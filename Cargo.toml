@@ -1,0 +1,18 @@
+[package]
+name = "pvz-portable-rust"
+version = "0.1.0"
+edition = "2024"
+description = "Plants vs Zombies Portable — Rust 翻译版本"
+
+[lib]
+name = "pvz_portable"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pvz-portable"
+path = "src/main.rs"
+
+[dependencies]
+# 只使用 Rust 标准库。
+# SDL2 和 OpenGL 通过 extern "C" FFI 直接调用 C 库。
+# 无需任何外部 crate。
