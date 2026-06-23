@@ -4,15 +4,11 @@
 use crate::lawn::game_enums::*;
 use crate::lawn::board::Board;
 use crate::framework::sexy_app_base::SexyAppBase;
-use crate::framework::graphics::gl_interface::GLInterface;
-use crate::framework::widget::widget_manager::WidgetManager;
-use crate::framework::graphics::graphics::Graphics;
-use crate::framework::rect::Rect;
-use crate::framework::color::Color;
 
 /// 游戏应用 — 管理游戏状态、屏幕切换和全局游戏逻辑
 pub struct LawnApp {
-    pub base: Option<*mut SexyAppBase>,
+    /// SexyAppBase 基类（直接内嵌，而非指针）
+    pub base: SexyAppBase,
 
     // 游戏核心
     pub board: Option<*mut Board>,
@@ -33,6 +29,9 @@ pub struct LawnApp {
     // 调试
     pub m_debug_keys_enabled: bool,
     pub m_cheat_keys_used: bool,
+
+    // 请求关闭标志
+    pub m_close_request: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -75,12 +74,12 @@ impl PlayerInfo {
 }
 
 /// 全局游戏实例
-static mut g_lawn_app_instance: Option<LawnApp> = None;
+static mut g_lawn_app_instance: Option<*mut LawnApp> = None;
 
 impl LawnApp {
     pub fn new() -> Self {
         LawnApp {
-            base: None,
+            base: SexyAppBase::new(),
             board: None,
             game_mode: GameMode::Adventure,
             game_screen: GameScreen::Intro,
@@ -91,6 +90,7 @@ impl LawnApp {
             m_tutorial_state: TutorialState::Off,
             m_debug_keys_enabled: false,
             m_cheat_keys_used: false,
+            m_close_request: false,
         }
     }
 
@@ -98,33 +98,59 @@ impl LawnApp {
     pub fn instance() -> Option<&'static mut Self> {
         unsafe {
             let ptr = std::ptr::addr_of_mut!(g_lawn_app_instance);
-            ptr.as_mut().and_then(|o| o.as_mut())
+            (*ptr).and_then(|p| p.as_mut())
         }
     }
 
-    /// 初始化游戏
+    /// 初始化游戏（对应 C++ LawnApp::Init → SexyApp::Init → SexyAppBase::Init）
     pub fn init(&mut self) {
-        // 存储全局引用
+        eprintln!("[LawnApp::init] 开始初始化...");
+
         unsafe {
-            g_lawn_app_instance = Some(LawnApp::new());
-            if let Some(ref mut inst) = g_lawn_app_instance {
-                *inst = LawnApp::new();
-            }
+            g_lawn_app_instance = Some(self as *mut LawnApp);
         }
 
-        // 初始化显示
+        // 初始化 SexyAppBase（SDL、窗口、OpenGL、资源等）
+        self.base.init();
+
+        eprintln!("[LawnApp::init] base.shutdown={}", self.base.shutdown);
+        if self.base.shutdown {
+            eprintln!("[LawnApp::init] base 初始化失败，跳过");
+            return;
+        }
+
+        // 设置标题
+        self.base.title = "PvZ Portable".to_string();
+
+        // 初始化完成，设置游戏屏幕
         self.game_screen = GameScreen::Title;
+        eprintln!("[LawnApp::init] 初始化完成");
     }
 
-    /// 启动游戏
+    /// 启动游戏（对应 C++ LawnApp::Start → SexyAppBase::Start → DoMainLoop）
     pub fn start(&mut self) {
-        // 开始游戏主循环
+        eprintln!("[LawnApp::start] 启动游戏循环...");
+        if self.base.shutdown {
+            eprintln!("[LawnApp::start] base 已关闭，跳过");
+            return;
+        }
+
+        // 设置游戏屏幕
         self.game_screen = GameScreen::Title;
+
+        // 调用 SexyAppBase::start() 进入主循环
+        // （这会在 while !shutdown 中循环，使用 base 的 start 方法）
+        eprintln!("[LawnApp::start] 进入 base.start() 主循环...");
+        self.base.start();
+        eprintln!("[LawnApp::start] 主循环结束");
     }
 
-    /// 关闭游戏
+    /// 关闭游戏（对应 C++ LawnApp::Shutdown）
     pub fn shutdown(&mut self) {
-        // 清理资源
+        self.base.shutdown();
+        unsafe {
+            g_lawn_app_instance = None;
+        }
     }
 
     /// 开始新游戏
@@ -148,7 +174,7 @@ impl LawnApp {
         self.game_screen = GameScreen::Playing;
     }
 
-    /// 主更新循环
+    /// 主更新循环（由 SexyAppBase 每帧调用）
     pub fn update(&mut self) {
         match self.game_screen {
             GameScreen::Playing => {
@@ -162,17 +188,18 @@ impl LawnApp {
         }
     }
 
-    /// 主绘制循环
+    /// 主绘制循环（由 SexyAppBase 每帧调用）
     pub fn draw(&self) {
-        // 由 GLInterface 调用
+        // 由 GLInterface 处理
     }
 
     /// 处理鼠标按下
-    pub fn mouse_down(&mut self, x: i32, y: i32, click_count: i32) {
+    pub fn mouse_down(&mut self, x: i32, y: i32, _btn: i32, _click_count: i32) {
+        // 注意：btn 参数保留以备将来右击支持
         match self.game_screen {
             GameScreen::Playing => {
                 if let Some(board_ptr) = self.board {
-                    unsafe { (*board_ptr).mouse_down(x, y, click_count); }
+                    unsafe { (*board_ptr).mouse_down(x, y, 1); }
                 }
             },
             _ => {}
@@ -180,11 +207,11 @@ impl LawnApp {
     }
 
     /// 处理按键
-    pub fn key_down(&mut self, key: i32) {
+    pub fn key_down(&mut self, _key: i32) {
         match self.game_screen {
             GameScreen::Playing => {
                 if let Some(board_ptr) = self.board {
-                    unsafe { (*board_ptr).key_down(key); }
+                    unsafe { (*board_ptr).key_down(_key); }
                 }
             },
             _ => {
@@ -200,23 +227,12 @@ impl LawnApp {
 
     /// 检查是否请求关闭
     pub fn get_close_request(&self) -> bool {
-        false
+        self.m_close_request
     }
 
     /// 检查是否使用了作弊键
     pub fn has_used_cheat_keys(&self) -> bool {
         self.m_cheat_keys_used
-    }
-
-    /// 设置参数
-    pub fn set_args(&mut self, _argc: i32, _argv: *mut *mut std::os::raw::c_char) {
-        // 处理命令行参数
-    }
-}
-
-impl Default for LawnApp {
-    fn default() -> Self {
-        LawnApp::new()
     }
 }
 

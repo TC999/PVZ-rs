@@ -9,6 +9,23 @@ use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_uint, c_void, c_double, c_float, c_long, c_short, c_uchar, c_ushort};
 
 // ============================================================
+// SDL 初始化标志
+// ============================================================
+pub const SDL_INIT_TIMER: Uint32 = 0x00000001;
+pub const SDL_INIT_AUDIO: Uint32 = 0x00000010;
+pub const SDL_INIT_VIDEO: Uint32 = 0x00000020;
+pub const SDL_INIT_JOYSTICK: Uint32 = 0x00000200;
+pub const SDL_INIT_HAPTIC: Uint32 = 0x00001000;
+pub const SDL_INIT_GAMEPAD: Uint32 = 0x00002000;
+pub const SDL_INIT_EVENTS: Uint32 = 0x00004000;
+pub const SDL_INIT_SENSOR: Uint32 = 0x00008000;
+pub const SDL_INIT_NOPARACHUTE: Uint32 = 0x00100000;
+
+// 窗口居中常量
+pub const SDL_WINDOWPOS_CENTERED: c_int = 0x2FFF0000;
+pub const SDL_WINDOWPOS_UNDEFINED: c_int = 0x1FFF0000;
+
+// ============================================================
 // SDL2 类型定义
 // ============================================================
 

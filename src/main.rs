@@ -8,24 +8,18 @@ mod todlib;
 mod lawn;
 
 use lawn::LawnApp;
-use todlib::TodStringFile;
+use framework::sexy_app_base::SexyAppBase;
 
 fn main() {
-    // 设置字符串颜色
-    // TodStringListSetColors(gLawnStringFormats, gLawnStringFormatCount);
-    // 在 todlib 模块中处理
-
-    // 全局函数指针（原 C++ 中通过函数指针注册）
-    // gGetCurrentLevelName = LawnGetCurrentLevelName;
-    // gAppCloseRequest = LawnGetCloseRequest;
-    // gAppHasUsedCheatKeys = LawnHasUsedCheatKeys;
-    // gExtractResourcesByName = Sexy::ExtractResourcesByName;
-
     // 创建 LawnApp
     let mut app = LawnApp::new();
 
-    // 初始化并运行
+    // 初始化 SDL、创建窗口、初始化 OpenGL（通过 SexyAppBase）
     app.init();
+
+    // 启动主循环（会阻塞直到窗口关闭）
     app.start();
+
+    // 清理资源
     app.shutdown();
 }
