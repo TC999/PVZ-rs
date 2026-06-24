@@ -18,6 +18,19 @@ unsafe extern "system" {
     fn GetModuleHandleA(lpModuleName: *const i8) -> *mut c_void;
 }
 
+#[cfg(not(windows))]
+#[allow(non_snake_case)]
+unsafe fn LoadLibraryA(_lpLibFileName: *const i8) -> *mut c_void { std::ptr::null_mut() }
+#[cfg(not(windows))]
+#[allow(non_snake_case)]
+unsafe fn GetProcAddress(_hModule: *mut c_void, _lpProcName: *const i8) -> *mut c_void { std::ptr::null_mut() }
+#[cfg(not(windows))]
+#[allow(non_snake_case)]
+unsafe fn FreeLibrary(_hLibModule: *mut c_void) -> c_int { 0 }
+#[cfg(not(windows))]
+#[allow(non_snake_case)]
+unsafe fn GetModuleHandleA(_lpModuleName: *const i8) -> *mut c_void { std::ptr::null_mut() }
+
 struct MixFuncs {
     open_audio: unsafe extern "C" fn(c_int, u16, c_int, c_int) -> c_int,
     close_audio: unsafe extern "C" fn(),

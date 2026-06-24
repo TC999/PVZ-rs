@@ -36,6 +36,16 @@ unsafe extern "system" {
     fn FreeLibrary(hLibModule: *mut c_void) -> c_int;
 }
 
+#[cfg(not(windows))]
+#[allow(non_snake_case)]
+unsafe fn LoadLibraryA(_lpLibFileName: *const i8) -> *mut c_void { std::ptr::null_mut() }
+#[cfg(not(windows))]
+#[allow(non_snake_case)]
+unsafe fn GetProcAddress(_hModule: *mut c_void, _lpProcName: *const i8) -> *mut c_void { std::ptr::null_mut() }
+#[cfg(not(windows))]
+#[allow(non_snake_case)]
+unsafe fn FreeLibrary(_hLibModule: *mut c_void) -> c_int { 0 }
+
 pub fn is_available() -> bool {
     unsafe { OPENMPT.is_some() }
 }
