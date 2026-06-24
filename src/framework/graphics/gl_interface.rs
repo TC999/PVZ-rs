@@ -1590,6 +1590,12 @@ impl GLInterface {
     pub fn init(&mut self, _is_windowed: bool) -> i32 {
         let inited = GL_INITED.get_or_init(|| {
             unsafe {
+                // 首先初始化 GL 函数指针表（运行时加载）
+                if !crate::ffi::opengl::init_gl() {
+                    eprintln!("错误：无法加载 OpenGL 函数指针");
+                    return false;
+                }
+
                 // 编译着色器
                 let prog = shader_load(SHADER_CODE);
                 if prog == 0 {

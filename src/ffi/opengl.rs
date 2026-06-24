@@ -1,11 +1,16 @@
-// PvZ Portable Rust 翻译 — OpenGL ES 2.0 FFI 绑定
+// PvZ Portable Rust 翻译 — OpenGL ES 2.0 FFI 绑定（运行时加载）
 //
-// 使用 extern "C" 声明所需的 GLES2 API。
-// 这些函数在运行时通过 glad（或 SDL_GL_GetProcAddress）加载。
+// 所有 GL 函数通过 SDL_GL_GetProcAddress 运行时加载，
+// 不使用 raw-dylib 静态链接 opengl32.dll（后者只导出 OpenGL 1.1）。
+//
+// 用法：在创建 OpenGL 上下文后调用 init_gl() 初始化函数表，
+// 然后即可直接调用 glXxx(...) 函数。
 
 #![allow(non_camel_case_types, dead_code)]
 
+use std::ffi::CString;
 use std::os::raw::{c_char, c_int, c_uint, c_void, c_float};
+use std::sync::OnceLock;
 
 // ============================================================
 // 类型定义
@@ -30,13 +35,11 @@ pub type GLuint64 = u64;
 pub type GLint64 = i64;
 
 // ============================================================
-// GLES2 常量
+// GLES2 常量（与原始文件一致）
 // ============================================================
 
 pub const GL_FALSE: GLboolean = 0;
 pub const GL_TRUE: GLboolean = 1;
-
-// 清除缓冲位
 pub const GL_DEPTH_BUFFER_BIT: GLbitfield = 0x00000100;
 pub const GL_STENCIL_BUFFER_BIT: GLbitfield = 0x00000400;
 pub const GL_COLOR_BUFFER_BIT: GLbitfield = 0x00004000;
@@ -193,17 +196,13 @@ pub const GL_FRAMEBUFFER_UNSUPPORTED: GLenum = 0x8CDD;
 pub const GL_STENCIL_INDEX8: GLenum = 0x8D48;
 pub const GL_DEPTH_COMPONENT16: GLenum = 0x81A5;
 
-// 像素存储
+// 像素存储、视图、查询等（保留全部常量）
 pub const GL_UNPACK_ALIGNMENT: GLenum = 0x0CF5;
 pub const GL_PACK_ALIGNMENT: GLenum = 0x0D05;
-
-// 视图
-pub const GL_VIEWPORT: GLenum = 0x0BA2;
+pub const GL_glViewport: GLenum = 0x0BA2;
 pub const GL_SCISSOR_BOX: GLenum = 0x0C10;
 pub const GL_MAX_VIEWPORT_DIMS: GLenum = 0x0D3A;
 pub const GL_SUBPIXEL_BITS: GLenum = 0x0D50;
-
-// 查询
 pub const GL_MAX_TEXTURE_SIZE: GLenum = 0x0D33;
 pub const GL_MAX_TEXTURE_IMAGE_UNITS: GLenum = 0x8872;
 pub const GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS: GLenum = 0x8B4D;
@@ -230,8 +229,6 @@ pub const GL_COMPRESSED_TEXTURE_FORMATS: GLenum = 0x86A3;
 pub const GL_NUM_SHADER_BINARY_FORMATS: GLenum = 0x8DF9;
 pub const GL_SHADER_BINARY_FORMATS: GLenum = 0x8DF8;
 pub const GL_SHADER_COMPILER: GLenum = 0x8DFA;
-
-// 状态
 pub const GL_VENDOR: GLenum = 0x1F00;
 pub const GL_RENDERER: GLenum = 0x1F01;
 pub const GL_VERSION: GLenum = 0x1F02;
@@ -322,158 +319,408 @@ pub const GL_BYTE: GLenum = 0x1400;
 pub const GL_SHORT: GLenum = 0x1402;
 
 // ============================================================
-// GLES2 函数声明
-// glad 和 OpenGL 函数声明
-// opengl32.dll 是 Windows 系统 DLL，用 raw-dylib 链接
-#[link(name = "opengl32", kind = "raw-dylib")]
-unsafe extern "C" {
-    // 顶点缓冲
-    pub fn glGenBuffers(n: GLsizei, buffers: *mut GLuint);
-    pub fn glDeleteBuffers(n: GLsizei, buffers: *const GLuint);
-    pub fn glBindBuffer(target: GLenum, buffer: GLuint);
-    pub fn glBufferData(target: GLenum, size: GLsizeiptr, data: *const c_void, usage: GLenum);
-    pub fn glBufferSubData(target: GLenum, offset: GLintptr, size: GLsizeiptr, data: *const c_void);
+// 运行时加载的 GL 函数表
+// ============================================================
 
-    // 纹理
-    pub fn glGenTextures(n: GLsizei, textures: *mut GLuint);
-    pub fn glDeleteTextures(n: GLsizei, textures: *const GLuint);
-    pub fn glBindTexture(target: GLenum, texture: GLuint);
-    pub fn glTexImage2D(target: GLenum, level: GLint, internalformat: GLint, width: GLsizei, height: GLsizei, border: GLint, format: GLenum, type_: GLenum, pixels: *const c_void);
-    pub fn glTexSubImage2D(target: GLenum, level: GLint, xoffset: GLint, yoffset: GLint, width: GLsizei, height: GLsizei, format: GLenum, type_: GLenum, pixels: *const c_void);
-    pub fn glTexParameteri(target: GLenum, pname: GLenum, param: GLint);
-    pub fn glTexParameterf(target: GLenum, pname: GLenum, param: GLfloat);
-    pub fn glTexParameteriv(target: GLenum, pname: GLenum, params: *const GLint);
-    pub fn glTexParameterfv(target: GLenum, pname: GLenum, params: *const GLfloat);
-    pub fn glGenerateMipmap(target: GLenum);
-    pub fn glActiveTexture(texture: GLenum);
-
-    // 着色器
-    pub fn glCreateShader(type_: GLenum) -> GLuint;
-    pub fn glDeleteShader(shader: GLuint);
-    pub fn glShaderSource(shader: GLuint, count: GLsizei, string_: *const *const GLchar, length: *const GLint);
-    pub fn glCompileShader(shader: GLuint);
-    pub fn glGetShaderiv(shader: GLuint, pname: GLenum, params: *mut GLint);
-    pub fn glGetShaderInfoLog(shader: GLuint, bufSize: GLsizei, length: *mut GLsizei, infoLog: *mut GLchar);
-    pub fn glIsShader(shader: GLuint) -> GLboolean;
-
-    // 程序
-    pub fn glCreateProgram() -> GLuint;
-    pub fn glDeleteProgram(program: GLuint);
-    pub fn glAttachShader(program: GLuint, shader: GLuint);
-    pub fn glDetachShader(program: GLuint, shader: GLuint);
-    pub fn glLinkProgram(program: GLuint);
-    pub fn glUseProgram(program: GLuint);
-    pub fn glGetProgramiv(program: GLuint, pname: GLenum, params: *mut GLint);
-    pub fn glGetProgramInfoLog(program: GLuint, bufSize: GLsizei, length: *mut GLsizei, infoLog: *mut GLchar);
-    pub fn glValidateProgram(program: GLuint);
-    pub fn glIsProgram(program: GLuint) -> GLboolean;
-    pub fn glBindAttribLocation(program: GLuint, index: GLuint, name: *const GLchar);
-
-    // 属性和 uniform
-    pub fn glGetAttribLocation(program: GLuint, name: *const GLchar) -> GLint;
-    pub fn glGetUniformLocation(program: GLuint, name: *const GLchar) -> GLint;
-    pub fn glUniform1i(location: GLint, v0: GLint);
-    pub fn glUniform1f(location: GLint, v0: GLfloat);
-    pub fn glUniform2f(location: GLint, v0: GLfloat, v1: GLfloat);
-    pub fn glUniform3f(location: GLint, v0: GLfloat, v1: GLfloat, v2: GLfloat);
-    pub fn glUniform4f(location: GLint, v0: GLfloat, v1: GLfloat, v2: GLfloat, v3: GLfloat);
-    pub fn glUniform1iv(location: GLint, count: GLsizei, value: *const GLint);
-    pub fn glUniform1fv(location: GLint, count: GLsizei, value: *const GLfloat);
-    pub fn glUniform2fv(location: GLint, count: GLsizei, value: *const GLfloat);
-    pub fn glUniform3fv(location: GLint, count: GLsizei, value: *const GLfloat);
-    pub fn glUniform4fv(location: GLint, count: GLsizei, value: *const GLfloat);
-    pub fn glUniformMatrix4fv(location: GLint, count: GLsizei, transpose: GLboolean, value: *const GLfloat);
-    pub fn glUniformMatrix3fv(location: GLint, count: GLsizei, transpose: GLboolean, value: *const GLfloat);
-
-    // 顶点属性
-    pub fn glVertexAttribPointer(index: GLuint, size: GLint, type_: GLenum, normalized: GLboolean, stride: GLsizei, pointer: *const c_void);
-    pub fn glEnableVertexAttribArray(index: GLuint);
-    pub fn glDisableVertexAttribArray(index: GLuint);
-    pub fn glVertexAttrib1f(index: GLuint, x: GLfloat);
-    pub fn glVertexAttrib2f(index: GLuint, x: GLfloat, y: GLfloat);
-    pub fn glVertexAttrib3f(index: GLuint, x: GLfloat, y: GLfloat, z: GLfloat);
-    pub fn glVertexAttrib4f(index: GLuint, x: GLfloat, y: GLfloat, z: GLfloat, w: GLfloat);
-
-    // 绘制
-    pub fn glDrawArrays(mode: GLenum, first: GLint, count: GLsizei);
-    pub fn glDrawElements(mode: GLenum, count: GLsizei, type_: GLenum, indices: *const c_void);
-
-    // 清除
-    pub fn glClear(mask: GLbitfield);
-    pub fn glClearColor(red: GLclampf, green: GLclampf, blue: GLclampf, alpha: GLclampf);
-    pub fn glClearDepthf(d: GLclampf);
-    pub fn glClearStencil(s: GLint);
-
-    // 状态
-    pub fn glEnable(cap: GLenum);
-    pub fn glDisable(cap: GLenum);
-    pub fn glIsEnabled(cap: GLenum) -> GLboolean;
-    pub fn glGetBooleanv(pname: GLenum, data: *mut GLboolean);
-    pub fn glGetIntegerv(pname: GLenum, data: *mut GLint);
-    pub fn glGetFloatv(pname: GLenum, data: *mut GLfloat);
-    pub fn glGetString(name: GLenum) -> *const GLubyte;
-    pub fn glGetStringi(name: GLenum, index: GLuint) -> *const GLubyte;
-    pub fn glGetError() -> GLenum;
-
-    // 视图
-    pub fn glViewport(x: GLint, y: GLint, width: GLsizei, height: GLsizei);
-    pub fn glScissor(x: GLint, y: GLint, width: GLsizei, height: GLsizei);
-    pub fn glDepthRangef(n: GLclampf, f: GLclampf);
-    pub fn glLineWidth(width: GLfloat);
-
-    // 混合
-    pub fn glBlendFunc(sfactor: GLenum, dfactor: GLenum);
-    pub fn glBlendFuncSeparate(srcRGB: GLenum, dstRGB: GLenum, srcAlpha: GLenum, dstAlpha: GLenum);
-    pub fn glBlendEquation(mode: GLenum);
-    pub fn glBlendEquationSeparate(modeRGB: GLenum, modeAlpha: GLenum);
-    pub fn glBlendColor(red: GLclampf, green: GLclampf, blue: GLclampf, alpha: GLclampf);
-
-    // 颜色
-    pub fn glColorMask(red: GLboolean, green: GLboolean, blue: GLboolean, alpha: GLboolean);
-
-    // 深度/模板
-    pub fn glDepthFunc(func: GLenum);
-    pub fn glDepthMask(flag: GLboolean);
-    pub fn glStencilFunc(func: GLenum, ref_: GLint, mask: GLuint);
-    pub fn glStencilFuncSeparate(face: GLenum, func: GLenum, ref_: GLint, mask: GLuint);
-    pub fn glStencilOp(fail: GLenum, zfail: GLenum, zpass: GLenum);
-    pub fn glStencilOpSeparate(face: GLenum, sfail: GLenum, dpfail: GLenum, dppass: GLenum);
-    pub fn glStencilMask(mask: GLuint);
-    pub fn glStencilMaskSeparate(face: GLenum, mask: GLuint);
-
-    // 光栅化
-    pub fn glFrontFace(mode: GLenum);
-    pub fn glCullFace(mode: GLenum);
-    pub fn glPolygonOffset(factor: GLfloat, units: GLfloat);
-    pub fn glSampleCoverage(value: GLclampf, invert: GLboolean);
-
-    // 像素存储
-    pub fn glPixelStorei(pname: GLenum, param: GLint);
-
-    // 帧缓冲
-    pub fn glGenFramebuffers(n: GLsizei, framebuffers: *mut GLuint);
-    pub fn glDeleteFramebuffers(n: GLsizei, framebuffers: *const GLuint);
-    pub fn glBindFramebuffer(target: GLenum, framebuffer: GLuint);
-    pub fn glFramebufferTexture2D(target: GLenum, attachment: GLenum, textarget: GLenum, texture: GLuint, level: GLint);
-    pub fn glFramebufferRenderbuffer(target: GLenum, attachment: GLenum, renderbuffertarget: GLenum, renderbuffer: GLuint);
-    pub fn glCheckFramebufferStatus(target: GLenum) -> GLenum;
-    pub fn glGenRenderbuffers(n: GLsizei, renderbuffers: *mut GLuint);
-    pub fn glDeleteRenderbuffers(n: GLsizei, renderbuffers: *const GLuint);
-    pub fn glBindRenderbuffer(target: GLenum, renderbuffer: GLuint);
-    pub fn glRenderbufferStorage(target: GLenum, internalformat: GLenum, width: GLsizei, height: GLsizei);
-    pub fn glReadPixels(x: GLint, y: GLint, width: GLsizei, height: GLsizei, format: GLenum, type_: GLenum, pixels: *mut c_void);
-
-    // 完成
-    pub fn glFinish();
-    pub fn glFlush();
-
-    // 缓冲子数据
-    pub fn glGetBufferParameteriv(target: GLenum, pname: GLenum, params: *mut GLint);
+/// 所有 OpenGL 函数的函数指针表。
+/// 在创建 OpenGL 上下文后通过 init_gl() 填充。
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct GlProcs {
+    pub glActiveTexture: unsafe extern "C" fn(texture: GLenum),
+    pub glAttachShader: unsafe extern "C" fn(program: GLuint, shader: GLuint),
+    pub glBindAttribLocation: unsafe extern "C" fn(program: GLuint, index: GLuint, name: *const GLchar),
+    pub glBindBuffer: unsafe extern "C" fn(target: GLenum, buffer: GLuint),
+    pub glBindFramebuffer: unsafe extern "C" fn(target: GLenum, framebuffer: GLuint),
+    pub glBindTexture: unsafe extern "C" fn(target: GLenum, texture: GLuint),
+    pub glBlendFunc: unsafe extern "C" fn(sfactor: GLenum, dfactor: GLenum),
+    pub glBlendFuncSeparate: unsafe extern "C" fn(srcRGB: GLenum, dstRGB: GLenum, srcAlpha: GLenum, dstAlpha: GLenum),
+    pub glBlendEquation: unsafe extern "C" fn(mode: GLenum),
+    pub glBlendEquationSeparate: unsafe extern "C" fn(modeRGB: GLenum, modeAlpha: GLenum),
+    pub glBlendColor: unsafe extern "C" fn(red: GLclampf, green: GLclampf, blue: GLclampf, alpha: GLclampf),
+    pub glBufferData: unsafe extern "C" fn(target: GLenum, size: GLsizeiptr, data: *const c_void, usage: GLenum),
+    pub glBufferSubData: unsafe extern "C" fn(target: GLenum, offset: GLintptr, size: GLsizeiptr, data: *const c_void),
+    pub glCheckFramebufferStatus: unsafe extern "C" fn(target: GLenum) -> GLenum,
+    pub glClear: unsafe extern "C" fn(mask: GLbitfield),
+    pub glClearColor: unsafe extern "C" fn(red: GLclampf, green: GLclampf, blue: GLclampf, alpha: GLclampf),
+    pub glClearDepthf: unsafe extern "C" fn(d: GLclampf),
+    pub glClearStencil: unsafe extern "C" fn(s: GLint),
+    pub glColorMask: unsafe extern "C" fn(red: GLboolean, green: GLboolean, blue: GLboolean, alpha: GLboolean),
+    pub glCompileShader: unsafe extern "C" fn(shader: GLuint),
+    pub glCreateProgram: unsafe extern "C" fn() -> GLuint,
+    pub glCreateShader: unsafe extern "C" fn(type_: GLenum) -> GLuint,
+    pub glCullFace: unsafe extern "C" fn(mode: GLenum),
+    pub glDeleteBuffers: unsafe extern "C" fn(n: GLsizei, buffers: *const GLuint),
+    pub glDeleteFramebuffers: unsafe extern "C" fn(n: GLsizei, framebuffers: *const GLuint),
+    pub glDeleteProgram: unsafe extern "C" fn(program: GLuint),
+    pub glDeleteShader: unsafe extern "C" fn(shader: GLuint),
+    pub glDeleteTextures: unsafe extern "C" fn(n: GLsizei, textures: *const GLuint),
+    pub glDepthFunc: unsafe extern "C" fn(func: GLenum),
+    pub glDepthMask: unsafe extern "C" fn(flag: GLboolean),
+    pub glDepthRangef: unsafe extern "C" fn(n: GLclampf, f: GLclampf),
+    pub glDetachShader: unsafe extern "C" fn(program: GLuint, shader: GLuint),
+    pub glDisable: unsafe extern "C" fn(cap: GLenum),
+    pub glDisableVertexAttribArray: unsafe extern "C" fn(index: GLuint),
+    pub glDrawArrays: unsafe extern "C" fn(mode: GLenum, first: GLint, count: GLsizei),
+    pub glDrawElements: unsafe extern "C" fn(mode: GLenum, count: GLsizei, type_: GLenum, indices: *const c_void),
+    pub glEnable: unsafe extern "C" fn(cap: GLenum),
+    pub glEnableVertexAttribArray: unsafe extern "C" fn(index: GLuint),
+    pub glFinish: unsafe extern "C" fn(),
+    pub glFlush: unsafe extern "C" fn(),
+    pub glFramebufferRenderbuffer: unsafe extern "C" fn(target: GLenum, attachment: GLenum, renderbuffertarget: GLenum, renderbuffer: GLuint),
+    pub glFramebufferTexture2D: unsafe extern "C" fn(target: GLenum, attachment: GLenum, textarget: GLenum, texture: GLuint, level: GLint),
+    pub glFrontFace: unsafe extern "C" fn(mode: GLenum),
+    pub glGenBuffers: unsafe extern "C" fn(n: GLsizei, buffers: *mut GLuint),
+    pub glGenFramebuffers: unsafe extern "C" fn(n: GLsizei, framebuffers: *mut GLuint),
+    pub glGenRenderbuffers: unsafe extern "C" fn(n: GLsizei, renderbuffers: *mut GLuint),
+    pub glGenTextures: unsafe extern "C" fn(n: GLsizei, textures: *mut GLuint),
+    pub glGenerateMipmap: unsafe extern "C" fn(target: GLenum),
+    pub glGetAttribLocation: unsafe extern "C" fn(program: GLuint, name: *const GLchar) -> GLint,
+    pub glGetBooleanv: unsafe extern "C" fn(pname: GLenum, data: *mut GLboolean),
+    pub glGetBufferParameteriv: unsafe extern "C" fn(target: GLenum, pname: GLenum, params: *mut GLint),
+    pub glGetError: unsafe extern "C" fn() -> GLenum,
+    pub glGetFloatv: unsafe extern "C" fn(pname: GLenum, data: *mut GLfloat),
+    pub glGetIntegerv: unsafe extern "C" fn(pname: GLenum, data: *mut GLint),
+    pub glGetProgramInfoLog: unsafe extern "C" fn(program: GLuint, bufSize: GLsizei, length: *mut GLsizei, infoLog: *mut GLchar),
+    pub glGetProgramiv: unsafe extern "C" fn(program: GLuint, pname: GLenum, params: *mut GLint),
+    pub glGetShaderInfoLog: unsafe extern "C" fn(shader: GLuint, bufSize: GLsizei, length: *mut GLsizei, infoLog: *mut GLchar),
+    pub glGetShaderiv: unsafe extern "C" fn(shader: GLuint, pname: GLenum, params: *mut GLint),
+    pub glGetString: unsafe extern "C" fn(name: GLenum) -> *const GLubyte,
+    pub glGetStringi: unsafe extern "C" fn(name: GLenum, index: GLuint) -> *const GLubyte,
+    pub glGetUniformLocation: unsafe extern "C" fn(program: GLuint, name: *const GLchar) -> GLint,
+    pub glIsBuffer: unsafe extern "C" fn(buffer: GLuint) -> GLboolean,
+    pub glIsEnabled: unsafe extern "C" fn(cap: GLenum) -> GLboolean,
+    pub glIsProgram: unsafe extern "C" fn(program: GLuint) -> GLboolean,
+    pub glIsShader: unsafe extern "C" fn(shader: GLuint) -> GLboolean,
+    pub glIsTexture: unsafe extern "C" fn(texture: GLuint) -> GLboolean,
+    pub glLineWidth: unsafe extern "C" fn(width: GLfloat),
+    pub glLinkProgram: unsafe extern "C" fn(program: GLuint),
+    pub glPixelStorei: unsafe extern "C" fn(pname: GLenum, param: GLint),
+    pub glPolygonOffset: unsafe extern "C" fn(factor: GLfloat, units: GLfloat),
+    pub glReadPixels: unsafe extern "C" fn(x: GLint, y: GLint, width: GLsizei, height: GLsizei, format: GLenum, type_: GLenum, pixels: *mut c_void),
+    pub glRenderbufferStorage: unsafe extern "C" fn(target: GLenum, internalformat: GLenum, width: GLsizei, height: GLsizei),
+    pub glSampleCoverage: unsafe extern "C" fn(value: GLclampf, invert: GLboolean),
+    pub glScissor: unsafe extern "C" fn(x: GLint, y: GLint, width: GLsizei, height: GLsizei),
+    pub glShaderSource: unsafe extern "C" fn(shader: GLuint, count: GLsizei, string_: *const *const GLchar, length: *const GLint),
+    pub glStencilFunc: unsafe extern "C" fn(func: GLenum, ref_: GLint, mask: GLuint),
+    pub glStencilFuncSeparate: unsafe extern "C" fn(face: GLenum, func: GLenum, ref_: GLint, mask: GLuint),
+    pub glStencilMask: unsafe extern "C" fn(mask: GLuint),
+    pub glStencilMaskSeparate: unsafe extern "C" fn(face: GLenum, mask: GLuint),
+    pub glStencilOp: unsafe extern "C" fn(fail: GLenum, zfail: GLenum, zpass: GLenum),
+    pub glStencilOpSeparate: unsafe extern "C" fn(face: GLenum, sfail: GLenum, dpfail: GLenum, dppass: GLenum),
+    pub glTexImage2D: unsafe extern "C" fn(target: GLenum, level: GLint, internalformat: GLint, width: GLsizei, height: GLsizei, border: GLint, format: GLenum, type_: GLenum, pixels: *const c_void),
+    pub glTexParameterf: unsafe extern "C" fn(target: GLenum, pname: GLenum, param: GLfloat),
+    pub glTexParameterfv: unsafe extern "C" fn(target: GLenum, pname: GLenum, params: *const GLfloat),
+    pub glTexParameteri: unsafe extern "C" fn(target: GLenum, pname: GLenum, param: GLint),
+    pub glTexParameteriv: unsafe extern "C" fn(target: GLenum, pname: GLenum, params: *const GLint),
+    pub glTexSubImage2D: unsafe extern "C" fn(target: GLenum, level: GLint, xoffset: GLint, yoffset: GLint, width: GLsizei, height: GLsizei, format: GLenum, type_: GLenum, pixels: *const c_void),
+    pub glUniform1f: unsafe extern "C" fn(location: GLint, v0: GLfloat),
+    pub glUniform1fv: unsafe extern "C" fn(location: GLint, count: GLsizei, value: *const GLfloat),
+    pub glUniform1i: unsafe extern "C" fn(location: GLint, v0: GLint),
+    pub glUniform1iv: unsafe extern "C" fn(location: GLint, count: GLsizei, value: *const GLint),
+    pub glUniform2f: unsafe extern "C" fn(location: GLint, v0: GLfloat, v1: GLfloat),
+    pub glUniform2fv: unsafe extern "C" fn(location: GLint, count: GLsizei, value: *const GLfloat),
+    pub glUniform3f: unsafe extern "C" fn(location: GLint, v0: GLfloat, v1: GLfloat, v2: GLfloat),
+    pub glUniform3fv: unsafe extern "C" fn(location: GLint, count: GLsizei, value: *const GLfloat),
+    pub glUniform4f: unsafe extern "C" fn(location: GLint, v0: GLfloat, v1: GLfloat, v2: GLfloat, v3: GLfloat),
+    pub glUniform4fv: unsafe extern "C" fn(location: GLint, count: GLsizei, value: *const GLfloat),
+    pub glUniformMatrix3fv: unsafe extern "C" fn(location: GLint, count: GLsizei, transpose: GLboolean, value: *const GLfloat),
+    pub glUniformMatrix4fv: unsafe extern "C" fn(location: GLint, count: GLsizei, transpose: GLboolean, value: *const GLfloat),
+    pub glUseProgram: unsafe extern "C" fn(program: GLuint),
+    pub glValidateProgram: unsafe extern "C" fn(program: GLuint),
+    pub glVertexAttrib1f: unsafe extern "C" fn(index: GLuint, x: GLfloat),
+    pub glVertexAttrib2f: unsafe extern "C" fn(index: GLuint, x: GLfloat, y: GLfloat),
+    pub glVertexAttrib3f: unsafe extern "C" fn(index: GLuint, x: GLfloat, y: GLfloat, z: GLfloat),
+    pub glVertexAttrib4f: unsafe extern "C" fn(index: GLuint, x: GLfloat, y: GLfloat, z: GLfloat, w: GLfloat),
+    pub glVertexAttribPointer: unsafe extern "C" fn(index: GLuint, size: GLint, type_: GLenum, normalized: GLboolean, stride: GLsizei, pointer: *const c_void),
+    pub glViewport: unsafe extern "C" fn(x: GLint, y: GLint, width: GLsizei, height: GLsizei),
+    pub glDeleteRenderbuffers: unsafe extern "C" fn(n: GLsizei, renderbuffers: *const GLuint),
+    pub glBindRenderbuffer: unsafe extern "C" fn(target: GLenum, renderbuffer: GLuint),
 }
 
-// glad 加载函数
-pub type GLADloadfunc = Option<unsafe extern "C" fn(name: *const GLchar) -> *mut c_void>;
+// ============================================================
+// 全局函数表实例（OnceLock，初始化一次）
+// ============================================================
 
-unsafe extern "C" {
-    pub fn gladLoadGLES2(loadfunc: GLADloadfunc) -> c_int;
+pub static GL: OnceLock<GlProcs> = OnceLock::new();
+
+/// 加载单个 GL 函数指针。
+/// 内部使用 SDL_GL_GetProcAddress。
+unsafe fn load_gl_func(name: &str) -> *mut c_void {
+    let cname = CString::new(name).unwrap();
+    // SDL_GL_GetProcAddress 来自 SDL2.dll（通过 raw-dylib 链接）
+    #[link(name = "SDL2", kind = "raw-dylib")]
+    unsafe extern "C" {
+        fn SDL_GL_GetProcAddress(proc_: *const c_char) -> *mut c_void;
+    }
+    SDL_GL_GetProcAddress(cname.as_ptr())
 }
+
+/// 初始化 OpenGL 函数表。
+/// 必须在创建并激活 OpenGL 上下文后调用，且只调用一次。
+pub fn init_gl() -> bool {
+    if GL.get().is_some() {
+        return true; // 已经初始化
+    }
+
+    // 辅助宏：加载函数并转成函数指针
+    macro_rules! load {
+        ($name:literal) => {{
+            let ptr = unsafe { load_gl_func($name) };
+            if ptr.is_null() {
+                eprintln!("OpenGL 函数加载失败: {}", $name);
+                return false;
+            }
+            unsafe { std::mem::transmute::<*mut c_void, _>(ptr) }
+        }};
+    }
+
+    let procs = GlProcs {
+        glActiveTexture: load!("glActiveTexture"),
+        glAttachShader: load!("glAttachShader"),
+        glBindAttribLocation: load!("glBindAttribLocation"),
+        glBindBuffer: load!("glBindBuffer"),
+        glBindFramebuffer: load!("glBindFramebuffer"),
+        glBindTexture: load!("glBindTexture"),
+        glBlendFunc: load!("glBlendFunc"),
+        glBlendFuncSeparate: load!("glBlendFuncSeparate"),
+        glBlendEquation: load!("glBlendEquation"),
+        glBlendEquationSeparate: load!("glBlendEquationSeparate"),
+        glBlendColor: load!("glBlendColor"),
+        glBufferData: load!("glBufferData"),
+        glBufferSubData: load!("glBufferSubData"),
+        glCheckFramebufferStatus: load!("glCheckFramebufferStatus"),
+        glClear: load!("glClear"),
+        glClearColor: load!("glClearColor"),
+        glClearDepthf: load!("glClearDepthf"),
+        glClearStencil: load!("glClearStencil"),
+        glColorMask: load!("glColorMask"),
+        glCompileShader: load!("glCompileShader"),
+        glCreateProgram: load!("glCreateProgram"),
+        glCreateShader: load!("glCreateShader"),
+        glCullFace: load!("glCullFace"),
+        glDeleteBuffers: load!("glDeleteBuffers"),
+        glDeleteFramebuffers: load!("glDeleteFramebuffers"),
+        glDeleteProgram: load!("glDeleteProgram"),
+        glDeleteShader: load!("glDeleteShader"),
+        glDeleteTextures: load!("glDeleteTextures"),
+        glDepthFunc: load!("glDepthFunc"),
+        glDepthMask: load!("glDepthMask"),
+        glDepthRangef: load!("glDepthRangef"),
+        glDetachShader: load!("glDetachShader"),
+        glDisable: load!("glDisable"),
+        glDisableVertexAttribArray: load!("glDisableVertexAttribArray"),
+        glDrawArrays: load!("glDrawArrays"),
+        glDrawElements: load!("glDrawElements"),
+        glEnable: load!("glEnable"),
+        glEnableVertexAttribArray: load!("glEnableVertexAttribArray"),
+        glFinish: load!("glFinish"),
+        glFlush: load!("glFlush"),
+        glFramebufferRenderbuffer: load!("glFramebufferRenderbuffer"),
+        glFramebufferTexture2D: load!("glFramebufferTexture2D"),
+        glFrontFace: load!("glFrontFace"),
+        glGenBuffers: load!("glGenBuffers"),
+        glGenFramebuffers: load!("glGenFramebuffers"),
+        glGenRenderbuffers: load!("glGenRenderbuffers"),
+        glGenTextures: load!("glGenTextures"),
+        glGenerateMipmap: load!("glGenerateMipmap"),
+        glGetAttribLocation: load!("glGetAttribLocation"),
+        glGetBooleanv: load!("glGetBooleanv"),
+        glGetBufferParameteriv: load!("glGetBufferParameteriv"),
+        glGetError: load!("glGetError"),
+        glGetFloatv: load!("glGetFloatv"),
+        glGetIntegerv: load!("glGetIntegerv"),
+        glGetProgramInfoLog: load!("glGetProgramInfoLog"),
+        glGetProgramiv: load!("glGetProgramiv"),
+        glGetShaderInfoLog: load!("glGetShaderInfoLog"),
+        glGetShaderiv: load!("glGetShaderiv"),
+        glGetString: load!("glGetString"),
+        glGetStringi: load!("glGetStringi"),
+        glGetUniformLocation: load!("glGetUniformLocation"),
+        glIsBuffer: load!("glIsBuffer"),
+        glIsEnabled: load!("glIsEnabled"),
+        glIsProgram: load!("glIsProgram"),
+        glIsShader: load!("glIsShader"),
+        glIsTexture: load!("glIsTexture"),
+        glLineWidth: load!("glLineWidth"),
+        glLinkProgram: load!("glLinkProgram"),
+        glPixelStorei: load!("glPixelStorei"),
+        glPolygonOffset: load!("glPolygonOffset"),
+        glReadPixels: load!("glReadPixels"),
+        glRenderbufferStorage: load!("glRenderbufferStorage"),
+        glSampleCoverage: load!("glSampleCoverage"),
+        glScissor: load!("glScissor"),
+        glShaderSource: load!("glShaderSource"),
+        glStencilFunc: load!("glStencilFunc"),
+        glStencilFuncSeparate: load!("glStencilFuncSeparate"),
+        glStencilMask: load!("glStencilMask"),
+        glStencilMaskSeparate: load!("glStencilMaskSeparate"),
+        glStencilOp: load!("glStencilOp"),
+        glStencilOpSeparate: load!("glStencilOpSeparate"),
+        glTexImage2D: load!("glTexImage2D"),
+        glTexParameterf: load!("glTexParameterf"),
+        glTexParameterfv: load!("glTexParameterfv"),
+        glTexParameteri: load!("glTexParameteri"),
+        glTexParameteriv: load!("glTexParameteriv"),
+        glTexSubImage2D: load!("glTexSubImage2D"),
+        glUniform1f: load!("glUniform1f"),
+        glUniform1fv: load!("glUniform1fv"),
+        glUniform1i: load!("glUniform1i"),
+        glUniform1iv: load!("glUniform1iv"),
+        glUniform2f: load!("glUniform2f"),
+        glUniform2fv: load!("glUniform2fv"),
+        glUniform3f: load!("glUniform3f"),
+        glUniform3fv: load!("glUniform3fv"),
+        glUniform4f: load!("glUniform4f"),
+        glUniform4fv: load!("glUniform4fv"),
+        glUniformMatrix3fv: load!("glUniformMatrix3fv"),
+        glUniformMatrix4fv: load!("glUniformMatrix4fv"),
+        glUseProgram: load!("glUseProgram"),
+        glValidateProgram: load!("glValidateProgram"),
+        glVertexAttrib1f: load!("glVertexAttrib1f"),
+        glVertexAttrib2f: load!("glVertexAttrib2f"),
+        glVertexAttrib3f: load!("glVertexAttrib3f"),
+        glVertexAttrib4f: load!("glVertexAttrib4f"),
+        glVertexAttribPointer: load!("glVertexAttribPointer"),
+        glViewport: load!("glViewport"),
+        glDeleteRenderbuffers: load!("glDeleteRenderbuffers"),
+        glBindRenderbuffer: load!("glBindRenderbuffer"),
+    };
+
+    GL.set(procs).map_err(|_| ()).is_ok()
+}
+
+// ============================================================
+// 方便调用的函数包装（保持与原始 opengl.rs 相同的函数签名）
+// 这些函数通过全局 GL 函数表间接调用
+// ============================================================
+
+macro_rules! gl_wrapper {
+    ($name:ident, ($($arg:ident: $t:ty),*) -> $ret:ty) => {
+        #[inline]
+        pub unsafe fn $name($($arg: $t),*) -> $ret {
+            (GL.get().unwrap().$name)($($arg),*)
+        }
+    };
+    ($name:ident, ($($arg:ident: $t:ty),*)) => {
+        #[inline]
+        pub unsafe fn $name($($arg: $t),*) {
+            (GL.get().unwrap().$name)($($arg),*)
+        }
+    };
+    ($name:ident) => {
+        #[inline]
+        pub unsafe fn $name() {
+            (GL.get().unwrap().$name)()
+        }
+    };
+}
+
+gl_wrapper!(glActiveTexture, (texture: GLenum));
+gl_wrapper!(glAttachShader, (program: GLuint, shader: GLuint));
+gl_wrapper!(glBindAttribLocation, (program: GLuint, index: GLuint, name: *const GLchar));
+gl_wrapper!(glBindBuffer, (target: GLenum, buffer: GLuint));
+gl_wrapper!(glBindFramebuffer, (target: GLenum, framebuffer: GLuint));
+gl_wrapper!(glBindTexture, (target: GLenum, texture: GLuint));
+gl_wrapper!(glBlendFunc, (sfactor: GLenum, dfactor: GLenum));
+gl_wrapper!(glBlendFuncSeparate, (srcRGB: GLenum, dstRGB: GLenum, srcAlpha: GLenum, dstAlpha: GLenum));
+gl_wrapper!(glBlendEquation, (mode: GLenum));
+gl_wrapper!(glBlendEquationSeparate, (modeRGB: GLenum, modeAlpha: GLenum));
+gl_wrapper!(glBlendColor, (red: GLclampf, green: GLclampf, blue: GLclampf, alpha: GLclampf));
+gl_wrapper!(glBufferData, (target: GLenum, size: GLsizeiptr, data: *const c_void, usage: GLenum));
+gl_wrapper!(glBufferSubData, (target: GLenum, offset: GLintptr, size: GLsizeiptr, data: *const c_void));
+gl_wrapper!(glCheckFramebufferStatus, (target: GLenum) -> GLenum);
+gl_wrapper!(glClear, (mask: GLbitfield));
+gl_wrapper!(glClearColor, (red: GLclampf, green: GLclampf, blue: GLclampf, alpha: GLclampf));
+gl_wrapper!(glClearDepthf, (d: GLclampf));
+gl_wrapper!(glClearStencil, (s: GLint));
+gl_wrapper!(glColorMask, (red: GLboolean, green: GLboolean, blue: GLboolean, alpha: GLboolean));
+gl_wrapper!(glCompileShader, (shader: GLuint));
+gl_wrapper!(glCreateProgram, () -> GLuint);
+gl_wrapper!(glCreateShader, (type_: GLenum) -> GLuint);
+gl_wrapper!(glCullFace, (mode: GLenum));
+gl_wrapper!(glDeleteBuffers, (n: GLsizei, buffers: *const GLuint));
+gl_wrapper!(glDeleteFramebuffers, (n: GLsizei, framebuffers: *const GLuint));
+gl_wrapper!(glDeleteProgram, (program: GLuint));
+gl_wrapper!(glDeleteShader, (shader: GLuint));
+gl_wrapper!(glDeleteTextures, (n: GLsizei, textures: *const GLuint));
+gl_wrapper!(glDepthFunc, (func: GLenum));
+gl_wrapper!(glDepthMask, (flag: GLboolean));
+gl_wrapper!(glDepthRangef, (n: GLclampf, f: GLclampf));
+gl_wrapper!(glDetachShader, (program: GLuint, shader: GLuint));
+gl_wrapper!(glDisable, (cap: GLenum));
+gl_wrapper!(glDisableVertexAttribArray, (index: GLuint));
+gl_wrapper!(glDrawArrays, (mode: GLenum, first: GLint, count: GLsizei));
+gl_wrapper!(glDrawElements, (mode: GLenum, count: GLsizei, type_: GLenum, indices: *const c_void));
+gl_wrapper!(glEnable, (cap: GLenum));
+gl_wrapper!(glEnableVertexAttribArray, (index: GLuint));
+gl_wrapper!(glFinish, ());
+gl_wrapper!(glFlush, ());
+gl_wrapper!(glFramebufferRenderbuffer, (target: GLenum, attachment: GLenum, renderbuffertarget: GLenum, renderbuffer: GLuint));
+gl_wrapper!(glFramebufferTexture2D, (target: GLenum, attachment: GLenum, textarget: GLenum, texture: GLuint, level: GLint));
+gl_wrapper!(glFrontFace, (mode: GLenum));
+gl_wrapper!(glGenBuffers, (n: GLsizei, buffers: *mut GLuint));
+gl_wrapper!(glGenFramebuffers, (n: GLsizei, framebuffers: *mut GLuint));
+gl_wrapper!(glGenRenderbuffers, (n: GLsizei, renderbuffers: *mut GLuint));
+gl_wrapper!(glGenTextures, (n: GLsizei, textures: *mut GLuint));
+gl_wrapper!(glGenerateMipmap, (target: GLenum));
+gl_wrapper!(glGetAttribLocation, (program: GLuint, name: *const GLchar) -> GLint);
+gl_wrapper!(glGetBooleanv, (pname: GLenum, data: *mut GLboolean));
+gl_wrapper!(glGetBufferParameteriv, (target: GLenum, pname: GLenum, params: *mut GLint));
+gl_wrapper!(glGetError, () -> GLenum);
+gl_wrapper!(glGetFloatv, (pname: GLenum, data: *mut GLfloat));
+gl_wrapper!(glGetIntegerv, (pname: GLenum, data: *mut GLint));
+gl_wrapper!(glGetProgramInfoLog, (program: GLuint, bufSize: GLsizei, length: *mut GLsizei, infoLog: *mut GLchar));
+gl_wrapper!(glGetProgramiv, (program: GLuint, pname: GLenum, params: *mut GLint));
+gl_wrapper!(glGetShaderInfoLog, (shader: GLuint, bufSize: GLsizei, length: *mut GLsizei, infoLog: *mut GLchar));
+gl_wrapper!(glGetShaderiv, (shader: GLuint, pname: GLenum, params: *mut GLint));
+gl_wrapper!(glGetString, (name: GLenum) -> *const GLubyte);
+gl_wrapper!(glGetStringi, (name: GLenum, index: GLuint) -> *const GLubyte);
+gl_wrapper!(glGetUniformLocation, (program: GLuint, name: *const GLchar) -> GLint);
+gl_wrapper!(glIsBuffer, (buffer: GLuint) -> GLboolean);
+gl_wrapper!(glIsEnabled, (cap: GLenum) -> GLboolean);
+gl_wrapper!(glIsProgram, (program: GLuint) -> GLboolean);
+gl_wrapper!(glIsShader, (shader: GLuint) -> GLboolean);
+gl_wrapper!(glIsTexture, (texture: GLuint) -> GLboolean);
+gl_wrapper!(glLineWidth, (width: GLfloat));
+gl_wrapper!(glLinkProgram, (program: GLuint));
+gl_wrapper!(glPixelStorei, (pname: GLenum, param: GLint));
+gl_wrapper!(glPolygonOffset, (factor: GLfloat, units: GLfloat));
+gl_wrapper!(glReadPixels, (x: GLint, y: GLint, width: GLsizei, height: GLsizei, format: GLenum, type_: GLenum, pixels: *mut c_void));
+gl_wrapper!(glRenderbufferStorage, (target: GLenum, internalformat: GLenum, width: GLsizei, height: GLsizei));
+gl_wrapper!(glSampleCoverage, (value: GLclampf, invert: GLboolean));
+gl_wrapper!(glScissor, (x: GLint, y: GLint, width: GLsizei, height: GLsizei));
+gl_wrapper!(glShaderSource, (shader: GLuint, count: GLsizei, string_: *const *const GLchar, length: *const GLint));
+gl_wrapper!(glStencilFunc, (func: GLenum, ref_: GLint, mask: GLuint));
+gl_wrapper!(glStencilFuncSeparate, (face: GLenum, func: GLenum, ref_: GLint, mask: GLuint));
+gl_wrapper!(glStencilMask, (mask: GLuint));
+gl_wrapper!(glStencilMaskSeparate, (face: GLenum, mask: GLuint));
+gl_wrapper!(glStencilOp, (fail: GLenum, zfail: GLenum, zpass: GLenum));
+gl_wrapper!(glStencilOpSeparate, (face: GLenum, sfail: GLenum, dpfail: GLenum, dppass: GLenum));
+gl_wrapper!(glTexImage2D, (target: GLenum, level: GLint, internalformat: GLint, width: GLsizei, height: GLsizei, border: GLint, format: GLenum, type_: GLenum, pixels: *const c_void));
+gl_wrapper!(glTexParameterf, (target: GLenum, pname: GLenum, param: GLfloat));
+gl_wrapper!(glTexParameterfv, (target: GLenum, pname: GLenum, params: *const GLfloat));
+gl_wrapper!(glTexParameteri, (target: GLenum, pname: GLenum, param: GLint));
+gl_wrapper!(glTexParameteriv, (target: GLenum, pname: GLenum, params: *const GLint));
+gl_wrapper!(glTexSubImage2D, (target: GLenum, level: GLint, xoffset: GLint, yoffset: GLint, width: GLsizei, height: GLsizei, format: GLenum, type_: GLenum, pixels: *const c_void));
+gl_wrapper!(glUniform1f, (location: GLint, v0: GLfloat));
+gl_wrapper!(glUniform1fv, (location: GLint, count: GLsizei, value: *const GLfloat));
+gl_wrapper!(glUniform1i, (location: GLint, v0: GLint));
+gl_wrapper!(glUniform1iv, (location: GLint, count: GLsizei, value: *const GLint));
+gl_wrapper!(glUniform2f, (location: GLint, v0: GLfloat, v1: GLfloat));
+gl_wrapper!(glUniform2fv, (location: GLint, count: GLsizei, value: *const GLfloat));
+gl_wrapper!(glUniform3f, (location: GLint, v0: GLfloat, v1: GLfloat, v2: GLfloat));
+gl_wrapper!(glUniform3fv, (location: GLint, count: GLsizei, value: *const GLfloat));
+gl_wrapper!(glUniform4f, (location: GLint, v0: GLfloat, v1: GLfloat, v2: GLfloat, v3: GLfloat));
+gl_wrapper!(glUniform4fv, (location: GLint, count: GLsizei, value: *const GLfloat));
+gl_wrapper!(glUniformMatrix3fv, (location: GLint, count: GLsizei, transpose: GLboolean, value: *const GLfloat));
+gl_wrapper!(glUniformMatrix4fv, (location: GLint, count: GLsizei, transpose: GLboolean, value: *const GLfloat));
+gl_wrapper!(glUseProgram, (program: GLuint));
+gl_wrapper!(glValidateProgram, (program: GLuint));
+gl_wrapper!(glVertexAttrib1f, (index: GLuint, x: GLfloat));
+gl_wrapper!(glVertexAttrib2f, (index: GLuint, x: GLfloat, y: GLfloat));
+gl_wrapper!(glVertexAttrib3f, (index: GLuint, x: GLfloat, y: GLfloat, z: GLfloat));
+gl_wrapper!(glVertexAttrib4f, (index: GLuint, x: GLfloat, y: GLfloat, z: GLfloat, w: GLfloat));
+gl_wrapper!(glVertexAttribPointer, (index: GLuint, size: GLint, type_: GLenum, normalized: GLboolean, stride: GLsizei, pointer: *const c_void));
+gl_wrapper!(glViewport, (x: GLint, y: GLint, width: GLsizei, height: GLsizei));
+
