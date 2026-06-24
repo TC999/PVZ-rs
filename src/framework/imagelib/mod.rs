@@ -1,12 +1,10 @@
 // PvZ Portable Rust 翻译 — ImageLib 图像加载库
 // 对应 C++ SexyAppFramework/imagelib/ImageLib.h / ImageLib.cpp
 //
-// 使用 SDL2_image (IMG_Load) 加载常见图像格式，转换为像素缓冲区。
+// 使用纯 Rust image crate 加载常见图像格式，转换为像素缓冲区。
+// 无 SDL2_image 依赖，跨平台兼容。
 
 #![allow(dead_code)]
-
-use std::ffi::CString;
-use crate::ffi::sdl2::*;
 
 /// 加载的图像信息（对应 C++ ImageLib::Image）
 pub struct Image {
@@ -29,51 +27,24 @@ pub static mut G_IGNORE_JPEG2000_ALPHA: bool = true;
 
 /// 加载图像文件（对应 C++ GetImage）
 pub fn get_image(file_name: &str, _look_for_alpha: bool) -> Option<Box<Image>> {
-    let c_path = CString::new(file_name).ok()?;
-    unsafe {
-        let surface = IMG_Load(c_path.as_ptr());
-        if surface.is_null() { return None; }
+    // 使用纯 Rust image crate 加载
+    let img = image::ImageReader::open(file_name).ok()?.decode().ok()?;
+    let rgba = img.to_rgba8();
 
-        let w = (*surface).w;
-        let h = (*surface).h;
-        let pitch = (*surface).pitch;
-        let pixels = (*surface).pixels;
+    let w = rgba.width() as i32;
+    let h = rgba.height() as i32;
+    let total = (w * h) as usize;
+    let mut bits = vec![0u32; total];
 
-        if pixels.is_null() {
-            SDL_FreeSurface(surface);
-            return None;
+    for y in 0..h {
+        for x in 0..w {
+            let px = rgba.get_pixel(x as u32, y as u32);
+            let idx = (y * w + x) as usize;
+            bits[idx] = (px[3] as u32) << 24 | (px[0] as u32) << 16 | (px[1] as u32) << 8 | px[2] as u32;
         }
-
-        // 将 SDL_Surface 像素转为 RGBA u32 数组
-        let bpp = pitch / w;
-        let total = (w * h) as usize;
-        let mut bits = vec![0u32; total];
-
-        let src = pixels as *const u8;
-        for i in 0..total {
-            let offset = (i as i32 / w) * pitch + (i as i32 % w) * bpp;
-            let (r, g, b, a) = match bpp {
-                4 => (
-                    *src.add(offset as usize),
-                    *src.add(offset as usize + 1),
-                    *src.add(offset as usize + 2),
-                    *src.add(offset as usize + 3),
-                ),
-                3 => (
-                    *src.add(offset as usize),
-                    *src.add(offset as usize + 1),
-                    *src.add(offset as usize + 2),
-                    255,
-                ),
-                _ => (0, 0, 0, 255),
-            };
-            bits[i] = (a as u32) << 24 | (r as u32) << 16 | (g as u32) << 8 | b as u32;
-        }
-
-        SDL_FreeSurface(surface);
-
-        Some(Box::new(Image { width: w, height: h, bits }))
     }
+
+    Some(Box::new(Image { width: w, height: h, bits }))
 }
 
 /// 写入 JPEG 图像（对应 C++ WriteJPEGImage）

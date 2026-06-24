@@ -11,6 +11,7 @@
 use std::ffi::CString;
 use std::os::raw::{c_char, c_int, c_uint, c_void, c_float};
 use std::sync::OnceLock;
+use sdl2::sys as sdl_sys;
 
 // ============================================================
 // 类型定义
@@ -445,15 +446,10 @@ pub struct GlProcs {
 pub static GL: OnceLock<GlProcs> = OnceLock::new();
 
 /// 加载单个 GL 函数指针。
-/// 内部使用 SDL_GL_GetProcAddress。
+/// 内部使用 SDL_GL_GetProcAddress（通过 sdl2 crate 获取）。
 unsafe fn load_gl_func(name: &str) -> *mut c_void {
     let cname = CString::new(name).unwrap();
-    // SDL_GL_GetProcAddress 来自 SDL2.dll（通过 raw-dylib 链接）
-    #[link(name = "SDL2", kind = "raw-dylib")]
-    unsafe extern "C" {
-        fn SDL_GL_GetProcAddress(proc_: *const c_char) -> *mut c_void;
-    }
-    SDL_GL_GetProcAddress(cname.as_ptr())
+    sdl_sys::SDL_GL_GetProcAddress(cname.as_ptr())
 }
 
 /// 初始化 OpenGL 函数表。

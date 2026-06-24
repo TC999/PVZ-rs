@@ -1,10 +1,16 @@
 // PvZ Portable Rust 翻译 — SexyAppBase（应用程序基类）
 // 对应 C++ SexyAppFramework/SexyAppBase.h / SexyAppBase.cpp
+//
+// SDL2 通过外部 crate (sdl2) 使用，不再用 raw-dylib FFI。
 
 #![allow(dead_code)]
 
 use std::collections::HashMap;
-use std::ffi::CString;
+
+use sdl2::event::{Event, WindowEvent};
+use sdl2::keyboard::Keycode;
+use sdl2::mouse::MouseButton;
+use sdl2::video::{GLContext, GLProfile, Window, WindowPos};
 
 use crate::framework::color::Color;
 use crate::framework::common;
@@ -17,14 +23,14 @@ use crate::framework::widget::dialog::Dialog;
 use crate::framework::sound::sound_manager::SoundManager;
 use crate::framework::sound::music_interface::MusicInterface;
 use crate::framework::resource_manager::ResourceManager;
-use crate::ffi::sdl2::*;
 
 /// 应用基类
 pub struct SexyAppBase {
-    // 窗口和上下文
-    pub window: *mut std::ffi::c_void,
-    pub context: *mut std::ffi::c_void,
-    pub surface: *mut std::ffi::c_void,
+    // SDL2 上下文（使用外部 crate，dropped last 以正确清理）
+    pub sdl_context: Option<sdl2::Sdl>,
+    pub window: Option<Window>,
+    pub gl_context: Option<GLContext>,
+    pub event_pump: Option<sdl2::EventPump>,
 
     // 基本属性
     pub rand_seed: u32,
@@ -100,18 +106,17 @@ pub struct SexyAppBase {
 
 impl SexyAppBase {
     pub fn new() -> Self {
-        // 对应 C++ 构造函数中的 SDL_Init(SDL_INIT_TIMER)
-        unsafe {
-            SDL_Init(SDL_INIT_TIMER);
-        }
+        // 初始化 SDL2（对应 C++ 构造函数中的 SDL_Init）
+        let sdl_context = sdl2::init().expect("SDL2 初始化失败");
 
         // 创建 WidgetManager（对应 C++ 构造函数 line 399: new WidgetManager(this)）
         let wm = WidgetManager::new();
 
         SexyAppBase {
-            window: std::ptr::null_mut(),
-            context: std::ptr::null_mut(),
-            surface: std::ptr::null_mut(),
+            sdl_context: Some(sdl_context),
+            window: None,
+            gl_context: None,
+            event_pump: None,
             rand_seed: 0,
             company_name: String::new(),
             prod_name: String::from("Product"),
@@ -186,84 +191,91 @@ impl SexyAppBase {
 
     /// 创建 SDL 窗口和 OpenGL 上下文（对应 C++ MakeWindow）
     pub fn make_window(&mut self) {
-        unsafe {
-            if SDL_Init(SDL_INIT_VIDEO) < 0 {
-                let err = SDL_GetError();
-                if !err.is_null() {
-                    let c_str = std::ffi::CStr::from_ptr(err);
-                    eprintln!("SDL_Init 失败: {:?}", c_str);
-                }
+        let sdl = match self.sdl_context.as_ref() {
+            Some(s) => s,
+            None => {
+                eprintln!("SDL2 未初始化");
                 self.m_shutdown_flag = true;
                 return;
             }
-        }
+        };
 
-        unsafe {
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-            SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-            SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 0);
-        }
-
-        let title_cstr = CString::new(self.title.clone()).unwrap();
-
-        unsafe {
-            self.window = SDL_CreateWindow(
-                title_cstr.as_ptr(),
-                0x2FFF0000i32, // SDL_WINDOWPOS_CENTERED
-                0x2FFF0000i32,
-                self.width,
-                self.height,
-                SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE,
-            ) as *mut std::ffi::c_void;
-        }
-
-        if self.window.is_null() {
-            eprintln!("SDL_CreateWindow 失败");
-            self.m_shutdown_flag = true;
-            return;
-        }
-
-        unsafe {
-            self.context = SDL_GL_CreateContext(self.window as *mut SDL_Window) as *mut std::ffi::c_void;
-        }
-
-        if self.context.is_null() {
-            // 回退 desktop GL 2.1
-            unsafe {
-                if !self.window.is_null() {
-                    SDL_DestroyWindow(self.window as *mut SDL_Window);
-                    self.window = std::ptr::null_mut();
-                }
-                SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
-                SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-                SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-
-                self.window = SDL_CreateWindow(
-                    title_cstr.as_ptr(),
-                    0x2FFF0000i32,
-                    0x2FFF0000i32,
-                    self.width,
-                    self.height,
-                    SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE,
-                ) as *mut std::ffi::c_void;
-
-                if !self.window.is_null() {
-                    self.context = SDL_GL_CreateContext(self.window as *mut SDL_Window) as *mut std::ffi::c_void;
-                }
-            }
-
-            if self.window.is_null() || self.context.is_null() {
-                eprintln!("无法创建 OpenGL 上下文");
+        let video = match sdl.video() {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("SDL 视频子系统初始化失败: {e}");
                 self.m_shutdown_flag = true;
                 return;
             }
+        };
+
+        // 尝试 GLES 2.0 配置
+        let gl_attr = video.gl_attr();
+        gl_attr.set_context_profile(GLProfile::GLES);
+        gl_attr.set_context_version(2, 0);
+        gl_attr.set_double_buffer(true);
+        gl_attr.set_depth_size(0);
+
+        // 创建窗口
+        let window_result = video
+            .window(&self.title, self.width as u32, self.height as u32)
+            .position_centered()
+            .opengl()
+            .resizable()
+            .build();
+
+        let (window, gl_context) = match window_result {
+            Ok(win) => {
+                match win.gl_create_context() {
+                    Ok(ctx) => (win, ctx),
+                    Err(e) => {
+                        eprintln!("GLES 2.0 上下文创建失败: {e}，回退到桌面 GL 2.1");
+                        // win 在这里 drop，释放第一个窗口
+                        drop(win);
+                        // 回退到 desktop GL 2.1
+                        gl_attr.set_context_profile(GLProfile::Compatibility);
+                        gl_attr.set_context_version(2, 1);
+
+                        let win2 = video
+                            .window(&self.title, self.width as u32, self.height as u32)
+                            .position_centered()
+                            .opengl()
+                            .resizable()
+                            .build();
+
+                        match win2 {
+                            Ok(w) => match w.gl_create_context() {
+                                Ok(ctx) => (w, ctx),
+                                Err(e2) => {
+                                    eprintln!("回退 GL 上下文创建失败: {e2}");
+                                    self.m_shutdown_flag = true;
+                                    return;
+                                }
+                            },
+                            Err(e2) => {
+                                eprintln!("回退窗口创建失败: {e2}");
+                                self.m_shutdown_flag = true;
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("SDL_CreateWindow 失败: {e}");
+                self.m_shutdown_flag = true;
+                return;
+            }
+        };
+
+        // 设置交换间隔
+        if let Err(e) = video.gl_set_swap_interval(1) {
+            eprintln!("设置交换间隔失败: {e}");
         }
 
-        unsafe {
-            SDL_GL_SetSwapInterval(1);
-        }
+        // 保存窗口和上下文
+        self.window = Some(window);
+        self.gl_context = Some(gl_context);
 
         // 初始化 GLInterface（对应 C++ MakeWindow 中 new GLInterface(this)）
         if self.gl_interface.is_none() {
@@ -281,8 +293,14 @@ impl SexyAppBase {
             return;
         }
 
+        // 创建事件泵
+        if let Some(ref sdl) = self.sdl_context {
+            self.event_pump = sdl.event_pump().ok();
+        }
+
         self.running = true;
-        self.last_time = unsafe { SDL_GetTicks() };
+        // sdl2::timer 模块的 ticks() 函数不可用，直接调用 SDL_GetTicks 通过 sys
+        self.last_time = unsafe { sdl2::sys::SDL_GetTicks() };
 
         // 对应 C++ DoMainLoop: while (!mShutdown) { UpdateApp(); }
         while !self.m_shutdown_flag {
@@ -356,32 +374,30 @@ impl SexyAppBase {
 
     /// 处理 SDL 事件队列（对应 C++ ProcessDeferredMessages）
     pub fn process_deferred_messages(&mut self, _allow_quit: bool) -> bool {
-        loop {
-            let mut event = std::mem::MaybeUninit::<SDL_Event>::uninit();
-            let has_event = unsafe { SDL_PollEvent(event.as_mut_ptr()) };
-            if has_event == 0 {
-                break;
-            }
+        let pump = match self.event_pump.as_mut() {
+            Some(p) => p,
+            None => return true,
+        };
 
-            let event = unsafe { event.assume_init() };
-            let event_type = unsafe { event.type_ };
+        // 先收集所有待处理事件，避免对 self 的双重可变借用
+        let events: Vec<Event> = pump.poll_iter().collect();
 
-            match event_type {
-                SDL_QUIT => {
+        for event in events {
+            match event {
+                Event::Quit { .. } => {
                     self.m_shutdown_flag = true;
                     return false;
                 }
 
-                SDL_WINDOWEVENT => {
-                    let window_event = unsafe { event.window };
-                    match window_event.event {
-                        SDL_WINDOWEVENT_CLOSE => {
+                Event::Window { win_event, .. } => {
+                    match win_event {
+                        WindowEvent::Close => {
                             self.m_shutdown_flag = true;
                             return false;
                         }
-                        SDL_WINDOWEVENT_RESIZED | SDL_WINDOWEVENT_SIZE_CHANGED => {
-                            self.width = window_event.data1 as i32;
-                            self.height = window_event.data2 as i32;
+                        WindowEvent::Resized(w, h) | WindowEvent::SizeChanged(w, h) => {
+                            self.width = w;
+                            self.height = h;
                             if let Some(gl) = self.gl_interface.as_mut() {
                                 unsafe {
                                     (**gl).width = self.width;
@@ -391,62 +407,72 @@ impl SexyAppBase {
                             }
                             if let Some(wm) = self.widget_manager {
                                 unsafe {
-                                    (*wm).resize(Rect::new(0, 0, self.width, self.height), Rect::new(0, 0, self.width, self.height));
+                                    (*wm).resize(
+                                        Rect::new(0, 0, self.width, self.height),
+                                        Rect::new(0, 0, self.width, self.height),
+                                    );
                                 }
                             }
                         }
-                        SDL_WINDOWEVENT_FOCUS_GAINED => {
+                        WindowEvent::FocusGained => {
                             self.has_focus = true;
                             self.active = true;
                         }
-                        SDL_WINDOWEVENT_FOCUS_LOST => {
+                        WindowEvent::FocusLost => {
                             self.has_focus = false;
                             self.active = false;
                         }
-                        SDL_WINDOWEVENT_MINIMIZED => {
+                        WindowEvent::Minimized => {
                             self.minimized = true;
                         }
-                        SDL_WINDOWEVENT_RESTORED => {
+                        WindowEvent::Restored => {
                             self.minimized = false;
                         }
                         _ => {}
                     }
                 }
 
-                SDL_KEYDOWN => {
-                    let key = unsafe { event.key };
-                    let keycode = key.keysym.sym;
-                    let mod_state = unsafe { SDL_GetModState() };
-                    self.ctrl_down = (mod_state & KMOD_CTRL) != 0;
-                    self.alt_down = (mod_state & KMOD_ALT) != 0;
-                    self.key_down(keycode);
+                Event::KeyDown {
+                    keycode: Some(kc),
+                    keymod,
+                    ..
+                } => {
+                    self.ctrl_down = keymod.intersects(
+                        sdl2::keyboard::Mod::LCTRLMOD | sdl2::keyboard::Mod::RCTRLMOD,
+                    );
+                    self.alt_down = keymod.intersects(
+                        sdl2::keyboard::Mod::LALTMOD | sdl2::keyboard::Mod::RALTMOD,
+                    );
+                    self.key_down(*kc);
                 }
 
-                SDL_KEYUP => {
-                    let key = unsafe { event.key };
-                    let keycode = key.keysym.sym;
-                    self.key_up(keycode);
+                Event::KeyDown { .. } => {} // no keycode
+
+                Event::KeyUp {
+                    keycode: Some(kc), ..
+                } => {
+                    self.key_up(*kc);
                 }
 
-                SDL_MOUSEBUTTONDOWN => {
-                    let button = unsafe { event.button };
-                    let x = button.x as i32;
-                    let y = button.y as i32;
-                    let btn = button.button as i32;
+                Event::KeyUp { .. } => {} // no keycode
+
+                Event::MouseButtonDown {
+                    mouse_btn, x, y, ..
+                } => {
+                    let btn = match mouse_btn {
+                        MouseButton::Left => 1,
+                        MouseButton::Middle => 2,
+                        MouseButton::Right => 3,
+                        _ => 0,
+                    };
                     self.mouse_down(x, y, btn, 1);
                 }
 
-                SDL_MOUSEBUTTONUP => {
-                    let button = unsafe { event.button };
-                    let x = button.x as i32;
-                    let y = button.y as i32;
+                Event::MouseButtonUp { x, y, .. } => {
                     self.mouse_up(x, y);
                 }
 
-                SDL_MOUSEMOTION => {
-                    let motion = unsafe { event.motion };
-                    let x = motion.x as i32;
-                    let y = motion.y as i32;
+                Event::MouseMotion { x, y, .. } => {
                     self.mouse_move(x, y);
                 }
 
@@ -461,10 +487,8 @@ impl SexyAppBase {
 
     /// 交换缓冲区（对应 C++ SDL_GL_SwapWindow）
     fn swap_buffers(&self) {
-        if !self.window.is_null() {
-            unsafe {
-                SDL_GL_SwapWindow(self.window as *mut SDL_Window);
-            }
+        if let Some(ref win) = self.window {
+            win.gl_swap_window();
         }
     }
 
@@ -488,22 +512,11 @@ impl SexyAppBase {
             }
         }
 
-        // 销毁窗口
-        if !self.window.is_null() {
-            unsafe {
-                if !self.context.is_null() {
-                    SDL_GL_DeleteContext(self.context as *mut std::ffi::c_void);
-                    self.context = std::ptr::null_mut();
-                }
-                SDL_DestroyWindow(self.window as *mut SDL_Window);
-                self.window = std::ptr::null_mut();
-            }
-        }
-
-        unsafe {
-            SDL_QuitSubSystem(SDL_INIT_VIDEO);
-            SDL_QuitSubSystem(SDL_INIT_TIMER);
-        }
+        // 释放 SDL2 资源（Drop 处理 window/context/sdl）
+        self.gl_context = None;
+        self.window = None;
+        self.event_pump = None;
+        self.sdl_context = None; // SDL_Quit 自动调用
     }
 
     /// 初始化 GL 接口

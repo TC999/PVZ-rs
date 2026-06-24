@@ -13,6 +13,9 @@ name = "pvz-portable"
 path = "src/main.rs"
 
 [dependencies]
-# 只使用 Rust 标准库。
-# SDL2 和 OpenGL 通过 extern "C" FFI 直接调用 C 库。
-# 无需任何外部 crate。
+sdl2 = { version = "0.37", features = ["bundled"] }
+
+[dependencies.image]
+version = "0.25"
+default-features = false
+features = ["png", "jpeg", "gif", "bmp", "tga", "webp", "tiff"]
