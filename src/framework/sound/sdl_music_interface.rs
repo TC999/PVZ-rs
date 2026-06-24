@@ -1,7 +1,5 @@
-// SDL 音乐接口
-// 流程：PAK→临时文件→Mix_LoadMUS，失败时输出日志
-// 如果 SDL2_mixer_ext.dll 可用，支持 OGG/MP3/WAV/FLAC/MO3（需 libopenmpt）
-// 如果只有 SDL2_mixer.dll，支持 OGG/WAV
+// SDL 音乐接口 — 完整实现
+// MO3 回退：SDL_mixer 不支持的格式通过 libopenmpt 解码为 WAV 再播放
 
 #![allow(dead_code, invalid_reference_casting)]
 
@@ -9,6 +7,9 @@ use std::collections::HashMap;
 use crate::framework::sound::music_interface::MusicInterface;
 use crate::framework::paklib::with_pak_interface;
 use crate::ffi::sdl_mixer;
+use crate::ffi::libopenmpt;
+
+const OPENMPT_SAMPLE_RATE: i32 = 48000;
 
 struct MusicInfo {
     filename: String,
@@ -40,8 +41,8 @@ impl SDLMusicInterface {
         std::fs::write(&dest, data).ok().map(|_| dest.to_string_lossy().to_string())
     }
 
-    /// 从 PAK 加载并尝试用 Mix_LoadMUS 播放
-    fn try_pak_music(&self, song_id: i32, filename: &str) -> bool {
+    /// 尝试用 SDL_mixer 从 PAK 加载
+    fn try_mixer_load(&self, song_id: i32, filename: &str) -> bool {
         let exts = ["", ".mo3", ".MO3", ".ogg", ".OGG", ".mp3", ".MP3", ".wav", ".WAV"];
         for ext in &exts {
             let path = format!("{}{}", filename, ext);
@@ -59,6 +60,99 @@ impl SDLMusicInterface {
                         return true;
                     }
                 }
+            }
+        }
+        false
+    }
+
+    /// 通过 libopenmpt 解码 MO3/IT/XM 为 WAV → Mix_LoadMUS
+    fn try_libopenmpt_decode(&self, song_id: i32, filename: &str) -> bool {
+        if !libopenmpt::is_available() { return false; }
+
+        let data = match with_pak_interface(|pak| {
+            let exts = [".mo3", ".MO3", ".it", ".IT", ".xm", ".XM", ".s3m", ".S3M", ".mod", ".MOD", ""];
+            for ext in &exts {
+                let path = format!("{}{}", filename, ext);
+                if let Some(d) = pak.load_file(&path) { return Some((path, d)); }
+                if let Ok(d) = std::fs::read(&path) { return Some((path, d)); }
+            }
+            None
+        }) {
+            Some((path, d)) => { eprintln!("  [libopenmpt] 从 '{}' 加载 {} 字节", path, d.len()); d }
+            None => return false,
+        };
+
+        // 解码
+        let mod_ = libopenmpt::create_from_memory(&data);
+        if mod_.is_null() {
+            eprintln!("  [libopenmpt] openmpt_module_create_from_memory 失败");
+            return false;
+        }
+
+        libopenmpt::set_repeat_count(mod_, 0);
+
+        let duration = libopenmpt::get_duration_seconds(mod_);
+        eprintln!("  [libopenmpt] 时长: {:.2}s", duration);
+
+        let num_channels = libopenmpt::get_num_channels(mod_);
+        if duration <= 0.0 || num_channels <= 0 {
+            libopenmpt::destroy(mod_);
+            return false;
+        }
+
+        // 渲染 PCM
+        let total_frames = (duration * OPENMPT_SAMPLE_RATE as f32) as usize;
+        let mut pcm: Vec<i16> = vec![0i16; total_frames * 2]; // 立体声交错
+
+        let mut written = 0usize;
+        loop {
+            let n = libopenmpt::read_interleaved_stereo(mod_, OPENMPT_SAMPLE_RATE, &mut pcm[written..]);
+            if n == 0 { break; }
+            written += n as usize;
+        }
+        libopenmpt::destroy(mod_);
+
+        pcm.truncate(written);
+        if pcm.len() < 2 { return false; }
+
+        eprintln!("  [libopenmpt] 解码 {} 个 PCM 样本", pcm.len());
+
+        // 写入 WAV
+        let num_samples = pcm.len() as u32;
+        let data_size = num_samples * 2;
+        let file_size = 44 + data_size;
+        let mut wav = Vec::with_capacity(file_size as usize);
+
+        wav.extend_from_slice(b"RIFF");
+        wav.extend(&(file_size - 8).to_le_bytes());
+        wav.extend_from_slice(b"WAVE");
+        wav.extend_from_slice(b"fmt ");
+        wav.extend(&16u32.to_le_bytes());
+        wav.extend(&1u16.to_le_bytes());          // PCM
+        wav.extend(&2u16.to_le_bytes());          // stereo
+        wav.extend(&(OPENMPT_SAMPLE_RATE as u32).to_le_bytes());
+        wav.extend(&(OPENMPT_SAMPLE_RATE as u32 * 2 * 2).to_le_bytes());
+        wav.extend(&4u16.to_le_bytes());          // block align
+        wav.extend(&16u16.to_le_bytes());         // 16-bit
+        wav.extend_from_slice(b"data");
+        wav.extend(&data_size.to_le_bytes());
+        for &sample in &pcm {
+            wav.extend(&sample.to_le_bytes());
+        }
+
+        // 临时 WAV 文件 → Mix_LoadMUS
+        if let Some(temp) = self.write_temp_file(&format!("{}.wav", filename), &wav) {
+            let c_path = std::ffi::CString::new(temp).unwrap();
+            let h = sdl_mixer::load_mus(c_path.as_ptr());
+            if !h.is_null() {
+                unsafe {
+                    let sm = &mut *(self as *const Self as *mut Self);
+                    sm.music_map.insert(song_id, MusicInfo {
+                        filename: format!("{} (libopenmpt decoded)", filename),
+                        handle: h, volume: 1.0, volume_cap: 1.0,
+                    });
+                }
+                return true;
             }
         }
         false
@@ -83,9 +177,12 @@ impl MusicInterface for SDLMusicInterface {
         if !sdl_mixer::is_available() { return false; }
 
         // 2. PAK → 临时文件 → Mix_LoadMUS
-        if self.try_pak_music(song_id, filename) { return true; }
+        if self.try_mixer_load(song_id, filename) { return true; }
 
-        eprintln!("  [SDLMusicInterface] 加载失败 '{}': 格式不受支持或文件不存在", filename);
+        // 3. libopenmpt 解码 MO3/IT/XM → WAV → Mix_LoadMUS
+        if self.try_libopenmpt_decode(song_id, filename) { return true; }
+
+        eprintln!("  [SDLMusicInterface] 所有加载方式均失败: '{}'", filename);
         false
     }
 

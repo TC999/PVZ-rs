@@ -697,6 +697,12 @@ impl SexyAppBase {
     /// 初始化音频系统（对应 C++ 中创建 SDLSoundManager + CreateMusicInterface）
     pub fn init_sound_system(&mut self) {
         use crate::ffi::sdl_mixer;
+        use crate::ffi::libopenmpt;
+
+        // 加载 libopenmpt.dll（运行时，编译时不需要）
+        if libopenmpt::load_library() {
+            eprintln!("[libopenmpt] libopenmpt.dll 已加载（支持 MO3/IT/XM 格式）");
+        }
 
         if sdl_mixer::load_library() {
             if sdl_mixer::open_audio(44100, 0x8010u16, 2, 2048) == 0 {
