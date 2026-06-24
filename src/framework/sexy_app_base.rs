@@ -699,18 +699,25 @@ impl SexyAppBase {
         use crate::ffi::sdl_mixer;
 
         // 加载 SDL_mixer DLL
+        eprintln!("[音频] 正在初始化音频系统...");
         if !sdl_mixer::load_mixer_library() {
-            eprintln!("SDL_mixer 不可用，音频已禁用");
-        } else if sdl_mixer::mix_open_audio(44100, 0x8010u16, 2, 2048) == 0 {
-            sdl_mixer::mix_allocate_channels(32);
+            eprintln!("[音频] 无法加载 SDL2_mixer.dll，游戏将无声运行");
+            eprintln!("[音频] 请确保 SDL2_mixer.dll 与可执行文件在同一目录");
         } else {
-            eprintln!("Mix_OpenAudio 失败");
+            eprintln!("[音频] SDL2_mixer.dll 加载成功");
+            if sdl_mixer::mix_open_audio(44100, 0x8010u16, 2, 2048) == 0 {
+                let allocated = sdl_mixer::mix_allocate_channels(32);
+                eprintln!("[音频] Mix_OpenAudio 成功，声道数: {}/32", allocated);
+            } else {
+                eprintln!("[音频] Mix_OpenAudio 调用失败");
+            }
         }
 
         // 创建 SDLSoundManager
         if self.sound_manager.is_none() {
             use crate::framework::sound::sdl_sound_manager::SDLSoundManager;
             let sm = Box::new(SDLSoundManager::new());
+            eprintln!("[音频] SDLSoundManager 创建完成");
             self.sound_manager = Some(Box::into_raw(sm) as *mut dyn crate::framework::sound::sound_manager::SoundManager);
         }
 
@@ -718,12 +725,14 @@ impl SexyAppBase {
         if self.music_interface.is_none() {
             use crate::framework::sound::sdl_music_interface::SDLMusicInterface;
             let mi = Box::new(SDLMusicInterface::new());
+            eprintln!("[音频] SDLMusicInterface 创建完成");
             self.music_interface = Some(Box::into_raw(mi) as *mut dyn crate::framework::sound::music_interface::MusicInterface);
         }
 
         // 设置初始音量
         self.set_sfx_volume(self.sfx_volume);
         self.set_music_volume(self.music_volume);
+        eprintln!("[音频] 初始音量: SFX={} Music={}", self.sfx_volume, self.music_volume);
     }
 
     /// 获取图像

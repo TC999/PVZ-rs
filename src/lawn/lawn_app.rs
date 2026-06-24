@@ -205,9 +205,11 @@ impl LawnApp {
         let app_ptr = self as *mut LawnApp;
         if self.music.is_none() {
             self.music = Some(Box::new(crate::lawn::system::music::Music::new(app_ptr)));
+            eprintln!("[LawnApp] Music 创建完成");
         }
         if self.sound_system.is_none() {
             self.sound_system = Some(Box::new(crate::todlib::tod_foley::FoleyManager::new(app_ptr)));
+            eprintln!("[LawnApp] FoleyManager 创建完成");
         }
 
         // 加载标题屏幕所需的图片资源

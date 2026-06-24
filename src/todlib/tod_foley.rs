@@ -25,10 +25,11 @@ impl FoleyManager {
         let app = unsafe { &*self.app };
         if let Some(sm_ptr) = app.base.sound_manager {
             unsafe {
-                // 按 FoleyType 作为音效 ID 播放
-                // C++ 版 FoleyType 值和 SoundManager 的 ID 是直接对应的
+                eprintln!("[Foley] play_foley type={}", foley_type);
                 (*sm_ptr).play_sound(foley_type);
             }
+        } else {
+            eprintln!("[Foley] play_foley type={} 失败：sound_manager 为 None", foley_type);
         }
     }
 

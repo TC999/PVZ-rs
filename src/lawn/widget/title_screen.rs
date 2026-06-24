@@ -142,15 +142,18 @@ impl WidgetImpl for TitleScreenImpl {
 
         if self.title_state == TitleState::WaitingForFirstDraw {
             // 首次 Update：初始化音乐、启动加载线程
+            eprintln!("[TitleScreen] 首次 Update，初始化音乐并启动加载线程");
             if let Some(ref mut music) = app.music {
                 music.music_title_screen_init();
+            } else {
+                eprintln!("[TitleScreen] music 为 None，跳过音乐初始化");
             }
             app.start_loading_thread();
 
             // 切换到 PopCap Logo 状态
             self.title_state = TitleState::PopCapLogo;
             self.title_state_counter = 0;
-            // C++ 中 mTitleStateDuration 在这里被设置为其他值，此处暂用默认
+            eprintln!("[TitleScreen] → PopCapLogo 状态");
         }
 
         // 计数递增

@@ -71,11 +71,16 @@ impl SoundManager for SDLSoundManager {
     fn load_sound_by_id(&mut self, sfx_id: i32, filename: &str) -> bool {
         if sfx_id < 0 || sfx_id as usize >= MAX_SOURCE_SOUNDS { return false; }
         self.release_sound_at(sfx_id);
-        let data = match Self::load_audio_data(filename) { Some(d) => d, None => return false };
+        let data = match Self::load_audio_data(filename) { Some(d) => d, None => {
+            eprintln!("  [SDLSoundManager] 加载音效 #{} '{}' 失败：文件未找到", sfx_id, filename);
+            return false;
+        }};
+        eprintln!("  [SDLSoundManager] 加载音效 #{} '{}' ({} 字节)", sfx_id, filename, data.len());
         let rwops = unsafe { sdl_mixer::rw_from_mem(data.as_ptr() as *mut std::ffi::c_void, data.len() as i32) };
-        if rwops.is_null() { return false; }
+        if rwops.is_null() { eprintln!("  [SDLSoundManager] SDL_RWFromMem 失败"); return false; }
         let chunk = sdl_mixer::mix_load_wav_rw(rwops, 1);
-        if chunk.is_null() { return false; }
+        if chunk.is_null() { eprintln!("  [SDLSoundManager] mix_load_wav_rw 返回 null"); return false; }
+        eprintln!("  [SDLSoundManager] 音效 #{} 加载成功", sfx_id);
         self.source_sounds[sfx_id as usize] = Some(chunk);
         self.source_file_names[sfx_id as usize] = filename.to_string();
         std::mem::forget(data);
@@ -104,15 +109,22 @@ impl SoundManager for SDLSoundManager {
 
     fn play_sound(&self, sfx_id: i32) -> bool {
         if sfx_id < 0 || sfx_id as usize >= MAX_SOURCE_SOUNDS { return false; }
-        let chunk = match self.source_sounds[sfx_id as usize] { Some(c) => c, None => return false };
+        let chunk = match self.source_sounds[sfx_id as usize] { Some(c) => c, None => {
+            eprintln!("  [SDLSoundManager] 播放音效 #{} 失败：未加载", sfx_id);
+            return false;
+        }};
         let channel = sdl_mixer::mix_play_channel_timed(-1, chunk, 0, -1);
-        if channel < 0 { return false; }
-        let vol = (self.master_volume * self.base_volumes[sfx_id as usize] * 128.0) as i32;
-        sdl_mixer::mix_volume(channel, vol.clamp(0, 128));
+        if channel >= 0 {
+            let vol = (self.master_volume * self.base_volumes[sfx_id as usize] * 128.0) as i32;
+            sdl_mixer::mix_volume(channel, vol.clamp(0, 128));
+            eprintln!("  [SDLSoundManager] 播放音效 #{} (声道={}, 音量={})", sfx_id, channel, vol.clamp(0, 128));
+        } else {
+            eprintln!("  [SDLSoundManager] 播放音效 #{} 失败：无空闲声道", sfx_id);
+        }
         let pan = self.base_pans[sfx_id as usize];
         if pan < 0 { sdl_mixer::mix_set_panning(channel, 128, (128 + pan).clamp(0, 128) as u8); }
         else if pan > 0 { sdl_mixer::mix_set_panning(channel, (128 - pan).clamp(0, 128) as u8, 128); }
-        true
+        channel >= 0
     }
 
     fn stop_sound(&self, _sfx_id: i32) {}

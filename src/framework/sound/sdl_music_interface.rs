@@ -55,16 +55,41 @@ impl SDLMusicInterface {
 impl MusicInterface for SDLMusicInterface {
     fn load_music(&mut self, song_id: i32, filename: &str) -> bool {
         self.unload_music(song_id);
+
+        eprintln!("  [SDLMusicInterface] load_music({}): 尝试加载 '{}'", song_id, filename);
+
         if !sdl_mixer::is_mixer_available() {
+            eprintln!("  [SDLMusicInterface] SDL_mixer 不可用，仅记录文件名");
             self.music_map.insert(song_id, SDLMusicInfo {
                 filename: filename.to_string(), h_music: std::ptr::null_mut(), volume: 1.0, volume_cap: 1.0,
             });
             return true;
         }
-        let temp_path = match self.extract_to_temp(filename) { Some(p) => p, None => return false };
+
+        // 从 PAK 读取数据并写入临时文件
+        let temp_path = match self.extract_to_temp(filename) { Some(p) => p, None => {
+            eprintln!("  [SDLMusicInterface] load_music({}): '{}' 未找到", song_id, filename);
+            return false;
+        }};
+
+        eprintln!("  [SDLMusicInterface] 写入临时文件: {}", temp_path);
+
         let c_path = std::ffi::CString::new(temp_path.as_str()).unwrap();
         let h_music = sdl_mixer::mix_load_mus(c_path.as_ptr());
-        if h_music.is_null() { return false; }
+        if h_music.is_null() {
+            eprintln!("  [SDLMusicInterface] mix_load_mus 返回 null，格式可能不支持");
+            return false;
+        }
+        eprintln!("  [SDLMusicInterface] mix_load_mus 成功");
+
+        let c_path = std::ffi::CString::new(temp_path.as_str()).unwrap();
+        let h_music = sdl_mixer::mix_load_mus(c_path.as_ptr());
+        if h_music.is_null() {
+            eprintln!("  [SDLMusicInterface] mix_load_mus 返回 null，格式可能不支持");
+            return false;
+        }
+        eprintln!("  [SDLMusicInterface] mix_load_mus 成功");
+
         self.music_map.insert(song_id, SDLMusicInfo {
             filename: filename.to_string(), h_music, volume: 1.0, volume_cap: 1.0,
         });
@@ -72,14 +97,26 @@ impl MusicInterface for SDLMusicInterface {
     }
 
     fn play_music(&self, song_id: i32, _offset: i32, no_loop: bool) {
+        eprintln!("  [SDLMusicInterface] play_music({}, no_loop={})", song_id, no_loop);
         if let Some(info) = self.music_map.get(&song_id) {
-            if info.h_music.is_null() { return; }
-            sdl_mixer::mix_play_music(info.h_music, if no_loop { 0 } else { -1 });
-            sdl_mixer::mix_volume_music((self.global_volume * info.volume * 128.0) as i32);
+            if info.h_music.is_null() {
+                eprintln!("  [SDLMusicInterface] h_music 为 null，跳过播放");
+                return;
+            }
+            let result = sdl_mixer::mix_play_music(info.h_music, if no_loop { 0 } else { -1 });
+            eprintln!("  [SDLMusicInterface] mix_play_music 返回: {}", result);
+            let vol = (self.global_volume * info.volume * 128.0) as i32;
+            sdl_mixer::mix_volume_music(vol.clamp(0, 128));
+            eprintln!("  [SDLMusicInterface] 设置音乐音量: {}", vol.clamp(0, 128));
+        } else {
+            eprintln!("  [SDLMusicInterface] song_id={} 不在 map 中", song_id);
         }
     }
 
-    fn stop_music(&self, _song_id: i32) { sdl_mixer::mix_halt_music(); }
+    fn stop_music(&self, _song_id: i32) {
+        eprintln!("  [SDLMusicInterface] stop_music");
+        sdl_mixer::mix_halt_music();
+    }
     fn pause_music(&self, _song_id: i32) { sdl_mixer::mix_pause_music(); }
     fn resume_music(&self, _song_id: i32) { sdl_mixer::mix_resume_music(); }
     fn stop_all_music(&self) { sdl_mixer::mix_halt_music(); }

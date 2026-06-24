@@ -54,7 +54,10 @@ unsafe extern "system" {
 /// 加载 SDL_mixer DLL 并获取所有函数指针
 pub fn load_mixer_library() -> bool {
     unsafe {
-        if G_MIX.is_some() { return true; }
+        if G_MIX.is_some() {
+            eprintln!("[sdl_mixer] 函数表已加载，跳过");
+            return true;
+        }
 
         let dll_names = [
             "SDL2_mixer.dll\0".as_ptr() as *const i8,
@@ -63,10 +66,19 @@ pub fn load_mixer_library() -> bool {
 
         let mut hmod: *mut c_void = std::ptr::null_mut();
         for &name in &dll_names {
+            let name_str = std::ffi::CStr::from_ptr(name).to_string_lossy();
             hmod = LoadLibraryA(name);
-            if !hmod.is_null() { break; }
+            if !hmod.is_null() {
+                eprintln!("[sdl_mixer] 成功加载 {}", name_str);
+                break;
+            } else {
+                eprintln!("[sdl_mixer] {} 未找到", name_str);
+            }
         }
-        if hmod.is_null() { return false; }
+        if hmod.is_null() {
+            eprintln!("[sdl_mixer] 所有 DLL 均未找到，音频不可用");
+            return false;
+        }
 
         macro_rules! load_fn {
             ($name:literal) => {{
