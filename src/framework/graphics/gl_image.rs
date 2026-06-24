@@ -61,6 +61,12 @@ impl GLImage {
             self.tex_id
         }
     }
+
+    /// 设置图像模式（对应 C++ SetImageMode）
+    pub fn set_image_mode(&mut self, _has_trans: bool, _has_alpha: bool) {
+        // 标记纹理的透明/Alpha 属性
+        // 具体实现在纹理上传时由 MemoryImage 处理
+    }
 }
 
 // 前向声明（用于 GLImage 引用 MemoryImage）

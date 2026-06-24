@@ -199,3 +199,23 @@ pub const fn byte_swap64(v: u64) -> u64 {
     ((v & 0x00FF000000000000) >> 40) |
     ((v & 0xFF00000000000000) >> 56)
 }
+
+// ============================================================
+// 2D 向量类型（SexyVector2，用于矩阵变换）
+// ============================================================
+
+/// 2D 浮点向量（对应 C++ SexyVector2）
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(C)]
+pub struct SexyVector2 {
+    pub x: f32,
+    pub y: f32,
+}
+
+impl SexyVector2 {
+    pub const ZERO: SexyVector2 = SexyVector2 { x: 0.0, y: 0.0 };
+
+    pub const fn new(x: f32, y: f32) -> Self {
+        SexyVector2 { x, y }
+    }
+}

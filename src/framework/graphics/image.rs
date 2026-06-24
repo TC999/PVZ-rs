@@ -3,6 +3,7 @@
 
 #![allow(dead_code)]
 
+use std::any::Any;
 use crate::framework::rect::Rect;
 
 /// 图像基类
@@ -45,6 +46,11 @@ impl Image {
     /// 获取图像的逻辑矩形区域
     pub fn get_rect(&self) -> Rect {
         Rect::new(0, 0, self.width, self.height)
+    }
+
+    /// 向下转型为具体类型（用于 MemoryImage 等子类）
+    pub fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
