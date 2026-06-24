@@ -1,5 +1,6 @@
-// SDL_mixer FFI 绑定 — 运行时动态加载 SDL2_mixer.dll
-// 完全对齐 C++ SDL_mixer 调用约定
+// SDL_mixer Ext FFI 绑定 — 运行时动态加载 SDL2_mixer_ext.dll（优先）或 SDL2_mixer.dll
+// 完全对齐 C++ SDL_mixer/SDL_mixer_ext 调用约定
+// SDL_mixer_ext 兼容所有标准 Mix_* API，并扩展了 Mix_PlayMusicStream 等增强函数
 
 #![allow(non_camel_case_types, dead_code)]
 use std::os::raw::{c_int, c_uchar, c_void, c_char};
@@ -29,7 +30,10 @@ struct MixFuncs {
     set_panning: unsafe extern "C" fn(c_int, c_uchar, c_uchar) -> c_int,
     load_mus: unsafe extern "C" fn(*const c_char) -> *mut Mix_Music,
     free_music: unsafe extern "C" fn(*mut Mix_Music),
+    /// Mix_PlayMusic（标准 API，所有 DLL 都提供）
     play_music: unsafe extern "C" fn(*mut Mix_Music, c_int) -> c_int,
+    /// Mix_PlayMusicStream（SDL_mixer_ext 增强 API，优先使用）
+    play_music_stream: Option<unsafe extern "C" fn(*mut Mix_Music, c_int) -> c_int>,
     halt_music: unsafe extern "C" fn() -> c_int,
     volume_music: unsafe extern "C" fn(c_int) -> c_int,
     pause_music: unsafe extern "C" fn(),
@@ -37,6 +41,10 @@ struct MixFuncs {
 }
 
 static mut MIX: Option<MixFuncs> = None;
+/// 标记是否为 SDL_mixer_ext（支持扩展 API）
+#[allow(dead_code)]
+/// 标记是否为 SDL_mixer_ext（支持扩展 API）
+static mut G_IS_EXT: bool = false;
 
 pub fn is_available() -> bool { unsafe { MIX.is_some() } }
 
@@ -44,22 +52,42 @@ pub fn load_library() -> bool {
     unsafe {
         if MIX.is_some() { return true; }
 
+        // 优先加载 SDL2_mixer_ext.dll，它兼容所有标准 API 且支持更多格式 (MO3/OGG 等)
+        // 回退到 SDL2_mixer.dll（基本版，不支持 MO3）
         let names: &[*const i8] = &[
-            "SDL2_mixer.dll\0".as_ptr() as *const i8,
             "SDL2_mixer_ext.dll\0".as_ptr() as *const i8,
+            "SDL2_mixer.dll\0".as_ptr() as *const i8,
         ];
+
         let mut mod_: *mut c_void = std::ptr::null_mut();
-        for &n in names {
+        let mut is_ext_dll = false;
+        for (i, &n) in names.iter().enumerate() {
             mod_ = LoadLibraryA(n);
-            if !mod_.is_null() { break; }
+            if !mod_.is_null() {
+                is_ext_dll = i == 0;
+                break;
+            }
         }
         if mod_.is_null() { return false; }
+        G_IS_EXT = is_ext_dll;
+        if G_IS_EXT {
+            eprintln!("[sdl_mixer] 已加载 SDL2_mixer_ext.dll（支持增强格式）");
+        } else {
+            eprintln!("[sdl_mixer] 已加载 SDL2_mixer.dll（基础版，不支持 MO3）");
+        }
 
         macro_rules! get {
             ($n:literal) => {{
                 let p = GetProcAddress(mod_, concat!($n, "\0").as_ptr() as *const i8);
                 if p.is_null() { FreeLibrary(mod_); return false; }
                 std::mem::transmute::<*mut c_void, _>(p)
+            }};
+        }
+        // 可选函数 — 找不到返回 None
+        macro_rules! get_opt {
+            ($n:literal) => {{
+                let p = GetProcAddress(mod_, concat!($n, "\0").as_ptr() as *const i8);
+                if p.is_null() { None } else { Some(std::mem::transmute::<*mut c_void, _>(p)) }
             }};
         }
 
@@ -76,6 +104,7 @@ pub fn load_library() -> bool {
             load_mus: get!("Mix_LoadMUS"),
             free_music: get!("Mix_FreeMusic"),
             play_music: get!("Mix_PlayMusic"),
+            play_music_stream: get_opt!("Mix_PlayMusicStream"),
             halt_music: get!("Mix_HaltMusic"),
             volume_music: get!("Mix_VolumeMusic"),
             pause_music: get!("Mix_PauseMusic"),
@@ -85,7 +114,8 @@ pub fn load_library() -> bool {
     }
 }
 
-// 安全包装 — 与 C++ 调用完全一致
+// ============ 安全包装 ============
+
 pub fn open_audio(freq: c_int, fmt: u16, ch: c_int, size: c_int) -> c_int {
     unsafe { match MIX { Some(ref m) => (m.open_audio)(freq, fmt, ch, size), None => -1 } }
 }
@@ -93,7 +123,6 @@ pub fn close_audio() { unsafe { if let Some(ref m) = MIX { (m.close_audio)(); } 
 pub fn allocate_channels(n: c_int) -> c_int {
     unsafe { match MIX { Some(ref m) => (m.allocate_channels)(n), None => -1 } }
 }
-/// 等价于 C++: Mix_LoadWAV_RW(SDL_RWFromConstMem(data, size), 1)
 pub fn load_wav_rw(rw: *mut c_void, freesrc: c_int) -> *mut Mix_Chunk {
     unsafe { match MIX { Some(ref m) => (m.load_wav_rw)(rw, freesrc), None => std::ptr::null_mut() } }
 }
@@ -110,15 +139,28 @@ pub fn volume(ch: c_int, vol: c_int) -> c_int {
 pub fn set_panning(ch: c_int, l: u8, r: u8) -> c_int {
     unsafe { match MIX { Some(ref m) => (m.set_panning)(ch, l, r), None => -1 } }
 }
-/// 等价于 C++: Mix_LoadMUS(theFileName.c_str())
 pub fn load_mus(path: *const c_char) -> *mut Mix_Music {
     unsafe { match MIX { Some(ref m) => (m.load_mus)(path), None => std::ptr::null_mut() } }
 }
 pub fn free_music(m: *mut Mix_Music) { unsafe { if let Some(ref m_) = MIX { (m_.free_music)(m); } } }
-/// 等价于 C++: Mix_PlayMusic(music, loops)
+
+/// 播放音乐 — 优先使用 Mix_PlayMusicStream（SDL_mixer_ext），回退到 Mix_PlayMusic
+/// 对应 C++ SDLMusicInterface::PlayMusic 中的 Mix_PlayMusicStream
 pub fn play_music(m: *mut Mix_Music, loops: c_int) -> c_int {
-    unsafe { match MIX { Some(ref m_) => (m_.play_music)(m, loops), None => -1 } }
+    unsafe {
+        match MIX {
+            Some(ref m_) => {
+                if let Some(stream) = m_.play_music_stream {
+                    (stream)(m, loops)
+                } else {
+                    (m_.play_music)(m, loops)
+                }
+            }
+            None => -1,
+        }
+    }
 }
+
 pub fn halt_music() -> c_int { unsafe { match MIX { Some(ref m) => (m.halt_music)(), None => -1 } } }
 pub fn volume_music(v: c_int) -> c_int {
     unsafe { match MIX { Some(ref m) => (m.volume_music)(v), None => 0 } }
