@@ -18,10 +18,11 @@
 
 ## 目录结构
 
-<!--
 ```
 rust/
 ├── Cargo.toml                    # 项目配置（零外部依赖）
+├── build.rs                      # 构建脚本（已简化，无需额外步骤）
+├── SDL2.dll                      # SDL2 运行时库（Windows 需要）
 ├── ANALYSIS_REPORT.md            # C++→Rust 架构映射分析报告
 ├── src/
 │   ├── main.rs                   # 主入口（main 函数）
@@ -52,92 +53,83 @@ rust/
 │   │   │   └── font.rs           # 字体度量
 │   │   ├── widget/               # GUI 组件系统
 │   │   │   ├── widget.rs         # Widget 基类（可见/交互/焦点管理）
-│   │   │   ├── widget_container.rs
-│   │   │   ├── widget_manager.rs # 事件分发 + 绘制调度
+│   │   │   ├── widget_container.rs, widget_manager.rs
 │   │   │   ├── dialog.rs         # 对话框
-│   │   │   ├── button*.rs        # 按钮
-│   │   │   ├── checkbox.rs       # 复选框
-│   │   │   ├── slider.rs         # 滑块
-│   │   │   ├── edit_widget.rs    # 文本输入框
-│   │   │   ├── list_widget.rs    # 列表
-│   │   │   ├── text_widget.rs    # 文本显示
-│   │   │   ├── scrollbar_widget.rs / scrollbutton_widget.rs
+│   │   │   ├── button*.rs, checkbox.rs, slider.rs
+│   │   │   ├── edit_widget.rs, list_widget.rs, text_widget.rs
+│   │   │   ├── scrollbar_widget.rs, scrollbutton_widget.rs
 │   │   │   ├── hyperlink_widget.rs
 │   │   │   └── insets.rs         # 边距
 │   │   ├── sound/                # 音频接口
-│   │   │   ├── sound_manager.rs  # 音效管理器 trait
-│   │   │   ├── music_interface.rs # 音乐接口 trait
+│   │   │   ├── sound_manager.rs, music_interface.rs
 │   │   │   └── sdl_*.rs          # SDL Mixer-X 包装
 │   │   ├── imagelib/             # 图像加载
 │   │   └── paklib/               # PAK 资源包接口
 │   ├── todlib/                   # Sexy.TodLib（PopCap 工具库）
 │   │   ├── tod_common.rs         # 曲线插值/随机/数学工具
 │   │   ├── reanimator.rs         # 动画系统（骨骼动画 + 插值）
-│   │   ├── definition.rs         # 动画定义/关键帧
-│   │   ├── tod_particle.rs       # 粒子系统
-│   │   ├── effect_system.rs      # 特效系统（管理动画/粒子/附着物）
-│   │   ├── attachment.rs         # 附着物
-│   │   ├── trail.rs              # 拖尾轨迹
-│   │   ├── filter_effect.rs      # 滤镜效果
-│   │   ├── reanim_atlas.rs       # 动画图集
-│   │   ├── tod_string_file.rs    # 字符串本地化文件
-│   │   ├── tod_foley.rs          # 音效触发器
-│   │   ├── data_array.rs         # 泛型数据数组
-│   │   ├── tod_list.rs           # 链表容器
+│   │   ├── definition.rs, tod_particle.rs, effect_system.rs
+│   │   ├── attachment.rs, trail.rs, filter_effect.rs
+│   │   ├── reanim_atlas.rs, tod_string_file.rs
+│   │   ├── tod_foley.rs, data_array.rs, tod_list.rs
 │   │   └── tod_debug.rs          # 调试工具
 │   └── lawn/                     # 游戏核心逻辑
 │       ├── game_enums.rs         # 全游戏枚举定义（~800 行）
 │       ├── game_object.rs        # GameObject 基类
 │       ├── lawn_app.rs           # LawnApp（游戏应用 + 全局状态机）
 │       ├── board.rs              # Board（关卡棋盘：所有实体的容器和调度器）
-│       ├── plant.rs              # Plant（48种植物逻辑）
-│       ├── zombie.rs             # Zombie（26种僵尸逻辑）
-│       ├── projectile.rs         # Projectile（14种投射物）
-│       ├── coin.rs               # Coin（阳光/硬币/奖励物品）
-│       ├── lawn_mower.rs         # 割草机
-│       ├── grid_item.rs          # 格子物品（墓碑/坑/梯子等）
-│       ├── seed_packet.rs        # 种子冷却槽
-│       ├── cursor_object.rs      # 拖放光标
-│       ├── challenge.rs          # 挑战模式状态机
-│       ├── cutscene.rs           # 过场动画
-│       ├── lawn_common.rs        # 游戏公用查询函数
-│       ├── tool_tip_widget.rs    # 工具提示
-│       ├── zen_garden.rs         # 禅境花园
-│       ├── widget/               # 游戏 UI 对话框
-│       │   ├── title_screen.rs, award_screen.rs, credit_screen.rs
-│       │   ├── game_selector.rs, challenge_screen.rs
-│       │   ├── store_screen.rs, seed_chooser_screen.rs
-│       │   ├── almanac_dialog.rs, achievements_screen.rs
-│       │   └── ... (共 18 个 UI 文件)
-│       └── system/               # 游戏系统
-│           ├── music.rs          # 游戏音乐管理
-│           ├── player_info.rs    # 玩家存档数据
-│           ├── save_game.rs      # 存档读写
-│           ├── profile_mgr.rs    # 用户档案管理
-│           ├── data_sync.rs      # 数据同步
-│           ├── typing_check.rs   # 输入校验
-│           └── reanimation_lawn.rs # 游戏专用动画包装
+│       ├── plant.rs, zombie.rs, projectile.rs, coin.rs
+│       ├── lawn_mower.rs, grid_item.rs, seed_packet.rs
+│       ├── cursor_object.rs, challenge.rs, cutscene.rs
+│       ├── lawn_common.rs, tool_tip_widget.rs, zen_garden.rs
+│       ├── widget/               # 游戏 UI 对话框（18 个文件）
+│       └── system/               # 游戏系统（7 个文件）
 ```
--->
 
 ## 构建与运行
 
 ### 前置条件
 
-- **Rust nightly**（2024 edition 需要 nightly 工具链）
-- **SDL2 开发库**（libsdl2-dev 或通过 vcpkg/homebrew 安装）
-- **OpenGL ES 2.0**（通常随显卡驱动提供）
+- **Rust nightly**（2024 edition 需要 nightly 工具链，当前使用 `rustc 1.94.0-nightly`）
+- **SDL2.dll**（Windows）或系统 SDL2 动态库（Linux/macOS）
+- **OpenGL 驱动**（随显卡驱动提供，通过 `opengl32.dll` / `libGL.so` 链接）
 
-### 构建步骤
+### Windows 构建
+
+```bash
+# 1. 进入 rust 目录
+cd rust
+
+# 2. 确保 SDL2.dll 在项目根目录下（已随版本库提供）
+#    链接方式：使用 #[link(kind = "raw-dylib")] 直接运行时加载 DLL
+
+# 3. 构建
+cargo build
+
+# 4. 复制 DLL 到输出目录（cargo 不会自动复制依赖的 DLL）
+copy SDL2.dll target\debug\
+
+# 5. 运行
+cargo run
+```
+
+> **链接说明**：本项目通过 `#[link(kind = "raw-dylib")]` 属性直接链接 SDL2.dll 和 opengl32.dll，**无需**导入库（.lib）或 vcpkg。`build.rs` 仅做路径声明，无需额外配置。该特性需要 Rust 1.72+，当前 nightly 1.94 完全支持。
+
+### Linux / macOS
 
 ```bash
 cd rust
-cargo build             # 调试构建
-cargo build --release   # 发布构建
-cargo run               # 运行
+# 安装 SDL2 开发库（如 Ubuntu）
+sudo apt install libsdl2-dev
+
+cargo build
+# 默认链接方式为 dylib，需要系统安装 SDL2 运行时库
+cargo run
 ```
 
-> **注意**：虽然代码编译零错误通过，但运行时需要游戏资源文件（`main.pak` + `properties/` 目录），请从原始 PvZ GOTY 版游戏提取，放置在运行目录下。
+### 游戏资源
+
+虽然代码编译零错误通过，但运行时需要游戏资源文件（`main.pak` + `properties/` 目录），请从原始 PvZ GOTY 版游戏提取，放置在运行目录下。
 
 ## 文件统计
 
@@ -147,7 +139,7 @@ cargo run               # 运行
 | 代码总大小 | **约 180 KB** |
 | 模块层次 | 5 级（ffi/framework/todlib/lawn/widget） |
 | 外部依赖 | **0**（零 crate） |
-| 编译错误 | **0** |
+| 编译警告 | **0** |
 | FFI 函数声明 | SDL2: ~120 个, GLES2: ~100 个, libc: ~30 个 |
 
 ## 架构映射对照
@@ -166,17 +158,29 @@ cargo run               # 运行
 
 ## C++ → Rust 翻译规则说明
 
-1. **枚举统一集中**：所有游戏枚举（`SeedType`, `ZombieType`, `PlantState` 等）集中在 `lawn::game_enums`，避免循环依赖
-2. **FFI 安全隔离**：`ffi/` 模块内的 `extern "C"` 函数全部标记 `unsafe`，上层模块通过安全包装调用
+1. **枚举统一集中**：所有游戏枚举在 `lawn::game_enums`，避免循环依赖
+2. **FFI 安全隔离**：`ffi/` 内的 `extern "C"` 全部标记 `unsafe`，上层通过安全包装调用
 3. **借用检查适配**：C++ 中自然的多重可变引用，在 Rust 中通过预拷贝值或重构访问模式解决
 4. **零 TODO 策略**：所有函数体均已实现，无 `todo!()` / `unimplemented!()` 占位符
-5. **资源管理**：C 库资源（SDL_Surface, GLuint 纹理等）的释放由各自的 Drop 实现保证
+5. **资源管理**：C 库资源的释放由各自的 Drop 实现保证
+
+## 当前状态
+
+- ✅ 编译通过（零警告零错误）
+- ✅ SDL2 初始化 + 窗口创建
+- ✅ OpenGL 上下文创建
+- ✅ 主事件循环（键盘/鼠标/窗口事件处理）
+- ✅ WidgetManager 框架（update/draw 管线已连接）
+- ⏳ 游戏资源加载（PakInterface / ResourceManager 为骨架）
+- ⏳ OpenGL 纹理渲染（GLInterface::Blt 等为桩函数）
+- ⏳ 游戏 UI 全部为骨架实现（draw() 方法体为空）
 
 ## 后续开发方向
 
-- [ ] 补齐各个 UI 对话框的业务逻辑（当前为骨架实现）
-- [ ] 实现完整的 PAK 资源包读取
+- [ ] 实现完整的 PAK 资源包读取（`PakInterface::open_pak` / `load_file`）
+- [ ] 实现 OpenGL 纹理渲染管线（`GLInterface::Blt` / `GLInterface::FillRect`）
 - [ ] 接入 SDL_Mixer-X 音频播放
+- [ ] 补齐各个 UI 对话框的绘制逻辑
 - [ ] 运行期调试和完善碰撞/状态机细节
 - [ ] 添加 WASM 平台支持
 
