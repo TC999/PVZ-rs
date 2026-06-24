@@ -17,3 +17,11 @@ pub mod paklib;
 pub mod sound;
 pub mod mt_rand;
 pub mod desc_parser;
+pub mod flags;
+pub mod ratio;
+pub mod mod_val;
+pub mod reg_emu;
+pub mod tod_debug;
+pub mod xml_parser;
+
+

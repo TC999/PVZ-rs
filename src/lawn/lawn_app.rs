@@ -1,252 +1,427 @@
-// PvZ Portable Rust 翻译 — LawnApp（游戏应用）
+// PvZ Portable Rust 翻译 — LawnApp（游戏应用主类）
 // 对应 C++ src/LawnApp.h / LawnApp.cpp
+//
+// 游戏的核心调度类，管理游戏状态、屏幕切换、资源加载等。
 
+use std::collections::LinkedList;
 use crate::lawn::game_enums::*;
 use crate::lawn::board::Board;
+use crate::lawn::zen_garden::ZenGarden;
 use crate::framework::sexy_app_base::SexyAppBase;
+use crate::framework::graphics::graphics::Graphics;
+use crate::framework::graphics::image::Image;
+use crate::framework::widget::dialog::Dialog;
+use crate::framework::widget::button_widget::ButtonWidget;
+use crate::todlib::reanimator::Reanimation;
+use crate::todlib::tod_particle::TodParticleSystem;
+use crate::todlib::tod_foley::FoleyManager;
+use crate::todlib::effect_system::EffectSystem;
 
-/// 游戏应用 — 管理游戏状态、屏幕切换和全局游戏逻辑
+/// 游戏场景枚举（对应 C++ GameScenes）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum GameScenes {
+    MainMenu = 0,
+    Playing = 1,
+    ZenGarden = 2,
+    Store = 3,
+    Credits = 4,
+    Award = 5,
+    Challenge = 6,
+    SeedChooser = 7,
+    GameSelector = 8,
+}
+
+/// 关卡统计（对应 C++ LevelStats）
+#[derive(Debug, Clone, Copy)]
+pub struct LevelStats {
+    pub unused_lawn_mowers: i32,
+}
+
+impl LevelStats {
+    pub fn new() -> Self { LevelStats { unused_lawn_mowers: 0 } }
+    pub fn reset(&mut self) { self.unused_lawn_mowers = 0; }
+}
+
+/// 按钮列表、图像列表类型
+pub type ButtonList = LinkedList<*mut ButtonWidget>;
+pub type ImageList = LinkedList<*mut Image>;
+
+/// 游戏应用类（对应 C++ LawnApp : SexyApp）
 pub struct LawnApp {
-    /// SexyAppBase 基类（直接内嵌，而非指针）
+    // ---- SexyAppBase 继承 ----
     pub base: SexyAppBase,
 
-    // 游戏核心
+    // ---- 游戏屏幕/面板 ----
     pub board: Option<*mut Board>,
-    pub game_mode: GameMode,
-    pub game_screen: GameScreen,
+    pub title_screen: Option<*mut ()>,
+    pub game_selector: Option<*mut ()>,
+    pub seed_chooser_screen: Option<*mut ()>,
+    pub award_screen: Option<*mut ()>,
+    pub credit_screen: Option<*mut ()>,
+    pub challenge_screen: Option<*mut ()>,
+    pub zen_garden: Option<*mut ZenGarden>,
 
-    // 关卡信息
+    // ---- 系统/管理器 ----
+    pub sound_system: Option<Box<FoleyManager>>,
+    pub effect_system: Option<Box<EffectSystem>>,
+    pub profile_mgr: Option<Box<crate::lawn::system::profile_mgr::ProfileMgr>>,
+    pub player_info: Option<Box<crate::lawn::system::player_info::PlayerInfo>>,
+    pub music: Option<Box<crate::lawn::system::music::Music>>,
+    pub pool_effect: Option<*mut ()>,
+
+    // ---- 列表 ----
+    pub control_button_list: ButtonList,
+    pub created_image_list: ImageList,
+
+    // ---- 游戏状态 ----
+    pub game_mode: GameMode,
+    pub game_scene: GameScenes,
+    pub board_result: BoardResult,
     pub m_level: i32,
     pub m_num_levels: i32,
+    pub m_close_request: bool,
+    pub m_app_counter: u32,
+    pub m_app_rand_seed: i32,
 
-    // 玩家信息
-    pub m_player_info: Option<*mut PlayerInfo>,
+    // ---- 调试/作弊 ----
+    pub m_debug_keys_enabled: bool,
+    pub m_cheat_keys_used: bool,
+    pub m_tod_cheat_keys: bool,
+    pub m_easy_planting_cheat: bool,
 
-    // 对话/界面
+    // ---- Crazy Dave ----
+    pub m_crazy_dave_reanim_id: ReanimationID,
+    pub m_crazy_dave_state: CrazyDaveState,
+    pub m_crazy_dave_blink_counter: i32,
+    pub m_crazy_dave_blink_reanim_id: ReanimationID,
+    pub m_crazy_dave_message_index: i32,
+    pub m_crazy_dave_message_text: String,
+
+    // ---- 打字检查（秘籍输入） ----
+    pub m_konami_check: Option<Box<crate::lawn::system::typing_check::TypingCheck>>,
+    pub m_mustache_check: Option<Box<crate::lawn::system::typing_check::TypingCheck>>,
+    pub m_moustache_check: Option<Box<crate::lawn::system::typing_check::TypingCheck>>,
+    pub m_super_mower_check: Option<Box<crate::lawn::system::typing_check::TypingCheck>>,
+    pub m_future_check: Option<Box<crate::lawn::system::typing_check::TypingCheck>>,
+    pub m_pinata_check: Option<Box<crate::lawn::system::typing_check::TypingCheck>>,
+    pub m_dance_check: Option<Box<crate::lawn::system::typing_check::TypingCheck>>,
+    pub m_daisy_check: Option<Box<crate::lawn::system::typing_check::TypingCheck>>,
+    pub m_sukhbir_check: Option<Box<crate::lawn::system::typing_check::TypingCheck>>,
+
+    // ---- 秘籍模式 ----
+    pub m_mustache_mode: bool,
+    pub m_super_mower_mode: bool,
+    pub m_future_mode: bool,
+    pub m_pinata_mode: bool,
+    pub m_dance_mode: bool,
+    pub m_daisy_mode: bool,
+    pub m_sukhbir_mode: bool,
+
+    // ---- 游戏统计 ----
+    pub m_games_played: i32,
+    pub m_max_executions: i32,
+    pub m_max_plays: i32,
+    pub m_max_time: i32,
+    pub m_play_time_active_session: i32,
+    pub m_play_time_inactive_session: i32,
+    pub m_saw_yeti: bool,
+
+    // ---- 对话框 ----
     pub m_dialog_id: i32,
     pub m_tutorial_state: TutorialState,
 
-    // 调试
-    pub m_debug_keys_enabled: bool,
-    pub m_cheat_keys_used: bool,
-
-    // 请求关闭标志
-    pub m_close_request: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(i32)]
-pub enum GameScreen {
-    Intro = 0,
-    Title,
-    Loading,
-    MainMenu,
-    GameSelector,
-    Playing,
-    ChallengeMenu,
-    Store,
-    ZenGarden,
-    Credits,
-    Achievements,
-}
-
-/// 玩家信息
-pub struct PlayerInfo {
-    pub m_name: String,
-    pub m_use_seed: [bool; 100],
-    pub m_seed_packs: [i32; 100],
-    pub m_sun_count: i32,
-    pub m_coin_bank: i64,
-    pub m_has_used_keys: bool,
-}
-
-impl PlayerInfo {
-    pub fn new() -> Self {
-        PlayerInfo {
-            m_name: String::new(),
-            m_use_seed: [false; 100],
-            m_seed_packs: [0; 100],
-            m_sun_count: 50,
-            m_coin_bank: 0,
-            m_has_used_keys: false,
-        }
-    }
+    // ---- 其他 ----
+    pub m_mute_sounds_for_cutscene: bool,
+    pub m_first_time_game_selector: bool,
+    pub m_register_resources_loaded: bool,
+    pub m_last_level_stats: Option<Box<LevelStats>>,
 }
 
 /// 全局游戏实例
-static mut g_lawn_app_instance: Option<*mut LawnApp> = None;
+static mut G_LAWN_APP_INSTANCE: Option<*mut LawnApp> = None;
 
 impl LawnApp {
     pub fn new() -> Self {
         LawnApp {
             base: SexyAppBase::new(),
-            board: None,
+            board: None, title_screen: None, game_selector: None,
+            seed_chooser_screen: None, award_screen: None,
+            credit_screen: None, challenge_screen: None, zen_garden: None,
+            sound_system: None, effect_system: None,
+            profile_mgr: None, player_info: None, music: None, pool_effect: None,
+            control_button_list: LinkedList::new(),
+            created_image_list: LinkedList::new(),
             game_mode: GameMode::Adventure,
-            game_screen: GameScreen::Intro,
-            m_level: 1,
-            m_num_levels: NUM_LEVELS,
-            m_player_info: None,
-            m_dialog_id: -1,
-            m_tutorial_state: TutorialState::Off,
-            m_debug_keys_enabled: false,
-            m_cheat_keys_used: false,
-            m_close_request: false,
+            game_scene: GameScenes::MainMenu,
+            board_result: BoardResult::None,
+            m_level: 1, m_num_levels: NUM_LEVELS,
+            m_close_request: false, m_app_counter: 0, m_app_rand_seed: 0,
+            m_debug_keys_enabled: false, m_cheat_keys_used: false,
+            m_tod_cheat_keys: false, m_easy_planting_cheat: false,
+            m_crazy_dave_reanim_id: REANIMATIONID_NULL,
+            m_crazy_dave_state: CrazyDaveState::NotHere,
+            m_crazy_dave_blink_counter: 0,
+            m_crazy_dave_blink_reanim_id: REANIMATIONID_NULL,
+            m_crazy_dave_message_index: 0,
+            m_crazy_dave_message_text: String::new(),
+            m_konami_check: None, m_mustache_check: None,
+            m_moustache_check: None, m_super_mower_check: None,
+            m_future_check: None, m_pinata_check: None,
+            m_dance_check: None, m_daisy_check: None, m_sukhbir_check: None,
+            m_mustache_mode: false, m_super_mower_mode: false,
+            m_future_mode: false, m_pinata_mode: false,
+            m_dance_mode: false, m_daisy_mode: false, m_sukhbir_mode: false,
+            m_games_played: 0, m_max_executions: 0, m_max_plays: 0,
+            m_max_time: 0, m_play_time_active_session: 0,
+            m_play_time_inactive_session: 0, m_saw_yeti: false,
+            m_dialog_id: -1, m_tutorial_state: TutorialState::Off,
+            m_mute_sounds_for_cutscene: false,
+            m_first_time_game_selector: false,
+            m_register_resources_loaded: false,
+            m_last_level_stats: None,
         }
     }
 
     /// 全局单例访问
     pub fn instance() -> Option<&'static mut Self> {
-        unsafe {
-            let ptr = std::ptr::addr_of_mut!(g_lawn_app_instance);
-            (*ptr).and_then(|p| p.as_mut())
-        }
+        unsafe { G_LAWN_APP_INSTANCE.and_then(|p| p.as_mut()) }
     }
 
-    /// 初始化游戏（对应 C++ LawnApp::Init → SexyApp::Init → SexyAppBase::Init）
+    // ==================== 生命周期 ====================
+
+    /// 初始化（对应 C++ Init）
     pub fn init(&mut self) {
-        unsafe {
-            g_lawn_app_instance = Some(self as *mut LawnApp);
-        }
-
-        // 初始化 SexyAppBase（SDL、窗口、OpenGL、资源等）
+        unsafe { G_LAWN_APP_INSTANCE = Some(self as *mut LawnApp); }
         self.base.init();
-
-        if self.base.shutdown {
-            return;
-        }
-
-        // 设置标题
+        if self.base.is_shutdown() { return; }
         self.base.title = "PvZ Portable".to_string();
-
-        // 初始化完成，设置游戏屏幕
-        self.game_screen = GameScreen::Title;
     }
 
-    /// 启动游戏（对应 C++ LawnApp::Start → SexyAppBase::Start → DoMainLoop）
+    /// 启动（对应 C++ Start）
     pub fn start(&mut self) {
-        if self.base.shutdown {
-            return;
-        }
-
-        // 设置游戏屏幕
-        self.game_screen = GameScreen::Title;
-
-        // 调用 SexyAppBase::start() 进入主循环
+        if self.base.is_shutdown() { return; }
         self.base.start();
     }
 
-    /// 关闭游戏（对应 C++ LawnApp::Shutdown）
+    /// 关闭（对应 C++ Shutdown）
     pub fn shutdown(&mut self) {
+        self.kill_board();
         self.base.shutdown();
-        unsafe {
-            g_lawn_app_instance = None;
+        unsafe { G_LAWN_APP_INSTANCE = None; }
+    }
+
+    /// 主更新循环（由 SexyAppBase 每帧调用）
+    pub fn update_frames(&mut self) {
+        // 更新游戏世界
+        if let Some(board_ptr) = self.board {
+            unsafe { (*board_ptr).update(); }
         }
     }
 
-    /// 开始新游戏
+    /// 更新应用单步（对应 C++ UpdateAppStep）
+    pub fn update_app_step(&mut self, _updated: Option<&mut bool>) -> bool {
+        self.update_frames();
+        true
+    }
+
+    // ==================== 关卡/游戏 ====================
+
+    /// 开始新游戏（对应 C++ NewGame）
     pub fn new_game(&mut self) {
         self.m_level = 1;
-        self.start_level(1);
+        self.pre_new_game(self.game_mode, true);
     }
+
+    /// 预新建游戏（对应 C++ PreNewGame）
+    pub fn pre_new_game(&mut self, _mode: GameMode, _look_for_saved: bool) {}
 
     /// 开始关卡
     pub fn start_level(&mut self, level: i32) {
         self.m_level = level;
-        self.game_screen = GameScreen::Loading;
+        self.make_new_board();
+    }
 
-        // 创建 Board
+    /// 创建新 Board（对应 C++ MakeNewBoard）
+    pub fn make_new_board(&mut self) {
+        self.kill_board();
         let mut board = Box::new(Board::new());
-        board.level = level;
+        board.level = self.m_level;
         board.board_init(self as *mut LawnApp);
-
-        // 将 Board 转移到全局状态
         self.board = Some(Box::into_raw(board));
-        self.game_screen = GameScreen::Playing;
     }
 
-    /// 主更新循环（由 SexyAppBase 每帧调用）
-    pub fn update(&mut self) {
-        match self.game_screen {
-            GameScreen::Playing => {
-                if let Some(board_ptr) = self.board {
-                    unsafe { (*board_ptr).update(); }
-                }
-            },
-            _ => {
-                // 更新菜单等
-            }
+    /// 销毁 Board（对应 C++ KillBoard）
+    pub fn kill_board(&mut self) {
+        if let Some(b) = self.board.take() {
+            unsafe { let _ = Box::from_raw(b); }
         }
     }
 
-    /// 主绘制循环（由 SexyAppBase 每帧调用）
-    pub fn draw(&self) {
-        // 由 GLInterface 处理
+    /// 开始游戏（对应 C++ StartPlaying）
+    pub fn start_playing(&mut self) {}
+
+    /// 结束关卡（对应 C++ EndLevel）
+    pub fn end_level(&mut self) {}
+
+    /// 尝试加载游戏（对应 C++ TryLoadGame）
+    pub fn try_load_game(&mut self) -> bool { false }
+
+    /// 检查游戏结束（对应 C++ CheckForGameEnd）
+    pub fn check_for_game_end(&mut self) {}
+
+    // ==================== 屏幕管理 ====================
+
+    /// 显示游戏选择器（对应 C++ ShowGameSelector）
+    pub fn show_game_selector(&mut self) {}
+    pub fn kill_game_selector(&mut self) {}
+
+    /// 显示奖励屏幕（对应 C++ ShowAwardScreen）
+    pub fn show_award_screen(&mut self, _award: i32, _show_achievements: bool) {}
+    pub fn kill_award_screen(&mut self) {}
+
+    /// 显示种子选择器
+    pub fn show_seed_chooser_screen(&mut self) {}
+    pub fn kill_seed_chooser_screen(&mut self) {}
+
+    /// 显示商店（对应 C++ ShowStoreScreen）
+    pub fn show_store_screen() {}
+    pub fn kill_store_screen() {}
+
+    /// 显示挑战选择
+    pub fn show_challenge_screen(&mut self, _page: i32) {}
+    pub fn kill_challenge_screen(&mut self) {}
+
+    /// 显示制作人员
+    pub fn show_credit_screen(&mut self) {}
+    pub fn kill_credit_screen(&mut self) {}
+
+    /// 显示图鉴（对应 C++ DoAlmanacDialog）
+    pub fn do_almanac_dialog(&mut self, _seed: SeedType, _zombie: ZombieType) {}
+    pub fn kill_almanac_dialog(&mut self) -> bool { false }
+
+    /// 返回主菜单（对应 C++ DoBackToMain）
+    pub fn do_back_to_main(&mut self) {}
+
+    /// 暂停
+    pub fn do_pause_dialog(&mut self) {}
+
+    /// 对话框（对应 C++ DoDialog）
+    pub fn do_dialog(&mut self, _id: i32, _modal: bool, _header: &str, _lines: &str, _footer: &str, _btn_mode: i32) -> Option<*mut Dialog> { None }
+
+    // ==================== 游戏对象管理 ====================
+
+    /// 添加动画（对应 C++ AddReanimation）
+    pub fn add_reanimation(&mut self, _x: f32, _y: f32, _render_order: i32, _type: i32) -> Option<*mut Reanimation> { None }
+
+    /// 添加粒子（对应 C++ AddTodParticle）
+    pub fn add_tod_particle(&mut self, _x: f32, _y: f32, _render_order: i32, _effect: i32) -> Option<*mut TodParticleSystem> { None }
+
+    /// 播放音效（对应 C++ PlayFoley）
+    pub fn play_foley(&self, _type: i32) {}
+    pub fn play_foley_pitch(&self, _type: i32, _pitch: f32) {}
+
+    // ==================== 状态查询 ====================
+
+    pub fn is_adventure_mode(&self) -> bool { self.game_mode == GameMode::Adventure }
+    pub fn is_survival_mode(&self) -> bool {
+        matches!(self.game_mode,
+            GameMode::SurvivalNormalStage1 | GameMode::SurvivalNormalStage2 |
+            GameMode::SurvivalNormalStage3 | GameMode::SurvivalNormalStage4 |
+            GameMode::SurvivalNormalStage5 | GameMode::SurvivalHardStage1 |
+            GameMode::SurvivalHardStage2 | GameMode::SurvivalHardStage3 |
+            GameMode::SurvivalHardStage4 | GameMode::SurvivalHardStage5 |
+            GameMode::SurvivalEndlessStage1 | GameMode::SurvivalEndlessStage2 |
+            GameMode::SurvivalEndlessStage3 | GameMode::SurvivalEndlessStage4 |
+            GameMode::SurvivalEndlessStage5
+        )
+    }
+    pub fn is_puzzle_mode(&self) -> bool { false }
+    pub fn is_challenge_mode(&self) -> bool { false }
+    pub fn is_art_challenge(&self) -> bool { false }
+    pub fn is_izombie_level(&self) -> bool { false }
+    pub fn is_scary_potter_level(&self) -> bool { false }
+    pub fn is_whack_a_zombie_level(&self) -> bool { false }
+    pub fn is_squirrel_level(&self) -> bool { false }
+    pub fn is_shovel_level(&self) -> bool { false }
+    pub fn is_wallnut_bowling_level(&self) -> bool { false }
+    pub fn is_mini_boss_level(&self) -> bool { false }
+    pub fn is_slot_machine_level(&self) -> bool { false }
+    pub fn is_stormy_night_level(&self) -> bool { false }
+    pub fn is_final_boss_level(&self) -> bool { false }
+    pub fn is_bungee_blitz_level(&self) -> bool { false }
+    pub fn is_night(&self) -> bool { false }
+    pub fn is_challenge_without_seed_bank(&self) -> bool { false }
+    pub fn can_show_almanac(&self) -> bool { false }
+    pub fn can_show_store(&self) -> bool { false }
+    pub fn can_show_zen_garden(&self) -> bool { false }
+    pub fn can_pause_now(&self) -> bool { true }
+    pub fn can_spawn_yetis(&self) -> bool { false }
+    pub fn has_finished_adventure(&self) -> bool { false }
+    pub fn has_beaten_challenge(&self, _mode: GameMode) -> bool { false }
+    pub fn has_seed_type(&self, _seed: SeedType) -> bool { false }
+
+    pub fn get_seeds_available(&self) -> i32 { 0 }
+    pub fn get_current_challenge_def() -> u32 { 0 }
+    pub fn get_current_challenge_index(&self) -> i32 { 0 }
+    pub fn get_current_level_name(&self) -> String { format!("Level {}", self.m_level) }
+    pub fn get_stage_string(level: i32) -> String { format!("Stage {}", level) }
+    pub fn get_num_trophies(_page: i32) -> i32 { 0 }
+    pub fn get_award_seed_for_level(_level: i32) -> SeedType { SeedType::Peashooter }
+    pub fn get_money_string(amount: i32) -> String { format!("${}", amount) }
+    pub fn get_close_request(&self) -> bool { self.m_close_request }
+    pub fn has_used_cheat_keys(&self) -> bool { self.m_cheat_keys_used }
+
+    // ==================== 疯狂戴夫 ====================
+
+    pub fn crazy_dave_enter(&mut self) {}
+    pub fn update_crazy_dave(&mut self) {}
+    pub fn crazy_dave_talk_index(&mut self, _idx: i32) {}
+    pub fn crazy_dave_talk_message(&mut self, _msg: &str) {}
+    pub fn crazy_dave_leave(&mut self) {}
+    pub fn draw_crazy_dave(&self, _g: &mut Graphics) {}
+    pub fn crazy_dave_die(&mut self) {}
+    pub fn crazy_dave_stop_talking(&mut self) {}
+    pub fn advance_crazy_dave_text(&mut self) -> bool { false }
+
+    // ==================== 杂项 ====================
+
+    pub fn pluralize(count: i32, singular: &str, plural: &str) -> String {
+        if count == 1 { format!("{} {}", count, singular) } else { format!("{} {}", count, plural) }
     }
 
-    /// 处理鼠标按下
-    pub fn mouse_down(&mut self, x: i32, y: i32, _btn: i32, _click_count: i32) {
-        // 注意：btn 参数保留以备将来右击支持
-        match self.game_screen {
-            GameScreen::Playing => {
-                if let Some(board_ptr) = self.board {
-                    unsafe { (*board_ptr).mouse_down(x, y, 1); }
-                }
-            },
-            _ => {}
+    pub fn toggle_slow_mo(&mut self) {}
+    pub fn toggle_fast_mo(&mut self) {}
+    pub fn need_pause_game(&self) -> bool { false }
+    pub fn need_register(&self) -> bool { false }
+    pub fn loading_completed(&mut self) {}
+    pub fn confirm_quit(&mut self) {}
+
+    // ==================== 事件处理 ====================
+
+    pub fn mouse_down(&mut self, x: i32, y: i32, _btn: i32, _cc: i32) {
+        if let Some(board_ptr) = self.board {
+            unsafe { (*board_ptr).mouse_down(x, y, 1); }
         }
     }
 
-    /// 处理按键
-    pub fn key_down(&mut self, _key: i32) {
-        match self.game_screen {
-            GameScreen::Playing => {
-                if let Some(board_ptr) = self.board {
-                    unsafe { (*board_ptr).key_down(_key); }
-                }
-            },
-            _ => {
-                // 菜单按键处理
-            }
+    pub fn key_down(&mut self, key: i32) {
+        if let Some(board_ptr) = self.board {
+            unsafe { (*board_ptr).key_down(key); }
         }
     }
 
-    /// 获取当前关卡名称
-    pub fn get_current_level_name(&self) -> String {
-        format!("Level {}", self.m_level)
-    }
+    // ==================== 调试 ====================
 
-    /// 检查是否请求关闭
-    pub fn get_close_request(&self) -> bool {
-        self.m_close_request
-    }
-
-    /// 检查是否使用了作弊键
-    pub fn has_used_cheat_keys(&self) -> bool {
-        self.m_cheat_keys_used
-    }
+    pub fn debug_key_down(&mut self, _key: i32) -> bool { false }
+    pub fn show_resource_error(&mut self, _exit: bool) {}
 }
 
-// 从 C++ 中全局函数指针对应的 Rust 函数
+// 全局辅助函数
 pub fn lawn_get_current_level_name() -> String {
-    if let Some(app) = LawnApp::instance() {
-        app.get_current_level_name()
-    } else {
-        String::new()
-    }
+    LawnApp::instance().map(|a| a.get_current_level_name()).unwrap_or_default()
 }
 
 pub fn lawn_get_close_request() -> bool {
-    if let Some(app) = LawnApp::instance() {
-        app.get_close_request()
-    } else {
-        false
-    }
-}
-
-pub fn lawn_has_used_cheat_keys() -> bool {
-    if let Some(app) = LawnApp::instance() {
-        app.has_used_cheat_keys()
-    } else {
-        false
-    }
+    LawnApp::instance().map(|a| a.m_close_request).unwrap_or(false)
 }

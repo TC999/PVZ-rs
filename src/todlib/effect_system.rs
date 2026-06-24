@@ -46,7 +46,7 @@ impl EffectSystem {
         }
         // 移除已完成的
         self.reanimations.retain(|r| !r.is_completely_done());
-        self.particle_systems.retain(|ps| ps.active);
+        self.particle_systems.retain(|ps| !ps.dead);
     }
 
     /// 绘制所有特效

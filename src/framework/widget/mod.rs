@@ -16,3 +16,4 @@ pub mod scrollbutton_widget;
 pub mod text_widget;
 pub mod hyperlink_widget;
 pub mod insets;
+pub mod dialog_button;

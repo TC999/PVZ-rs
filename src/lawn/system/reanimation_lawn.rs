@@ -1,17 +1,2 @@
-#![allow(dead_code)]
-
-pub struct ReanimationLawn {
-    animations: Vec<()>,
-}
-
-impl ReanimationLawn {
-    pub fn new() -> Self {
-        ReanimationLawn { animations: Vec::new() }
-    }
-}
-
-impl Default for ReanimationLawn {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+use crate::todlib::reanimator::Reanimation;
+pub fn lawn_reanimation_add(_x: f32, _y: f32, _type: i32, _render_order: i32) -> Option<*mut Reanimation> { None }

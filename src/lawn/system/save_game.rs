@@ -1,17 +1,3 @@
-#![allow(dead_code)]
-
-pub struct SaveGame {
-    slot: u32,
-}
-
-impl SaveGame {
-    pub fn new() -> Self {
-        SaveGame { slot: 0 }
-    }
-}
-
-impl Default for SaveGame {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+pub fn save_game(_profile: i32) -> bool { true }
+pub fn load_game(_profile: i32) -> bool { true }
+pub fn delete_game(_profile: i32) -> bool { true }

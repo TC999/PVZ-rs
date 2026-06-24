@@ -1,5 +1,3 @@
-// PvZ Portable Rust 翻译 — Lawn System 子模块
-
 pub mod music;
 pub mod player_info;
 pub mod save_game;

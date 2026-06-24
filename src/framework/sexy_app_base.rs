@@ -48,7 +48,7 @@ pub struct SexyAppBase {
 
     // 窗口状态
     pub is_windowed: bool,
-    pub shutdown: bool,
+    pub m_shutdown_flag: bool,
     pub minimized: bool,
     pub active: bool,
     pub has_focus: bool,
@@ -127,7 +127,7 @@ impl SexyAppBase {
             music_volume: 0.85,
             sfx_volume: 0.85,
             is_windowed: true,
-            shutdown: false,
+            m_shutdown_flag: false,
             minimized: false,
             active: true,
             has_focus: true,
@@ -170,7 +170,7 @@ impl SexyAppBase {
         // 创建窗口和 GL 上下文（对应 C++ MakeWindow）
         self.make_window();
 
-        if self.shutdown {
+        if self.m_shutdown_flag {
             return;
         }
 
@@ -193,7 +193,7 @@ impl SexyAppBase {
                     let c_str = std::ffi::CStr::from_ptr(err);
                     eprintln!("SDL_Init 失败: {:?}", c_str);
                 }
-                self.shutdown = true;
+                self.m_shutdown_flag = true;
                 return;
             }
         }
@@ -221,7 +221,7 @@ impl SexyAppBase {
 
         if self.window.is_null() {
             eprintln!("SDL_CreateWindow 失败");
-            self.shutdown = true;
+            self.m_shutdown_flag = true;
             return;
         }
 
@@ -256,7 +256,7 @@ impl SexyAppBase {
 
             if self.window.is_null() || self.context.is_null() {
                 eprintln!("无法创建 OpenGL 上下文");
-                self.shutdown = true;
+                self.m_shutdown_flag = true;
                 return;
             }
         }
@@ -277,7 +277,7 @@ impl SexyAppBase {
 
     /// 启动主循环（对应 C++ SexyAppBase::Start + DoMainLoop）
     pub fn start(&mut self) {
-        if self.shutdown {
+        if self.m_shutdown_flag {
             return;
         }
 
@@ -285,7 +285,7 @@ impl SexyAppBase {
         self.last_time = unsafe { SDL_GetTicks() };
 
         // 对应 C++ DoMainLoop: while (!mShutdown) { UpdateApp(); }
-        while !self.shutdown {
+        while !self.m_shutdown_flag {
             self.update_app();
         }
 
@@ -300,7 +300,7 @@ impl SexyAppBase {
             return false;
         }
 
-        if self.shutdown {
+        if self.m_shutdown_flag {
             return false;
         }
 
@@ -368,7 +368,7 @@ impl SexyAppBase {
 
             match event_type {
                 SDL_QUIT => {
-                    self.shutdown = true;
+                    self.m_shutdown_flag = true;
                     return false;
                 }
 
@@ -376,7 +376,7 @@ impl SexyAppBase {
                     let window_event = unsafe { event.window };
                     match window_event.event {
                         SDL_WINDOWEVENT_CLOSE => {
-                            self.shutdown = true;
+                            self.m_shutdown_flag = true;
                             return false;
                         }
                         SDL_WINDOWEVENT_RESIZED | SDL_WINDOWEVENT_SIZE_CHANGED => {
@@ -472,7 +472,7 @@ impl SexyAppBase {
 
     /// 关闭（对应 C++ SexyAppBase::Shutdown）
     pub fn shutdown(&mut self) {
-        self.shutdown = true;
+        self.m_shutdown_flag = true;
 
         // 清理 WidgetManager
         if let Some(wm) = self.widget_manager.take() {
@@ -560,10 +560,82 @@ impl SexyAppBase {
     pub fn mouse_down(&mut self, _x: i32, _y: i32, _btn: i32, _click_count: i32) {}
     pub fn mouse_up(&mut self, _x: i32, _y: i32) {}
     pub fn mouse_move(&mut self, _x: i32, _y: i32) {}
+
+    /// 鼠标滚轮（对应 C++ MouseWheel）
+    pub fn mouse_wheel(&mut self, _delta: i32) {}
+
+    /// 更新应用单步（对应 C++ UpdateAppStep，供 Dialog::WaitForResult 使用）
+    pub fn update_app_step(&mut self) -> bool {
+        self.update_app()
+    }
+
+    /// 弹出消息框（对应 C++ Popup）
+    pub fn popup(&self, msg: &str) {
+        eprintln!("Popup: {}", msg);
+    }
+
+    /// 从文件读取 UTF-8 字符串（对应 C++ ReadUTF8StringFromFile）
+    pub fn read_utf8_string_from_file(&self, path: &str) -> Option<String> {
+        std::fs::read_to_string(path).ok()
+    }
+
+    /// 复制到剪贴板（对应 C++ CopyToClipboard）
+    pub fn copy_to_clipboard(&self, _text: &str) {}
+
+    /// 获取剪贴板内容（对应 C++ GetClipboard）
+    pub fn get_clipboard(&self) -> String { String::new() }
+
+    /// 设置光标类型（对应 C++ SetCursor 的完整版本）
+    pub fn set_cursor_type(&mut self, _cursor_type: i32) {}
+
+    /// 开始文本输入（对应 C++ StartTextInput）
+    pub fn start_text_input(&mut self, _initial_text: &str) -> bool { false }
+
+    /// 停止文本输入（对应 C++ StopTextInput）
+    pub fn stop_text_input(&mut self) {}
+
+    /// 检查是否已关闭
+    pub fn is_shutdown(&self) -> bool { self.m_shutdown_flag }
+}
+
+// ---- DialogListener / ButtonListener 实现 ----
+// 对应 C++ SexyAppBase 同时继承 ButtonListener 和 DialogListener
+
+/// DialogListener 接口实现
+pub trait DialogListenerImpl {
+    fn dialog_button_press(&mut self, dialog_id: i32, button_id: i32);
+    fn dialog_button_depress(&mut self, dialog_id: i32, button_id: i32);
+}
+
+/// ButtonListener 接口实现
+pub trait ButtonListenerImpl {
+    fn button_press(&mut self, the_id: i32);
+    fn button_depress(&mut self, the_id: i32);
+    fn button_down_tick(&mut self, the_id: i32);
+    fn button_mouse_enter(&mut self, the_id: i32);
+    fn button_mouse_leave(&mut self, the_id: i32);
+    fn button_mouse_move(&mut self, the_id: i32, x: i32, y: i32);
+}
+
+impl DialogListenerImpl for SexyAppBase {
+    fn dialog_button_press(&mut self, _dialog_id: i32, _button_id: i32) {}
+    fn dialog_button_depress(&mut self, dialog_id: i32, button_id: i32) {
+        // 对话框按钮释放事件 - 由 DialogManager 处理
+        let _ = (dialog_id, button_id);
+    }
 }
 
 impl Default for SexyAppBase {
     fn default() -> Self {
         SexyAppBase::new()
     }
+}
+
+impl ButtonListenerImpl for SexyAppBase {
+    fn button_press(&mut self, _the_id: i32) {}
+    fn button_depress(&mut self, _the_id: i32) {}
+    fn button_down_tick(&mut self, _the_id: i32) {}
+    fn button_mouse_enter(&mut self, _the_id: i32) {}
+    fn button_mouse_leave(&mut self, _the_id: i32) {}
+    fn button_mouse_move(&mut self, _the_id: i32, _x: i32, _y: i32) {}
 }
