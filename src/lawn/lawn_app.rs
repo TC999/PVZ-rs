@@ -201,6 +201,15 @@ impl LawnApp {
         if self.base.is_shutdown() { return; }
         self.base.title = "PvZ Portable".to_string();
 
+        // 创建子系统（对应 C++ LawnApp::Init 中的 new Music / new TodFoley / new EffectSystem）
+        let app_ptr = self as *mut LawnApp;
+        if self.music.is_none() {
+            self.music = Some(Box::new(crate::lawn::system::music::Music::new(app_ptr)));
+        }
+        if self.sound_system.is_none() {
+            self.sound_system = Some(Box::new(crate::todlib::tod_foley::FoleyManager::new(app_ptr)));
+        }
+
         // 加载标题屏幕所需的图片资源
         if let Some(rm) = self.base.resource_manager {
             unsafe {

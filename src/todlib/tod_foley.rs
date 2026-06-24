@@ -3,38 +3,44 @@
 
 #![allow(dead_code)]
 
-/// Foley 音效类型
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(i32)]
-pub enum FoleyType {
-    None = -1,
-    // 这些值从资源定义中获取
-    // 常见值：Peashooter, Cherrybomb, ZombieEating, etc.
-}
+use crate::framework::sound::sound_manager::SoundManager;
 
-/// 音效管理器
+/// Foley 音效管理器
 pub struct FoleyManager {
     pub audio_enabled: bool,
+    pub app: *mut crate::lawn::lawn_app::LawnApp,
 }
 
 impl FoleyManager {
-    pub fn new() -> Self {
+    pub fn new(app: *mut crate::lawn::lawn_app::LawnApp) -> Self {
         FoleyManager {
             audio_enabled: true,
+            app,
         }
     }
 
     /// 播放音效
-    pub fn play_foley(&self, _foley_type: FoleyType) {
-        // 委托给 SoundManager
+    pub fn play_foley(&self, foley_type: i32) {
+        if !self.audio_enabled { return; }
+        let app = unsafe { &*self.app };
+        if let Some(sm_ptr) = app.base.sound_manager {
+            unsafe {
+                // 按 FoleyType 作为音效 ID 播放
+                // C++ 版 FoleyType 值和 SoundManager 的 ID 是直接对应的
+                (*sm_ptr).play_sound(foley_type);
+            }
+        }
     }
 
     /// 停止音效
-    pub fn stop_foley(&self, _foley_type: FoleyType) {
-        // 停止特定音效
+    pub fn stop_foley(&self, foley_type: i32) {
+        let app = unsafe { &*self.app };
+        if let Some(sm_ptr) = app.base.sound_manager {
+            unsafe { (*sm_ptr).stop_sound(foley_type); }
+        }
     }
 
-    /// 设置是否静音
+    /// 设置是否启用音频
     pub fn set_audio_enabled(&mut self, enabled: bool) {
         self.audio_enabled = enabled;
     }
@@ -42,6 +48,6 @@ impl FoleyManager {
 
 impl Default for FoleyManager {
     fn default() -> Self {
-        FoleyManager::new()
+        panic!("FoleyManager::default called without app pointer");
     }
 }

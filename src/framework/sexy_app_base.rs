@@ -197,6 +197,9 @@ impl SexyAppBase {
             self.resource_manager = Some(Box::into_raw(rm));
         }
 
+        // 初始化音频系统（对应 C++ Init 中的 new SDLSoundManager + CreateMusicInterface）
+        self.init_sound_system();
+
         // 创建窗口和 GL 上下文（对应 C++ MakeWindow）
         self.make_window();
 
@@ -686,15 +689,43 @@ impl SexyAppBase {
     pub fn load_resource_manifest(&mut self) {
         if let Some(rm) = self.resource_manager {
             unsafe {
-                eprintln!("解析 properties/resources.xml...");
-                if !(*rm).parse_resources_file("properties/resources.xml") {
-                    eprintln!("资源文件 'properties/resources.xml' 解析失败: {}", (*rm).get_error_text());
-                } else {
-                    eprintln!("资源文件解析成功，图像: {}，声音: {}，字体: {}",
-                        (*rm).image_map.len(), (*rm).sound_map.len(), (*rm).font_map.len());
-                }
+                (*rm).parse_resources_file("properties/resources.xml");
             }
         }
+    }
+
+    /// 初始化音频系统（对应 C++ 中创建 SDLSoundManager + CreateMusicInterface）
+    pub fn init_sound_system(&mut self) {
+        use crate::ffi::sdl_mixer;
+
+        // 加载 SDL_mixer DLL
+        if !sdl_mixer::load_mixer_library() {
+            eprintln!("SDL_mixer 不可用，音频已禁用");
+        } else {
+            if sdl_mixer::mix_init(44100, 0x8010u16, 2, 2048) == 0 {
+                sdl_mixer::mix_allocate_channels(32);
+            } else {
+                eprintln!("Mix_OpenAudio 失败");
+            }
+        }
+
+        // 创建 SDLSoundManager
+        if self.sound_manager.is_none() {
+            use crate::framework::sound::sdl_sound_manager::SDLSoundManager;
+            let sm = Box::new(SDLSoundManager::new());
+            self.sound_manager = Some(Box::into_raw(sm) as *mut dyn crate::framework::sound::sound_manager::SoundManager);
+        }
+
+        // 创建 SDLMusicInterface
+        if self.music_interface.is_none() {
+            use crate::framework::sound::sdl_music_interface::SDLMusicInterface;
+            let mi = Box::new(SDLMusicInterface::new());
+            self.music_interface = Some(Box::into_raw(mi) as *mut dyn crate::framework::sound::music_interface::MusicInterface);
+        }
+
+        // 设置初始音量
+        self.set_sfx_volume(self.sfx_volume);
+        self.set_music_volume(self.music_volume);
     }
 
     /// 获取图像

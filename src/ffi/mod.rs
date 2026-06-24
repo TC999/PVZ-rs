@@ -6,6 +6,7 @@
 
 pub mod opengl;
 pub mod libc;
+pub mod sdl_mixer;
 
 // 重新导出常用类型
 pub use opengl::*;
