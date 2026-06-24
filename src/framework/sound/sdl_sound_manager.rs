@@ -1,17 +1,18 @@
-// SDL 声音管理器 — 完整实现
-// 对应 C++ SDLSoundManager.h / SDLSoundManager.cpp
+// SDL 声音管理器 — 完全对齐 C++ SDLSoundManager
+// 使用 SDL_RWFromConstMem + Mix_LoadWAV_RW 从 PAK 内存中加载音效
 
 use crate::framework::sound::sound_manager::SoundManager;
 use crate::framework::paklib::with_pak_interface;
 use crate::ffi::sdl_mixer;
+use std::array;
 
 const MAX_SOURCE_SOUNDS: usize = 256;
 
 pub struct SDLSoundManager {
-    source_sounds: [Option<*mut std::ffi::c_void>; MAX_SOURCE_SOUNDS],
-    source_file_names: Vec<String>,
-    base_volumes: Vec<f64>,
-    base_pans: Vec<i32>,
+    source_chunks: [*mut std::ffi::c_void; MAX_SOURCE_SOUNDS],
+    source_file_names: [String; MAX_SOURCE_SOUNDS],
+    base_volumes: [f64; MAX_SOURCE_SOUNDS],
+    base_pans: [i32; MAX_SOURCE_SOUNDS],
     master_volume: f64,
     initialized: bool,
 }
@@ -19,130 +20,142 @@ pub struct SDLSoundManager {
 impl SDLSoundManager {
     pub fn new() -> Self {
         SDLSoundManager {
-            source_sounds: [None; MAX_SOURCE_SOUNDS],
-            source_file_names: (0..MAX_SOURCE_SOUNDS).map(|_| String::new()).collect(),
-            base_volumes: vec![1.0; MAX_SOURCE_SOUNDS],
-            base_pans: vec![0; MAX_SOURCE_SOUNDS],
+            source_chunks: [std::ptr::null_mut(); MAX_SOURCE_SOUNDS],
+            source_file_names: array::from_fn(|_| String::new()),
+            base_volumes: [1.0; MAX_SOURCE_SOUNDS],
+            base_pans: [0; MAX_SOURCE_SOUNDS],
             master_volume: 1.0,
             initialized: true,
         }
     }
+}
 
-    fn release_sound_at(&mut self, idx: i32) {
-        let idx = idx as usize;
+impl SDLSoundManager {
+    fn release_sound_at(&mut self, idx: usize) {
         if idx >= MAX_SOURCE_SOUNDS { return; }
-        if let Some(chunk) = self.source_sounds[idx].take() {
-            sdl_mixer::mix_free_chunk(chunk);
+        let ck = self.source_chunks[idx];
+        if !ck.is_null() {
+            sdl_mixer::free_chunk(ck);
+            self.source_chunks[idx] = std::ptr::null_mut();
         }
         self.source_file_names[idx].clear();
     }
 
-    fn find_free_slot(&self) -> Option<i32> {
+    fn find_slot(&self) -> Option<usize> {
         for i in (0..MAX_SOURCE_SOUNDS).rev() {
-            if self.source_sounds[i].is_none() { return Some(i as i32); }
+            if self.source_chunks[i].is_null() { return Some(i); }
         }
         None
     }
 
-    fn find_by_filename(&self, filename: &str) -> Option<i32> {
-        let upper = filename.to_uppercase();
+    fn find_by_name(&self, name: &str) -> Option<usize> {
         for i in 0..MAX_SOURCE_SOUNDS {
-            if !self.source_file_names[i].is_empty() && self.source_file_names[i].to_uppercase() == upper {
-                return Some(i as i32);
+            if self.source_file_names[i] == name { return Some(i); }
+        }
+        None
+    }
+
+    /// 等价于 C++ LoadSound(SfxID, theFilename)
+    /// 尝试 .wav → .mp3 → .ogg，从 PAK 读入内存后 Mix_LoadWAV_RW
+    fn load_into_slot(&mut self, idx: usize, filename: &str) -> bool {
+        self.release_sound_at(idx);
+        self.source_file_names[idx] = filename.to_string();
+
+        if !self.initialized { return true; }
+
+        // C++: const char* formats[] = {".wav", ".mp3", ".ogg"};
+        const EXTS: [&str; 3] = [".wav", ".mp3", ".ogg"];
+        for ext in &EXTS {
+            let path = format!("{}{}", filename, ext);
+            eprintln!("  [SDLSoundManager] 尝试加载: {}", path);
+            if let Some(data) = with_pak_interface(|pak| pak.load_file(&path)) {
+                // C++: Mix_LoadWAV_RW(SDL_RWFromConstMem(data.data(), fileSize), 1)
+                let rw = unsafe {
+                    sdl_mixer::rw_from_constmem(data.as_ptr() as *const std::ffi::c_void, data.len() as i32)
+                };
+                if rw.is_null() { continue; }
+                let ck = sdl_mixer::load_wav_rw(rw, 1);
+                if !ck.is_null() {
+                    self.source_chunks[idx] = ck;
+                    std::mem::forget(data);
+                    return true;
+                }
             }
         }
-        None
-    }
-
-    fn load_audio_data(filename: &str) -> Option<Vec<u8>> {
-        let extensions = ["", ".wav", ".WAV", ".mp3", ".MP3", ".ogg", ".OGG"];
-        for ext in &extensions {
-            let path = format!("{}{}", filename, ext);
-            if let Some(d) = with_pak_interface(|pak| pak.load_file(&path)) { return Some(d); }
-            if let Ok(d) = std::fs::read(&path) { return Some(d); }
-        }
-        None
+        false
     }
 }
 
 impl SoundManager for SDLSoundManager {
     fn initialized(&self) -> bool { self.initialized }
 
+    /// C++: bool LoadSound(intptr_t theSfxID, const std::string& theFilename)
     fn load_sound_by_id(&mut self, sfx_id: i32, filename: &str) -> bool {
         if sfx_id < 0 || sfx_id as usize >= MAX_SOURCE_SOUNDS { return false; }
-        self.release_sound_at(sfx_id);
-        let data = match Self::load_audio_data(filename) { Some(d) => d, None => {
-            eprintln!("  [SDLSoundManager] 加载音效 #{} '{}' 失败：文件未找到", sfx_id, filename);
-            return false;
-        }};
-        eprintln!("  [SDLSoundManager] 加载音效 #{} '{}' ({} 字节)", sfx_id, filename, data.len());
-        let rwops = unsafe { sdl_mixer::rw_from_mem(data.as_ptr() as *mut std::ffi::c_void, data.len() as i32) };
-        if rwops.is_null() { eprintln!("  [SDLSoundManager] SDL_RWFromMem 失败"); return false; }
-        let chunk = sdl_mixer::mix_load_wav_rw(rwops, 1);
-        if chunk.is_null() { eprintln!("  [SDLSoundManager] mix_load_wav_rw 返回 null"); return false; }
-        eprintln!("  [SDLSoundManager] 音效 #{} 加载成功", sfx_id);
-        self.source_sounds[sfx_id as usize] = Some(chunk);
-        self.source_file_names[sfx_id as usize] = filename.to_string();
-        std::mem::forget(data);
+        if filename.is_empty() { return false; }
+        self.load_into_slot(sfx_id as usize, filename)
+    }
+
+    /// C++: intptr_t LoadSound(const std::string& theFilename)
+    fn load_sound(&mut self, filename: &str) -> i32 {
+        if let Some(id) = self.find_by_name(filename) { return id as i32; }
+        let slot = match self.find_slot() { Some(s) => s, None => return -1 };
+        if !self.load_into_slot(slot, filename) { return -1; }
+        slot as i32
+    }
+
+    fn release_sound(&mut self, sfx_id: i32) {
+        if sfx_id >= 0 { self.release_sound_at(sfx_id as usize); }
+    }
+
+    fn set_volume(&mut self, volume: f64) { self.master_volume = volume; }
+
+    fn set_base_volume(&mut self, sfx_id: i32, vol: f64) -> bool {
+        if sfx_id < 0 || sfx_id as usize >= MAX_SOURCE_SOUNDS { return false; }
+        self.base_volumes[sfx_id as usize] = vol; true
+    }
+
+    fn set_base_pan(&mut self, sfx_id: i32, pan: i32) -> bool {
+        if sfx_id < 0 || sfx_id as usize >= MAX_SOURCE_SOUNDS { return false; }
+        self.base_pans[sfx_id as usize] = pan; true
+    }
+
+    /// C++: Mix_PlayChannel(-1, chunk, 0) → 返回声道号
+    fn play_sound(&self, sfx_id: i32) -> bool {
+        if sfx_id < 0 || sfx_id as usize >= MAX_SOURCE_SOUNDS { return false; }
+        let ck = self.source_chunks[sfx_id as usize];
+        if ck.is_null() { return false; }
+        let ch = sdl_mixer::play_channel(-1, ck, 0);
+        if ch < 0 { return false; }
+        let v = (self.master_volume * self.base_volumes[sfx_id as usize] * 128.0) as i32;
+        sdl_mixer::volume(ch, v.clamp(0, 128));
+        let p = self.base_pans[sfx_id as usize];
+        if p < 0 { sdl_mixer::set_panning(ch, 128, (128 + p).clamp(0, 128) as u8); }
+        else if p > 0 { sdl_mixer::set_panning(ch, (128 - p).clamp(0, 128) as u8, 128); }
         true
     }
 
-    fn load_sound(&mut self, filename: &str) -> i32 {
-        if let Some(id) = self.find_by_filename(filename) { return id; }
-        let slot = match self.find_free_slot() { Some(s) => s, None => return -1 };
-        if !self.load_sound_by_id(slot, filename) { return -1; }
-        slot
-    }
-
-    fn release_sound(&mut self, sfx_id: i32) { self.release_sound_at(sfx_id); }
-    fn set_volume(&mut self, volume: f64) { self.master_volume = volume; }
-
-    fn set_base_volume(&mut self, sfx_id: i32, base_volume: f64) -> bool {
-        if sfx_id < 0 || sfx_id as usize >= MAX_SOURCE_SOUNDS { return false; }
-        self.base_volumes[sfx_id as usize] = base_volume; true
-    }
-
-    fn set_base_pan(&mut self, sfx_id: i32, base_pan: i32) -> bool {
-        if sfx_id < 0 || sfx_id as usize >= MAX_SOURCE_SOUNDS { return false; }
-        self.base_pans[sfx_id as usize] = base_pan; true
-    }
-
-    fn play_sound(&self, sfx_id: i32) -> bool {
-        if sfx_id < 0 || sfx_id as usize >= MAX_SOURCE_SOUNDS { return false; }
-        let chunk = match self.source_sounds[sfx_id as usize] { Some(c) => c, None => {
-            eprintln!("  [SDLSoundManager] 播放音效 #{} 失败：未加载", sfx_id);
-            return false;
-        }};
-        let channel = sdl_mixer::mix_play_channel_timed(-1, chunk, 0, -1);
-        if channel >= 0 {
-            let vol = (self.master_volume * self.base_volumes[sfx_id as usize] * 128.0) as i32;
-            sdl_mixer::mix_volume(channel, vol.clamp(0, 128));
-            eprintln!("  [SDLSoundManager] 播放音效 #{} (声道={}, 音量={})", sfx_id, channel, vol.clamp(0, 128));
-        } else {
-            eprintln!("  [SDLSoundManager] 播放音效 #{} 失败：无空闲声道", sfx_id);
-        }
-        let pan = self.base_pans[sfx_id as usize];
-        if pan < 0 { sdl_mixer::mix_set_panning(channel, 128, (128 + pan).clamp(0, 128) as u8); }
-        else if pan > 0 { sdl_mixer::mix_set_panning(channel, (128 - pan).clamp(0, 128) as u8, 128); }
-        channel >= 0
-    }
-
     fn stop_sound(&self, _sfx_id: i32) {}
-    fn stop_all_sounds(&self) { sdl_mixer::mix_halt_channel(-1); }
-    fn set_master_volume(&mut self, volume: f64) { self.master_volume = volume; }
+    fn stop_all_sounds(&self) { sdl_mixer::halt_channel(-1); }
+    fn set_master_volume(&mut self, v: f64) { self.master_volume = v; }
     fn get_master_volume(&self) -> f64 { self.master_volume }
     fn flush(&mut self) {}
-    fn get_free_sound_id(&self) -> i32 { self.find_free_slot().unwrap_or(-1) }
-    fn num_sounds(&self) -> i32 { self.source_sounds.iter().filter(|s| s.is_some()).count() as i32 }
+    fn get_free_sound_id(&self) -> i32 {
+        self.find_slot().map(|i| i as i32).unwrap_or(-1)
+    }
+    fn num_sounds(&self) -> i32 {
+        self.source_chunks.iter().filter(|c| !c.is_null()).count() as i32
+    }
 }
 
 impl Default for SDLSoundManager { fn default() -> Self { SDLSoundManager::new() } }
 
 impl Drop for SDLSoundManager {
     fn drop(&mut self) {
-        sdl_mixer::mix_halt_channel(-1);
+        sdl_mixer::halt_channel(-1);
         for i in 0..MAX_SOURCE_SOUNDS {
-            if let Some(chunk) = self.source_sounds[i].take() { sdl_mixer::mix_free_chunk(chunk); }
+            let ck = self.source_chunks[i];
+            if !ck.is_null() { sdl_mixer::free_chunk(ck); }
         }
     }
 }
