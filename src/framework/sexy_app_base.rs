@@ -701,12 +701,10 @@ impl SexyAppBase {
         // 加载 SDL_mixer DLL
         if !sdl_mixer::load_mixer_library() {
             eprintln!("SDL_mixer 不可用，音频已禁用");
+        } else if sdl_mixer::mix_open_audio(44100, 0x8010u16, 2, 2048) == 0 {
+            sdl_mixer::mix_allocate_channels(32);
         } else {
-            if sdl_mixer::mix_init(44100, 0x8010u16, 2, 2048) == 0 {
-                sdl_mixer::mix_allocate_channels(32);
-            } else {
-                eprintln!("Mix_OpenAudio 失败");
-            }
+            eprintln!("Mix_OpenAudio 失败");
         }
 
         // 创建 SDLSoundManager
