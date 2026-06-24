@@ -71,7 +71,7 @@
     - 已有 `native_display.rs`（30 行骨架）
     - 简单的屏幕清空和交换链管理包装
 
-- [~] **1.1.8 GLInterface（OpenGL 接口层）**
+- [✓] **1.1.8 GLInterface（OpenGL 接口层）**
   - **C++ 源文件：** `src/SexyAppFramework/graphics/GLInterface.{h,cpp}`（8KB + 45KB）
   - **核心依赖项：** `SDL2`, `OpenGL`, `MemoryImage`, `Graphics`
   - **Rust 实现要点：**
@@ -79,7 +79,7 @@
     - 检查翻译完整性：`Set3D`, `DrawTriangle`, `PresentFrame` 等方法体
     - 包装 OpenGL 状态机调用
 
-- [~] **1.1.9 SWTri（软件三角形渲染器）**
+- [✓] **1.1.9 SWTri（软件三角形渲染器）**
   - **C++ 源文件：** `src/SexyAppFramework/graphics/SWTri.{h,cpp}`（31KB + 31KB）
   - **核心依赖项：** `Image`, `Graphics`, `SexyMatrix3`
   - **Rust 实现要点：**
@@ -274,7 +274,7 @@
     - 已有 `key_codes.rs`（105 行），基本完成
     - 键码枚举映射
 
-- [~] **1.3.7 Common（通用工具函数）**
+- [✓] **1.3.7 Common（通用工具函数）**
   - **C++ 源文件：** `src/SexyAppFramework/Common.{h,cpp}`（13KB + 14KB）
   - **核心依赖项：** 无
   - **Rust 实现要点：**
@@ -420,7 +420,7 @@
 
 ### 2.1 动画系统
 
-- [~] **2.1.1 ReanimatorDefinition（动画定义数据结构）**
+- [✓] **2.1.1 ReanimatorDefinition（动画定义数据结构）**
   - **C++ 源文件：** `src/Sexy.TodLib/Definition.{h,cpp}`（15KB + 69KB）
   - **核心依赖项：** `TodCommon`, `ReanimAtlas`, `TodStringFile`, `Image`
   - **Rust 实现要点：**
@@ -429,14 +429,14 @@
     - 数据量庞大：`gReanimatorDefCount` 约数百个动画定义
     - 结构体：`ReanimatorDefinition`, `ReanimatorTrack`, `ReanimatorTransform`, `ReanimationParams`
 
-- [~] **2.1.2 ReanimAtlas（动画图集）**
+- [✓] **2.1.2 ReanimAtlas（动画图集）**
   - **C++ 源文件：** `src/Sexy.TodLib/ReanimAtlas.{h,cpp}`（2KB + 9KB）
   - **核心依赖项：** `Image`, `Graphics`, `MemoryImage`
   - **Rust 实现要点：**
     - 已有 `reanim_atlas.rs`（17 行骨架）
     - 将动画的所有帧打包到一张大纹理中，减少 OpenGL 状态切换
 
-- [~] **2.1.3 Reanimation（动画实例——核心类）**
+- [✓] **2.1.3 Reanimation（动画实例——核心类）**
   - **C++ 源文件：** `src/Sexy.TodLib/Reanimator.{h,cpp}`（14KB + 74KB）
   - **核心依赖项：** `ReanimatorDefinition`, `ReanimatorTrackInstance`, `Graphics`, `SexyMatrix`, `FilterEffect`, `Attachment`
   - **Rust 实现要点：**
@@ -450,14 +450,14 @@
     - 需要 `ReanimationHolder`（`DataArray<Reanimation>`）管理所有动画实例
     - 性能关键——每帧要更新和绘制数百个动画
 
-- [~] **2.1.4 ReanimatorTransform（动画变换帧）**
+- [✓] **2.1.4 ReanimatorTransform（动画变换帧）**
   - **C++ 源文件：** `src/Sexy.TodLib/Reanimator.h`（内联定义）
   - **核心依赖项：** `Image`, `Font`
   - **Rust 实现要点：**
     - 结构体已在 C++ 中定义：位置、旋转、缩放、透明度、图像/字体/文字
     - 需要 `DEFAULT_FIELD_PLACEHOLDER` 标记未设置的字段
 
-- [~] **2.1.5 ReanimatorTrackInstance（轨道实例）**
+- [✓] **2.1.5 ReanimatorTrackInstance（轨道实例）**
   - **C++ 源文件：** `src/Sexy.TodLib/Reanimator.h`（内联定义）
   - **核心依赖项：** `ReanimatorTransform`, `Attachment`
   - **Rust 实现要点：**
