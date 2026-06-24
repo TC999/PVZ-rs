@@ -32,7 +32,7 @@ pub fn quantize_8bit(
         return true;
     }
 
-    let mut color_table_size = 0usize;
+    let mut color_table_size;
     let mut search_table = [0u32; 256];
     let mut translation_table = [0u8; 256]; // 从搜索表到颜色表的映射
 

@@ -1085,7 +1085,7 @@ impl TextureData {
             while src_y < src_bottom {
                 let mut src_x = src_left;
                 let mut dst_x = the_x;
-                let mut w = 0;
+                let mut w;
                 let mut h = 0;
                 while src_x < src_right {
                     w = src_right - src_x;
@@ -1153,7 +1153,7 @@ impl TextureData {
             while src_y < src_bottom {
                 let mut src_x = src_left;
                 let mut dst_x = start_x;
-                let mut w = 0;
+                let mut w;
                 let mut h = 0;
                 while src_x < src_right {
                     w = src_right - src_x;

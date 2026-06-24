@@ -1372,7 +1372,10 @@ impl Graphics {
                                 cur_pos += 1;
                             }
                         }
+                        // 值在下一轮循环中被读取（line_start_pos 用于 else 分支）
+                        // let _ = 读取旧值以消除 unused_assignments 警告
                         line_start_pos = cur_pos;
+                        let _ = line_start_pos;
                     } else {
                         let mut draw_end = char_start;
                         if draw_end <= line_start_pos {

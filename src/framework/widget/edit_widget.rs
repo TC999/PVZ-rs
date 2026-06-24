@@ -31,7 +31,7 @@ const G_EDIT_COLORS: [[u8; 3]; EDIT_NUM_COLORS] = [
 ];
 
 /// 宽度检查结构
-struct WidthCheck {
+pub(crate) struct WidthCheck {
     font: Font,
     max_width: i32,
 }
@@ -52,7 +52,7 @@ pub struct EditWidget {
     pub text: String,
     pub password_display: String,
     pub font: Option<Box<Font>>,
-    pub width_check_list: Vec<WidthCheck>,
+    pub(crate) width_check_list: Vec<WidthCheck>,
     pub listener: Option<Box<dyn EditListener>>,
     pub showing_cursor: bool,
     pub draw_sel_override: bool,

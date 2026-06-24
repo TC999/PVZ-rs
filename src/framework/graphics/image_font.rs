@@ -822,7 +822,7 @@ unsafe impl Sync for ImagePtr {}
 #[derive(Debug, Clone)]
 pub struct RenderCommand {
     /// 绘制图像指针（Send 包装）
-    pub image: ImagePtr,
+    pub(crate) image: ImagePtr,
     /// 目标位置 (x, y)
     pub dest: [i32; 2],
     /// 源纹理矩形 (x, y, w, h)
@@ -993,7 +993,7 @@ impl ImageFont {
             // 在创建活跃层后获取可变指针
             active_layer.base_font_layer = &mut fd.font_layer_list[layer_idx] as *mut FontLayer;
 
-            let mut a_layer_point_size = point_size_val;
+            let a_layer_point_size = point_size_val;
 
             if a_layer_point_size == 0 {
                 // 无需缩放，直接引用原始图像
@@ -1125,7 +1125,7 @@ impl ImageFont {
                 let base_layer = &mut *active_layer.base_font_layer;
                 // 先复制需要的字段，避免借用检查问题
                 let layer_spacing = base_layer.spacing;
-                let mut char_data = base_layer.get_char_data(ch).clone();
+                let char_data = base_layer.get_char_data(ch).clone();
                 let prev_char_data = if prev_ch != '\0' {
                     Some(base_layer.get_char_data(prev_ch).clone())
                 } else {
@@ -1241,9 +1241,7 @@ impl ImageFont {
 
         let mut cur_x_pos = the_x;
 
-        // 使用 UTF8 逐个字符迭代
-        let mut decode_offset = 0usize;
-        let mut prev_char: Option<char> = None;
+        // 使用 UTF8 逐个字符迭代（Rust 用 chars().collect() 迭代，无需手动字节偏移）
 
         // 逐字符处理
         let chars: Vec<char> = the_string.chars().collect();

@@ -110,7 +110,7 @@ impl Font {
     ) {
         // 默认实现：使用 Graphics 填充像素模拟文字
         // 实际渲染由子类型（SysFont/ImageFont）覆盖
-        let mut cur_x = x;
+        let cur_x = x;
         let orig_color = g.color;
         g.set_color(color);
 
