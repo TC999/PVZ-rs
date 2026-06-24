@@ -100,7 +100,7 @@ impl<T> DataArray<T> {
             self.free_head = index + 1;
         }
 
-        unsafe { &mut self.slots[index as usize].as_mut().unwrap().item as *mut T }
+        &mut self.slots[index as usize].as_mut().unwrap().item as *mut T
     }
 
     /// 释放对象（对应 C++ DataArrayFree）
@@ -133,7 +133,7 @@ impl<T> DataArray<T> {
     /// 获取对象 ID
     pub fn get_id(&self, item: *const T) -> u32 {
         for slot in self.slots.iter() {
-            if let Some(ref s) = slot {
+            if let Some(s) = slot {
                 if &s.item as *const T == item {
                     return s.id;
                 }
@@ -184,7 +184,7 @@ impl<T> DataArray<T> {
         } else {
             let mut i = 0;
             while i < self.slots.len() {
-                if let Some(ref slot) = self.slots[i] {
+                if let Some(slot) = &self.slots[i] {
                     if &slot.item as *const T == current {
                         break;
                     }
@@ -195,7 +195,7 @@ impl<T> DataArray<T> {
         };
 
         for i in start..self.slots.len() {
-            if let Some(ref slot) = self.slots[i] {
+            if let Some(slot) = &self.slots[i] {
                 return &slot.item as *const T as *mut T;
             }
         }

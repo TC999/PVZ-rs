@@ -125,7 +125,7 @@ impl MTRand {
             }
             for kk in (MTRAND_N - MTRAND_M)..(MTRAND_N - 1) {
                 let y = (self.mt[kk] & UPPER_MASK) | (self.mt[kk + 1] & LOWER_MASK);
-                self.mt[kk] = self.mt[kk + (MTRAND_M - MTRAND_N)] ^ (y >> 1) ^ mag01[(y & 0x1) as usize];
+                self.mt[kk] = self.mt[kk - (MTRAND_N - MTRAND_M)] ^ (y >> 1) ^ mag01[(y & 0x1) as usize];
             }
             let y = (self.mt[MTRAND_N - 1] & UPPER_MASK) | (self.mt[0] & LOWER_MASK);
             self.mt[MTRAND_N - 1] = self.mt[MTRAND_M - 1] ^ (y >> 1) ^ mag01[(y & 0x1) as usize];
