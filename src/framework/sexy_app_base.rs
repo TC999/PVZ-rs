@@ -17,12 +17,14 @@ use crate::framework::common;
 use crate::framework::rect::Rect;
 use crate::framework::graphics::gl_image::GLImage;
 use crate::framework::graphics::memory_image::MemoryImage;
+use crate::framework::graphics::image::Image;
 use crate::framework::graphics::gl_interface::GLInterface;
 use crate::framework::widget::widget_manager::WidgetManager;
 use crate::framework::widget::dialog::Dialog;
 use crate::framework::sound::sound_manager::SoundManager;
 use crate::framework::sound::music_interface::MusicInterface;
 use crate::framework::resource_manager::ResourceManager;
+use crate::framework::paklib::{init_pak_interface, with_pak_interface_mut, set_resource_folder};
 
 /// 应用基类
 pub struct SexyAppBase {
@@ -102,6 +104,9 @@ pub struct SexyAppBase {
     pub is_drawing: bool,
     pub last_draw_tick: u32,
     pub next_draw_tick: u32,
+
+    // 屏幕图像（作为绘制目标，对应 C++ mImage）
+    pub screen_image: Option<*mut MemoryImage>,
 }
 
 impl SexyAppBase {
@@ -164,6 +169,7 @@ impl SexyAppBase {
             is_drawing: false,
             last_draw_tick: 0,
             next_draw_tick: 0,
+            screen_image: None,
         }
     }
 
@@ -171,6 +177,21 @@ impl SexyAppBase {
     pub fn init(&mut self) {
         // 设置资源目录
         self.resource_dir = common::get_cur_dir();
+
+        // 初始化 PakInterface 并加载 main.pak（对应 C++ Init 中的 AddPakFile）
+        init_pak_interface();
+        set_resource_folder(&self.resource_dir);
+        with_pak_interface_mut(|pak| {
+            let pak_path = format!("{}/main.pak", self.resource_dir.trim_end_matches('/'));
+            pak.add_pak_file(&pak_path);
+        });
+
+        // 创建 ResourceManager（对应 C++ 构造函数中的 new ResourceManager(this)）
+        if self.resource_manager.is_none() {
+            let app_ptr: *mut SexyAppBase = self;
+            let rm = Box::new(ResourceManager::new(Some(app_ptr)));
+            self.resource_manager = Some(Box::into_raw(rm));
+        }
 
         // 创建窗口和 GL 上下文（对应 C++ MakeWindow）
         self.make_window();
@@ -185,6 +206,12 @@ impl SexyAppBase {
                 (*wm).resize(Rect::new(0, 0, self.width, self.height), Rect::new(0, 0, self.width, self.height));
             }
         }
+
+        // 创建屏幕图像（对应 C++ 中 Graphics aScrG(mImage) 的 mImage）
+        let mut screen = Box::new(MemoryImage::new(self.width, self.height));
+        screen.create(self.width, self.height);
+        screen.clear(Color::BLACK);
+        self.screen_image = Some(Box::into_raw(screen));
 
         self.load_resource_manifest();
     }
@@ -358,10 +385,13 @@ impl SexyAppBase {
         // 通过 WidgetManager 绘制所有可见 widget
         if let Some(wm) = self.widget_manager {
             unsafe {
-                // 创建一个临时的 Graphics 上下文用于 widget 绘制
-                // 对应 C++ WidgetManager::DrawScreen 中的 Graphics aScrG(mImage)
+                // 创建以屏幕图像为目的地的 Graphics 上下文
+                // 对应 C++ 中的 Graphics aScrG(mImage);
                 use crate::framework::graphics::graphics::Graphics;
                 let mut g = Graphics::new();
+                if let Some(screen) = self.screen_image {
+                    g.dest_image = screen as *mut crate::framework::graphics::image::Image;
+                }
                 (*wm).draw(&mut g);
             }
         }
@@ -498,6 +528,11 @@ impl SexyAppBase {
     pub fn shutdown(&mut self) {
         self.m_shutdown_flag = true;
 
+        // 清理屏幕图像
+        if let Some(si) = self.screen_image.take() {
+            unsafe { let _ = Box::from_raw(si); }
+        }
+
         // 清理 WidgetManager
         if let Some(wm) = self.widget_manager.take() {
             unsafe {
@@ -531,8 +566,20 @@ impl SexyAppBase {
     /// 设置参数
     pub fn set_args(&mut self, _argc: i32, _argv: *mut *mut std::os::raw::c_char) {}
 
-    /// 加载资源清单
-    pub fn load_resource_manifest(&mut self) {}
+    /// 加载资源清单（对应 C++ LoadResourceManifest）
+    pub fn load_resource_manifest(&mut self) {
+        if let Some(rm) = self.resource_manager {
+            unsafe {
+                eprintln!("解析 properties/resources.xml...");
+                if !(*rm).parse_resources_file("properties/resources.xml") {
+                    eprintln!("资源文件 'properties/resources.xml' 解析失败: {}", (*rm).get_error_text());
+                } else {
+                    eprintln!("资源文件解析成功，图像: {}，声音: {}，字体: {}",
+                        (*rm).image_map.len(), (*rm).sound_map.len(), (*rm).font_map.len());
+                }
+            }
+        }
+    }
 
     /// 获取图像
     pub fn get_image(&self, _filename: &str, _commit_bits: bool) -> Option<&mut GLImage> {

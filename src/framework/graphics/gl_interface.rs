@@ -1732,6 +1732,8 @@ impl GLInterface {
     /// 绘制前的准备（对应 C++ PreDraw）
     pub fn pre_draw(&self) -> bool {
         unsafe {
+            glClearColor(0.0, 0.0, 0.0, 1.0);
+            glClear(GL_COLOR_BUFFER_BIT);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         }
         true

@@ -41,6 +41,39 @@ pub const LAY_HCENTER: i32 = 0x100000;
 pub const LAY_VCENTER: i32 = 0x200000;
 pub const LAY_MAX: i32 = 0x400000;
 
+// ============================================================
+// WidgetImpl trait — 模拟 C++ 虚函数分派
+// ============================================================
+
+/// Widget 子类需实现此 trait 来覆盖绘制/更新/事件等行为。
+/// 所有方法都有默认空实现，子类只覆盖需要的即可。
+pub trait WidgetImpl {
+    // ---- 绘制 ----
+    fn draw(&mut self, widget: &Widget, g: &mut Graphics) {}
+    fn draw_overlay(&mut self, widget: &Widget, g: &mut Graphics) {}
+
+    // ---- 更新 ----
+    fn update(&mut self, widget: &mut Widget) {}
+
+    // ---- 键盘 ----
+    fn key_down(&mut self, widget: &mut Widget, key: KeyCode, wm: &mut WidgetManager) {}
+    fn key_up(&mut self, widget: &mut Widget, key: KeyCode) {}
+    fn key_char(&mut self, widget: &mut Widget, c: u8) {}
+
+    // ---- 鼠标 ----
+    fn mouse_down_btn(&mut self, widget: &mut Widget, x: i32, y: i32, btn: i32, click: i32) {}
+    fn mouse_up_btn(&mut self, widget: &mut Widget, x: i32, y: i32, btn: i32, click: i32) {}
+    fn mouse_move(&mut self, widget: &mut Widget, x: i32, y: i32) {}
+    fn mouse_drag(&mut self, widget: &mut Widget, x: i32, y: i32) {}
+    fn mouse_wheel(&mut self, widget: &mut Widget, delta: i32) {}
+    fn mouse_enter(&mut self, widget: &mut Widget) {}
+    fn mouse_leave(&mut self, widget: &mut Widget) {}
+
+    // ---- 焦点 ----
+    fn got_focus(&mut self, widget: &mut Widget) {}
+    fn lost_focus(&mut self, widget: &mut Widget) {}
+}
+
 /// 控件基类（对应 C++ Widget，继承自 WidgetContainer）
 /// 在 Rust 中使用组合，字段直接内联（不再通过 container 字段访问）
 pub struct Widget {
@@ -82,6 +115,9 @@ pub struct Widget {
 
     // ---- 资源 ----
     pub loaded_resource_names: Vec<String>,
+
+    // ---- WidgetImpl 分派（模拟 C++ 虚表） ----
+    pub impl_: Option<Box<dyn WidgetImpl>>,
 }
 
 /// 静态标志：是否启用带颜色标记的字符串绘制
@@ -112,6 +148,7 @@ impl Widget {
             tab_prev: None,
             tab_next: None,
             loaded_resource_names: Vec::new(),
+            impl_: None,
         }
     }
 
@@ -249,9 +286,25 @@ impl Widget {
     // 绘制
     // ============================================================
 
-    pub fn draw(&self, _g: &mut Graphics) {}
-    pub fn draw_overlay(&self, _g: &mut Graphics) {}
-    pub fn draw_overlay_priority(&self, g: &mut Graphics, _priority: i32) {
+    pub fn draw(&mut self, g: &mut Graphics) {
+        if self.impl_.is_some() {
+            let mut impl_ = self.impl_.take();
+            if let Some(ref mut imp) = impl_ {
+                imp.draw(self, g);
+            }
+            self.impl_ = impl_;
+        }
+    }
+    pub fn draw_overlay(&mut self, g: &mut Graphics) {
+        if self.impl_.is_some() {
+            let mut impl_ = self.impl_.take();
+            if let Some(ref mut imp) = impl_ {
+                imp.draw_overlay(self, g);
+            }
+            self.impl_ = impl_;
+        }
+    }
+    pub fn draw_overlay_priority(&mut self, g: &mut Graphics, _priority: i32) {
         self.draw_overlay(g);
     }
 
@@ -259,14 +312,40 @@ impl Widget {
     // 更新
     // ============================================================
 
-    pub fn update(&mut self) {}
+    pub fn update(&mut self) {
+        if self.impl_.is_some() {
+            let mut impl_ = self.impl_.take();
+            if let Some(ref mut imp) = impl_ {
+                imp.update(self);
+            }
+            self.impl_ = impl_;
+        }
+    }
 
     // ============================================================
     // 焦点
     // ============================================================
 
-    pub fn got_focus(&mut self) { self.has_focus = true; }
-    pub fn lost_focus(&mut self) { self.has_focus = false; }
+    pub fn got_focus(&mut self) {
+        self.has_focus = true;
+        if self.impl_.is_some() {
+            let mut impl_ = self.impl_.take();
+            if let Some(ref mut imp) = impl_ {
+                imp.got_focus(self);
+            }
+            self.impl_ = impl_;
+        }
+    }
+    pub fn lost_focus(&mut self) {
+        self.has_focus = false;
+        if self.impl_.is_some() {
+            let mut impl_ = self.impl_.take();
+            if let Some(ref mut imp) = impl_ {
+                imp.lost_focus(self);
+            }
+            self.impl_ = impl_;
+        }
+    }
     pub fn wants_focus(&self) -> bool { self.wants_focus }
     pub fn show_finger(&mut self, _on: bool) {}
 
@@ -274,7 +353,15 @@ impl Widget {
     // 键盘
     // ============================================================
 
-    pub fn key_char(&mut self, _the_char: u8) {}
+    pub fn key_char(&mut self, c: u8) {
+        if self.impl_.is_some() {
+            let mut impl_ = self.impl_.take();
+            if let Some(ref mut imp) = impl_ {
+                imp.key_char(self, c);
+            }
+            self.impl_ = impl_;
+        }
+    }
 
     pub fn key_down(&mut self, the_key: KeyCode, wm: &mut WidgetManager) {
         if the_key == KEYCODE_TAB {
@@ -290,17 +377,56 @@ impl Widget {
                 }
             }
         }
+        if self.impl_.is_some() {
+            let mut impl_ = self.impl_.take();
+            if let Some(ref mut imp) = impl_ {
+                imp.key_down(self, the_key, wm);
+            }
+            self.impl_ = impl_;
+        }
     }
 
-    pub fn key_up(&mut self, _key: KeyCode) {}
+    pub fn key_up(&mut self, key: KeyCode) {
+        if self.impl_.is_some() {
+            let mut impl_ = self.impl_.take();
+            if let Some(ref mut imp) = impl_ {
+                imp.key_up(self, key);
+            }
+            self.impl_ = impl_;
+        }
+    }
 
     // ============================================================
     // 鼠标
     // ============================================================
 
-    pub fn mouse_enter(&mut self) {}
-    pub fn mouse_leave(&mut self) {}
-    pub fn mouse_move(&mut self, _x: i32, _y: i32) {}
+    pub fn mouse_enter(&mut self) {
+        if self.impl_.is_some() {
+            let mut impl_ = self.impl_.take();
+            if let Some(ref mut imp) = impl_ {
+                imp.mouse_enter(self);
+            }
+            self.impl_ = impl_;
+        }
+    }
+    pub fn mouse_leave(&mut self) {
+        if self.impl_.is_some() {
+            let mut impl_ = self.impl_.take();
+            if let Some(ref mut imp) = impl_ {
+                imp.mouse_leave(self);
+            }
+            self.impl_ = impl_;
+        }
+    }
+    pub fn mouse_move(&mut self, x: i32, y: i32) {
+        if self.impl_.is_some() {
+            let mut impl_ = self.impl_.take();
+            if let Some(ref mut imp) = impl_ {
+                imp.mouse_move(self, x, y);
+            }
+            self.impl_ = impl_;
+        }
+    }
 
     pub fn mouse_down(&mut self, x: i32, y: i32, click_count: i32) {
         if click_count == 3 {
@@ -312,7 +438,15 @@ impl Widget {
         }
     }
 
-    pub fn mouse_down_btn(&mut self, _x: i32, _y: i32, _btn: i32, _click: i32) {}
+    pub fn mouse_down_btn(&mut self, x: i32, y: i32, btn: i32, click: i32) {
+        if self.impl_.is_some() {
+            let mut impl_ = self.impl_.take();
+            if let Some(ref mut imp) = impl_ {
+                imp.mouse_down_btn(self, x, y, btn, click);
+            }
+            self.impl_ = impl_;
+        }
+    }
     pub fn mouse_up(&mut self, _x: i32, _y: i32) {}
 
     pub fn mouse_up_ext(&mut self, x: i32, y: i32, last_btn_id: i32) {
@@ -326,9 +460,33 @@ impl Widget {
         }
     }
 
-    pub fn mouse_up_btn(&mut self, _x: i32, _y: i32, _btn: i32, _click: i32) {}
-    pub fn mouse_drag(&mut self, _x: i32, _y: i32) {}
-    pub fn mouse_wheel(&mut self, _delta: i32) {}
+    pub fn mouse_up_btn(&mut self, x: i32, y: i32, btn: i32, click: i32) {
+        if self.impl_.is_some() {
+            let mut impl_ = self.impl_.take();
+            if let Some(ref mut imp) = impl_ {
+                imp.mouse_up_btn(self, x, y, btn, click);
+            }
+            self.impl_ = impl_;
+        }
+    }
+    pub fn mouse_drag(&mut self, x: i32, y: i32) {
+        if self.impl_.is_some() {
+            let mut impl_ = self.impl_.take();
+            if let Some(ref mut imp) = impl_ {
+                imp.mouse_drag(self, x, y);
+            }
+            self.impl_ = impl_;
+        }
+    }
+    pub fn mouse_wheel(&mut self, delta: i32) {
+        if self.impl_.is_some() {
+            let mut impl_ = self.impl_.take();
+            if let Some(ref mut imp) = impl_ {
+                imp.mouse_wheel(self, delta);
+            }
+            self.impl_ = impl_;
+        }
+    }
 
     // ============================================================
     // 脏标记

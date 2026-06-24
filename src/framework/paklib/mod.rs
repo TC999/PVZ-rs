@@ -792,18 +792,30 @@ impl PakInterface {
     // ============================================================
 
     /// 从 PAK 包（或真实文件系统）加载一个文件的完整内容
+    ///
+    /// 注意：此方法可直接从 &self 读取，不通过 f_read（避免嵌套 Mutex 锁）
     pub fn load_file(&self, path: &str) -> Option<Vec<u8>> {
-        let mut handle = self.f_open(path, "rb")?;
-
-        // 获取文件大小
-        let size = Self::f_get_size(&mut handle)?;
-
-        let mut buffer = vec![0u8; size as usize];
-        let read = Self::f_read(&mut handle, &mut buffer, 1, size as i32);
-        if read == 0 && size > 0 {
+        let key = normalize_pak_path(path);
+        
+        // 先查 PAK 记录
+        if let Some(record) = self.records.get(&key) {
+            if let Some(collection) = self.collections.get(record.collection_index) {
+                let start = record.start_pos as usize;
+                let end = start + record.size as usize;
+                if end <= collection.data.len() {
+                    return Some(collection.data[start..end].to_vec());
+                }
+            }
             return None;
         }
-        Some(buffer)
+
+        // 尝试从真实文件系统读取
+        let file_path = if !self.resource_folder.is_empty() && !std::path::Path::new(path).is_absolute() {
+            format!("{}/{}", self.resource_folder.trim_end_matches('/'), path)
+        } else {
+            path.to_string()
+        };
+        std::fs::read(&file_path).ok()
     }
 
     /// 获取文件大小

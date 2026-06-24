@@ -8,10 +8,14 @@ use crate::lawn::game_enums::*;
 use crate::lawn::board::Board;
 use crate::lawn::zen_garden::ZenGarden;
 use crate::framework::sexy_app_base::SexyAppBase;
+use crate::framework::common::string_to_lower;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
 use crate::framework::widget::dialog::Dialog;
 use crate::framework::widget::button_widget::ButtonWidget;
+use crate::framework::widget::widget::{Widget, WidgetImpl};
+use crate::framework::widget::widget_manager::WidgetManager;
+use crate::lawn::widget::title_screen::{TitleScreenImpl, TitleState};
 use crate::todlib::reanimator::Reanimation;
 use crate::todlib::tod_particle::TodParticleSystem;
 use crate::todlib::tod_foley::FoleyManager;
@@ -54,7 +58,7 @@ pub struct LawnApp {
 
     // ---- 游戏屏幕/面板 ----
     pub board: Option<*mut Board>,
-    pub title_screen: Option<*mut ()>,
+    pub title_screen: Option<*mut Widget>,
     pub game_selector: Option<*mut ()>,
     pub seed_chooser_screen: Option<*mut ()>,
     pub award_screen: Option<*mut ()>,
@@ -196,6 +200,41 @@ impl LawnApp {
         self.base.init();
         if self.base.is_shutdown() { return; }
         self.base.title = "PvZ Portable".to_string();
+
+        // 加载标题屏幕所需的图片资源
+        if let Some(rm) = self.base.resource_manager {
+            unsafe {
+                let needed_images = ["popcap_logo", "partner_logo", "pvz_logo", "titlescreen",
+                    "loadbar_dirt", "loadbar_grass", "reanim_sodrollcap"];
+                for img_id in &needed_images {
+                    let shared = (*rm).get_image(img_id);
+                    if shared.unshared_image.is_null() && shared.shared_image.is_null() {
+                        let key = string_to_lower(img_id);
+                        if let Some(&ptr) = (*rm).image_map.get(&key) {
+                            let res = &mut *(ptr as *mut crate::framework::resource_manager::ImageRes);
+                            if !res.base.path.is_empty() {
+                                (*rm).load_single_image(res);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 创建 TitleScreen Widget + WidgetImpl
+        let mut title_widget = Box::new(Widget::new());
+        title_widget.impl_ = Some(Box::new(TitleScreenImpl::new(self as *mut LawnApp)));
+        title_widget.resize(0, 0, self.base.width, self.base.height);
+        let title_widget_ptr = Box::into_raw(title_widget);
+        self.title_screen = Some(title_widget_ptr);
+
+        // 注册到 WidgetManager
+        if let Some(wm) = self.base.widget_manager {
+            unsafe {
+                (*wm).add_widget(title_widget_ptr);
+                (*wm).set_focus(Some(title_widget_ptr));
+            }
+        }
     }
 
     /// 启动（对应 C++ Start）
@@ -206,6 +245,13 @@ impl LawnApp {
 
     /// 关闭（对应 C++ Shutdown）
     pub fn shutdown(&mut self) {
+        // 清理 TitleScreen widget（必须在 base.shutdown 销毁 WidgetManager 之前）
+        if let Some(ts) = self.title_screen.take() {
+            if let Some(wm) = self.base.widget_manager {
+                unsafe { (*wm).remove_widget(ts); }
+            }
+            unsafe { let _ = Box::from_raw(ts); }
+        }
         self.kill_board();
         self.base.shutdown();
         unsafe { G_LAWN_APP_INSTANCE = None; }
@@ -395,6 +441,12 @@ impl LawnApp {
     pub fn need_pause_game(&self) -> bool { false }
     pub fn need_register(&self) -> bool { false }
     pub fn loading_completed(&mut self) {}
+
+    /// 启动加载线程（对应 C++ StartLoadingThread）
+    pub fn start_loading_thread(&mut self) {
+        // 暂为 stub，后续 Phase 实现异步资源加载
+    }
+
     pub fn confirm_quit(&mut self) {}
 
     // ==================== 事件处理 ====================
