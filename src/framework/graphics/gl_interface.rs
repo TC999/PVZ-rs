@@ -95,13 +95,13 @@ impl TextureDataPiece {
 static mut G_VERTICES: Vec<GLVertex> = Vec::new();
 static mut G_NUM_VERTICES: usize = 0;
 static mut G_VERTEX_MODE: u32 = GFX_MODE_NONE;
-static mut G_PROGRAM: GLuint = 0;
-static mut G_VBO: GLuint = 0;
-static mut G_UF_VIEW_PROJ_MTX: GLint = -1;
-static mut G_UF_TEXTURE: GLint = -1;
-static mut G_UF_USE_TEXTURE: GLint = -1;
-static mut G_UF_UV_BOUNDS: GLint = -1;
-static mut G_UF_CLAMP_UV_ENABLED: GLint = -1;
+pub(crate) static mut G_PROGRAM: GLuint = 0;
+pub(crate) static mut G_VBO: GLuint = 0;
+pub(crate) static mut G_UF_VIEW_PROJ_MTX: GLint = -1;
+pub(crate) static mut G_UF_TEXTURE: GLint = -1;
+pub(crate) static mut G_UF_USE_TEXTURE: GLint = -1;
+pub(crate) static mut G_UF_UV_BOUNDS: GLint = -1;
+pub(crate) static mut G_UF_CLAMP_UV_ENABLED: GLint = -1;
 static mut G_LINEAR_FILTER: bool = false;
 
 // 初始化标记

@@ -19,6 +19,7 @@ use crate::framework::graphics::gl_image::GLImage;
 use crate::framework::graphics::memory_image::MemoryImage;
 use crate::framework::graphics::image::Image;
 use crate::framework::graphics::gl_interface::GLInterface;
+use crate::framework::graphics::gl_interface::GLVertex;
 use crate::framework::widget::widget_manager::WidgetManager;
 use crate::framework::widget::dialog::Dialog;
 use crate::framework::sound::sound_manager::SoundManager;
@@ -107,6 +108,8 @@ pub struct SexyAppBase {
 
     // 屏幕图像（作为绘制目标，对应 C++ mImage）
     pub screen_image: Option<*mut MemoryImage>,
+    // 屏幕图像的 GL 纹理 ID（用于渲染到屏幕）
+    pub screen_gl_texture: Option<u32>,
 }
 
 impl SexyAppBase {
@@ -170,6 +173,7 @@ impl SexyAppBase {
             last_draw_tick: 0,
             next_draw_tick: 0,
             screen_image: None,
+            screen_gl_texture: None,
         }
     }
 
@@ -393,6 +397,118 @@ impl SexyAppBase {
                     g.dest_image = screen as *mut crate::framework::graphics::image::Image;
                 }
                 (*wm).draw(&mut g);
+            }
+        }
+
+        // ===== 将 screen_image 渲染到 OpenGL 屏幕 =====
+        if let Some(screen_ptr) = self.screen_image {
+            unsafe {
+                use crate::ffi::opengl::*;
+                use std::mem::size_of;
+                use std::ptr;
+
+                let mem = &*screen_ptr;
+                let w = mem.base.width;
+                let h = mem.base.height;
+
+                if w <= 0 || h <= 0 || mem.base.pixels.is_empty() {
+                    self.m_draw_count += 1;
+                    return true;
+                }
+
+                // 获取或创建 GL 纹理
+                let tex_id = match self.screen_gl_texture {
+                    Some(id) => id,
+                    None => {
+                        let mut id: GLuint = 0;
+                        glGenTextures(1, &mut id);
+                        self.screen_gl_texture = Some(id);
+                        id
+                    }
+                };
+
+                // 上传像素数据到纹理
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, tex_id);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST as GLint);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST as GLint);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE as GLint);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE as GLint);
+                glTexImage2D(
+                    GL_TEXTURE_2D, 0, GL_RGBA as GLint, w, h, 0,
+                    GL_RGBA, GL_UNSIGNED_BYTE,
+                    mem.base.pixels.as_ptr() as *const std::ffi::c_void,
+                );
+
+                // 使用现有 GL 着色器程序
+                glUseProgram(crate::framework::graphics::gl_interface::G_PROGRAM);
+
+                // 设置正交投影矩阵
+                let ortho: [f32; 16] = [
+                    2.0 / w as f32, 0.0, 0.0, 0.0,
+                    0.0, 2.0 / h as f32, 0.0, 0.0,
+                    0.0, 0.0, -2.0 / 20.0, 0.0,
+                    -1.0, -1.0, -10.0 / 20.0, 1.0,
+                ];
+                glUniformMatrix4fv(
+                    crate::framework::graphics::gl_interface::G_UF_VIEW_PROJ_MTX,
+                    1, GL_FALSE, ortho.as_ptr(),
+                );
+                glUniform1i(
+                    crate::framework::graphics::gl_interface::G_UF_TEXTURE,
+                    0,
+                );
+                glUniform1i(
+                    crate::framework::graphics::gl_interface::G_UF_USE_TEXTURE,
+                    1,
+                );
+                glUniform4fv(
+                    crate::framework::graphics::gl_interface::G_UF_UV_BOUNDS,
+                    1,
+                    [0.0f32, 0.0, 1.0, 1.0].as_ptr(),
+                );
+                glUniform1i(
+                    crate::framework::graphics::gl_interface::G_UF_CLAMP_UV_ENABLED,
+                    1,
+                );
+
+                // 渲染全屏四边形（两个三角形组成 Triangle Strip）
+                let verts: [GLVertex; 4] = [
+                    GLVertex { sx: 0.0, sy: 0.0, sz: 0.0, color: 0xFFFFFFFF, tu: 0.0, tv: 0.0 },
+                    GLVertex { sx: w as f32, sy: 0.0, sz: 0.0, color: 0xFFFFFFFF, tu: 1.0, tv: 0.0 },
+                    GLVertex { sx: 0.0, sy: h as f32, sz: 0.0, color: 0xFFFFFFFF, tu: 0.0, tv: 1.0 },
+                    GLVertex { sx: w as f32, sy: h as f32, sz: 0.0, color: 0xFFFFFFFF, tu: 1.0, tv: 1.0 },
+                ];
+
+                // 使用已有 VBO 和顶点属性配置
+                let vbo = crate::framework::graphics::gl_interface::G_VBO;
+                glBindBuffer(GL_ARRAY_BUFFER, vbo);
+                glBufferSubData(
+                    GL_ARRAY_BUFFER, 0,
+                    (size_of::<GLVertex>() * 4) as GLsizeiptr,
+                    verts.as_ptr() as *const std::ffi::c_void,
+                );
+
+                // Position (3 floats, offset 0)
+                glEnableVertexAttribArray(0);
+                glVertexAttribPointer(
+                    0, 3, GL_FLOAT, GL_FALSE, size_of::<GLVertex>() as GLsizei,
+                    ptr::null(),
+                );
+                // Color (4 ubytes normalized, offset 12 = 3*4)
+                glEnableVertexAttribArray(1);
+                glVertexAttribPointer(
+                    1, 4, GL_UNSIGNED_BYTE, GL_TRUE, size_of::<GLVertex>() as GLsizei,
+                    (size_of::<f32>() * 3) as *const std::ffi::c_void,
+                );
+                // UV (2 floats, offset 16 = 3*4 + 4)
+                glEnableVertexAttribArray(2);
+                glVertexAttribPointer(
+                    2, 2, GL_FLOAT, GL_FALSE, size_of::<GLVertex>() as GLsizei,
+                    (size_of::<f32>() * 3 + size_of::<u32>()) as *const std::ffi::c_void,
+                );
+
+                glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
             }
         }
 
