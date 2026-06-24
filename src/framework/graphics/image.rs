@@ -4,7 +4,6 @@
 #![allow(dead_code)]
 
 use crate::framework::rect::Rect;
-use crate::framework::color::Color;
 
 /// 图像基类
 #[derive(Debug)]

@@ -3,7 +3,7 @@
 
 #![allow(dead_code)]
 
-use std::ops::{Add, Sub, Mul, Div, Neg};
+use std::ops::{Add, Sub, Mul, Neg};
 
 /// 二维整数点
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

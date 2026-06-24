@@ -104,8 +104,6 @@ impl LawnApp {
 
     /// 初始化游戏（对应 C++ LawnApp::Init → SexyApp::Init → SexyAppBase::Init）
     pub fn init(&mut self) {
-        eprintln!("[LawnApp::init] 开始初始化...");
-
         unsafe {
             g_lawn_app_instance = Some(self as *mut LawnApp);
         }
@@ -113,9 +111,7 @@ impl LawnApp {
         // 初始化 SexyAppBase（SDL、窗口、OpenGL、资源等）
         self.base.init();
 
-        eprintln!("[LawnApp::init] base.shutdown={}", self.base.shutdown);
         if self.base.shutdown {
-            eprintln!("[LawnApp::init] base 初始化失败，跳过");
             return;
         }
 
@@ -124,14 +120,11 @@ impl LawnApp {
 
         // 初始化完成，设置游戏屏幕
         self.game_screen = GameScreen::Title;
-        eprintln!("[LawnApp::init] 初始化完成");
     }
 
     /// 启动游戏（对应 C++ LawnApp::Start → SexyAppBase::Start → DoMainLoop）
     pub fn start(&mut self) {
-        eprintln!("[LawnApp::start] 启动游戏循环...");
         if self.base.shutdown {
-            eprintln!("[LawnApp::start] base 已关闭，跳过");
             return;
         }
 
@@ -139,10 +132,7 @@ impl LawnApp {
         self.game_screen = GameScreen::Title;
 
         // 调用 SexyAppBase::start() 进入主循环
-        // （这会在 while !shutdown 中循环，使用 base 的 start 方法）
-        eprintln!("[LawnApp::start] 进入 base.start() 主循环...");
         self.base.start();
-        eprintln!("[LawnApp::start] 主循环结束");
     }
 
     /// 关闭游戏（对应 C++ LawnApp::Shutdown）

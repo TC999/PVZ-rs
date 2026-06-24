@@ -4,8 +4,7 @@
 #![allow(dead_code)]
 
 use crate::framework::color::Color;
-use crate::framework::rect::{Rect, RectF};
-use crate::framework::point::Point;
+use crate::framework::rect::Rect;
 use crate::framework::graphics::image::Image;
 use crate::framework::graphics::font::Font;
 

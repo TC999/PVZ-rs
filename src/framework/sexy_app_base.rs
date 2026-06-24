@@ -6,16 +6,11 @@
 use std::collections::HashMap;
 use std::ffi::CString;
 
-use crate::framework::color::Color;
 use crate::framework::common;
 use crate::framework::rect::Rect;
-use crate::framework::buffer::Buffer;
-use crate::framework::graphics::image::Image;
 use crate::framework::graphics::gl_image::GLImage;
 use crate::framework::graphics::memory_image::MemoryImage;
 use crate::framework::graphics::gl_interface::GLInterface;
-use crate::framework::graphics::graphics::Graphics;
-use crate::framework::widget::widget::Widget;
 use crate::framework::widget::widget_manager::WidgetManager;
 use crate::framework::widget::dialog::Dialog;
 use crate::framework::sound::sound_manager::SoundManager;
@@ -151,29 +146,22 @@ impl SexyAppBase {
 
     /// 初始化（对应 C++ SexyAppBase::Init）
     pub fn init(&mut self) {
-        eprintln!("[SexyAppBase::init] 开始...");
-
         // 设置资源目录
         self.resource_dir = common::get_cur_dir();
-        eprintln!("[SexyAppBase::init] 资源目录: {}", self.resource_dir);
 
         // 创建窗口和 GL 上下文（对应 C++ MakeWindow）
         self.make_window();
 
         if self.shutdown {
-            eprintln!("[SexyAppBase::init] 窗口创建失败！");
             return;
         }
 
         // 加载资源
         self.load_resource_manifest();
-        eprintln!("[SexyAppBase::init] 完成");
     }
 
     /// 创建 SDL 窗口和 OpenGL 上下文（对应 C++ MakeWindow）
     pub fn make_window(&mut self) {
-        eprintln!("[SexyAppBase::make_window] 创建窗口...");
-
         // 初始化 SDL 视频子系统
         unsafe {
             if SDL_Init(SDL_INIT_VIDEO) < 0 {
@@ -186,7 +174,8 @@ impl SexyAppBase {
                 return;
             }
         }
-        eprintln!("[SexyAppBase::make_window] SDL_Init 成功");
+
+        // 设置 OpenGL ES 2.0 属性
 
         // 设置 OpenGL ES 2.0 属性
         unsafe {

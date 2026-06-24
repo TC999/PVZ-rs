@@ -4,6 +4,9 @@
 // 只声明本游戏实际使用的函数。
 
 #![allow(non_camel_case_types, dead_code)]
+// SDL2 结构体字段名和常量名保持与 C 头文件一致
+#![allow(non_snake_case)]
+#![allow(non_upper_case_globals)]
 
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_uint, c_void, c_double, c_float, c_long, c_short, c_uchar, c_ushort};
@@ -589,10 +592,9 @@ pub struct SDL_ControllerAxisEvent {
     pub padding4: Uint16,
 }
 
-// ============================================================
-// SDL2 函数声明
-// ============================================================
-
+// 使用 raw-dylib 直接链接 SDL2.dll，无需导入库 .lib
+// 需要 rustc 1.72+，当前 nightly 1.94 完全支持
+#[link(name = "SDL2", kind = "raw-dylib")]
 unsafe extern "C" {
     // 初始化/退出
     pub fn SDL_Init(flags: Uint32) -> c_int;

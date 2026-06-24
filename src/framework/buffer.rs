@@ -2,7 +2,6 @@
 // 对应 C++ SexyAppFramework/misc/Buffer.h / Buffer.cpp
 
 #![allow(dead_code)]
-use std::vec;
 
 /// 二进制缓冲区，对应 C++ 的 Buffer 类
 #[derive(Clone)]

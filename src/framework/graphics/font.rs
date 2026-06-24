@@ -3,8 +3,6 @@
 
 #![allow(dead_code)]
 
-use crate::framework::color::Color;
-
 /// 字体基类
 #[derive(Debug)]
 pub struct Font {

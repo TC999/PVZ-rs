@@ -8,7 +8,6 @@ use crate::framework::rect::Rect;
 use crate::framework::graphics::image::Image;
 use crate::framework::graphics::gl_image::GLImage;
 use crate::framework::graphics::memory_image::MemoryImage;
-use crate::framework::graphics::native_display::NativeDisplay;
 use crate::framework::sexy_matrix::SexyMatrix3;
 use crate::framework::sexy_app_base::SexyAppBase;
 
@@ -75,10 +74,8 @@ impl GLInterface {
 
     /// 初始化 OpenGL
     pub fn init(&mut self, _is_windowed: bool) -> i32 {
-        // 加载 glad
-        unsafe {
-            crate::ffi::opengl::gladLoadGLES2(Some(crate::ffi::opengl_load_proc));
-        }
+        // glClear/glViewport 通过 opengl32.dll 的 raw-dylib 链接自动解析
+        // 无需显式加载 glad
         1
     }
 

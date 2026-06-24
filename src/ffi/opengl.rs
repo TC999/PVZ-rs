@@ -323,8 +323,9 @@ pub const GL_SHORT: GLenum = 0x1402;
 
 // ============================================================
 // GLES2 函数声明
-// ============================================================
-
+// glad 和 OpenGL 函数声明
+// opengl32.dll 是 Windows 系统 DLL，用 raw-dylib 链接
+#[link(name = "opengl32", kind = "raw-dylib")]
 unsafe extern "C" {
     // 顶点缓冲
     pub fn glGenBuffers(n: GLsizei, buffers: *mut GLuint);

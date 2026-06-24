@@ -2,6 +2,8 @@
 // 对应 C++ src/Sexy.TodLib/TodStringFile.h / TodStringFile.cpp
 
 #![allow(dead_code)]
+// 全局变量名保持与 C++ 源码一致
+#![allow(non_upper_case_globals)]
 
 use std::collections::HashMap;
 

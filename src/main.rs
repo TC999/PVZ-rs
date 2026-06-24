@@ -2,13 +2,21 @@
 //
 // 对应 C++ 的 main.cpp
 
+// 游戏逻辑串联阶段允许这些 lint（FFI、未串联的桩代码）
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+#![allow(non_upper_case_globals)]
+#![allow(non_snake_case)]
+#![allow(unsafe_op_in_unsafe_fn)]
+#![allow(rust_2024_compatibility)]
+
 mod ffi;
 mod framework;
 mod todlib;
 mod lawn;
 
 use lawn::LawnApp;
-use framework::sexy_app_base::SexyAppBase;
 
 fn main() {
     // 创建 LawnApp
