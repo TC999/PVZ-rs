@@ -56,7 +56,7 @@
     - 已有 `font.rs`（51 行骨架）
     - 实现字符尺寸度量、字符串宽度计算
 
-- [~] **1.1.6 ImageFont（图像字体）**
+- [✓] **1.1.6 ImageFont（图像字体）**
   - **C++ 源文件：** `src/SexyAppFramework/graphics/ImageFont.{h,cpp}`（5KB + 46KB）
   - **核心依赖项：** `Font`, `Image`, `XMLParser`, `Color`
   - **Rust 实现要点：**
@@ -95,13 +95,13 @@
     - 已有 `color.rs`（81 行），基本完成
     - 注意 RGBA 顺序和 `u32` 打包/解包
 
-- [ ] **1.1.11 SharedImage（共享图像）**
+- [✓] **1.1.11 SharedImage（共享图像）**
   - **C++ 源文件：** `src/SexyAppFramework/graphics/SharedImage.{h,cpp}`（2KB + 3KB）
   - **核心依赖项：** `Image`, `ResourceManager`
   - **Rust 实现要点：**
     - 引用计数图像管理，可用 `Rc<RefCell<Image>>` 或 `Arc<Mutex<Image>>` 替代
 
-- [ ] **1.1.12 Quantize（颜色量化）**
+- [✓] **1.1.12 Quantize（颜色量化）**
   - **C++ 源文件：** `src/SexyAppFramework/graphics/Quantize.{h,cpp}`（1KB + 2KB）
   - **核心依赖项：** `Image`
   - **Rust 实现要点：**

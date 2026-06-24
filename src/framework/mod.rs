@@ -16,3 +16,4 @@ pub mod imagelib;
 pub mod paklib;
 pub mod sound;
 pub mod mt_rand;
+pub mod desc_parser;

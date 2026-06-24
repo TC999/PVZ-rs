@@ -229,3 +229,149 @@ impl SexyVector2 {
         SexyVector2 { x, y }
     }
 }
+
+// ============================================================
+// UTF8 编解码（对应 C++ Common.h UTF8DecodeNext）
+// ============================================================
+
+/// 从 UTF-8 字符串中解码下一个码点（对应 C++ UTF8DecodeNext）
+/// 成功返回 true 并更新 offset，失败返回 false
+pub fn utf8_decode_next(s: &[u8], offset: &mut usize) -> Option<char> {
+    if *offset >= s.len() {
+        return None;
+    }
+
+    let first = s[*offset];
+    if first < 0x80 {
+        *offset += 1;
+        return Some(first as char);
+    }
+
+    let length = if (first & 0xE0) == 0xC0 {
+        2usize
+    } else if (first & 0xF0) == 0xE0 {
+        3
+    } else if (first & 0xF8) == 0xF0 {
+        4
+    } else {
+        return None; // 无效前缀字节
+    };
+
+    if *offset + length > s.len() {
+        return None;
+    }
+
+    // 验证后续字节都是 10xxxxxx 格式
+    for i in 1..length {
+        if (s[*offset + i] & 0xC0) != 0x80 {
+            return None;
+        }
+    }
+
+    let value: u32 = match length {
+        2 => ((first as u32 & 0x1F) << 6) | (s[*offset + 1] as u32 & 0x3F),
+        3 => {
+            ((first as u32 & 0x0F) << 12)
+                | ((s[*offset + 1] as u32 & 0x3F) << 6)
+                | (s[*offset + 2] as u32 & 0x3F)
+        }
+        4 => {
+            ((first as u32 & 0x07) << 18)
+                | ((s[*offset + 1] as u32 & 0x3F) << 12)
+                | ((s[*offset + 2] as u32 & 0x3F) << 6)
+                | (s[*offset + 3] as u32 & 0x3F)
+        }
+        _ => return None,
+    };
+
+    *offset += length;
+    char::from_u32(value)
+}
+
+/// 从 UTF-8 字符串中解码下一个码点（std::string 版本，对应 C++ UTF8DecodeNext(string)）
+pub fn utf8_decode_next_str(s: &str, offset: &mut usize) -> Option<char> {
+    utf8_decode_next(s.as_bytes(), offset)
+}
+
+/// 判断是否为开头标点（对应 C++ IsOpeningPunctuation）
+pub fn is_opening_punctuation(c: char) -> bool {
+    matches!(
+        c,
+        '〈' | '《' | '「' | '『' | '【' | '〔' | '〖' | '〘' | '〚'
+            | '（' | '［' | '｛'
+            | '\u{2018}' | '\u{201A}' | '\u{201B}' | '\u{201C}'
+    )
+}
+
+/// 判断是否为结尾标点（对应 C++ IsClosingPunctuation）
+pub fn is_closing_punctuation(c: char) -> bool {
+    matches!(
+        c,
+        '〉' | '》' | '」' | '』' | '】' | '〕' | '〗' | '〙' | '〛'
+            | '）' | '］' | '｝'
+            | '\u{2019}' | '\u{201D}'
+            | '、' | '。'
+            | '，' | '．'
+            | '！' | '？'
+            | '：' | '；'
+    )
+}
+
+/// 判断是否可自动换行（对应 C++ IsAutoBreakChar）
+pub fn is_auto_break_char(c: char) -> bool {
+    let v = c as u32;
+    if v < 0x80 {
+        return false;
+    }
+    (v >= 0x2018 && v <= 0x201D)
+        || (v >= 0x2600 && v <= 0x27BF)
+        || (v >= 0x3000 && v <= 0x303F)
+        || (v >= 0x3040 && v <= 0x309F)
+        || (v >= 0x30A0 && v <= 0x30FF)
+        || (v >= 0x3400 && v <= 0x4DBF)
+        || (v >= 0x4E00 && v <= 0x9FFF)
+        || (v >= 0xAC00 && v <= 0xD7AF)
+        || (v >= 0xF900 && v <= 0xFAFF)
+        || (v >= 0xFE30 && v <= 0xFE4F)
+        || (v >= 0xFF01 && v <= 0xFF60)
+        || (v >= 0x1F300 && v <= 0x1FAFF)
+        || (v >= 0x20000 && v <= 0x2FA1F)
+}
+
+/// 将字符串转为整数（对应 C++ StringToInt）
+pub fn string_to_int(s: &str, val: &mut i32) -> bool {
+    if let Ok(v) = s.trim().parse::<i32>() {
+        *val = v;
+        true
+    } else {
+        false
+    }
+}
+
+/// 将字符串转为浮点数（对应 C++ StringToDouble）
+pub fn string_to_double(s: &str, val: &mut f64) -> bool {
+    if let Ok(v) = s.trim().parse::<f64>() {
+        *val = v;
+        true
+    } else {
+        false
+    }
+}
+
+/// XML 解码字符串（对应 C++ XMLDecodeString）——简单实现
+pub fn xml_decode_string(s: &str) -> String {
+    s.replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+}
+
+/// XML 编码字符串（对应 C++ XMLEncodeString）——简单实现
+pub fn xml_encode_string(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
