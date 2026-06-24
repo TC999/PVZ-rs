@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 use std::ffi::CString;
 
+use crate::framework::color::Color;
 use crate::framework::common;
 use crate::framework::rect::Rect;
 use crate::framework::graphics::gl_image::GLImage;
@@ -62,7 +63,7 @@ pub struct SexyAppBase {
     pub show_fps: bool,
     pub frame_time: i32,
 
-    // 子系统
+    // 子系统（C++ 构造函数中创建这些对象）
     pub widget_manager: Option<*mut WidgetManager>,
     pub gl_interface: Option<*mut GLInterface>,
     pub sound_manager: Option<*mut dyn SoundManager>,
@@ -84,18 +85,28 @@ pub struct SexyAppBase {
     pub update_multiplier: f64,
     pub paused: bool,
 
-    // 新增：主循环控制
+    // 主循环控制（对应 C++ mRunning, mLastTime 等）
     pub running: bool,
     pub last_time: u32,
-    pub frame_time_target: u32,
+    pub last_time_check: u32,
+    pub update_f_time_acc: f64,
+    pub has_pending_draw: bool,
+    pub m_draw_count: i32,
+    pub m_update_count: i32,
+    pub is_drawing: bool,
+    pub last_draw_tick: u32,
+    pub next_draw_tick: u32,
 }
 
 impl SexyAppBase {
     pub fn new() -> Self {
-        // 初始化 SDL（对应 C++ 构造函数中的 SDL_Init(SDL_INIT_TIMER)）
+        // 对应 C++ 构造函数中的 SDL_Init(SDL_INIT_TIMER)
         unsafe {
             SDL_Init(SDL_INIT_TIMER);
         }
+
+        // 创建 WidgetManager（对应 C++ 构造函数 line 399: new WidgetManager(this)）
+        let wm = WidgetManager::new();
 
         SexyAppBase {
             window: std::ptr::null_mut(),
@@ -103,7 +114,7 @@ impl SexyAppBase {
             surface: std::ptr::null_mut(),
             rand_seed: 0,
             company_name: String::new(),
-            prod_name: String::new(),
+            prod_name: String::from("Product"),
             title: String::from("PvZ Portable"),
             reg_key: String::new(),
             resource_dir: String::new(),
@@ -113,8 +124,8 @@ impl SexyAppBase {
             preferred_x: 0,
             preferred_y: 0,
             fullscreen_bits: 32,
-            music_volume: 1.0,
-            sfx_volume: 1.0,
+            music_volume: 0.85,
+            sfx_volume: 0.85,
             is_windowed: true,
             shutdown: false,
             minimized: false,
@@ -125,8 +136,8 @@ impl SexyAppBase {
             fps_count: 0,
             fps_time: 0,
             show_fps: false,
-            frame_time: 0,
-            widget_manager: None,
+            frame_time: 10,
+            widget_manager: Some(Box::into_raw(Box::new(wm))),
             gl_interface: None,
             sound_manager: None,
             music_interface: None,
@@ -140,7 +151,14 @@ impl SexyAppBase {
             paused: false,
             running: false,
             last_time: 0,
-            frame_time_target: 16, // ~60 FPS
+            last_time_check: 0,
+            update_f_time_acc: 0.0,
+            has_pending_draw: true,
+            m_draw_count: 0,
+            m_update_count: 0,
+            is_drawing: false,
+            last_draw_tick: 0,
+            next_draw_tick: 0,
         }
     }
 
@@ -156,28 +174,30 @@ impl SexyAppBase {
             return;
         }
 
-        // 加载资源
+        // WidgetManager resize（对应 C++ Init 中的 mWidgetManager->Resize）
+        if let Some(wm) = self.widget_manager {
+            unsafe {
+                (*wm).resize(Rect::new(0, 0, self.width, self.height), Rect::new(0, 0, self.width, self.height));
+            }
+        }
+
         self.load_resource_manifest();
     }
 
     /// 创建 SDL 窗口和 OpenGL 上下文（对应 C++ MakeWindow）
     pub fn make_window(&mut self) {
-        // 初始化 SDL 视频子系统
         unsafe {
             if SDL_Init(SDL_INIT_VIDEO) < 0 {
                 let err = SDL_GetError();
                 if !err.is_null() {
                     let c_str = std::ffi::CStr::from_ptr(err);
-                    eprintln!("SDL_Init(SDL_INIT_VIDEO) 失败: {:?}", c_str);
+                    eprintln!("SDL_Init 失败: {:?}", c_str);
                 }
                 self.shutdown = true;
                 return;
             }
         }
 
-        // 设置 OpenGL ES 2.0 属性
-
-        // 设置 OpenGL ES 2.0 属性
         unsafe {
             SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
             SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
@@ -188,12 +208,11 @@ impl SexyAppBase {
 
         let title_cstr = CString::new(self.title.clone()).unwrap();
 
-        // 创建窗口
         unsafe {
             self.window = SDL_CreateWindow(
                 title_cstr.as_ptr(),
-                /*SDL_WINDOWPOS_CENTERED*/ 0x2FFF0000i32,
-                /*SDL_WINDOWPOS_CENTERED*/ 0x2FFF0000i32,
+                0x2FFF0000i32, // SDL_WINDOWPOS_CENTERED
+                0x2FFF0000i32,
                 self.width,
                 self.height,
                 SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE,
@@ -201,24 +220,17 @@ impl SexyAppBase {
         }
 
         if self.window.is_null() {
-            unsafe {
-                let err = SDL_GetError();
-                if !err.is_null() {
-                    let c_str = std::ffi::CStr::from_ptr(err);
-                    eprintln!("SDL_CreateWindow 失败: {:?}", c_str);
-                }
-            }
+            eprintln!("SDL_CreateWindow 失败");
             self.shutdown = true;
             return;
         }
 
-        // 创建 OpenGL 上下文
         unsafe {
             self.context = SDL_GL_CreateContext(self.window as *mut SDL_Window) as *mut std::ffi::c_void;
         }
 
         if self.context.is_null() {
-            // 回退：尝试桌面 OpenGL 2.1
+            // 回退 desktop GL 2.1
             unsafe {
                 if !self.window.is_null() {
                     SDL_DestroyWindow(self.window as *mut SDL_Window);
@@ -243,24 +255,25 @@ impl SexyAppBase {
             }
 
             if self.window.is_null() || self.context.is_null() {
-                eprintln!("无法创建 OpenGL 上下文，请检查显卡驱动。");
+                eprintln!("无法创建 OpenGL 上下文");
                 self.shutdown = true;
                 return;
             }
         }
 
-        // 启用垂直同步
         unsafe {
             SDL_GL_SetSwapInterval(1);
         }
 
-        // 初始化 GL 接口（加载 glad/GLES2）
+        // 初始化 GLInterface（对应 C++ MakeWindow 中 new GLInterface(this)）
         if self.gl_interface.is_none() {
             let mut gl = Box::new(GLInterface::new(None));
             gl.init(true);
             self.gl_interface = Some(Box::into_raw(gl));
         }
     }
+
+    // ==================== 主循环 ====================
 
     /// 启动主循环（对应 C++ SexyAppBase::Start + DoMainLoop）
     pub fn start(&mut self) {
@@ -271,39 +284,75 @@ impl SexyAppBase {
         self.running = true;
         self.last_time = unsafe { SDL_GetTicks() };
 
-        // 主循环（对应 C++ DoMainLoop）
+        // 对应 C++ DoMainLoop: while (!mShutdown) { UpdateApp(); }
         while !self.shutdown {
             self.update_app();
-            // 简单的帧率控制
-            let now = unsafe { SDL_GetTicks() };
-            let elapsed = now.wrapping_sub(self.last_time);
-            if elapsed < self.frame_time_target {
-                unsafe {
-                    SDL_Delay(self.frame_time_target - elapsed);
-                }
-            }
-            self.last_time = unsafe { SDL_GetTicks() };
         }
 
         self.running = false;
     }
 
-    /// 主循环单步（处理事件 + 更新 + 绘制）
+    /// 主循环单步（对应 C++ UpdateApp 的简化版本）
+    /// 包含: 事件处理 → 更新游戏逻辑 → 绘制
     pub fn update_app(&mut self) -> bool {
-        // 处理所有待处理的 SDL 事件
-        self.process_deferred_messages(true);
+        // 1. 处理 SDL 事件（对应 C++ ProcessDeferredMessages）
+        if !self.process_deferred_messages(true) {
+            return false;
+        }
 
         if self.shutdown {
             return false;
         }
 
-        // 绘制
-        self.draw();
-        // 交换缓冲区
+        // 2. 更新帧（对应 C++ Process → DoUpdateFrames → UpdateFrames）
+        self.do_update_frames();
+
+        // 3. 绘制脏区域（对应 C++ DrawDirtyStuff）
+        self.draw_dirty_stuff();
+
+        // 4. 交换缓冲区（对应 C++ Redraw → GLInterface 的 SwapBuffers）
         self.swap_buffers();
 
         true
     }
+
+    /// 更新帧（对应 C++ SexyAppBase::DoUpdateFrames → UpdateFrames）
+    fn do_update_frames(&mut self) -> bool {
+        // 对应 C++ UpdateFrames: mWidgetManager->UpdateFrame()
+        if let Some(wm) = self.widget_manager {
+            unsafe {
+                (*wm).update();
+            }
+        }
+        self.m_update_count += 1;
+        true
+    }
+
+    /// 绘制脏区域（对应 C++ SexyAppBase::DrawDirtyStuff）
+    fn draw_dirty_stuff(&mut self) -> bool {
+        // 清除屏幕（GL 清屏）
+        if let Some(gl) = self.gl_interface {
+            unsafe {
+                (*gl).pre_draw();
+            }
+        }
+
+        // 通过 WidgetManager 绘制所有可见 widget
+        if let Some(wm) = self.widget_manager {
+            unsafe {
+                // 创建一个临时的 Graphics 上下文用于 widget 绘制
+                // 对应 C++ WidgetManager::DrawScreen 中的 Graphics aScrG(mImage)
+                use crate::framework::graphics::graphics::Graphics;
+                let mut g = Graphics::new();
+                (*wm).draw(&mut g);
+            }
+        }
+
+        self.m_draw_count += 1;
+        true
+    }
+
+    // ==================== 事件处理 ====================
 
     /// 处理 SDL 事件队列（对应 C++ ProcessDeferredMessages）
     pub fn process_deferred_messages(&mut self, _allow_quit: bool) -> bool {
@@ -331,7 +380,6 @@ impl SexyAppBase {
                             return false;
                         }
                         SDL_WINDOWEVENT_RESIZED | SDL_WINDOWEVENT_SIZE_CHANGED => {
-                            // 更新窗口大小
                             self.width = window_event.data1 as i32;
                             self.height = window_event.data2 as i32;
                             if let Some(gl) = self.gl_interface.as_mut() {
@@ -339,6 +387,11 @@ impl SexyAppBase {
                                     (**gl).width = self.width;
                                     (**gl).height = self.height;
                                     (**gl).update_viewport();
+                                }
+                            }
+                            if let Some(wm) = self.widget_manager {
+                                unsafe {
+                                    (*wm).resize(Rect::new(0, 0, self.width, self.height), Rect::new(0, 0, self.width, self.height));
                                 }
                             }
                         }
@@ -404,17 +457,10 @@ impl SexyAppBase {
         true
     }
 
-    /// 绘制（由子类重写）
-    pub fn draw(&self) {
-        if let Some(gl) = self.gl_interface {
-            unsafe {
-                (*gl).pre_draw();
-            }
-        }
-    }
+    // ==================== 绘制 ====================
 
-    /// 交换缓冲区
-    pub fn swap_buffers(&self) {
+    /// 交换缓冲区（对应 C++ SDL_GL_SwapWindow）
+    fn swap_buffers(&self) {
         if !self.window.is_null() {
             unsafe {
                 SDL_GL_SwapWindow(self.window as *mut SDL_Window);
@@ -422,9 +468,18 @@ impl SexyAppBase {
         }
     }
 
-    /// 关闭
+    // ==================== 关闭清理 ====================
+
+    /// 关闭（对应 C++ SexyAppBase::Shutdown）
     pub fn shutdown(&mut self) {
         self.shutdown = true;
+
+        // 清理 WidgetManager
+        if let Some(wm) = self.widget_manager.take() {
+            unsafe {
+                let _ = Box::from_raw(wm);
+            }
+        }
 
         // 清理 GL 接口
         if let Some(gl) = self.gl_interface.take() {
@@ -461,14 +516,10 @@ impl SexyAppBase {
     }
 
     /// 设置参数
-    pub fn set_args(&mut self, _argc: i32, _argv: *mut *mut std::os::raw::c_char) {
-        // 处理命令行参数
-    }
+    pub fn set_args(&mut self, _argc: i32, _argv: *mut *mut std::os::raw::c_char) {}
 
     /// 加载资源清单
-    pub fn load_resource_manifest(&mut self) {
-        // 加载资源列表
-    }
+    pub fn load_resource_manifest(&mut self) {}
 
     /// 获取图像
     pub fn get_image(&self, _filename: &str, _commit_bits: bool) -> Option<&mut GLImage> {
@@ -500,31 +551,15 @@ impl SexyAppBase {
     }
 
     /// 重绘
-    pub fn redraw(&self, _clip_rect: Option<&Rect>) {
-        // 由子类实现
-    }
+    pub fn redraw(&self, _clip_rect: Option<&Rect>) {}
 
     // ---- 输入事件处理（可被子类重写）----
 
-    pub fn key_down(&mut self, _key: i32) {
-        // 由子类实现
-    }
-
-    pub fn key_up(&mut self, _key: i32) {
-        // 由子类实现
-    }
-
-    pub fn mouse_down(&mut self, _x: i32, _y: i32, _btn: i32, _click_count: i32) {
-        // 由子类实现
-    }
-
-    pub fn mouse_up(&mut self, _x: i32, _y: i32) {
-        // 由子类实现
-    }
-
-    pub fn mouse_move(&mut self, _x: i32, _y: i32) {
-        // 由子类实现
-    }
+    pub fn key_down(&mut self, _key: i32) {}
+    pub fn key_up(&mut self, _key: i32) {}
+    pub fn mouse_down(&mut self, _x: i32, _y: i32, _btn: i32, _click_count: i32) {}
+    pub fn mouse_up(&mut self, _x: i32, _y: i32) {}
+    pub fn mouse_move(&mut self, _x: i32, _y: i32) {}
 }
 
 impl Default for SexyAppBase {

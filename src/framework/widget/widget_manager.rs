@@ -6,6 +6,7 @@
 use crate::framework::widget::widget::Widget;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::key_codes::KeyCode;
+use crate::framework::rect::Rect;
 
 /// Widget 管理器（负责事件分发和绘制管理）
 pub struct WidgetManager {
@@ -134,6 +135,11 @@ impl WidgetManager {
                 (**widget).update();
             }
         }
+    }
+
+    /// 调整大小（对应 C++ WidgetManager::Resize）
+    pub fn resize(&mut self, _rect: Rect, _presentation_rect: Rect) {
+        // 在完整实现中，此方法会重新计算布局
     }
 }
 

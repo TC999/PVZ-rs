@@ -1,6 +1,6 @@
 # PvZ Portable — Rust 翻译版本
 
-> 项目基于 [PvZ-Portable](https://github.com/wszqkzqk/PvZ-Portable)（植物大战僵尸便携版，PopCap 游戏的社区反编译实现）的全自动 C++ → Rust 翻译。
+> 项目基于 [PvZ-Portable](https://github.com/wszqkzqk/PvZ-Portable)（植物大战僵尸跨平台版，PopCap 游戏的社区反编译实现）的全自动 C++ → Rust 翻译。
 
 ## 概述
 
