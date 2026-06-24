@@ -177,7 +177,7 @@ cargo run
 
 ## 后续开发方向
 
-- [ ] 实现完整的 PAK 资源包读取（`PakInterface::open_pak` / `load_file`）
+- [x] 实现完整的 PAK 资源包读取（`PakInterface::open_pak` / `load_file`）
 - [ ] 实现 OpenGL 纹理渲染管线（`GLInterface::Blt` / `GLInterface::FillRect`）
 - [ ] 接入 SDL_Mixer-X 音频播放
 - [ ] 补齐各个 UI 对话框的绘制逻辑
