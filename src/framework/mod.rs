@@ -15,3 +15,4 @@ pub mod widget;
 pub mod imagelib;
 pub mod paklib;
 pub mod sound;
+pub mod mt_rand;

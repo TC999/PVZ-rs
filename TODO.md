@@ -13,7 +13,7 @@
 <!-- ==================================================== -->
 <!-- 1.1.1 Graphics                                               -->
 <!-- ==================================================== -->
-- [ ] **1.1.1 Graphics 图形绘制上下文**
+- [✓] **1.1.1 Graphics 图形绘制上下文**
   - **C++ 源文件：** `src/SexyAppFramework/graphics/Graphics.{h,cpp}`（43KB）
   - **核心依赖项：** `Color`, `Rect`, `Image`, `Font`, `SexyMatrix3`
   - **Rust 实现要点：**
@@ -25,14 +25,14 @@
 <!-- ==================================================== -->
 <!-- 1.1.2 Image / MemoryImage / GLImage                      -->
 <!-- ==================================================== -->
-- [ ] **1.1.2 Image（图像基类）**
+- [✓] **1.1.2 Image（图像基类）**
   - **C++ 源文件：** `src/SexyAppFramework/graphics/Image.{h,cpp}`（5KB + 6KB）
   - **核心依赖项：** `MemoryImage`, `Color`
   - **Rust 实现要点：**
     - 已有 `image.rs`（61 行骨架），需实现像素数据管理
     - 用 `Vec<u8>` 存储像素缓冲，暴露 `width`/`height`/`GetPixel`/`SetPixel`
 
-- [ ] **1.1.3 MemoryImage（内存图像）**
+- [✓] **1.1.3 MemoryImage（内存图像）**
   - **C++ 源文件：** `src/SexyAppFramework/graphics/MemoryImage.{h,cpp}`（6KB + 45KB）
   - **核心依赖项：** `Image`, `Graphics`, `DDImage`
   - **Rust 实现要点：**
@@ -41,7 +41,7 @@
     - 像素格式支持：RGBA8888, RGB565, RGB555
     - 需要 `unsafe` 操作像素内存，封装为 safe Rust 方法
 
-- [ ] **1.1.4 GLImage（OpenGL 纹理图像）**
+- [✓] **1.1.4 GLImage（OpenGL 纹理图像）**
   - **C++ 源文件：** `src/SexyAppFramework/graphics/GLImage.{h,cpp}`（3KB + 7KB）
   - **核心依赖项：** `Image`, `MemoryImage`, OpenGL
   - **Rust 实现要点：**
@@ -49,14 +49,14 @@
     - 管理 OpenGL 纹理 ID 的生命周期（`Drop` trait 释放纹理）
     - 实现 `UploadToGPU`, `Bind` 等方法
 
-- [ ] **1.1.5 Font（字体基类）**
+- [✓] **1.1.5 Font（字体基类）**
   - **C++ 源文件：** `src/SexyAppFramework/graphics/Font.{h,cpp}`（2KB + 1KB）
   - **核心依赖项：** `Image`, `Graphics`
   - **Rust 实现要点：**
     - 已有 `font.rs`（51 行骨架）
     - 实现字符尺寸度量、字符串宽度计算
 
-- [ ] **1.1.6 ImageFont（图像字体）**
+- [~] **1.1.6 ImageFont（图像字体）**
   - **C++ 源文件：** `src/SexyAppFramework/graphics/ImageFont.{h,cpp}`（5KB + 46KB）
   - **核心依赖项：** `Font`, `Image`, `XMLParser`, `Color`
   - **Rust 实现要点：**
@@ -64,14 +64,14 @@
     - 实现 `DrawString`——从图集中切割字符子图并渲染
     - 大量字符布局逻辑
 
-- [ ] **1.1.7 NativeDisplay（原生显示）**
+- [✓] **1.1.7 NativeDisplay（原生显示）**
   - **C++ 源文件：** `src/SexyAppFramework/graphics/NativeDisplay.{h,cpp}`（1.5KB + 1.6KB）
   - **核心依赖项：** `Graphics`
   - **Rust 实现要点：**
     - 已有 `native_display.rs`（30 行骨架）
     - 简单的屏幕清空和交换链管理包装
 
-- [ ] **1.1.8 GLInterface（OpenGL 接口层）**
+- [~] **1.1.8 GLInterface（OpenGL 接口层）**
   - **C++ 源文件：** `src/SexyAppFramework/graphics/GLInterface.{h,cpp}`（8KB + 45KB）
   - **核心依赖项：** `SDL2`, `OpenGL`, `MemoryImage`, `Graphics`
   - **Rust 实现要点：**
@@ -79,7 +79,7 @@
     - 检查翻译完整性：`Set3D`, `DrawTriangle`, `PresentFrame` 等方法体
     - 包装 OpenGL 状态机调用
 
-- [ ] **1.1.9 SWTri（软件三角形渲染器）**
+- [~] **1.1.9 SWTri（软件三角形渲染器）**
   - **C++ 源文件：** `src/SexyAppFramework/graphics/SWTri.{h,cpp}`（31KB + 31KB）
   - **核心依赖项：** `Image`, `Graphics`, `SexyMatrix3`
   - **Rust 实现要点：**
@@ -88,7 +88,7 @@
     - 需要 `unsafe` 操作像素缓冲区，性能敏感
     - 建议用泛型 + trait 消除大量重复，或用宏生成
 
-- [ ] **1.1.10 Color（颜色）**
+- [✓] **1.1.10 Color（颜色）**
   - **C++ 源文件：** `src/SexyAppFramework/graphics/Color.{h,cpp}`（1.8KB + 3KB）
   - **核心依赖项：** 无
   - **Rust 实现要点：**
@@ -107,7 +107,7 @@
   - **Rust 实现要点：**
     - 颜色量化算法（中值切割），用于将图像转为 256 色
 
-- [ ] **1.1.13 TriVertex（三角形顶点结构）**
+- [✓] **1.1.13 TriVertex（三角形顶点结构）**
   - **C++ 源文件：** `src/SexyAppFramework/graphics/TriVertex.h`（1.7KB）
   - **核心依赖项：** 无
   - **Rust 实现要点：**
@@ -216,7 +216,7 @@
   - **核心依赖项：** `Widget`
   - **Rust 实现要点：** 已有骨架，点击打开 URL
 
-- [ ] **1.2.15 Insets（边距）**
+- [✓] **1.2.15 Insets（边距）**
   - **C++ 源文件：** `src/SexyAppFramework/widget/Insets.{h,cpp}`（1KB + 1KB）
   - **核心依赖项：** 无
   - **Rust 实现要点：** 已有 `insets.rs`（28 行），基本完成
@@ -249,35 +249,35 @@
     - 从 `resources.xml`/`pak` 加载图像、字体、声音等资源
     - 资源缓存与引用管理
 
-- [ ] **1.3.3 SexyMatrix（矩阵运算）**
+- [✓] **1.3.3 SexyMatrix（矩阵运算）**
   - **C++ 源文件：** `src/SexyAppFramework/misc/SexyMatrix.{h,cpp}`（3KB + 9KB）
   - **核心依赖项：** `Point`, `Rect`
   - **Rust 实现要点：**
     - 已有 `sexy_matrix.rs`（163 行），基本完成
     - 2D 变换矩阵（平移、旋转、缩放）
 
-- [ ] **1.3.4 Buffer（缓冲）**
+- [✓] **1.3.4 Buffer（缓冲）**
   - **C++ 源文件：** `src/SexyAppFramework/misc/Buffer.{h,cpp}`（2KB + 12KB）
   - **核心依赖项：** 无
   - **Rust 实现要点：**
     - 已有 `buffer.rs`（198 行）
     - 字节缓冲读写，大/小端序支持
 
-- [ ] **1.3.5 Point / Rect（几何结构）**
+- [✓] **1.3.5 Point / Rect（几何结构）**
   - **C++ 源文件：** `src/SexyAppFramework/misc/Point.h`（2KB）, `misc/Rect.h`（3KB）
   - **核心依赖项：** 无
   - **Rust 实现要点：**
     - 已有 `point.rs`（89 行）, `rect.rs`（155 行），基本完成
     - 矩形碰撞检测、包含关系等
 
-- [ ] **1.3.6 KeyCodes（键码）**
+- [✓] **1.3.6 KeyCodes（键码）**
   - **C++ 源文件：** `src/SexyAppFramework/misc/KeyCodes.{h,cpp}`（4KB + 7KB）
   - **核心依赖项：** 无
   - **Rust 实现要点：**
     - 已有 `key_codes.rs`（105 行），基本完成
     - 键码枚举映射
 
-- [ ] **1.3.7 Common（通用工具函数）**
+- [~] **1.3.7 Common（通用工具函数）**
   - **C++ 源文件：** `src/SexyAppFramework/Common.{h,cpp}`（13KB + 14KB）
   - **核心依赖项：** 无
   - **Rust 实现要点：**
@@ -285,13 +285,13 @@
     - 包含三角函数查找表、字符串工具、随机数、文件 I/O 等杂项
     - `MTRand`（梅森旋转随机数生成器）需要单独翻译
 
-- [ ] **1.3.8 MTRand（随机数）**
+- [✓] **1.3.8 MTRand（随机数）**
   - **C++ 源文件：** `src/SexyAppFramework/misc/MTRand.{h,cpp}`（0.8KB + 5KB）
   - **核心依赖项：** 无
   - **Rust 实现要点：**
     - 移植梅森旋转算法，确保种子序列与 C++ 一致（游戏需要确定性的关卡生成）
 
-- [ ] **1.3.9 PerfTimer（性能计时器）**
+- [✓] **1.3.9 PerfTimer（性能计时器）**
   - **C++ 源文件：** `src/SexyAppFramework/misc/PerfTimer.{h,cpp}`（4KB + 10KB）
   - **核心依赖项：** 无
   - **Rust 实现要点：**
@@ -423,7 +423,7 @@
 
 ### 2.1 动画系统
 
-- [ ] **2.1.1 ReanimatorDefinition（动画定义数据结构）**
+- [~] **2.1.1 ReanimatorDefinition（动画定义数据结构）**
   - **C++ 源文件：** `src/Sexy.TodLib/Definition.{h,cpp}`（15KB + 69KB）
   - **核心依赖项：** `TodCommon`, `ReanimAtlas`, `TodStringFile`, `Image`
   - **Rust 实现要点：**
@@ -432,14 +432,14 @@
     - 数据量庞大：`gReanimatorDefCount` 约数百个动画定义
     - 结构体：`ReanimatorDefinition`, `ReanimatorTrack`, `ReanimatorTransform`, `ReanimationParams`
 
-- [ ] **2.1.2 ReanimAtlas（动画图集）**
+- [~] **2.1.2 ReanimAtlas（动画图集）**
   - **C++ 源文件：** `src/Sexy.TodLib/ReanimAtlas.{h,cpp}`（2KB + 9KB）
   - **核心依赖项：** `Image`, `Graphics`, `MemoryImage`
   - **Rust 实现要点：**
     - 已有 `reanim_atlas.rs`（17 行骨架）
     - 将动画的所有帧打包到一张大纹理中，减少 OpenGL 状态切换
 
-- [ ] **2.1.3 Reanimation（动画实例——核心类）**
+- [~] **2.1.3 Reanimation（动画实例——核心类）**
   - **C++ 源文件：** `src/Sexy.TodLib/Reanimator.{h,cpp}`（14KB + 74KB）
   - **核心依赖项：** `ReanimatorDefinition`, `ReanimatorTrackInstance`, `Graphics`, `SexyMatrix`, `FilterEffect`, `Attachment`
   - **Rust 实现要点：**
@@ -453,14 +453,14 @@
     - 需要 `ReanimationHolder`（`DataArray<Reanimation>`）管理所有动画实例
     - 性能关键——每帧要更新和绘制数百个动画
 
-- [ ] **2.1.4 ReanimatorTransform（动画变换帧）**
+- [~] **2.1.4 ReanimatorTransform（动画变换帧）**
   - **C++ 源文件：** `src/Sexy.TodLib/Reanimator.h`（内联定义）
   - **核心依赖项：** `Image`, `Font`
   - **Rust 实现要点：**
     - 结构体已在 C++ 中定义：位置、旋转、缩放、透明度、图像/字体/文字
     - 需要 `DEFAULT_FIELD_PLACEHOLDER` 标记未设置的字段
 
-- [ ] **2.1.5 ReanimatorTrackInstance（轨道实例）**
+- [~] **2.1.5 ReanimatorTrackInstance（轨道实例）**
   - **C++ 源文件：** `src/Sexy.TodLib/Reanimator.h`（内联定义）
   - **核心依赖项：** `ReanimatorTransform`, `Attachment`
   - **Rust 实现要点：**

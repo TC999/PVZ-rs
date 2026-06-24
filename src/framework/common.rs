@@ -26,38 +26,48 @@ pub type CharVector = Vec<u8>;
 pub static mut gDebug: AtomicBool = AtomicBool::new(false);
 
 // ============================================================
-// 随机数
+// 随机数（使用 MTRand 梅森旋转算法，对应 C++ Common 中的 Rand/SRand）
 // ============================================================
 
 pub const SEXY_RAND_MAX: ulong = 0x7FFFFFFF;
 
-/// C++ 风格的线性同余随机数生成器
-pub struct SexyRand {
-    seed: u32,
+use crate::framework::mt_rand::MTRand;
+
+/// 全局随机数生成器（对应 C++ 中的 gMTRand）
+static mut G_MT_RAND: Option<MTRand> = None;
+
+/// 获取全局 MTRand 实例
+fn get_global_mt_rand() -> &'static mut MTRand {
+    unsafe {
+        if G_MT_RAND.is_none() {
+            G_MT_RAND = Some(MTRand::from_seed(4357));
+        }
+        G_MT_RAND.as_mut().unwrap()
+    }
 }
 
-impl SexyRand {
-    pub fn new(seed: u32) -> Self {
-        SexyRand { seed }
-    }
+/// 返回 [0, SEXY_RAND_MAX] 范围内的随机整数（对应 C++ Sexy::Rand()）
+pub fn Rand() -> i32 {
+    get_global_mt_rand().next() as i32
+}
 
-    /// 返回 0..SEXY_RAND_MAX 范围内的整数
-    pub fn next(&mut self) -> i32 {
-        // 原 C++ 使用：(seed = seed * 0x5D588B656C078965 + 0x269EC3) & 0x7FFFFFFF
-        // 简化版暂时使用标准库
-        self.seed = self.seed.wrapping_mul(0x5D588B65).wrapping_add(0x269EC3) & 0x7FFFFFFF;
-        self.seed as i32
+/// 返回 [0, range) 范围内的随机整数（对应 C++ Sexy::Rand(int)）
+pub fn RandRange(range: i32) -> i32 {
+    if range <= 0 {
+        return 0;
     }
+    (get_global_mt_rand().next() % range as u32) as i32
+}
 
-    pub fn next_range(&mut self, range: i32) -> i32 {
-        if range <= 0 { return 0; }
-        self.next() % range
-    }
+/// 返回 [0, range) 范围内的随机浮点数（对应 C++ Sexy::Rand(float)）
+pub fn RandFloat(range: f32) -> f32 {
+    get_global_mt_rand().next_float(range)
+}
 
-    pub fn next_float(&mut self, range: f32) -> f32 {
-        if range <= 0.0 { return 0.0; }
-        (self.next() as f32 / SEXY_RAND_MAX as f32) * range
-    }
+/// 设置种子（对应 C++ Sexy::SRand(ulong)）
+pub fn SRand(seed: u32) {
+    let s = if seed == 0 { 4357 } else { seed };
+    get_global_mt_rand().srand(s);
 }
 
 static mut gRandSeed: u32 = 0;

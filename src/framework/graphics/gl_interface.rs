@@ -701,6 +701,19 @@ impl TextureData {
         }
     }
 
+    /// 从 Vec<u8> 像素缓冲区读取 RGBA 像素（4字节 → u32 RGBA）
+    unsafe fn read_pixel_rgba(pixels: &[u8], idx: usize) -> u32 {
+        let base = idx * 4;
+        if base + 3 < pixels.len() {
+            (pixels[base] as u32) << 24
+                | (pixels[base + 1] as u32) << 16
+                | (pixels[base + 2] as u32) << 8
+                | pixels[base + 3] as u32
+        } else {
+            0
+        }
+    }
+
     /// CopyImageToTexture8888
     unsafe fn copy_to_texture_8888(
         image: &MemoryImage,
@@ -720,12 +733,11 @@ impl TextureData {
         let img_w = image.base.width;
 
         if image.color_table.is_empty() {
-            let src_row = image.bits.as_ptr().add((offy * img_w + offx) as usize);
             for y in 0..h {
-                let s = src_row.add((y * img_w) as usize);
                 let d = dst.add((y * pitch) as usize);
                 for x in 0..w {
-                    *d.add(x as usize) = argb_to_rgba(*s.add(x as usize));
+                    let px_idx = ((offy + y) * img_w + (offx + x)) as usize;
+                    *d.add(x as usize) = Self::read_pixel_rgba(&image.base.pixels, px_idx);
                 }
                 if pad_r {
                     *d.add(w as usize) = *d.add(w as usize - 1);
@@ -788,12 +800,12 @@ impl TextureData {
         };
 
         if image.color_table.is_empty() {
-            let src_row = image.bits.as_ptr().add((offy * img_w + offx) as usize);
             for y in 0..h {
-                let s = src_row.add((y * img_w) as usize);
                 let d = dst.add((y * pitch) as usize);
                 for x in 0..w {
-                    *d.add(x as usize) = argb_to_4444(*s.add(x as usize));
+                    let px_idx = ((offy + y) * img_w + (offx + x)) as usize;
+                    let rgba = Self::read_pixel_rgba(&image.base.pixels, px_idx);
+                    *d.add(x as usize) = argb_to_4444(rgba);
                 }
                 if pad_r {
                     *d.add(w as usize) = *d.add(w as usize - 1);
@@ -852,12 +864,12 @@ impl TextureData {
         };
 
         if image.color_table.is_empty() {
-            let src_row = image.bits.as_ptr().add((offy * img_w + offx) as usize);
             for y in 0..h {
-                let s = src_row.add((y * img_w) as usize);
                 let d = dst.add((y * pitch) as usize);
                 for x in 0..w {
-                    *d.add(x as usize) = argb_to_565(*s.add(x as usize));
+                    let px_idx = ((offy + y) * img_w + (offx + x)) as usize;
+                    let rgba = Self::read_pixel_rgba(&image.base.pixels, px_idx);
+                    *d.add(x as usize) = argb_to_565(rgba);
                 }
                 if pad_r {
                     *d.add(w as usize) = *d.add(w as usize - 1);
@@ -1682,8 +1694,8 @@ impl GLInterface {
     pub fn set_video_only_draw(&mut self, _video_only: bool) {
         self.screen_image = {
             let mut img = Box::new(GLImage::new(self.width, self.height));
-            img.base.width = self.width;
-            img.base.height = self.height;
+            img.base.base.width = self.width;
+            img.base.base.height = self.height;
             Some(Box::into_raw(img))
         };
         if let Some(img) = self.screen_image {
@@ -1799,13 +1811,19 @@ impl GLInterface {
                     glBindFramebuffer(GL_FRAMEBUFFER, 0);
                     glDeleteFramebuffers(1, &fbo);
 
-                    // 复制回 bits
+                    // 复制回 bits（转换为 RGBA 字节）
                     for r in 0..h {
                         for c in 0..w {
-                            let dst_idx = ((offy + r) * image.base.width + (offx + c)) as usize;
                             let src_idx = (r * w + c) as usize;
-                            if dst_idx < image.bits.len() && src_idx < buf.len() {
-                                image.bits[dst_idx] = rgba_to_argb(buf[src_idx]);
+                            if src_idx < buf.len() {
+                                let rgba = buf[src_idx];
+                                let dst_base = ((offy + r) * image.base.width + (offx + c)) as usize * 4;
+                                if dst_base + 3 < image.base.pixels.len() {
+                                    image.base.pixels[dst_base] = ((rgba >> 24) & 0xFF) as u8;     // R
+                                    image.base.pixels[dst_base + 1] = ((rgba >> 16) & 0xFF) as u8;  // G
+                                    image.base.pixels[dst_base + 2] = ((rgba >> 8) & 0xFF) as u8;   // B
+                                    image.base.pixels[dst_base + 3] = (rgba & 0xFF) as u8;         // A
+                                }
                             }
                         }
                     }

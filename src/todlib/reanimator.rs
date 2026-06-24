@@ -16,7 +16,27 @@ use crate::todlib::definition::{ReanimatorDefinition, ReanimatorTrackInstance};
 #[repr(i32)]
 pub enum ReanimationType {
     None = -1,
-    // 实际类型从资源定义中获取
+    ReanimZombie = 0,
+    ReanimPolevaulter,
+    ReanimZombieNewspaper,
+    ReanimZombieFootball,
+    ReanimDancer,
+    ReanimBackupDancer,
+    ReanimSnorkel,
+    ReanimZombieZamboni,
+    ReanimBobsled,
+    ReanimZombieDolphinrider,
+    ReanimJackinthebox,
+    ReanimBalloon,
+    ReanimDigger,
+    ReanimPogo,
+    ReanimYeti,
+    ReanimBungee,
+    ReanimLadder,
+    ReanimCatapult,
+    ReanimGargantuar,
+    ReanimImp,
+    ReanimBoss,
 }
 
 /// 循环模式
