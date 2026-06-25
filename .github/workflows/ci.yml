@@ -35,6 +35,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Cache SDL2_mixer SDK
+      uses: actions/cache@v4
+      with:
+        path: |
+          SDL2_mixer-2.6.3/**
+        key: ${{ runner.os }}-sdl2-mixer-2.6.3-${{ matrix.target }}
     - name: Build
       run: cargo build --release
     - name: Upload to GitHub Actions
