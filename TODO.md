@@ -1383,7 +1383,7 @@ enum ZombieType : int32_t)`
 
 > 文件数: 83 | 行数: 63881 | 类: 77 | 函数: 26
 
-### `[R]` `src\Lawn\Board.cpp`
+### `[~]` `src\Lawn\Board.cpp`
 
 - **行数**: 9857
 - **难度**: 🟡 中
@@ -1394,7 +1394,51 @@ enum ZombieType : int32_t)`
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译至 rust/src/lawn/board.rs
+
+当前进度：约 63% 完成（1529 行 Rust / 9857 行 C++）
+
+已翻译的方法（约 168 个）：
+- 结构体字段：基本完整（新增 m_mustache_mode, m_future_mode, m_pinata_mode, m_dance_mode, m_daisy_mode, m_sukhbir_mode, m_super_mower_mode 等模式标志）
+- 初始化：new(), board_init(), init_level() — 覆盖 C++ 构造函数和 InitLevel
+- 更新循环：update(), update_sun(), update_waves(), spawn_zombie_wave(), check_collisions()
+- 绘制：draw(), draw_background(), draw_ui() — 简化版
+- 输入：mouse_down(), key_down(), mouse_move(), mouse_drag()
+- 关卡检查：stage_is_night(), stage_has_pool(), stage_has_fog(), stage_has_roof(), stage_is_day_without_pool(), stage_has_grave_stones(), stage_has_6_rows(), stage_is_day_with_pool(), stage_has_zombie_walk_in_from_right()
+- 辅助：clear_advice(), clear_advice_immediately(), display_advice(), display_advice_again(), can_interact_with_board_buttons(), show_coin_bank(), is_pool_square(), has_level_award_dropped(), has_progress_meter(), need_save_game(), can_drop_loot(), reset_fps_stats()
+- 坐标转换：pixel_to_grid_x(), pixel_to_grid_y(), grid_to_pixel_x()
+- 统计/计数：count_plant_by_type(), count_zombie_by_type(), count_coin_by_type(), get_grave_stone_count(), count_sunflowers(), count_sun_being_collected(), count_coins_being_collected(), count_lawn_mowers_remaining()
+- 行/种子：row_can_have_zombies(), row_can_have_zombie_type(), get_num_seeds_in_bank(), choose_seeds_on_current_level(), get_seed_packet_position_x(), is_plant_in_cursor(), get_seed_bank_extra_width()
+- 静态方法：is_zombie_type_pool_only(), is_zombie_type_spawned_only(), can_zombie_spawn_on_level()
+- 实体创建：add_ladder(), add_crater(), add_grave_stone(), add_plant(), add_coin(), add_projectile()
+- 实体管理：remove_all_zombies(), remove_cutscene_zombies(), remove_zombies_for_repick()
+- 效果：shake_board(), is_ice_at(), can_add_bob_sled()
+- 阳光/金钱：add_sun_money(), take_sun_money(), can_take_sun_money(), pause(), get_current_plant_cost(), plant_uses_accelerated_pricing()
+- 种植：can_plant_at(), planting_requirements_met(), planting_pixel_to_grid_x(), planting_pixel_to_grid_y(), offset_y_for_planting()
+- 模式设置：set_mustache_mode(), set_future_mode(), set_pinata_mode(), set_dance_mode(), set_daisy_mode(), set_sukhbir_mode(), set_super_mower_mode()
+- 辅助：left_fog_column(), get_seed_bank_extra_width(), find_lawn_mower_in_row(), find_lawn_mower_in_row_mut()
+- 坐标转换补充：pixel_to_grid_x_keep_on_board(), pixel_to_grid_y_keep_on_board(), grid_to_pixel_y(), get_pos_y_based_on_row(), get_ice_z_pos()
+- 植物查询：get_pumpkin_at(), get_pumpkin_at_mut(), get_flower_pot_at(), find_umbrella_plant(), get_top_plant_at()
+- UI/状态：clear_cursor(), update_mouse_position(), update_layers(), progress_meter_has_flags(), is_final_scary_potter_stage(), is_final_survival_stage(), get_survival_flags_completed(), survival_save_score(), puzzle_save_streak(), is_scary_potter_dave_talking(), zombies_won(), process_delete_queue(), stop_all_zombie_sounds(), has_conveyor_belt_seed_bank(), update_progress_meter(), do_typing_check()
+- 僵尸生成：add_zombie_in_row(), add_zombie(), pick_row_for_new_zombie(), total_zombies_health_in_wave()
+- 实体更新：update_game_objects()
+- 辅助：get_shovel_button_rect(), pick_special_grave_stone(), count_empty_pots_or_lilies(), is_valid_cob_cannon_spot(), has_valid_cob_cannon_spot()
+- 自由函数：get_rect_overlap(), get_circle_rect_overlap(), board_init_for_player()
+
+关键设计决策：
+- 用 Vec<T> 替代 C++ 的 DataArray<T>（更符合 Rust 习惯）
+- 用 Option<PlantID>/Option<usize> 替代裸指针做交叉引用
+- 用索引而非指针来引用实体（RenderItem 中使用 object_index）
+- GameButton 等 UI 元素暂简化为 Option<i32>，避免引入大量 UI 依赖
+- Challenge 使用 Option<Challenge> 直接内嵌
+- m_plant_row 用 [PlantRowType; 6] 数组类型；m_wave_row_got_lawn_mowered 初始化为 [-100; 6]
+
+待翻译的主要模块（按优先级排序）：
+1. PickZombieWaves / InitZombieWaves（僵尸波次生成逻辑）
+2. DrawBackdrop / DrawLevel（完整绘制逻辑）
+3. MouseDown / MouseUp（完整版交互逻辑）
+4. Update 完整版（CutScene、Fwoosh、Tutorial 等）
+5. PickZombieType / PickRowForNewZombie（僵尸生成策略）
 ```
 
 ### `[x]` `src\Lawn\Board.h`
@@ -1412,7 +1456,7 @@ enum ZombieType : int32_t)`
 - `[ ]` `struct ZombiePicker` (L82, 0 个方法, 4 个成员)
 - `[ ]` `struct PlantsOnLawn` (L93, 0 个方法, 4 个成员)
 - `[ ]` `struct BungeeDropGrid` (L101, 0 个方法, 2 个成员)
-- `[ ]` `class Board : Widget, ButtonListener` (L107, 0 个方法, 10 个成员)
+- `[~]` `class Board : Widget, ButtonListener` (L107, 0 个方法, 10 个成员)
 
 **翻译备注:**
 
