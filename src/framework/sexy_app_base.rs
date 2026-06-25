@@ -127,7 +127,7 @@ impl SexyAppBase {
             rand_seed: 0,
             company_name: String::new(),
             prod_name: String::from("Product"),
-            title: String::from("PvZ Portable"),
+            title: String::from("Plants vs. Zombies"),
             reg_key: String::new(),
             resource_dir: String::new(),
             custom_save_dir: String::new(),
