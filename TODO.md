@@ -2471,18 +2471,24 @@ class Plant : public GameObject)`
 
 **类/结构体:**
 
-- `[ ]` `class AchievementItem` (L39, 0 个方法, 2 个成员)
-- `[ ]` `class AchievementsWidget : Widget` (L47, 0 个方法, 7 个成员)
-- `[ ]` `class ReportAchievement` (L68, 0 个方法, 0 个成员)
+- `[x]` `class AchievementItem` (L39, 0 个方法, 2 个成员)
+- `[x]` `class AchievementsWidget : Widget` (L47, 0 个方法, 7 个成员)
+- `[x]` `class ReportAchievement` (L68, 0 个方法, 0 个成员)
 
 **枚举:**
 
-- `[ ]` `enum AchievementId` → { HomeSecurity, NovelPeasPrize, BetterOffDead, ChinaShop, Spudow, ... (21 个值) }
+- `[x]` `enum AchievementId` → { HomeSecurity, NovelPeasPrize, BetterOffDead, ChinaShop, Spudow, ... (21 个值) }
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/widget/achievements_screen.rs
+设计决策:
+- AchievementId 枚举 → Rust #[repr(i32)] 枚举（21个值 + MaxAchievements）
+- AchievementItem 结构体 → Rust struct（name: String, description: String）
+- AchievementsWidget 类 → Rust struct（7个字段映射，含 Rect）
+- ReportAchievement → 无字段结构体 + 静态方法
+- 全局变量 gAchievementList 待后续翻译
 ```
 
 ### `[x]` `src\Lawn\Widget\AlmanacDialog.cpp`
