@@ -1,7 +1,7 @@
 // PvZ Portable Rust 翻译 — SexyAppBase（应用程序基类）
 // 对应 C++ SexyAppFramework/SexyAppBase.h / SexyAppBase.cpp
 //
-// SDL2 通过外部 crate (sdl2) 使用，不再用 raw-dylib FFI。
+// 显示使用 SDL2 的 2D 渲染器（替代 OpenGL），提高兼容性和可靠性。
 
 #![allow(dead_code)]
 
@@ -10,7 +10,9 @@ use std::collections::HashMap;
 use sdl2::event::{Event, WindowEvent};
 use sdl2::keyboard::Keycode;
 use sdl2::mouse::MouseButton;
-use sdl2::video::{GLContext, GLProfile, Window, WindowPos};
+use sdl2::pixels::PixelFormatEnum;
+use sdl2::render::Canvas;
+use sdl2::video::Window;
 
 use crate::framework::color::Color;
 use crate::framework::common;
@@ -19,7 +21,6 @@ use crate::framework::graphics::gl_image::GLImage;
 use crate::framework::graphics::memory_image::MemoryImage;
 use crate::framework::graphics::image::Image;
 use crate::framework::graphics::gl_interface::GLInterface;
-use crate::framework::graphics::gl_interface::GLVertex;
 use crate::framework::widget::widget_manager::WidgetManager;
 use crate::framework::widget::dialog::Dialog;
 use crate::framework::sound::sound_manager::SoundManager;
@@ -32,7 +33,8 @@ pub struct SexyAppBase {
     // SDL2 上下文（使用外部 crate，dropped last 以正确清理）
     pub sdl_context: Option<sdl2::Sdl>,
     pub window: Option<Window>,
-    pub gl_context: Option<GLContext>,
+    // SDL2 2D 渲染器（替代 OpenGL）
+    pub canvas: Option<Canvas<Window>>,
     pub event_pump: Option<sdl2::EventPump>,
 
     // 基本属性
@@ -108,8 +110,6 @@ pub struct SexyAppBase {
 
     // 屏幕图像（作为绘制目标，对应 C++ mImage）
     pub screen_image: Option<*mut MemoryImage>,
-    // 屏幕图像的 GL 纹理 ID（用于渲染到屏幕）
-    pub screen_gl_texture: Option<u32>,
 }
 
 impl SexyAppBase {
@@ -123,7 +123,7 @@ impl SexyAppBase {
         SexyAppBase {
             sdl_context: Some(sdl_context),
             window: None,
-            gl_context: None,
+            canvas: None,
             event_pump: None,
             rand_seed: 0,
             company_name: String::new(),
@@ -173,7 +173,6 @@ impl SexyAppBase {
             last_draw_tick: 0,
             next_draw_tick: 0,
             screen_image: None,
-            screen_gl_texture: None,
         }
     }
 
@@ -223,7 +222,7 @@ impl SexyAppBase {
         self.load_resource_manifest();
     }
 
-    /// 创建 SDL 窗口和 OpenGL 上下文（对应 C++ MakeWindow）
+    /// 创建 SDL 窗口和 2D 渲染器（替代 OpenGL，提高兼容性）
     pub fn make_window(&mut self) {
         let sdl = match self.sdl_context.as_ref() {
             Some(s) => s,
@@ -243,58 +242,14 @@ impl SexyAppBase {
             }
         };
 
-        // 尝试 GLES 2.0 配置
-        let gl_attr = video.gl_attr();
-        gl_attr.set_context_profile(GLProfile::GLES);
-        gl_attr.set_context_version(2, 0);
-        gl_attr.set_double_buffer(true);
-        gl_attr.set_depth_size(0);
-
-        // 创建窗口
-        let window_result = video
+        // 创建窗口（不使用 OpenGL，改用 SDL2 内置 2D 渲染器）
+        let window = match video
             .window(&self.title, self.width as u32, self.height as u32)
             .position_centered()
-            .opengl()
             .resizable()
-            .build();
-
-        let (window, gl_context) = match window_result {
-            Ok(win) => {
-                match win.gl_create_context() {
-                    Ok(ctx) => (win, ctx),
-                    Err(e) => {
-                        eprintln!("GLES 2.0 上下文创建失败: {e}，回退到桌面 GL 2.1");
-                        // win 在这里 drop，释放第一个窗口
-                        drop(win);
-                        // 回退到 desktop GL 2.1
-                        gl_attr.set_context_profile(GLProfile::Compatibility);
-                        gl_attr.set_context_version(2, 1);
-
-                        let win2 = video
-                            .window(&self.title, self.width as u32, self.height as u32)
-                            .position_centered()
-                            .opengl()
-                            .resizable()
-                            .build();
-
-                        match win2 {
-                            Ok(w) => match w.gl_create_context() {
-                                Ok(ctx) => (w, ctx),
-                                Err(e2) => {
-                                    eprintln!("回退 GL 上下文创建失败: {e2}");
-                                    self.m_shutdown_flag = true;
-                                    return;
-                                }
-                            },
-                            Err(e2) => {
-                                eprintln!("回退窗口创建失败: {e2}");
-                                self.m_shutdown_flag = true;
-                                return;
-                            }
-                        }
-                    }
-                }
-            }
+            .build()
+        {
+            Ok(w) => w,
             Err(e) => {
                 eprintln!("SDL_CreateWindow 失败: {e}");
                 self.m_shutdown_flag = true;
@@ -302,19 +257,48 @@ impl SexyAppBase {
             }
         };
 
-        // 设置交换间隔
-        if let Err(e) = video.gl_set_swap_interval(1) {
-            eprintln!("设置交换间隔失败: {e}");
-        }
+        // 创建 2D 渲染器（使用默认驱动：Direct3D / OpenGL / 软件）
+        let canvas = match window.into_canvas()
+            .accelerated()
+            .present_vsync()
+            .build()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("SDL_CreateRenderer 失败，尝试软件渲染器: {e}");
+                // 回退到软件渲染
+                let window2 = match video
+                    .window(&self.title, self.width as u32, self.height as u32)
+                    .position_centered()
+                    .resizable()
+                    .build()
+                {
+                    Ok(w) => w,
+                    Err(e2) => {
+                        eprintln!("回退窗口创建失败: {e2}");
+                        self.m_shutdown_flag = true;
+                        return;
+                    }
+                };
+                match window2.into_canvas().software().build() {
+                    Ok(c) => c,
+                    Err(e2) => {
+                        eprintln!("软件渲染器创建也失败: {e2}");
+                        self.m_shutdown_flag = true;
+                        return;
+                    }
+                }
+            }
+        };
 
-        // 保存窗口和上下文
-        self.window = Some(window);
-        self.gl_context = Some(gl_context);
+        self.window = Some(canvas.window().clone());
+        self.canvas = Some(canvas);
 
-        // 初始化 GLInterface（对应 C++ MakeWindow 中 new GLInterface(this)）
+        eprintln!("[显示] SDL2 2D 渲染器创建成功 ({}x{})", self.width, self.height);
+
+        // 初始化 GLInterface（用于纹理缓存管理，但不做实际 GL 渲染）
         if self.gl_interface.is_none() {
-            let mut gl = Box::new(GLInterface::new(None));
-            gl.init(true);
+            let gl = Box::new(GLInterface::new(None));
             self.gl_interface = Some(Box::into_raw(gl));
         }
     }
@@ -381,21 +365,13 @@ impl SexyAppBase {
     }
 
     /// 绘制脏区域（对应 C++ SexyAppBase::DrawDirtyStuff）
+    ///
+    /// 使用 SDL2 2D 渲染器将软件渲染的 screen_image 显示到窗口。
     fn draw_dirty_stuff(&mut self) -> bool {
-        // 清除屏幕（GL 清屏）
-        if let Some(gl) = self.gl_interface {
-            unsafe {
-                (*gl).pre_draw();
-            }
-        }
-
-        // 通过 WidgetManager 绘制所有可见 widget
+        // ===== 软件渲染：WidgetManager 绘制到 screen_image =====
         if let Some(wm) = self.widget_manager {
             unsafe {
-                // 创建以屏幕图像为目的地的 Graphics 上下文
-                // 对应 C++ 中的 Graphics aScrG(mImage);
-                use crate::framework::graphics::graphics::Graphics;
-                let mut g = Graphics::new();
+                let mut g = crate::framework::graphics::graphics::Graphics::new();
                 if let Some(screen) = self.screen_image {
                     g.dest_image = screen as *mut crate::framework::graphics::image::Image;
                 }
@@ -403,115 +379,57 @@ impl SexyAppBase {
             }
         }
 
-        // ===== 将 screen_image 渲染到 OpenGL 屏幕 =====
-        if let Some(screen_ptr) = self.screen_image {
-            unsafe {
-                use crate::ffi::opengl::*;
-                use std::mem::size_of;
-                use std::ptr;
+        // ===== 将 screen_image 通过 SDL2 纹理显示到窗口 =====
+        if let (Some(screen_ptr), Some(ref mut canvas)) =
+            (self.screen_image, self.canvas.as_mut())
+        {
+            let mem = unsafe { &*screen_ptr };
+            let w = mem.base.width;
+            let h = mem.base.height;
 
-                let mem = &*screen_ptr;
-                let w = mem.base.width;
-                let h = mem.base.height;
+            if w <= 0 || h <= 0 || mem.base.pixels.is_empty() {
+                self.m_draw_count += 1;
+                return true;
+            }
 
-                if w <= 0 || h <= 0 || mem.base.pixels.is_empty() {
-                    self.m_draw_count += 1;
-                    return true;
-                }
-
-                // 获取或创建 GL 纹理
-                let tex_id = match self.screen_gl_texture {
-                    Some(id) => id,
-                    None => {
-                        let mut id: GLuint = 0;
-                        glGenTextures(1, &mut id);
-                        self.screen_gl_texture = Some(id);
-                        id
+            // 从 Canvas 创建纹理（借用生命周期限制，用块限定作用域确保 Texture 先于 TextureCreator 丢弃）
+            let render_ok = {
+                let tc = canvas.texture_creator();
+                let tex_result = tc.create_texture_streaming(
+                    PixelFormatEnum::RGBA32,
+                    w as u32,
+                    h as u32,
+                );
+                match tex_result {
+                    Ok(mut texture) => {
+                        let pitch = (w * 4) as usize;
+                        if texture.update(None, &mem.base.pixels, pitch).is_ok() {
+                            canvas.set_draw_color(sdl2::pixels::Color::RGB(0, 0, 0));
+                            canvas.clear();
+                            let copy_ok = canvas.copy(&texture, None, None).is_ok();
+                            canvas.present();
+                            copy_ok
+                        } else {
+                            false
+                        }
                     }
-                };
+                    Err(_) => false,
+                }
+                // texture 在这里先 drop，然后 tc drop
+            };
 
-                // 上传像素数据到纹理
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, tex_id);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST as GLint);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST as GLint);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE as GLint);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE as GLint);
-                glTexImage2D(
-                    GL_TEXTURE_2D, 0, GL_RGBA as GLint, w, h, 0,
-                    GL_RGBA, GL_UNSIGNED_BYTE,
-                    mem.base.pixels.as_ptr() as *const std::ffi::c_void,
-                );
-
-                // 使用现有 GL 着色器程序
-                glUseProgram(crate::framework::graphics::gl_interface::G_PROGRAM);
-
-                // 设置正交投影矩阵
-                let ortho: [f32; 16] = [
-                    2.0 / w as f32, 0.0, 0.0, 0.0,
-                    0.0, 2.0 / h as f32, 0.0, 0.0,
-                    0.0, 0.0, -2.0 / 20.0, 0.0,
-                    -1.0, -1.0, -10.0 / 20.0, 1.0,
-                ];
-                glUniformMatrix4fv(
-                    crate::framework::graphics::gl_interface::G_UF_VIEW_PROJ_MTX,
-                    1, GL_FALSE, ortho.as_ptr(),
-                );
-                glUniform1i(
-                    crate::framework::graphics::gl_interface::G_UF_TEXTURE,
-                    0,
-                );
-                glUniform1i(
-                    crate::framework::graphics::gl_interface::G_UF_USE_TEXTURE,
-                    1,
-                );
-                glUniform4fv(
-                    crate::framework::graphics::gl_interface::G_UF_UV_BOUNDS,
-                    1,
-                    [0.0f32, 0.0, 1.0, 1.0].as_ptr(),
-                );
-                glUniform1i(
-                    crate::framework::graphics::gl_interface::G_UF_CLAMP_UV_ENABLED,
-                    1,
-                );
-
-                // 渲染全屏四边形（两个三角形组成 Triangle Strip）
-                let verts: [GLVertex; 4] = [
-                    GLVertex { sx: 0.0, sy: 0.0, sz: 0.0, color: 0xFFFFFFFF, tu: 0.0, tv: 0.0 },
-                    GLVertex { sx: w as f32, sy: 0.0, sz: 0.0, color: 0xFFFFFFFF, tu: 1.0, tv: 0.0 },
-                    GLVertex { sx: 0.0, sy: h as f32, sz: 0.0, color: 0xFFFFFFFF, tu: 0.0, tv: 1.0 },
-                    GLVertex { sx: w as f32, sy: h as f32, sz: 0.0, color: 0xFFFFFFFF, tu: 1.0, tv: 1.0 },
-                ];
-
-                // 使用已有 VBO 和顶点属性配置
-                let vbo = crate::framework::graphics::gl_interface::G_VBO;
-                glBindBuffer(GL_ARRAY_BUFFER, vbo);
-                glBufferSubData(
-                    GL_ARRAY_BUFFER, 0,
-                    (size_of::<GLVertex>() * 4) as GLsizeiptr,
-                    verts.as_ptr() as *const std::ffi::c_void,
-                );
-
-                // Position (3 floats, offset 0)
-                glEnableVertexAttribArray(0);
-                glVertexAttribPointer(
-                    0, 3, GL_FLOAT, GL_FALSE, size_of::<GLVertex>() as GLsizei,
-                    ptr::null(),
-                );
-                // Color (4 ubytes normalized, offset 12 = 3*4)
-                glEnableVertexAttribArray(1);
-                glVertexAttribPointer(
-                    1, 4, GL_UNSIGNED_BYTE, GL_TRUE, size_of::<GLVertex>() as GLsizei,
-                    (size_of::<f32>() * 3) as *const std::ffi::c_void,
-                );
-                // UV (2 floats, offset 16 = 3*4 + 4)
-                glEnableVertexAttribArray(2);
-                glVertexAttribPointer(
-                    2, 2, GL_FLOAT, GL_FALSE, size_of::<GLVertex>() as GLsizei,
-                    (size_of::<f32>() * 3 + size_of::<u32>()) as *const std::ffi::c_void,
-                );
-
-                glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+            if !render_ok {
+                eprintln!("[显示] 渲染失败");
+                canvas.set_draw_color(sdl2::pixels::Color::RGB(0, 0, 0));
+                canvas.clear();
+                canvas.present();
+            }
+        } else {
+            // 没有 screen_image 或 canvas，直接清屏
+            if let Some(ref mut canvas) = self.canvas {
+                canvas.set_draw_color(sdl2::pixels::Color::RGB(0, 0, 0));
+                canvas.clear();
+                canvas.present();
             }
         }
 
@@ -547,13 +465,6 @@ impl SexyAppBase {
                         WindowEvent::Resized(w, h) | WindowEvent::SizeChanged(w, h) => {
                             self.width = w;
                             self.height = h;
-                            if let Some(gl) = self.gl_interface.as_mut() {
-                                unsafe {
-                                    (**gl).width = self.width;
-                                    (**gl).height = self.height;
-                                    (**gl).update_viewport();
-                                }
-                            }
                             if let Some(wm) = self.widget_manager {
                                 unsafe {
                                     (*wm).resize(
@@ -634,11 +545,9 @@ impl SexyAppBase {
 
     // ==================== 绘制 ====================
 
-    /// 交换缓冲区（对应 C++ SDL_GL_SwapWindow）
+    /// 交换缓冲区 — 已在 draw_dirty_stuff 中通过 canvas.present() 完成
     fn swap_buffers(&self) {
-        if let Some(ref win) = self.window {
-            win.gl_swap_window();
-        }
+        // no-op: 缓冲区交换已在 draw_dirty_stuff() 中完成
     }
 
     // ==================== 关闭清理 ====================
@@ -666,11 +575,11 @@ impl SexyAppBase {
             }
         }
 
-        // 释放 SDL2 资源（Drop 处理 window/context/sdl）
-        self.gl_context = None;
+        // 清理 Canvas 和窗口
+        self.canvas = None;
         self.window = None;
         self.event_pump = None;
-        self.sdl_context = None; // SDL_Quit 自动调用
+        self.sdl_context = None;
     }
 
     /// 初始化 GL 接口
