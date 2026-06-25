@@ -2121,20 +2121,27 @@ class Plant : public GameObject)`
 
 **类/结构体:**
 
-- `[ ]` `class MusicFileData` (L62, 0 个方法, 1 个成员)
-- `[ ]` `class Music` (L69, 0 个方法, 10 个成员)
+- `[x]` `class MusicFileData` (L62, 0 个方法, 1 个成员)
+- `[x]` `class Music` (L69, 0 个方法, 10 个成员) — 类型定义完成，方法存根
 
 **枚举:**
 
-- `[ ]` `enum MusicTune` → { MUSIC_TUNE_NONE, MUSIC_TUNE_DAY_GRASSWALK, MUSIC_TUNE_NIGHT_MOONGRAINS, MUSIC_TUNE_POOL_WATERYGRAVES, MUSIC_TUNE_FOG_RIGORMORMIST, ... (15 个值) }
-- `[ ]` `enum MusicFile` → { MUSIC_FILE_NONE, MUSIC_FILE_MAIN_MUSIC, MUSIC_FILE_DRUMS, MUSIC_FILE_HIHATS, MUSIC_FILE_CREDITS_ZOMBIES_ON_YOUR_LAWN, ... (6 个值) }
-- `[ ]` `enum MusicBurstState` → { MUSIC_BURST_OFF, MUSIC_BURST_STARTING, MUSIC_BURST_ON, MUSIC_BURST_FINISHING }
-- `[ ]` `enum MusicDrumsState` → { MUSIC_DRUMS_OFF, MUSIC_DRUMS_ON_QUEUED, MUSIC_DRUMS_ON, MUSIC_DRUMS_OFF_QUEUED, MUSIC_DRUMS_FADING }
+- `[x]` `enum MusicTune` → { MUSIC_TUNE_NONE, MUSIC_TUNE_DAY_GRASSWALK, MUSIC_TUNE_NIGHT_MOONGRAINS, MUSIC_TUNE_POOL_WATERYGRAVES, MUSIC_TUNE_FOG_RIGORMORMIST, ... (15 个值) }
+- `[x]` `enum MusicFile` → { MUSIC_FILE_NONE, MUSIC_FILE_MAIN_MUSIC, MUSIC_FILE_DRUMS, MUSIC_FILE_HIHATS, MUSIC_FILE_CREDITS_ZOMBIES_ON_YOUR_LAWN, ... (6 个值) }
+- `[x]` `enum MusicBurstState` → { MUSIC_BURST_OFF, MUSIC_BURST_STARTING, MUSIC_BURST_ON, MUSIC_BURST_FINISHING }
+- `[x]` `enum MusicDrumsState` → { MUSIC_DRUMS_OFF, MUSIC_DRUMS_ON_QUEUED, MUSIC_DRUMS_ON, MUSIC_DRUMS_OFF_QUEUED, MUSIC_DRUMS_FADING }
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/system/music.rs
+设计决策:
+- MusicTune/MusicFile/MusicBurstState/MusicDrumsState 枚举 → Rust #[repr(i32)] 枚举
+- MusicFileData → Option<*mut u32> 包装
+- Music 类 → Rust struct（20个字段完整映射）
+- 所有方法签名存根已创建（待从 Music.cpp 翻译）
+- music_interface 字段使用 *mut dyn MusicInterface trait 对象
+- 保留了 new() 无参构造和 new_with_app(app_ptr) 两种方式
 ```
 
 ### `[x]` `src\Lawn\System\PlayerInfo.cpp`

@@ -215,7 +215,7 @@ impl LawnApp {
         // 创建子系统（对应 C++ LawnApp::Init 中的 new Music / new TodFoley / new EffectSystem）
         let app_ptr = self as *mut LawnApp;
         if self.music.is_none() {
-            self.music = Some(Box::new(crate::lawn::system::music::Music::new(app_ptr)));
+            self.music = Some(Box::new(crate::lawn::system::music::Music::new_with_app(app_ptr)));
             eprintln!("[LawnApp] Music 创建完成");
         }
         if self.sound_system.is_none() {
