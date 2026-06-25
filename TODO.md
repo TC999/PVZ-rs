@@ -1396,9 +1396,9 @@ enum ZombieType : int32_t)`
 ```
 翻译至 rust/src/lawn/board.rs
 
-当前进度：约 66% 完成（~1980 行 Rust / 9857 行 C++）
+当前进度：约 67% 完成（~2249 行 Rust / 9857 行 C++）
 
-已翻译的方法（约 170 个）：
+已翻译的方法（约 176 个）：
 - 结构体字段：基本完整（新增 m_mustache_mode, m_future_mode, m_pinata_mode, m_dance_mode, m_daisy_mode, m_sukhbir_mode, m_super_mower_mode, m_row_picking_array 等字段）
 - 初始化：new(), board_init(), init_level() — 覆盖 C++ 构造函数和 InitLevel
 - 更新循环：update(), update_sun_spawning() [完整版], update_waves(), spawn_zombie_wave(), check_collisions()
@@ -1444,12 +1444,21 @@ enum ZombieType : int32_t)`
 - LawnApp 新增 is_survival_normal/is_survival_hard/is_survival_endless/is_continuous_challenge 辅助方法
 - 新增 LAST_STAND_FLAGS = 5 常量
 
+本轮新增翻译（2025-07-15）：
+- pick_special_grave_stone()：完整实现，遍历 grid_items 收集墓碑并随机选一个标记为特殊
+- total_zombies_health_in_wave()：完整实现，累加指定波次中符合条件的僵尸体力值
+- count_empty_pots_or_lilies()：完整实现，遍历 plants 统计空底层植物
+- is_valid_cob_cannon_spot() / has_valid_cob_cannon_spot()：完整实现，含玉米加农炮位置检查
+- has_pumpkin_at()：新增辅助方法，检查某格是否有南瓜
+- can_zombie_spawn_on_level()：改为 &self 实例方法，实现 Yeti 特殊逻辑 + 起始关卡/权重检查
+- 注意：gZombieAllowedLevels 关卡允许表暂未翻译，can_zombie_spawn_on_level 对非 Yeti 僵尸暂缺该检查
+
 待翻译的主要模块（按优先级排序）：
 1. PickZombieWaves / InitZombieWaves（僵尸波次生成逻辑）
 2. DrawBackdrop / DrawLevel（完整绘制逻辑）
 3. MouseDown / MouseUp（完整版交互逻辑）
 4. Update 完整版（CutScene、Fwoosh、Tutorial 等）
-5. CanZombieSpawnOnLevel / PickZombieType（僵尸类型选择策略）
+5. SpawnZombieWave / SpawnZombiesFromPool / SpawnZombiesFromGraves（僵尸生成）
 ```
 
 ### `[x]` `src\Lawn\Board.h`
@@ -2825,9 +2834,9 @@ public:
 
 **类/结构体:**
 
-- `[ ]` `class ReanimationWidget : Widget` (L26, 0 个方法, 5 个成员)
-- `[ ]` `class LawnDialog : Dialog` (L45, 0 个方法, 8 个成员)
-- `[ ]` `class GameOverDialog : LawnDialog` (L77, 0 个方法, 1 个成员)
+- `[x]` `class ReanimationWidget : Widget` (L26, 0 个方法, 5 个成员)
+- `[x]` `class LawnDialog : Dialog` (L45, 0 个方法, 8 个成员) — 类型定义完成，方法存根
+- `[x]` `class GameOverDialog : LawnDialog` (L77, 0 个方法, 1 个成员) — 类型定义完成，方法存根
 
 **自由函数:**
 
@@ -2836,7 +2845,14 @@ public:
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/widget/lawn_dialog.rs
+设计决策:
+- ReanimationWidget 类 → Rust struct（app/reanim/lawn_dialog 使用 Option<*mut> 裸指针模式）
+- LawnDialog 类 → Rust struct（8 个字段映射，LawnStoneButton* → DialogButton* 替代）
+- GameOverDialog 类 → Rust struct（menu_button: Option<*mut DialogButton>）
+- 常量 DIALOG_HEADER_OFFSET → pub const i32
+- 所有方法签名存根已创建（待从 LawnDialog.cpp 翻译）
+- 继承关系 Dialog/Widget 在 Rust 中未用继承模拟，改用组合
 ```
 
 ### `[x]` `src\Lawn\Widget\NewOptionsDialog.cpp`

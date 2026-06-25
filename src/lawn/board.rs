@@ -1428,7 +1428,19 @@ impl Board {
     }
 
     /// 检查僵尸类型能否在某一关卡生成（对应 C++ CanZombieSpawnOnLevel）
-    pub fn can_zombie_spawn_on_level(_zombie_type: ZombieType, _level: i32) -> bool {
+    /// 检查僵尸的起始关卡和选择权重，以及 Yeti 的特殊生成条件
+    pub fn can_zombie_spawn_on_level(&self, zombie_type: ZombieType, level: i32) -> bool {
+        if zombie_type == ZombieType::Yeti {
+            return self.app.map_or(false, |app| unsafe { (*app).can_spawn_yetis() });
+        }
+
+        let zombie_def = crate::lawn::zombie::get_zombie_definition(zombie_type);
+        if level < zombie_def.starting_level || zombie_def.pick_weight == 0 {
+            return false;
+        }
+
+        // 注意：C++ 中还有 gZombieAllowedLevels 关卡允许表检查
+        // Rust 端暂未翻译该表，此处默认返回 true（不影响主要功能）
         true
     }
 
@@ -1523,15 +1535,30 @@ impl Board {
     }
 
     /// 移除开场动画僵尸（对应 C++ RemoveCutsceneZombies）
+    /// 遍历所有僵尸，从过场动画波次生成的僵尸调用 DieNoLoot
     pub fn remove_cutscene_zombies(&mut self) {
-        // 简化版：移除所有僵尸
-        self.remove_all_zombies();
+        let mut i = 0;
+        while i < self.zombies.len() {
+            if self.zombies[i].from_wave == crate::lawn::zombie::Zombie::ZOMBIE_WAVE_CUTSCENE {
+                self.zombies[i].die_no_loot();
+            }
+            i += 1;
+        }
     }
 
     /// 重选种子时移除僵尸（对应 C++ RemoveZombiesForRepick）
+    /// 遍历所有僵尸，移除被精神控制且位置靠右的僵尸
     pub fn remove_zombies_for_repick(&mut self) {
-        // 简化版
-        self.remove_all_zombies();
+        let mut i = 0;
+        while i < self.zombies.len() {
+            if !self.zombies[i].dead && self.zombies[i].zombie_phase != ZombiePhase::Dying
+                && self.zombies[i].mind_controlled
+                && self.zombies[i].pos_x > 720.0
+            {
+                self.zombies[i].die_no_loot();
+            }
+            i += 1;
+        }
     }
 
     /// 检查是否可以种植（对应 C++ CanPlantAt 简化版）
@@ -2075,9 +2102,26 @@ impl Board {
         crate::todlib::tod_common::tod_pick_from_smooth_array(&mut self.m_row_picking_array)
     }
 
-    /// 统计波中僵尸总血量（对应 C++ TotalZombiesHealthInWave 简化版）
-    pub fn total_zombies_health_in_wave(&self, _wave_index: i32) -> i32 {
-        0
+    /// 统计波中僵尸总血量（对应 C++ TotalZombiesHealthInWave）
+    /// 累加指定波次中所有符合条件的僵尸的体力值
+    pub fn total_zombies_health_in_wave(&self, wave_index: i32) -> i32 {
+        let mut total_health = 0i32;
+        for zombie in &self.zombies {
+            if zombie.dead { continue; }
+            if zombie.from_wave == wave_index
+                && !zombie.mind_controlled
+                && !zombie.dead
+                && (zombie.zombie_phase == ZombiePhase::Normal || zombie.zombie_phase == ZombiePhase::BungeeDiving)
+                && zombie.zombie_type != ZombieType::Bungee
+                && zombie.related_zombie_id == crate::lawn::game_enums::ZOMBIEID_NULL
+            {
+                total_health += zombie.body_health
+                    + zombie.helm_health
+                    + (zombie.shield_health as f32 * 0.2) as i32
+                    + zombie.flying_health;
+            }
+        }
+        total_health
     }
 
     // ========== 实体更新 ==========
@@ -2094,9 +2138,21 @@ impl Board {
 
     // ========== 特殊格子操作 ==========
 
-    /// 选择特殊墓碑（对应 C++ PickSpecialGraveStone 简化版）
+    /// 选择特殊墓碑（对应 C++ PickSpecialGraveStone）
+    /// 在所有墓碑中随机选择一个，将其状态设为 GRIDITEM_STATE_GRAVESTONE_SPECIAL
     pub fn pick_special_grave_stone(&mut self) {
-        // 简化版
+        // 收集所有墓碑的索引
+        let picks: Vec<usize> = self.grid_items.iter().enumerate()
+            .filter(|(_, item)| item.grid_item_type == GridItemType::Grave)
+            .map(|(i, _)| i)
+            .collect();
+
+        let pick_count = picks.len();
+        if pick_count > 0 {
+            // 从有效范围随机选一个
+            let idx = crate::todlib::tod_common::rand_range_int(0, pick_count as i32 - 1) as usize;
+            self.grid_items[picks[idx]].grid_item_state = GridItemState::GravestoneSpecial;
+        }
     }
 
     /// 获取铁锹按钮矩形（对应 C++ GetShovelButtonRect 简化版）
@@ -2106,18 +2162,96 @@ impl Board {
 
     // ========== 计数 ==========
 
-    /// 统计空花盆或睡莲数量（对应 C++ CountEmptyPotsOrLilies 简化版）
-    pub fn count_empty_pots_or_lilies(&self, _seed_type: SeedType) -> i32 {
-        0
+    /// 统计空花盆或睡莲数量（对应 C++ CountEmptyPotsOrLilies）
+    /// 统计某类型且没有被其他植物占据的底层植物数量
+    pub fn count_empty_pots_or_lilies(&self, seed_type: SeedType) -> i32 {
+        let mut count = 0;
+        for plant in &self.plants {
+            if plant.dead { continue; }
+            if plant.seed_type != seed_type { continue; }
+
+            // 检查同一格子上是否有其他普通位置的植物
+            let has_normal_plant_above = self.plants.iter().any(|other| {
+                if other.dead { return false; }
+                if other.plant_col != plant.plant_col { return false; }
+                if other.base.row != plant.base.row { return false; }
+                if other.squished { return false; }
+                if !other.is_on_board { return false; }
+                // 跳过底层植物（花盆/睡莲/飞行）本身
+                if other.seed_type == SeedType::Flowerpot || other.seed_type == SeedType::Lilypad {
+                    return false;
+                }
+                if Plant::is_flying(other.seed_type) {
+                    return false;
+                }
+                true
+            });
+
+            if !has_normal_plant_above {
+                count += 1;
+            }
+        }
+        count
     }
 
-    /// 检查是否有效玉米加农炮位置（对应 C++ IsValidCobCannonSpot 简化版）
-    pub fn is_valid_cob_cannon_spot(&self, _grid_x: i32, _grid_y: i32) -> bool {
-        false
+    /// 检查某格是否有南瓜（对应 C++ GetPlantsOnLawn 简化版—南瓜检查）
+    fn has_pumpkin_at(&self, grid_x: i32, grid_y: i32) -> bool {
+        self.plants.iter().any(|p| {
+            !p.dead && p.plant_col == grid_x && p.base.row == grid_y && p.seed_type == SeedType::Pumpkinshell
+        })
+    }
+
+    /// 玉米加农炮位置辅助检查（对应 C++ IsValidCobCannonSpotHelper）
+    /// 检查单个格子是否可以作为玉米加农炮的一部分
+    fn is_valid_cob_cannon_spot_helper(&self, grid_x: i32, grid_y: i32) -> bool {
+        if grid_x < 0 || grid_x >= MAX_GRID_SIZE_X as i32 || grid_y < 0 || grid_y >= MAX_GRID_SIZE_Y as i32 {
+            return false;
+        }
+
+        if self.has_pumpkin_at(grid_x, grid_y) {
+            return false;
+        }
+
+        // 检查该格是否有玉米投手（CobCannon 的前置植物）
+        let has_kernelpult = self.plants.iter().any(|p| {
+            !p.dead && p.plant_col == grid_x && p.base.row == grid_y && p.seed_type == SeedType::Kernelpult
+        });
+
+        if has_kernelpult {
+            return true;
+        }
+
+        // 简易种植外挂检查
+        self.app.map_or(false, |app| unsafe {
+            (*app).m_easy_planting_cheat
+        }) && self.can_plant_at(grid_x, grid_y, SeedType::Kernelpult) == PlantingReason::Ok
+    }
+
+    /// 检查是否有效玉米加农炮位置（对应 C++ IsValidCobCannonSpot）
+    /// 检查 (grid_x, grid_y) 和 (grid_x+1, grid_y) 两个格子是否构成有效位置
+    pub fn is_valid_cob_cannon_spot(&self, grid_x: i32, grid_y: i32) -> bool {
+        if !self.is_valid_cob_cannon_spot_helper(grid_x, grid_y)
+            || !self.is_valid_cob_cannon_spot_helper(grid_x + 1, grid_y)
+        {
+            return false;
+        }
+
+        // 两个格子的花盆状态必须一致
+        let has_pot_left = self.get_flower_pot_at(grid_x, grid_y).is_some();
+        let has_pot_right = self.get_flower_pot_at(grid_x + 1, grid_y).is_some();
+        has_pot_left == has_pot_right
     }
 
     /// 是否有有效的玉米加农炮位置（对应 C++ HasValidCobCannonSpot）
     pub fn has_valid_cob_cannon_spot(&self) -> bool {
+        for plant in &self.plants {
+            if plant.dead { continue; }
+            if plant.seed_type == SeedType::Kernelpult
+                && self.is_valid_cob_cannon_spot(plant.plant_col, plant.base.row)
+            {
+                return true;
+            }
+        }
         false
     }
 }

@@ -523,3 +523,11 @@ impl Default for Zombie {
         Zombie::new()
     }
 }
+
+// --- Zombie 类常量（对应 C++ Zombie 内部枚举） ---
+impl Zombie {
+    pub const ZOMBIE_WAVE_DEBUG: i32 = -1;
+    pub const ZOMBIE_WAVE_CUTSCENE: i32 = -2;
+    pub const ZOMBIE_WAVE_UI: i32 = -3;
+    pub const ZOMBIE_WAVE_WINNER: i32 = -4;
+}
