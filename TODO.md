@@ -1,1025 +1,9806 @@
-# 🌱 PvZ Portable C++ → Rust 翻译 — 详尽任务清单
+# C++ → Rust 翻译清单
 
-> 生成日期：2026-06-18
-> 范围：`src/Lawn/` + `src/Sexy.TodLib/` + `src/SexyAppFramework/`
-> 进度表示：`[ ]` = 未开始，`[~]` = 部分完成，`[✓]` = 已翻译（结构体骨架），`[✗]` = 需重写
+> 自动生成 — 使用时将 `[ ]` 改为对应状态：
+> `[ ]` 未开始 · `[~]` 进行中 · `[x]` 已完成 · `[R]` 需要重写
 
 ---
 
-## 一、SexyAppFramework（框架层）
+## 总览
 
-### 1.1 图形系统
+| 指标 | 数值 |
+|---|---|
+| 源文件总数 | 495 |
+| 代码总行数 | 238188 |
+| 类/结构体 | 372 |
+| 函数/方法总计 | 92 |
+| 模块数 | 5 |
 
-<!-- ==================================================== -->
-<!-- 1.1.1 Graphics                                               -->
-<!-- ==================================================== -->
-- [✓] **1.1.1 Graphics 图形绘制上下文**
-  - **C++ 源文件：** `src/SexyAppFramework/graphics/Graphics.{h,cpp}`（43KB）
-  - **核心依赖项：** `Color`, `Rect`, `Image`, `Font`, `SexyMatrix3`
-  - **Rust 实现要点：**
-    - 翻译所有绘制方法：`DrawImage`, `DrawString`, `FillRect`, `DrawRect`, `DrawLine`, `SetClipRect`, `PushState`/`PopState`
-    - 颜色混合模式（`DrawMode` 枚举）
-    - 已有 `graphics.rs`（130 行骨架），需填充全部方法体
-    - 注意 `Graphics` 持有对 `Image` 内部缓冲区的引用——用借用检查器确保生命周期安全
+## 建议翻译顺序
 
-<!-- ==================================================== -->
-<!-- 1.1.2 Image / MemoryImage / GLImage                      -->
-<!-- ==================================================== -->
-- [✓] **1.1.2 Image（图像基类）**
-  - **C++ 源文件：** `src/SexyAppFramework/graphics/Image.{h,cpp}`（5KB + 6KB）
-  - **核心依赖项：** `MemoryImage`, `Color`
-  - **Rust 实现要点：**
-    - 已有 `image.rs`（61 行骨架），需实现像素数据管理
-    - 用 `Vec<u8>` 存储像素缓冲，暴露 `width`/`height`/`GetPixel`/`SetPixel`
-
-- [✓] **1.1.3 MemoryImage（内存图像）**
-  - **C++ 源文件：** `src/SexyAppFramework/graphics/MemoryImage.{h,cpp}`（6KB + 45KB）
-  - **核心依赖项：** `Image`, `Graphics`, `DDImage`
-  - **Rust 实现要点：**
-    - 已有 `memory_image.rs`（111 行骨架）
-    - 实现 `SetImageData`, `Blt`, `StretchBlt` 等方法
-    - 像素格式支持：RGBA8888, RGB565, RGB555
-    - 需要 `unsafe` 操作像素内存，封装为 safe Rust 方法
-
-- [✓] **1.1.4 GLImage（OpenGL 纹理图像）**
-  - **C++ 源文件：** `src/SexyAppFramework/graphics/GLImage.{h,cpp}`（3KB + 7KB）
-  - **核心依赖项：** `Image`, `MemoryImage`, OpenGL
-  - **Rust 实现要点：**
-    - 已有 `gl_image.rs`（73 行骨架）
-    - 管理 OpenGL 纹理 ID 的生命周期（`Drop` trait 释放纹理）
-    - 实现 `UploadToGPU`, `Bind` 等方法
-
-- [✓] **1.1.5 Font（字体基类）**
-  - **C++ 源文件：** `src/SexyAppFramework/graphics/Font.{h,cpp}`（2KB + 1KB）
-  - **核心依赖项：** `Image`, `Graphics`
-  - **Rust 实现要点：**
-    - 已有 `font.rs`（51 行骨架）
-    - 实现字符尺寸度量、字符串宽度计算
-
-- [✓] **1.1.6 ImageFont（图像字体）**
-  - **C++ 源文件：** `src/SexyAppFramework/graphics/ImageFont.{h,cpp}`（5KB + 46KB）
-  - **核心依赖项：** `Font`, `Image`, `XMLParser`, `Color`
-  - **Rust 实现要点：**
-    - 从 XML 解析字体定义（字符映射、字间距）
-    - 实现 `DrawString`——从图集中切割字符子图并渲染
-    - 大量字符布局逻辑
-
-- [✓] **1.1.7 NativeDisplay（原生显示）**
-  - **C++ 源文件：** `src/SexyAppFramework/graphics/NativeDisplay.{h,cpp}`（1.5KB + 1.6KB）
-  - **核心依赖项：** `Graphics`
-  - **Rust 实现要点：**
-    - 已有 `native_display.rs`（30 行骨架）
-    - 简单的屏幕清空和交换链管理包装
-
-- [✓] **1.1.8 GLInterface（OpenGL 接口层）**
-  - **C++ 源文件：** `src/SexyAppFramework/graphics/GLInterface.{h,cpp}`（8KB + 45KB）
-  - **核心依赖项：** `SDL2`, `OpenGL`, `MemoryImage`, `Graphics`
-  - **Rust 实现要点：**
-    - 已有 `gl_interface.rs`（2238 行，已大量翻译）
-    - 检查翻译完整性：`Set3D`, `DrawTriangle`, `PresentFrame` 等方法体
-    - 包装 OpenGL 状态机调用
-
-- [✓] **1.1.9 SWTri（软件三角形渲染器）**
-  - **C++ 源文件：** `src/SexyAppFramework/graphics/SWTri.{h,cpp}`（31KB + 31KB）
-  - **核心依赖项：** `Image`, `Graphics`, `SexyMatrix3`
-  - **Rust 实现要点：**
-    - 软件纹理三角形渲染管线
-    - 大量像素格式变体函数（~40 个 `TodDrawTriangle_*` 函数）
-    - 需要 `unsafe` 操作像素缓冲区，性能敏感
-    - 建议用泛型 + trait 消除大量重复，或用宏生成
-
-- [✓] **1.1.10 Color（颜色）**
-  - **C++ 源文件：** `src/SexyAppFramework/graphics/Color.{h,cpp}`（1.8KB + 3KB）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：**
-    - 已有 `color.rs`（81 行），基本完成
-    - 注意 RGBA 顺序和 `u32` 打包/解包
-
-- [✓] **1.1.11 SharedImage（共享图像）**
-  - **C++ 源文件：** `src/SexyAppFramework/graphics/SharedImage.{h,cpp}`（2KB + 3KB）
-  - **核心依赖项：** `Image`, `ResourceManager`
-  - **Rust 实现要点：**
-    - 引用计数图像管理，可用 `Rc<RefCell<Image>>` 或 `Arc<Mutex<Image>>` 替代
-
-- [✓] **1.1.12 Quantize（颜色量化）**
-  - **C++ 源文件：** `src/SexyAppFramework/graphics/Quantize.{h,cpp}`（1KB + 2KB）
-  - **核心依赖项：** `Image`
-  - **Rust 实现要点：**
-    - 颜色量化算法（中值切割），用于将图像转为 256 色
-
-- [✓] **1.1.13 TriVertex（三角形顶点结构）**
-  - **C++ 源文件：** `src/SexyAppFramework/graphics/TriVertex.h`（1.7KB）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：**
-    - 简单的顶点结构体定义，已在 `gl_interface.rs` 中部分实现
-
-### 1.2 Widget 控件系统
-
-- [✓] **1.2.1 Widget（控件基类）**
-  - **C++ 源文件：** `src/SexyAppFramework/widget/Widget.{h,cpp}`（5KB + 12KB）
-  - **核心依赖项：** `Graphics`, `WidgetManager`, `Rect`
-  - **Rust 实现要点：**
-    - 已完整翻译 `widget.rs`（~400 行）
-    - 实现事件方法：`Update`, `Draw`, `MouseDown`, `MouseUp`, `KeyDown`, `KeyChar`
-    - 控件树管理：`AddWidget`, `RemoveWidget`, 父子关系
-    - 焦点管理、可见性、可用性
-
-- [✓] **1.2.2 WidgetContainer（控件容器）**
-  - **C++ 源文件：** `src/SexyAppFramework/widget/WidgetContainer.{h,cpp}`（3KB + 15KB）
-  - **核心依赖项：** `Widget`, `Graphics`, `WidgetManager`
-  - **Rust 实现要点：**
-    - 已完整翻译 `widget_container.rs`（~180 行）
-    - 实现子控件的更新/绘制分发、事件传递
-    - Z 顺序排序渲染
-
-- [✓] **1.2.3 WidgetManager（控件管理器）**
-  - **C++ 源文件：** `src/SexyAppFramework/widget/WidgetManager.{h,cpp}`（4KB + 18KB）
-  - **核心依赖项：** `Widget`, `WidgetContainer`, `Graphics`, `Image`
-  - **Rust 实现要点：**
-    - 已完整翻译 `widget_manager.rs`（~240 行）
-    - 全局事件循环调度：鼠标、键盘、定时器
-    - 控件叠加层管理、拖拽处理、弹出菜单
-    - 每个 `WidgetManager` 持有 `Graphics` 引用
-
-- [✓] **1.2.4 ButtonWidget（按钮控件）**
-  - **C++ 源文件：** `src/SexyAppFramework/widget/ButtonWidget.{h,cpp}`（2KB + 8KB）
-  - **核心依赖项：** `Widget`, `ButtonListener`, `Image`
-  - **Rust 实现要点：**
-    - 已完整翻译 `button_widget.rs`（~400 行）和 `button_listener.rs`
-    - 实现按钮状态（Normal/Hover/Pressed/Disabled），事件回调
-    - 按钮图片可能为 3~4 帧动画
-
-- [✓] **1.2.5 Dialog（对话框）**
-  - **C++ 源文件：** `src/SexyAppFramework/widget/Dialog.{h,cpp}`（4KB + 12KB）
-  - **核心依赖项：** `Widget`, `DialogListener`, `ButtonWidget`, `Image`
-  - **Rust 实现要点：**
-    - 已完整翻译 `dialog.rs`（~230 行）
-    - 对话框布局、按钮添加、模态行为
-
-- [✓] **1.2.6 DialogButton（对话框按钮）**
-  - **C++ 源文件：** `src/SexyAppFramework/widget/DialogButton.{h,cpp}`（1KB + 3KB）
-  - **核心依赖项：** `ButtonWidget`
-  - **Rust 实现要点：**
-    - 已完整翻译 `dialog_button.rs`（~200 行）
-    - 带组件图片的对话框按钮，支持按下平移和悬停高亮
-
-- [✓] **1.2.7 EditWidget（文本输入框）**
-  - **C++ 源文件：** `src/SexyAppFramework/widget/EditWidget.{h,cpp}`（3KB + 17KB）
-  - **核心依赖项：** `Widget`, `EditListener`, `Font`
-  - **Rust 实现要点：**
-    - 已完整翻译 `edit_widget.rs`（~500 行）
-    - 文本光标、选择、IME 输入支持
-    - 键盘事件处理、剪贴板
-
-- [✓] **1.2.8 ListWidget（列表控件）**
-  - **C++ 源文件：** `src/SexyAppFramework/widget/ListWidget.{h,cpp}`（3KB + 12KB）
-  - **核心依赖项：** `Widget`, `ListListener`, `ScrollbarWidget`, `Font`
-  - **Rust 实现要点：**
-    - 以 `list_widget.rs` 骨架为基础（17 行），待填充完整列表逻辑
-
-- [✓] **1.2.9 ScrollbarWidget（滚动条）**
-  - **C++ 源文件：** `src/SexyAppFramework/widget/ScrollbarWidget.{h,cpp}`（3KB + 9KB）
-  - **核心依赖项：** `Widget`, `ScrollListener`, `ScrollbuttonWidget`
-  - **Rust 实现要点：**
-    - 已完整翻译 `scrollbar_widget.rs`（~270 行）
-    - 滑块拖拽、滚动位置计算
-
-- [✓] **1.2.10 ScrollbuttonWidget（滚动按钮）**
-  - **C++ 源文件：** `src/SexyAppFramework/widget/ScrollbuttonWidget.{h,cpp}`（1KB + 2KB）
-  - **核心依赖项：** `ButtonWidget`
-  - **Rust 实现要点：** 简单按钮子类
-
-- [✓] **1.2.11 Checkbox（复选框）**
-  - **C++ 源文件：** `src/SexyAppFramework/widget/Checkbox.{h,cpp}`（1KB + 2KB）
-  - **核心依赖项：** `Widget`, `CheckboxListener`, `Image`
-  - **Rust 实现要点：**
-    - 已有 `checkbox.rs`（17 行骨架）
-    - 选中/未选中状态
-
-- [✓] **1.2.12 Slider（滑动条）**
-  - **C++ 源文件：** `src/SexyAppFramework/widget/Slider.{h,cpp}`（1KB + 5KB）
-  - **核心依赖项：** `Widget`, `SliderListener`, `Image`
-  - **Rust 实现要点：**
-    - 已有 `slider.rs`（17 行骨架）
-    - 拖拽值计算（0.0 ~ 1.0）
-
-- [✓] **1.2.13 TextWidget（文本控件）**
-  - **C++ 源文件：** `src/SexyAppFramework/widget/TextWidget.{h,cpp}`（2KB + 10KB）
-  - **核心依赖项：** `Widget`, `Font`, `Color`
-  - **Rust 实现要点：**
-    - 已完整翻译 `text_widget.rs`（~250 行）
-    - 文本自动换行、对齐、滚动
-
-- [✓] **1.2.14 HyperlinkWidget（超链接）**
-  - **C++ 源文件：** `src/SexyAppFramework/widget/HyperlinkWidget.{h,cpp}`（1KB + 2KB）
-  - **核心依赖项：** `Widget`
-  - **Rust 实现要点：** 已有骨架，点击打开 URL
-
-- [✓] **1.2.15 Insets（边距）**
-  - **C++ 源文件：** `src/SexyAppFramework/widget/Insets.{h,cpp}`（1KB + 1KB）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：** 已有 `insets.rs`（28 行），基本完成
-
-- [✓] **1.2.16 ButtonListener / CheckboxListener / DialogListener / EditListener / ListListener / ScrollListener / SliderListener（监听器接口）**
-  - **C++ 源文件：** 各自的 `.h` 文件（~1.2KB 每个）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：**
-    - 用 trait 替代 C++ 虚接口
-    - ButtonListener、DialogListener、CheckboxListener、SliderListener 已翻译完成
-
-### 1.3 杂项（Misc）
-
-- [✓] **1.3.1 SexyAppBase（应用基类）**
-  - **C++ 源文件：** `src/SexyAppFramework/SexyAppBase.{h,cpp}`（19KB + 99KB）
-  - **核心依赖项：** `WidgetManager`, `Graphics`, `Image`, `SoundManager`, `ResourceManager`, `PakInterface`
-  - **Rust 实现要点：**
-    - 已有 `sexy_app_base.rs`（~650 行）
-    - 主循环（`UpdateMain`, `DrawMain`, `DoMainLoop`）
-    - 窗口创建、初始化、事件处理
-    - 资源管理器、声音管理器、存档路径管理
-
-- [✓] **1.3.2 ResourceManager（资源管理器）**
-  - **C++ 源文件：** `src/SexyAppFramework/misc/ResourceManager.{h,cpp}`（6KB + 31KB）
-  - **核心依赖项：** `Image`, `Font`, `SoundManager`, `PakInterface`, `XMLParser`
-  - **Rust 实现要点：**
-    - 已有 `resource_manager.rs`（26 行骨架）
-    - 从 `resources.xml`/`pak` 加载图像、字体、声音等资源
-    - 资源缓存与引用管理
-
-- [✓] **1.3.3 SexyMatrix（矩阵运算）**
-  - **C++ 源文件：** `src/SexyAppFramework/misc/SexyMatrix.{h,cpp}`（3KB + 9KB）
-  - **核心依赖项：** `Point`, `Rect`
-  - **Rust 实现要点：**
-    - 已有 `sexy_matrix.rs`（163 行），基本完成
-    - 2D 变换矩阵（平移、旋转、缩放）
-
-- [✓] **1.3.4 Buffer（缓冲）**
-  - **C++ 源文件：** `src/SexyAppFramework/misc/Buffer.{h,cpp}`（2KB + 12KB）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：**
-    - 已有 `buffer.rs`（198 行）
-    - 字节缓冲读写，大/小端序支持
-
-- [✓] **1.3.5 Point / Rect（几何结构）**
-  - **C++ 源文件：** `src/SexyAppFramework/misc/Point.h`（2KB）, `misc/Rect.h`（3KB）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：**
-    - 已有 `point.rs`（89 行）, `rect.rs`（155 行），基本完成
-    - 矩形碰撞检测、包含关系等
-
-- [✓] **1.3.6 KeyCodes（键码）**
-  - **C++ 源文件：** `src/SexyAppFramework/misc/KeyCodes.{h,cpp}`（4KB + 7KB）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：**
-    - 已有 `key_codes.rs`（105 行），基本完成
-    - 键码枚举映射
-
-- [✓] **1.3.7 Common（通用工具函数）**
-  - **C++ 源文件：** `src/SexyAppFramework/Common.{h,cpp}`（13KB + 14KB）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：**
-    - 已有 `common.rs`（221 行骨架）
-    - 包含三角函数查找表、字符串工具、随机数、文件 I/O 等杂项
-    - `MTRand`（梅森旋转随机数生成器）需要单独翻译
-
-- [✓] **1.3.8 MTRand（随机数）**
-  - **C++ 源文件：** `src/SexyAppFramework/misc/MTRand.{h,cpp}`（0.8KB + 5KB）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：**
-    - 移植梅森旋转算法，确保种子序列与 C++ 一致（游戏需要确定性的关卡生成）
-
-- [✓] **1.3.9 PerfTimer（性能计时器）**
-  - **C++ 源文件：** `src/SexyAppFramework/misc/PerfTimer.{h,cpp}`（4KB + 10KB）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：**
-    - 已有 `perf_timer.rs`（51 行骨架）
-    - 高精度计时器包装
-
-- [✓] **1.3.10 Debug / TodDebug（调试工具）**
-  - **C++ 源文件：** `src/SexyAppFramework/misc/Debug.{h,cpp}`（1KB + 6KB）, `src/Sexy.TodLib/TodDebug.{h,cpp}`（2KB + 5KB）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：**
-    - 断言宏、日志输出
-    - 已有 `tod_debug.rs`（17 行骨架）
-
-- [✓] **1.3.11 XMLParser（XML 解析器）**
-  - **C++ 源文件：** `src/SexyAppFramework/misc/XMLParser.{h,cpp}`（3KB + 18KB）
-  - **核心依赖项：** `Buffer`
-  - **Rust 实现要点：**
-    - 解析 Ressources.xml、Reanim XML 定义文件等
-    - 考虑用 Rust 的 `quick-xml` 或 `roxmltree` 替代手写解析器
-
-- [✓] **1.3.12 PropertiesParser（键值属性解析器）**
-  - **C++ 源文件：** `src/SexyAppFramework/misc/PropertiesParser.{h,cpp}`（1KB + 6KB）
-  - **核心依赖项：** `Buffer`
-  - **Rust 实现要点：**
-    - 解析 `key=value` 格式的属性文件
-
-- [✓] **1.3.13 DescParser（描述解析器）**
-  - **C++ 源文件：** `src/SexyAppFramework/misc/DescParser.{h,cpp}`（3KB + 12KB）
-  - **核心依赖项：** `Buffer`
-  - **Rust 实现要点：**
-    - 解析资源描述文件格式
-
-- [✓] **1.3.14 SexyVector（向量）**
-  - **C++ 源文件：** `src/SexyAppFramework/misc/SexyVector.h`（3KB）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：**
-    - 简单的 2D/3D 向量结构体
-
-- [✓] **1.3.15 Flags（位标志）**
-  - **C++ 源文件：** `src/SexyAppFramework/misc/Flags.{h,cpp}`（2KB + 1KB）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：** 位标志集合，可用 `bitflags!` 宏
-
-- [✓] **1.3.16 ModVal（模值）**
-  - **C++ 源文件：** `src/SexyAppFramework/misc/ModVal.{h,cpp}`（3KB + 8KB）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：** 一个特殊的模运算数值类型
-
-- [✓] **1.3.17 Ratio（比例）**
-  - **C++ 源文件：** `src/SexyAppFramework/misc/Ratio.{h,cpp}`（2KB + 1KB）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：** 比例/分数类型
-
-- [✓] **1.3.18 RegEmu（注册表模拟）**
-  - **C++ 源文件：** `src/SexyAppFramework/misc/RegEmu.{h,cpp}`（1KB + 6KB）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：**
-    - 用文件或内存中的键值存储替代 Windows 注册表
-    - 用于保存游戏设置
-
-### 1.4 PakLib（PAK 文件读取）
-
-- [✓] **1.4.1 PakInterface（PAK 文件接口）**
-  - **C++ 源文件：** `src/SexyAppFramework/paklib/PakInterface.{h,cpp}`（5KB + 9KB）
-  - **核心依赖项：** `Buffer`, `Common`
-  - **Rust 实现要点：**
-    - 已有 `paklib/mod.rs`（952 行），翻译较完整
-    - PAK 文件读取：TOC 解析、文件提取
-    - 可替代方案：直接读取文件系统而不依赖 PAK
-
-### 1.5 ImageLib（图像格式加载）
-
-- [✓] **1.5.1 ImageLib（图像库）**
-  - **C++ 源文件：** `src/SexyAppFramework/imagelib/ImageLib.{h,cpp}`（1KB + 35KB）
-  - **核心依赖项：** `Image`, `MemoryImage`, `Buffer`
-  - **Rust 实现要点：**
-    - 已有 `imagelib/mod.rs`（13 行骨架）
-    - 加载 PNG, JPEG 等格式——建议用 Rust 的 `image` crate 替代
-    - 负责将加载的像素数据填入 `MemoryImage`
-
-### 1.6 声音系统
-
-- [✓] **1.6.1 SoundManager（声音管理器接口）**
-  - **C++ 源文件：** `src/SexyAppFramework/sound/SoundManager.h`（2KB）
-  - **核心依赖项：** `SoundInstance`
-  - **Rust 实现要点：**
-    - 已有 `sound_manager.rs`（9 行骨架）
-    - 定义声音管理 trait：`LoadSound`, `PlaySound`, `SetVolume` 等
-
-- [✓] **1.6.2 SoundInstance（声音实例接口）**
-  - **C++ 源文件：** `src/SexyAppFramework/sound/SoundInstance.h`（1KB）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：**
-    - 已有 `sound_instance.rs`（9 行骨架）
-    - 定义声音实例 trait：`Play`, `Stop`, `SetVolume`, `IsPlaying` 等
-
-- [✓] **1.6.3 SDLSoundManager（SDL 声音管理器）**
-  - **C++ 源文件：** `src/SexyAppFramework/sound/SDLSoundManager.{h,cpp}`（2KB + 10KB）
-  - **核心依赖项：** `SoundManager`, `SDLSoundInstance`, SDL2_mixer
-  - **Rust 实现要点：**
-    - 已有 `sdl_sound_manager.rs`（48 行骨架）
-    - 基于 SDL2_mixer 的声音管理实现
-    - 需绑定/包装 SDL_mixer C API
-
-- [✓] **1.6.4 SDLSoundInstance（SDL 声音实例）**
-  - **C++ 源文件：** `src/SexyAppFramework/sound/SDLSoundInstance.{h,cpp}`（3KB + 9KB）
-  - **核心依赖项：** `SoundInstance`, SDL2_mixer
-  - **Rust 实现要点：**
-    - 已有 `sdl_sound_instance.rs`（31 行骨架）
-    - 包装 SDL_mixer 的 `Mix_Chunk` 播放
-
-- [✓] **1.6.5 SDLMusicInterface（SDL 音乐接口）**
-  - **C++ 源文件：** `src/SexyAppFramework/sound/SDLMusicInterface.{h,cpp}`（2KB + 8KB）
-  - **核心依赖项：** `MusicInterface`, SDL2_mixer
-  - **Rust 实现要点：**
-    - 已有 `sdl_music_interface.rs`（27 行骨架）
-    - 包装 SDL_mixer 的 `Mix_Music` 播放
-
-- [✓] **1.6.6 MusicInterface（音乐接口）**
-  - **C++ 源文件：** `src/SexyAppFramework/sound/MusicInterface.h`（2KB）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：**
-    - 已有 `music_interface.rs`（8 行骨架）
-    - 定义音乐接口 trait
+1. **数据结构与类型定义**（纯数据 struct、enum、typedef）
+2. **底层工具/库函数**（无外部依赖的纯函数）
+3. **核心业务逻辑**（主要类和算法）
+4. **I/O 与外部接口**（文件、网络、系统调用）
+5. **入口与胶水代码**（main、CLI、配置解析）
 
 ---
 
-## 二、Sexy.TodLib（引擎特效库）
+## 模块: `src`
 
-### 2.1 动画系统
+> 文件数: 7 | 行数: 10609 | 类: 2 | 函数: 3
 
-- [✓] **2.1.1 ReanimatorDefinition（动画定义数据结构）**
-  - **C++ 源文件：** `src/Sexy.TodLib/Definition.{h,cpp}`（15KB + 69KB）
-  - **核心依赖项：** `TodCommon`, `ReanimAtlas`, `TodStringFile`, `Image`
-  - **Rust 实现要点：**
-    - 已有 `definition.rs`（97 行骨架）
-    - 解析 reanim XML 定义文件（轨道、变换帧、图集引用）
-    - 数据量庞大：`gReanimatorDefCount` 约数百个动画定义
-    - 结构体：`ReanimatorDefinition`, `ReanimatorTrack`, `ReanimatorTransform`, `ReanimationParams`
+### `[ ]` `src\ConstEnums.h`
 
-- [✓] **2.1.2 ReanimAtlas（动画图集）**
-  - **C++ 源文件：** `src/Sexy.TodLib/ReanimAtlas.{h,cpp}`（2KB + 9KB）
-  - **核心依赖项：** `Image`, `Graphics`, `MemoryImage`
-  - **Rust 实现要点：**
-    - 已有 `reanim_atlas.rs`（17 行骨架）
-    - 将动画的所有帧打包到一张大纹理中，减少 OpenGL 状态切换
+- **行数**: 1412
+- **难度**: 🟢 低
+- **注意**: 同步原语, 类型转换
+- **标准库依赖**: cstdint
 
-- [✓] **2.1.3 Reanimation（动画实例——核心类）**
-  - **C++ 源文件：** `src/Sexy.TodLib/Reanimator.{h,cpp}`（14KB + 74KB）
-  - **核心依赖项：** `ReanimatorDefinition`, `ReanimatorTrackInstance`, `Graphics`, `SexyMatrix`, `FilterEffect`, `Attachment`
-  - **Rust 实现要点：**
-    - 已有 `reanimator.rs`（157 行骨架）
-    - **这是 TodLib 中最重要的类之一**
-    - 实现动画播放：`Update`（帧推进），`Draw`（渲染），`DrawRenderGroup`
-    - 变换插值：`GetCurrentTransform`, `BlendTransform`
-    - 轨道管理：`FindTrackIndex`, `AssignRenderGroupToTrack`
-    - 混合/淡入淡出：`StartBlend`
-    - 附件系统：`AttachToAnotherReanimation`（一个动画实例可以附着到另一个的轨道上）
-    - 需要 `ReanimationHolder`（`DataArray<Reanimation>`）管理所有动画实例
-    - 性能关键——每帧要更新和绘制数百个动画
+**枚举:**
 
-- [✓] **2.1.4 ReanimatorTransform（动画变换帧）**
-  - **C++ 源文件：** `src/Sexy.TodLib/Reanimator.h`（内联定义）
-  - **核心依赖项：** `Image`, `Font`
-  - **Rust 实现要点：**
-    - 结构体已在 C++ 中定义：位置、旋转、缩放、透明度、图像/字体/文字
-    - 需要 `DEFAULT_FIELD_PLACEHOLDER` 标记未设置的字段
+- `[ ]` `enum AdviceType` → { ADVICE_NONE, ADVICE_CLICK_ON_SUN, ADVICE_CLICKED_ON_SUN, ADVICE_CLICKED_ON_COIN, ADVICE_SEED_REFRESH, ... (68 个值) }
+- `[ ]` `enum AlmanacPage` → { ALMANAC_PAGE_INDEX, ALMANAC_PAGE_PLANTS, ALMANAC_PAGE_ZOMBIES }
+- `[ ]` `enum AwardType` → { AWARD_FORLEVEL, AWARD_CREDITS_ZOMBIENOTE, AWARD_HELP_ZOMBIENOTE, AWARD_ACHIEVEMENTONLY, AWARD_PRECREDITS_ZOMBIENOTE }
+- `[ ]` `enum BackgroundType` → { BACKGROUND_1_DAY, BACKGROUND_2_NIGHT, BACKGROUND_3_POOL, BACKGROUND_4_FOG, BACKGROUND_5_ROOF, ... (10 个值) }
+- `[ ]` `enum BoardResult` → { BOARDRESULT_NONE, BOARDRESULT_WON, BOARDRESULT_LOST, BOARDRESULT_RESTART, BOARDRESULT_QUIT, ... (7 个值) }
+- `[ ]` `enum BossPart` → { BOSS_PART_BACK_LEG, BOSS_PART_FRONT_LEG, BOSS_PART_MAIN, BOSS_PART_BACK_ARM, BOSS_PART_FIREBALL }
+- `[ ]` `enum ChallengePage` → { CHALLENGE_PAGE_SURVIVAL, CHALLENGE_PAGE_CHALLENGE, CHALLENGE_PAGE_LIMBO, CHALLENGE_PAGE_PUZZLE, MAX_CHALLANGE_PAGES }
+- `[ ]` `enum ChallengeState` → { STATECHALLENGE_NORMAL, STATECHALLENGE_BEGHOULED_MOVING, STATECHALLENGE_BEGHOULED_FALLING, STATECHALLENGE_BEGHOULED_NO_MATCHES, STATECHALLENGE_SLOT_MACHINE_ROLLING, ... (15 个值) }
+- `[ ]` `enum ChosenSeedState` → { SEED_FLYING_TO_BANK, SEED_IN_BANK, SEED_FLYING_TO_CHOOSER, SEED_IN_CHOOSER, SEED_PACKET_HIDDEN }
+- `[ ]` `enum CoinMotion` → { COIN_MOTION_FROM_SKY, COIN_MOTION_FROM_SKY_SLOW, COIN_MOTION_FROM_PLANT, COIN_MOTION_COIN, COIN_MOTION_LAWNMOWER_COIN, ... (7 个值) }
+- `[ ]` `enum CoinType` → { COIN_NONE, COIN_SILVER, COIN_GOLD, COIN_DIAMOND, COIN_SUN, ... (28 个值) }
+- `[ ]` `enum CrazyDaveState` → { CRAZY_DAVE_OFF, CRAZY_DAVE_ENTERING, CRAZY_DAVE_LEAVING, CRAZY_DAVE_IDLING, CRAZY_DAVE_TALKING, ... (7 个值) }
+- `[ ]` `enum CursorType` → { CURSOR_TYPE_NORMAL, CURSOR_TYPE_PLANT_FROM_BANK, CURSOR_TYPE_PLANT_FROM_USABLE_COIN, CURSOR_TYPE_PLANT_FROM_GLOVE, CURSOR_TYPE_PLANT_FROM_DUPLICATOR, ... (18 个值) }
+- `[ ]` `enum DamageFlags` → { DAMAGE_BYPASSES_SHIELD, DAMAGE_HITS_SHIELD_AND_BODY, DAMAGE_FREEZE, DAMAGE_DOESNT_CAUSE_FLASH, DAMAGE_DOESNT_LEAVE_BODY, ... (6 个值) }
+- `[ ]` `enum DamageRangeFlags` → { DAMAGES_GROUND, DAMAGES_FLYING, DAMAGES_SUBMERGED, DAMAGES_DOG, DAMAGES_OFF_GROUND, ... (8 个值) }
+- `[ ]` `enum Dialogs` → { DIALOG_NEW_GAME, DIALOG_OPTIONS, DIALOG_NEWOPTIONS, DIALOG_ALMANAC, DIALOG_STORE, ... (52 个值) }
+- `[ ]` `enum DebugTextMode` → { DEBUG_TEXT_NONE, DEBUG_TEXT_ZOMBIE_SPAWN, DEBUG_TEXT_MUSIC, DEBUG_TEXT_MEMORY, DEBUG_TEXT_COLLISION }
+- `[ ]` `enum DrawStringJustification` → { DS_ALIGN_LEFT, DS_ALIGN_RIGHT, DS_ALIGN_CENTER, DS_ALIGN_LEFT_VERTICAL_MIDDLE, DS_ALIGN_RIGHT_VERTICAL_MIDDLE, ... (6 个值) }
+- `[ ]` `enum DrawVariation` → { VARIATION_NORMAL, VARIATION_IMITATER, VARIATION_MARIGOLD_WHITE, VARIATION_MARIGOLD_MAGENTA, VARIATION_MARIGOLD_ORANGE, ... (18 个值) }
+- `[ ]` `enum EffectType` → { EFFECT_PARTICLE, EFFECT_TRAIL, EFFECT_REANIM, EFFECT_ATTACHMENT, EFFECT_OTHER }
+- `[ ]` `enum EmitterType` → { EMITTER_CIRCLE, EMITTER_BOX, EMITTER_BOX_PATH, EMITTER_CIRCLE_PATH, EMITTER_CIRCLE_EVEN_SPACING }
+- `[ ]` `enum GameMode` → { GAMEMODE_ADVENTURE, GAMEMODE_SURVIVAL_NORMAL_STAGE_1, GAMEMODE_SURVIVAL_NORMAL_STAGE_2, GAMEMODE_SURVIVAL_NORMAL_STAGE_3, GAMEMODE_SURVIVAL_NORMAL_STAGE_4, ... (74 个值) }
+- `[ ]` `enum GameObjectType` → { OBJECT_TYPE_NONE, OBJECT_TYPE_PLANT, OBJECT_TYPE_PROJECTILE, OBJECT_TYPE_COIN, OBJECT_TYPE_SEEDPACKET, ... (22 个值) }
+- `[ ]` `enum GameScenes` → { SCENE_LOADING, SCENE_MENU, SCENE_LEVEL_INTRO, SCENE_PLAYING, SCENE_ZOMBIES_WON, ... (8 个值) }
+- `[ ]` `enum GardenType` → { GARDEN_MAIN, GARDEN_MUSHROOM, GARDEN_WHEELBARROW, GARDEN_AQUARIUM }
+- `[ ]` `enum GridItemType` → { GRIDITEM_NONE, GRIDITEM_GRAVESTONE, GRIDITEM_CRATER, GRIDITEM_LADDER, GRIDITEM_PORTAL_CIRCLE, ... (12 个值) }
+- `[ ]` `enum GridItemState` → { GRIDITEM_STATE_NORMAL, GRIDITEM_STATE_GRAVESTONE_SPECIAL, GRIDITEM_STATE_PORTAL_CLOSED, GRIDITEM_STATE_SCARY_POT_QUESTION, GRIDITEM_STATE_SCARY_POT_LEAF, ... (30 个值) }
+- `[ ]` `enum GridSquareType` → { GRIDSQUARE_NONE, GRIDSQUARE_GRASS, GRIDSQUARE_DIRT, GRIDSQUARE_POOL, GRIDSQUARE_HIGH_GROUND }
+- `[ ]` `enum HelmType` → { HELMTYPE_NONE, HELMTYPE_TRAFFIC_CONE, HELMTYPE_PAIL, HELMTYPE_FOOTBALL, HELMTYPE_DIGGER, ... (10 个值) }
+- `[ ]` `enum LawnMowerState` → { MOWER_ROLLING_IN, MOWER_READY, MOWER_TRIGGERED, MOWER_SQUISHED }
+- `[ ]` `enum LawnMowerType` → { LAWNMOWER_LAWN, LAWNMOWER_POOL, LAWNMOWER_ROOF, LAWNMOWER_SUPER_MOWER, NUM_MOWER_TYPES }
+- `[ ]` `enum MessageStyle` → { MESSAGE_STYLE_OFF, MESSAGE_STYLE_TUTORIAL_LEVEL1, MESSAGE_STYLE_TUTORIAL_LEVEL1_STAY, MESSAGE_STYLE_TUTORIAL_LEVEL2, MESSAGE_STYLE_TUTORIAL_LATER, ... (19 个值) }
+- `[ ]` `enum MowerHeight` → { MOWER_HEIGHT_LAND, MOWER_HEIGHT_DOWN_TO_POOL, MOWER_HEIGHT_IN_POOL, MOWER_HEIGHT_UP_TO_LAND }
+- `[ ]` `enum NotRecommend` → { NOT_RECOMMENDED_NOCTURNAL, NOT_RECOMMENDED_NEEDS_POOL, NOT_RECOMMENDED_NEEDS_GRAVES, NOT_RECOMMENDED_NEEDS_FOG, NOT_RECOMMENDED_NEEDS_ROOF, ... (8 个值) }
+- `[ ]` `enum ParticleEffect` → { PARTICLE_NONE, PARTICLE_MELONSPLASH, PARTICLE_WINTERMELON, PARTICLE_FUMECLOUD, PARTICLE_POPCORNSPLASH, ... (108 个值) }
+- `[ ]` `enum PlantPriority` → { TOPPLANT_EATING_ORDER, TOPPLANT_DIGGING_ORDER, TOPPLANT_BUNGEE_ORDER, TOPPLANT_CATAPULT_ORDER, TOPPLANT_ZEN_TOOL_ORDER, ... (10 个值) }
+- `[ ]` `enum PlantingReason` → { PLANTING_OK, PLANTING_NOT_HERE, PLANTING_ONLY_ON_GRAVES, PLANTING_ONLY_IN_POOL, PLANTING_ONLY_ON_GROUND, ... (14 个值) }
+- `[ ]` `enum PlantRowType` → { PLANTROW_DIRT, PLANTROW_NORMAL, PLANTROW_POOL, PLANTROW_HIGH_GROUND }
+- `[ ]` `enum PottedPlantAge` → { PLANTAGE_SPROUT, PLANTAGE_SMALL, PLANTAGE_MEDIUM, PLANTAGE_FULL }
+- `[ ]` `enum PottedPlantNeed` → { PLANTNEED_NONE, PLANTNEED_WATER, PLANTNEED_FERTILIZER, PLANTNEED_BUGSPRAY, PLANTNEED_PHONOGRAPH }
+- `[ ]` `enum ProjectileMotion` → { MOTION_STRAIGHT, MOTION_LOBBED, MOTION_THREEPEATER, MOTION_BEE, MOTION_BEE_BACKWARDS, ... (10 个值) }
+- `[ ]` `enum ProjectileType` → { PROJECTILE_PEA, PROJECTILE_SNOWPEA, PROJECTILE_CABBAGE, PROJECTILE_MELON, PROJECTILE_PUFF, ... (15 个值) }
+- `[ ]` `enum ReanimationType` → { REANIM_NONE, REANIM_LOADBAR_SPROUT, REANIM_LOADBAR_ZOMBIEHEAD, REANIM_SODROLL, REANIM_FINAL_WAVE, ... (145 个值) }
+- `[ ]` `enum ReanimLoopType` → { REANIM_LOOP, REANIM_LOOP_FULL_LAST_FRAME, REANIM_PLAY_ONCE, REANIM_PLAY_ONCE_AND_HOLD, REANIM_PLAY_ONCE_FULL_LAST_FRAME, ... (6 个值) }
+- `[ ]` `enum RenderLayer` → { RENDER_LAYER_ROW_OFFSET, RENDER_LAYER_UI_BOTTOM, RENDER_LAYER_GROUND, RENDER_LAYER_LAWN, RENDER_LAYER_GRAVE_STONE, ... (17 个值) }
+- `[ ]` `enum RenderObjectType` → { RENDER_ITEM_COIN, RENDER_ITEM_PROJECTILE, RENDER_ITEM_ZOMBIE, RENDER_ITEM_ZOMBIE_SHADOW, RENDER_ITEM_ZOMBIE_BUNGEE_TARGET, ... (25 个值) }
+- `[ ]` `enum ScaryPotType` → { SCARYPOT_NONE, SCARYPOT_SEED, SCARYPOT_ZOMBIE, SCARYPOT_SUN }
+- `[ ]` `enum SeedChooserState` → { CHOOSE_NORMAL, CHOOSE_VIEW_LAWN }
+- `[ ]` `enum SeedType` → { SEED_PEASHOOTER, SEED_SUNFLOWER, SEED_CHERRYBOMB, SEED_WALLNUT, SEED_POTATOMINE, ... (77 个值) }
+- `[ ]` `enum ShieldType` → { SHIELDTYPE_NONE, SHIELDTYPE_DOOR, SHIELDTYPE_NEWSPAPER, SHIELDTYPE_LADDER }
+- `[ ]` `enum StoreItem` → { STORE_ITEM_PLANT_GATLINGPEA, STORE_ITEM_PLANT_TWINSUNFLOWER, STORE_ITEM_PLANT_GLOOMSHROOM, STORE_ITEM_PLANT_CATTAIL, STORE_ITEM_PLANT_WINTERMELON, ... (32 个值) }
+- `[ ]` `enum StorePages` → { STORE_PAGE_SLOT_UPGRADES, STORE_PAGE_PLANT_UPGRADES, STORE_PAGE_ZEN1, STORE_PAGE_ZEN2, NUM_STORE_PAGES }
+- `[ ]` `enum TodCurves` → { CURVE_CONSTANT, CURVE_LINEAR, CURVE_EASE_IN, CURVE_EASE_OUT, CURVE_EASE_IN_OUT, ... (14 个值) }
+- `[ ]` `enum TrialType` → { TRIALTYPE_NONE, TRIALTYPE_STAGELOCKED }
+- `[ ]` `enum TutorialState` → { TUTORIAL_OFF, TUTORIAL_LEVEL_1_PICK_UP_PEASHOOTER, TUTORIAL_LEVEL_1_PLANT_PEASHOOTER, TUTORIAL_LEVEL_1_REFRESH_PEASHOOTER, TUTORIAL_LEVEL_1_COMPLETED, ... (31 个值) }
+- `[ ]` `enum UnlockingState` → { UNLOCK_OFF, UNLOCK_SHAKING, UNLOCK_FADING }
+- `[ ]` `enum ZombieHeight` → { HEIGHT_ZOMBIE_NORMAL, HEIGHT_IN_TO_POOL, HEIGHT_OUT_OF_POOL, HEIGHT_DRAGGED_UNDER, HEIGHT_UP_TO_HIGH_GROUND, ... (11 个值) }
+- `[ ]` `enum ZombiePhase` → { PHASE_ZOMBIE_NORMAL, PHASE_ZOMBIE_DYING, PHASE_ZOMBIE_BURNED, PHASE_ZOMBIE_MOWERED, PHASE_BUNGEE_DIVING, ... (96 个值) }
+- `[ ]` `enum ZombieType` → { ZOMBIE_INVALID, ZOMBIE_NORMAL, ZOMBIE_FLAG, ZOMBIE_TRAFFIC_CONE, ZOMBIE_POLEVAULTER, ... (37 个值) }
+- `[ ]` `enum AttachmentID` → { ATTACHMENTID_NULL }
+- `[ ]` `enum CoinID` → { COINID_NULL }
+- `[ ]` `enum ParticleID` → { PARTICLEID_NULL }
+- `[ ]` `enum ParticleEmitterID` → { PARTICLEEMITTERID_NULL }
+- `[ ]` `enum ParticleSystemID` → { PARTICLESYSTEMID_NULL }
+- `[ ]` `enum PlantID` → { PLANTID_NULL }
+- `[ ]` `enum ReanimationID` → { REANIMATIONID_NULL }
+- `[ ]` `enum ZombieID` → { ZOMBIEID_NULL }
 
-- [✓] **2.1.5 ReanimatorTrackInstance（轨道实例）**
-  - **C++ 源文件：** `src/Sexy.TodLib/Reanimator.h`（内联定义）
-  - **核心依赖项：** `ReanimatorTransform`, `Attachment`
-  - **Rust 实现要点：**
-    - 每个轨道保存运行时状态（混合计数器、图像覆盖、渲染组、颜色覆盖等）
+**自由函数:**
 
-- [✓] **2.1.6 ReanimationHolder（动画管理器）**
-  - **C++ 源文件：** `src/Sexy.TodLib/Reanimator.{h,cpp}`（内联）
-  - **核心依赖项：** `DataArray<Reanimation>`
-  - **Rust 实现要点：**
-    - 包装 `DataArray<Reanimation>`，提供 `AllocReanimation` 方法
+- `[ ]` `enum AdviceType : int32_t({
+    ADVICE_NONE = -1,
+    ADVICE_CLICK_ON_SUN = 0,
+    ADVICE_CLICKED_ON_SUN = 1,
+    ADVICE_CLICKED_ON_COIN = 2,
+    ADVICE_SEED_REFRESH = 3,
+    ADVICE_CANT_AFFORD_PLANT = 4,
+    ADVICE_PLANT_GRAVEBUSTERS_ON_GRAVES = 5,
+    ADVICE_PLANT_LILYPAD_ON_WATER = 6,
+    ADVICE_PLANT_TANGLEKELP_ON_WATER = 7,
+    ADVICE_PLANT_SEASHROOM_ON_WATER = 8,
+    ADVICE_PLANT_POTATOE_MINE_ON_LILY = 9,
+    ADVICE_PLANT_WRONG_ART_TYPE = 10,
+    ADVICE_PLANT_NEED_POT = 11,
+    ADVICE_PLANT_NOT_ON_GRAVE = 12,
+    ADVICE_PLANT_NOT_ON_CRATER = 13,
+    ADVICE_CANT_PLANT_THERE = 14,
+    ADVICE_PLANT_NOT_ON_WATER = 15,
+    ADVICE_PLANTING_NEEDS_GROUND = 16,
+    ADVICE_BEGHOULED_DRAG_TO_MATCH_3 = 17,
+    ADVICE_BEGHOULED_MATCH_3 = 18,
+    ADVICE_BEGHOULED_MATCH_4 = 19,
+    ADVICE_BEGHOULED_SAVE_SUN = 20,
+    ADVICE_BEGHOULED_USE_CRATER_1 = 21,
+    ADVICE_BEGHOULED_USE_CRATER_2 = 22,
+    ADVICE_PLANT_NOT_PASSED_LINE = 23,
+    ADVICE_PLANT_ONLY_ON_REPEATERS = 24,
+    ADVICE_PLANT_ONLY_ON_MELONPULT = 25,
+    ADVICE_PLANT_ONLY_ON_SUNFLOWER = 26,
+    ADVICE_PLANT_ONLY_ON_SPIKEWEED = 27,
+    ADVICE_PLANT_ONLY_ON_KERNELPULT = 28,
+    ADVICE_PLANT_ONLY_ON_MAGNETSHROOM = 29,
+    ADVICE_PLANT_ONLY_ON_FUMESHROOM = 30,
+    ADVICE_PLANT_ONLY_ON_LILYPAD = 31,
+    ADVICE_PLANT_NEEDS_REPEATER = 32,
+    ADVICE_PLANT_NEEDS_MELONPULT = 33,
+    ADVICE_PLANT_NEEDS_SUNFLOWER = 34,
+    ADVICE_PLANT_NEEDS_SPIKEWEED = 35,
+    ADVICE_PLANT_NEEDS_KERNELPULT = 36,
+    ADVICE_PLANT_NEEDS_MAGNETSHROOM = 37,
+    ADVICE_PLANT_NEEDS_FUMESHROOM = 38,
+    ADVICE_PLANT_NEEDS_LILYPAD = 39,
+    ADVICE_SLOT_MACHINE_PULL = 40,
+    ADVICE_HUGE_WAVE = 41,
+    ADVICE_SHOVEL_REFRESH = 42,
+    ADVICE_PORTAL_RELOCATING = 43,
+    ADVICE_SLOT_MACHINE_COLLECT_SUN = 44,
+    ADVICE_DESTORY_POTS_TO_FINISIH_LEVEL = 45,
+    ADVICE_USE_SHOVEL_ON_POTS = 46,
+    ADVICE_ALMOST_THERE = 47,
+    ADVICE_ZOMBIQUARIUM_CLICK_TROPHY = 48,
+    ADVICE_ZOMBIQUARIUM_COLLECT_SUN = 49,
+    ADVICE_ZOMBIQUARIUM_CLICK_TO_FEED,
+    ADVICE_ZOMBIQUARIUM_BUY_SNORKEL,
+    ADVICE_I_ZOMBIE_PLANTS_NOT_REAL,
+    ADVICE_I_ZOMBIE_NOT_PASSED_LINE,
+    ADVICE_I_ZOMBIE_LEFT_OF_LINE,
+    ADVICE_SLOT_MACHINE_SPIN_AGAIN,
+    ADVICE_I_ZOMBIE_EAT_ALL_BRAINS,
+    ADVICE_PEASHOOTER_DIED,
+    ADVICE_STINKY_SLEEPING,
+    ADVICE_BEGHOULED_NO_MOVES,
+    ADVICE_PLANT_SUNFLOWER5,
+    ADVICE_PLANTING_NEED_SLEEPING,
+    ADVICE_CLICK_TO_CONTINUE,
+    ADVICE_SURVIVE_FLAGS,
+    ADVICE_UNLOCKED_MODE,
+    ADVICE_NEED_WHEELBARROW,
+    NUM_ADVICE_TYPES
+};
+enum AlmanacPage : int32_t
+{
+    ALMANAC_PAGE_INDEX,
+    ALMANAC_PAGE_PLANTS,
+    ALMANAC_PAGE_ZOMBIES
+};
+enum AwardType : int32_t
+{
+    AWARD_FORLEVEL,
+    AWARD_CREDITS_ZOMBIENOTE,
+    AWARD_HELP_ZOMBIENOTE,
+    AWARD_ACHIEVEMENTONLY,
+    AWARD_PRECREDITS_ZOMBIENOTE,
+};
+enum BackgroundType : int32_t
+{
+    BACKGROUND_1_DAY,
+    BACKGROUND_2_NIGHT,
+    BACKGROUND_3_POOL,
+    BACKGROUND_4_FOG,
+    BACKGROUND_5_ROOF,
+    BACKGROUND_6_BOSS,
+    BACKGROUND_MUSHROOM_GARDEN,
+    BACKGROUND_GREENHOUSE,
+    BACKGROUND_ZOMBIQUARIUM,
+    BACKGROUND_TREEOFWISDOM
+};
+enum BoardResult : int32_t
+{
+    BOARDRESULT_NONE = 0,
+    BOARDRESULT_WON = 1,
+    BOARDRESULT_LOST = 2,
+    BOARDRESULT_RESTART = 3,
+    BOARDRESULT_QUIT = 4,
+    BOARDRESULT_QUIT_APP = 5,
+    BOARDRESULT_CHEAT = 6
+};
+enum BossPart : int32_t
+{
+    BOSS_PART_BACK_LEG = 0,
+    BOSS_PART_FRONT_LEG = 1,
+    BOSS_PART_MAIN = 2,
+    BOSS_PART_BACK_ARM = 3,
+    BOSS_PART_FIREBALL = 4
+};
+enum ChallengePage : int32_t
+{
+    CHALLENGE_PAGE_SURVIVAL = 0,
+    CHALLENGE_PAGE_CHALLENGE = 1,
+    CHALLENGE_PAGE_LIMBO = 2,
+    CHALLENGE_PAGE_PUZZLE = 3,
+    MAX_CHALLANGE_PAGES = 4
+};
+enum ChallengeState : int32_t
+{
+    STATECHALLENGE_NORMAL,
+    STATECHALLENGE_BEGHOULED_MOVING,
+    STATECHALLENGE_BEGHOULED_FALLING,
+    STATECHALLENGE_BEGHOULED_NO_MATCHES,
+    STATECHALLENGE_SLOT_MACHINE_ROLLING,
+    STATECHALLENGE_STORM_FLASH_1,
+    STATECHALLENGE_STORM_FLASH_2,
+    STATECHALLENGE_STORM_FLASH_3,
+    STATECHALLENGE_ZEN_FADING,
+    STATECHALLENGE_SCARY_POTTER_MALLETING,
+    STATECHALLENGE_LAST_STAND_ONSLAUGHT,
+    STATECHALLENGE_TREE_JUST_GREW,
+    STATECHALLENGE_TREE_GIVE_WISDOM,
+    STATECHALLENGE_TREE_WAITING_TO_BABBLE,
+    STATECHALLENGE_TREE_BABBLING
+};
+enum ChosenSeedState : int32_t
+{
+    SEED_FLYING_TO_BANK = 0,
+    SEED_IN_BANK = 1,
+    SEED_FLYING_TO_CHOOSER = 2,
+    SEED_IN_CHOOSER = 3,
+    SEED_PACKET_HIDDEN = 4
+};
+enum CoinMotion : int32_t
+{
+    COIN_MOTION_FROM_SKY = 0,
+    COIN_MOTION_FROM_SKY_SLOW = 1,
+    COIN_MOTION_FROM_PLANT = 2,
+    COIN_MOTION_COIN = 3,
+    COIN_MOTION_LAWNMOWER_COIN = 4,
+    COIN_MOTION_FROM_PRESENT = 5,
+    COIN_MOTION_FROM_BOSS = 6
+};
+enum CoinType : int32_t
+{
+    COIN_NONE,
+    COIN_SILVER,
+    COIN_GOLD,
+    COIN_DIAMOND,
+    COIN_SUN,
+    COIN_SMALLSUN,
+    COIN_LARGESUN,
+    COIN_FINAL_SEED_PACKET,
+    COIN_TROPHY,
+    COIN_SHOVEL,
+    COIN_ALMANAC,
+    COIN_CARKEYS,
+    COIN_VASE,
+    COIN_WATERING_CAN,
+    COIN_TACO,
+    COIN_NOTE,
+    COIN_USABLE_SEED_PACKET,
+    COIN_PRESENT_PLANT,
+    COIN_AWARD_MONEY_BAG,
+    COIN_AWARD_PRESENT,
+    COIN_AWARD_BAG_DIAMOND,
+    COIN_AWARD_SILVER_SUNFLOWER,
+    COIN_AWARD_GOLD_SUNFLOWER,
+    COIN_CHOCOLATE,
+    COIN_AWARD_CHOCOLATE,
+    COIN_PRESENT_MINIGAMES,
+    COIN_PRESENT_PUZZLE_MODE,
+    COIN_PRESENT_SURVIVAL_MODE,
+};
+enum CrazyDaveState : int32_t
+{
+    CRAZY_DAVE_OFF = 0,
+    CRAZY_DAVE_ENTERING = 1,
+    CRAZY_DAVE_LEAVING = 2,
+    CRAZY_DAVE_IDLING = 3,
+    CRAZY_DAVE_TALKING = 4,
+    CRAZY_DAVE_HANDING_TALKING = 5,
+    CRAZY_DAVE_HANDING_IDLING = 6
+};
+enum CursorType : int32_t
+{
+    CURSOR_TYPE_NORMAL,
+    CURSOR_TYPE_PLANT_FROM_BANK,
+    CURSOR_TYPE_PLANT_FROM_USABLE_COIN,
+    CURSOR_TYPE_PLANT_FROM_GLOVE,
+    CURSOR_TYPE_PLANT_FROM_DUPLICATOR,
+    CURSOR_TYPE_PLANT_FROM_WHEEL_BARROW,
+    CURSOR_TYPE_SHOVEL,
+    CURSOR_TYPE_HAMMER,
+    CURSOR_TYPE_COBCANNON_TARGET,
+    CURSOR_TYPE_WATERING_CAN,
+    CURSOR_TYPE_FERTILIZER,
+    CURSOR_TYPE_BUG_SPRAY,
+    CURSOR_TYPE_PHONOGRAPH,
+    CURSOR_TYPE_CHOCOLATE,
+    CURSOR_TYPE_GLOVE,
+    CURSOR_TYPE_MONEY_SIGN,
+    CURSOR_TYPE_WHEEELBARROW,
+    CURSOR_TYPE_TREE_FOOD
+};
+enum DamageFlags : int32_t
+{
+    DAMAGE_BYPASSES_SHIELD = 0,
+    DAMAGE_HITS_SHIELD_AND_BODY = 1,
+    DAMAGE_FREEZE = 2,
+    DAMAGE_DOESNT_CAUSE_FLASH = 3,
+    DAMAGE_DOESNT_LEAVE_BODY = 4,
+    DAMAGE_SPIKE = 5
+};
+enum DamageRangeFlags : int32_t
+{
+    DAMAGES_GROUND,
+    DAMAGES_FLYING,
+    DAMAGES_SUBMERGED,
+    DAMAGES_DOG,
+    DAMAGES_OFF_GROUND,
+    DAMAGES_DYING,
+    DAMAGES_UNDERGROUND,
+    DAMAGES_ONLY_MINDCONTROLLED
+};
+enum Dialogs : int32_t
+{
+    DIALOG_NEW_GAME,                            
+    DIALOG_OPTIONS,                             
+    DIALOG_NEWOPTIONS,                          
+    DIALOG_ALMANAC,                             
+    DIALOG_STORE,                               
+    DIALOG_PREGAME_NAG,                         
+    DIALOG_LOAD_GAME,                           
+    DIALOG_CONFIRM_UPDATE_CHECK,                
+    DIALOG_CHECKING_UPDATES,                    
+    DIALOG_REGISTER_ERROR,                      
+    DIALOG_COLORDEPTH_EXP,                      
+    DIALOG_OPENURL_WAIT,                        
+    DIALOG_OPENURL_FAIL,                        
+    DIALOG_QUIT,                                
+    DIALOG_HIGH_SCORES,                         
+    DIALOG_NAG,                                 
+    DIALOG_INFO,                                
+    DIALOG_GAME_OVER,                           
+    DIALOG_LEVEL_COMPLETE,                      
+    DIALOG_PAUSED,                              
+    DIALOG_NO_MORE_MONEY,                       
+    DIALOG_BONUS,                               
+    DIALOG_CONFIRM_BACK_TO_MAIN,                
+    DIALOG_CONFIRM_RESTART,                     
+    DIALOG_THANKS_FOR_REGISTERING,              
+    DIALOG_NOT_ENOUGH_MONEY,                    
+    DIALOG_UPGRADED,                            
+    DIALOG_NO_UPGRADE,                          
+    DIALOG_CHOOSER_WARNING,                     
+    DIALOG_USERDIALOG,                          
+    DIALOG_CREATEUSER,                          
+    DIALOG_CONFIRMDELETEUSER,                   
+    DIALOG_RENAMEUSER,                          
+    DIALOG_CREATEUSERERROR,                     
+    DIALOG_RENAMEUSERERROR,                     
+    DIALOG_CHEAT,                               
+    DIALOG_CHEATERROR,                          
+    DIALOG_CONTINUE,                            
+    DIALOG_GETREADY,                            
+    DIALOG_RESTARTCONFIRM,                      
+    DIALOG_CONFIRMPURCHASE,                     
+    DIALOG_CONFIRMSELL,                         
+    DIALOG_TIMESUP,                             
+    DIALOG_VIRTUALHELP,                         
+    DIALOG_JUMPAHEAD,                           
+    DIALOG_CRAZY_DAVE,                          
+    DIALOG_STORE_PURCHASE,                      
+    DIALOG_ZEN_SELL,                            
+    DIALOG_MESSAGE,                             
+    DIALOG_IMITATER,                            
+    DIALOG_PURCHASE_PACKET_SLOT,                
+    NUM_DIALOGS
+};
+enum DebugTextMode : int32_t
+{
+    DEBUG_TEXT_NONE = 0,
+    DEBUG_TEXT_ZOMBIE_SPAWN = 1,
+    DEBUG_TEXT_MUSIC = 2,
+    DEBUG_TEXT_MEMORY = 3,
+    DEBUG_TEXT_COLLISION = 4
+};
+enum DrawStringJustification : int32_t
+{
+    DS_ALIGN_LEFT = 0,
+    DS_ALIGN_RIGHT = 1,
+    DS_ALIGN_CENTER = 2,
+    DS_ALIGN_LEFT_VERTICAL_MIDDLE = 3,
+    DS_ALIGN_RIGHT_VERTICAL_MIDDLE = 4,
+    DS_ALIGN_CENTER_VERTICAL_MIDDLE = 5
+};
+enum DrawVariation : int32_t
+{
+    VARIATION_NORMAL,
+    VARIATION_IMITATER,
+    VARIATION_MARIGOLD_WHITE,
+    VARIATION_MARIGOLD_MAGENTA,
+    VARIATION_MARIGOLD_ORANGE,
+    VARIATION_MARIGOLD_PINK,
+    VARIATION_MARIGOLD_LIGHT_BLUE,
+    VARIATION_MARIGOLD_RED,
+    VARIATION_MARIGOLD_BLUE,
+    VARIATION_MARIGOLD_VIOLET,
+    VARIATION_MARIGOLD_LAVENDER,
+    VARIATION_MARIGOLD_YELLOW,
+    VARIATION_MARIGOLD_LIGHT_GREEN,
+    VARIATION_ZEN_GARDEN,
+    VARIATION_ZEN_GARDEN_WATER,
+    VARIATION_SPROUT_NO_FLOWER,
+    VARIATION_IMITATER_LESS,
+    VARIATION_AQUARIUM
+};
+enum EffectType : int32_t
+{
+    EFFECT_PARTICLE = 0,
+    EFFECT_TRAIL = 1,
+    EFFECT_REANIM = 2,
+    EFFECT_ATTACHMENT = 3,
+    EFFECT_OTHER = 4
+};
+enum EmitterType : int32_t
+{
+    EMITTER_CIRCLE = 0,
+    EMITTER_BOX = 1,
+    EMITTER_BOX_PATH = 2,
+    EMITTER_CIRCLE_PATH = 3,
+    EMITTER_CIRCLE_EVEN_SPACING = 4
+};
+enum GameMode : int32_t
+{
+    GAMEMODE_ADVENTURE,
+    GAMEMODE_SURVIVAL_NORMAL_STAGE_1,
+    GAMEMODE_SURVIVAL_NORMAL_STAGE_2,
+    GAMEMODE_SURVIVAL_NORMAL_STAGE_3,
+    GAMEMODE_SURVIVAL_NORMAL_STAGE_4,
+    GAMEMODE_SURVIVAL_NORMAL_STAGE_5,
+    GAMEMODE_SURVIVAL_HARD_STAGE_1,
+    GAMEMODE_SURVIVAL_HARD_STAGE_2,
+    GAMEMODE_SURVIVAL_HARD_STAGE_3,
+    GAMEMODE_SURVIVAL_HARD_STAGE_4,
+    GAMEMODE_SURVIVAL_HARD_STAGE_5,
+    GAMEMODE_SURVIVAL_ENDLESS_STAGE_1,
+    GAMEMODE_SURVIVAL_ENDLESS_STAGE_2,
+    GAMEMODE_SURVIVAL_ENDLESS_STAGE_3,
+    GAMEMODE_SURVIVAL_ENDLESS_STAGE_4,
+    GAMEMODE_SURVIVAL_ENDLESS_STAGE_5,
+    GAMEMODE_CHALLENGE_WAR_AND_PEAS,
+    GAMEMODE_CHALLENGE_WALLNUT_BOWLING,
+    GAMEMODE_CHALLENGE_SLOT_MACHINE,
+    GAMEMODE_CHALLENGE_RAINING_SEEDS,
+    GAMEMODE_CHALLENGE_BEGHOULED,
+    GAMEMODE_CHALLENGE_INVISIGHOUL,
+    GAMEMODE_CHALLENGE_SEEING_STARS,
+    GAMEMODE_CHALLENGE_ZOMBIQUARIUM,
+    GAMEMODE_CHALLENGE_BEGHOULED_TWIST,
+    GAMEMODE_CHALLENGE_LITTLE_TROUBLE,
+    GAMEMODE_CHALLENGE_PORTAL_COMBAT,
+    GAMEMODE_CHALLENGE_COLUMN,
+    GAMEMODE_CHALLENGE_BOBSLED_BONANZA,
+    GAMEMODE_CHALLENGE_SPEED,
+    GAMEMODE_CHALLENGE_WHACK_A_ZOMBIE,
+    GAMEMODE_CHALLENGE_LAST_STAND,
+    GAMEMODE_CHALLENGE_WAR_AND_PEAS_2,
+    GAMEMODE_CHALLENGE_WALLNUT_BOWLING_2,
+    GAMEMODE_CHALLENGE_POGO_PARTY,
+    GAMEMODE_CHALLENGE_FINAL_BOSS,
+    GAMEMODE_CHALLENGE_ART_CHALLENGE_WALLNUT,
+    GAMEMODE_CHALLENGE_SUNNY_DAY,
+    GAMEMODE_CHALLENGE_RESODDED,
+    GAMEMODE_CHALLENGE_BIG_TIME,
+    GAMEMODE_CHALLENGE_ART_CHALLENGE_SUNFLOWER,
+    GAMEMODE_CHALLENGE_AIR_RAID,
+    GAMEMODE_CHALLENGE_ICE,
+    GAMEMODE_CHALLENGE_ZEN_GARDEN,
+    GAMEMODE_CHALLENGE_HIGH_GRAVITY,
+    GAMEMODE_CHALLENGE_GRAVE_DANGER,
+    GAMEMODE_CHALLENGE_SHOVEL,
+    GAMEMODE_CHALLENGE_STORMY_NIGHT,
+    GAMEMODE_CHALLENGE_BUNGEE_BLITZ,
+    GAMEMODE_CHALLENGE_SQUIRREL,
+    GAMEMODE_TREE_OF_WISDOM,
+    GAMEMODE_SCARY_POTTER_1,
+    GAMEMODE_SCARY_POTTER_2,
+    GAMEMODE_SCARY_POTTER_3,
+    GAMEMODE_SCARY_POTTER_4,
+    GAMEMODE_SCARY_POTTER_5,
+    GAMEMODE_SCARY_POTTER_6,
+    GAMEMODE_SCARY_POTTER_7,
+    GAMEMODE_SCARY_POTTER_8,
+    GAMEMODE_SCARY_POTTER_9,
+    GAMEMODE_SCARY_POTTER_ENDLESS,
+    GAMEMODE_PUZZLE_I_ZOMBIE_1,
+    GAMEMODE_PUZZLE_I_ZOMBIE_2,
+    GAMEMODE_PUZZLE_I_ZOMBIE_3,
+    GAMEMODE_PUZZLE_I_ZOMBIE_4,
+    GAMEMODE_PUZZLE_I_ZOMBIE_5,
+    GAMEMODE_PUZZLE_I_ZOMBIE_6,
+    GAMEMODE_PUZZLE_I_ZOMBIE_7,
+    GAMEMODE_PUZZLE_I_ZOMBIE_8,
+    GAMEMODE_PUZZLE_I_ZOMBIE_9,
+    GAMEMODE_PUZZLE_I_ZOMBIE_ENDLESS,
+    GAMEMODE_UPSELL,
+    GAMEMODE_INTRO,
+    NUM_GAME_MODES
+};
+enum GameObjectType : int32_t
+{
+    OBJECT_TYPE_NONE,
+    OBJECT_TYPE_PLANT,
+    OBJECT_TYPE_PROJECTILE,
+    OBJECT_TYPE_COIN,
+    OBJECT_TYPE_SEEDPACKET,
+    OBJECT_TYPE_SHOVEL,
+    OBJECT_TYPE_WATERING_CAN,
+    OBJECT_TYPE_FERTILIZER,
+    OBJECT_TYPE_BUG_SPRAY,
+    OBJECT_TYPE_PHONOGRAPH,
+    OBJECT_TYPE_CHOCOLATE,
+    OBJECT_TYPE_GLOVE,
+    OBJECT_TYPE_MONEY_SIGN,
+    OBJECT_TYPE_WHEELBARROW,
+    OBJECT_TYPE_TREE_FOOD,
+    OBJECT_TYPE_NEXT_GARDEN,
+    OBJECT_TYPE_MENU_BUTTON,
+    OBJECT_TYPE_STORE_BUTTON,
+    OBJECT_TYPE_SLOT_MACHINE_HANDLE,
+    OBJECT_TYPE_SCARY_POT,
+    OBJECT_TYPE_STINKY,
+    OBJECT_TYPE_TREE_OF_WISDOM
+};
+enum GameScenes : int32_t
+{
+    SCENE_LOADING = 0,
+    SCENE_MENU = 1,
+    SCENE_LEVEL_INTRO = 2,
+    SCENE_PLAYING = 3,
+    SCENE_ZOMBIES_WON = 4,
+    SCENE_AWARD = 5,
+    SCENE_CREDIT = 6,
+    SCENE_CHALLENGE = 7
+};
+enum GardenType : int32_t
+{
+    GARDEN_MAIN = 0,
+    GARDEN_MUSHROOM = 1,
+    GARDEN_WHEELBARROW = 2,
+    GARDEN_AQUARIUM = 3
+};
+enum GridItemType : int32_t
+{
+    GRIDITEM_NONE = 0,
+    GRIDITEM_GRAVESTONE = 1,
+    GRIDITEM_CRATER = 2,
+    GRIDITEM_LADDER = 3,
+    GRIDITEM_PORTAL_CIRCLE = 4,
+    GRIDITEM_PORTAL_SQUARE = 5,
+    GRIDITEM_BRAIN = 6,
+    GRIDITEM_SCARY_POT = 7,
 
-### 2.2 粒子系统
+    GRIDITEM_ZEN_TOOL = 9,
+    GRIDITEM_STINKY = 10,
+    GRIDITEM_RAKE = 11,
+    GRIDITEM_IZOMBIE_BRAIN = 12
+};
+enum GridItemState : int32_t
+{
+    GRIDITEM_STATE_NORMAL = 0,
+    GRIDITEM_STATE_GRAVESTONE_SPECIAL = 1,
+    GRIDITEM_STATE_PORTAL_CLOSED = 2,
+    GRIDITEM_STATE_SCARY_POT_QUESTION = 3,
+    GRIDITEM_STATE_SCARY_POT_LEAF = 4,
+    GRIDITEM_STATE_SCARY_POT_ZOMBIE = 5,
+    GRIDITEM_STATE_SQUIRREL_WAITING = 6,
+    GRIDITEM_STATE_SQUIRREL_PEEKING = 7,
+    GRIDITEM_STATE_SQUIRREL_RUNNING_UP = 8,
+    GRIDITEM_STATE_SQUIRREL_RUNNING_DOWN = 9,
+    GRIDITEM_STATE_SQUIRREL_RUNNING_LEFT = 10,
+    GRIDITEM_STATE_SQUIRREL_RUNNING_RIGHT = 11,
+    GRIDITEM_STATE_SQUIRREL_CAUGHT = 12,
+    GRIDITEM_STATE_SQUIRREL_ZOMBIE = 13,
+    GRIDITEM_STATE_ZEN_TOOL_WATERING_CAN = 14,
+    GRIDITEM_STATE_ZEN_TOOL_FERTILIZER = 15,
+    GRIDITEM_STATE_ZEN_TOOL_BUG_SPRAY = 16,
+    GRIDITEM_STATE_ZEN_TOOL_PHONOGRAPH = 17,
+    GRIDITEM_STATE_ZEN_TOOL_GOLD_WATERING_CAN = 18,
+    GRIDITEM_STINKY_WALKING_LEFT = 19,
+    GRIDITEM_STINKY_TURNING_LEFT = 20,
+    GRIDITEM_STINKY_WALKING_RIGHT = 21,
+    GRIDITEM_STINKY_TURNING_RIGHT = 22,
+    GRIDITEM_STINKY_SLEEPING = 23,
+    GRIDITEM_STINKY_FALLING_ASLEEP = 24,
+    GRIDITEM_STINKY_WAKING_UP = 25,
+    GRIDITEM_STATE_RAKE_ATTRACTING = 26,
+    GRIDITEM_STATE_RAKE_WAITING = 27,
+    GRIDITEM_STATE_RAKE_TRIGGERED = 28,
+    GRIDITEM_STATE_BRAIN_SQUISHED = 29
+};
+enum GridSquareType : int32_t
+{
+    GRIDSQUARE_NONE = 0,
+    GRIDSQUARE_GRASS = 1,
+    GRIDSQUARE_DIRT = 2,
+    GRIDSQUARE_POOL = 3,
+    GRIDSQUARE_HIGH_GROUND = 4
+};
+enum HelmType : int32_t
+{
+    HELMTYPE_NONE = 0,
+    HELMTYPE_TRAFFIC_CONE = 1,
+    HELMTYPE_PAIL = 2,
+    HELMTYPE_FOOTBALL = 3,
+    HELMTYPE_DIGGER = 4,
+    HELMTYPE_REDEYES = 5,
+    HELMTYPE_HEADBAND = 6,
+    HELMTYPE_BOBSLED = 7,
+    HELMTYPE_WALLNUT = 8,
+    HELMTYPE_TALLNUT = 9
+};
+enum LawnMowerState : int32_t
+{
+    MOWER_ROLLING_IN = 0,
+    MOWER_READY = 1,
+    MOWER_TRIGGERED = 2,
+    MOWER_SQUISHED = 3
+};
+enum LawnMowerType : int32_t
+{
+    LAWNMOWER_LAWN,
+    LAWNMOWER_POOL,
+    LAWNMOWER_ROOF,
+    LAWNMOWER_SUPER_MOWER,
+    NUM_MOWER_TYPES
+};
+enum MessageStyle : int32_t
+{
+    MESSAGE_STYLE_OFF,
+    MESSAGE_STYLE_TUTORIAL_LEVEL1,
+    MESSAGE_STYLE_TUTORIAL_LEVEL1_STAY,
+    MESSAGE_STYLE_TUTORIAL_LEVEL2,
+    MESSAGE_STYLE_TUTORIAL_LATER,
+    MESSAGE_STYLE_TUTORIAL_LATER_STAY,
+    MESSAGE_STYLE_HINT_LONG,
+    MESSAGE_STYLE_HINT_FAST,
+    MESSAGE_STYLE_HINT_STAY,
+    MESSAGE_STYLE_HINT_TALL_FAST,
+    MESSAGE_STYLE_HINT_TALL_UNLOCKMESSAGE,
+    
+    MESSAGE_STYLE_HINT_TALL_LONG,
+    MESSAGE_STYLE_BIG_MIDDLE,
+    MESSAGE_STYLE_BIG_MIDDLE_FAST,
+    MESSAGE_STYLE_HOUSE_NAME,
+    MESSAGE_STYLE_HUGE_WAVE,
+    MESSAGE_STYLE_SLOT_MACHINE,
+    MESSAGE_STYLE_ZEN_GARDEN_LONG,
+    MESSAGE_STYLE_ACHIEVEMENT 
+};
+enum MowerHeight : int32_t
+{
+    MOWER_HEIGHT_LAND = 0,
+    MOWER_HEIGHT_DOWN_TO_POOL = 1,
+    MOWER_HEIGHT_IN_POOL = 2,
+    MOWER_HEIGHT_UP_TO_LAND = 3
+};
+enum NotRecommend : int32_t
+{
+    NOT_RECOMMENDED_NOCTURNAL,
+    NOT_RECOMMENDED_NEEDS_POOL,
+    NOT_RECOMMENDED_NEEDS_GRAVES,
+    NOT_RECOMMENDED_NEEDS_FOG,
+    NOT_RECOMMENDED_NEEDS_ROOF,
+    NOT_RECOMMENDED_ON_ROOF,
+    NOT_RECOMMENDED_FOR_CHALLENGE,
+    NOT_RECOMMENDED_AT_NIGHT
+};
+enum ParticleEffect : int32_t
+{
+    PARTICLE_NONE = -1,
+    PARTICLE_MELONSPLASH,
+    PARTICLE_WINTERMELON,
+    PARTICLE_FUMECLOUD,
+    PARTICLE_POPCORNSPLASH,
+    PARTICLE_POWIE,
+    PARTICLE_JACKEXPLODE,
+    PARTICLE_ZOMBIE_HEAD,
+    PARTICLE_ZOMBIE_ARM,
+    PARTICLE_ZOMBIE_TRAFFIC_CONE,
+    PARTICLE_ZOMBIE_PAIL,
+    PARTICLE_ZOMBIE_HELMET,
+    PARTICLE_ZOMBIE_FLAG,
+    PARTICLE_ZOMBIE_DOOR,
+    PARTICLE_ZOMBIE_NEWSPAPER,
+    PARTICLE_ZOMBIE_HEADLIGHT,
+    PARTICLE_POW,
+    PARTICLE_ZOMBIE_POGO,
+    PARTICLE_ZOMBIE_NEWSPAPER_HEAD,
+    PARTICLE_ZOMBIE_BALLOON_HEAD,
+    PARTICLE_SOD_ROLL,
+    PARTICLE_GRAVE_STONE_RISE,
+    PARTICLE_PLANTING,
+    PARTICLE_PLANTING_POOL,
+    PARTICLE_ZOMBIE_RISE,
+    PARTICLE_GRAVE_BUSTER,
+    PARTICLE_GRAVE_BUSTER_DIE,
+    PARTICLE_POOL_SPLASH,
+    PARTICLE_ICE_SPARKLE,
+    PARTICLE_SEED_PACKET,
+    PARTICLE_TALL_NUT_BLOCK,
+    PARTICLE_DOOM,
+    PARTICLE_DIGGER_RISE,
+    PARTICLE_DIGGER_TUNNEL,
+    PARTICLE_DANCER_RISE,
+    PARTICLE_POOL_SPARKLY,
+    PARTICLE_WALLNUT_EAT_SMALL,
+    PARTICLE_WALLNUT_EAT_LARGE,
+    PARTICLE_PEA_SPLAT,
+    PARTICLE_BUTTER_SPLAT,
+    PARTICLE_CABBAGE_SPLAT,
+    PARTICLE_PUFF_SPLAT,
+    PARTICLE_STAR_SPLAT,
+    PARTICLE_ICE_TRAP,
+    PARTICLE_SNOWPEA_SPLAT,
+    PARTICLE_SNOWPEA_PUFF,
+    PARTICLE_SNOWPEA_TRAIL,
+    PARTICLE_LANTERN_SHINE,
+    PARTICLE_SEED_PACKET_PICKUP,
+    PARTICLE_POTATO_MINE,
+    PARTICLE_POTATO_MINE_RISE,
+    PARTICLE_PUFFSHROOM_TRAIL,
+    PARTICLE_PUFFSHROOM_MUZZLE,
+    PARTICLE_SEED_PACKET_FLASH,
+    PARTICLE_WHACK_A_ZOMBIE_RISE,
+    PARTICLE_ZOMBIE_LADDER,
+    PARTICLE_UMBRELLA_REFLECT,
+    PARTICLE_SEED_PACKET_PICK,
+    PARTICLE_ICE_TRAP_ZOMBIE,
+    PARTICLE_ICE_TRAP_RELEASE,
+    PARTICLE_ZAMBONI_SMOKE,
+    PARTICLE_GLOOMCLOUD,
+    PARTICLE_ZOMBIE_POGO_HEAD,
+    PARTICLE_ZAMBONI_TIRE,
+    PARTICLE_ZAMBONI_EXPLOSION,
+    PARTICLE_ZAMBONI_EXPLOSION2,
+    PARTICLE_CATAPULT_EXPLOSION,
+    PARTICLE_MOWER_CLOUD,
+    PARTICLE_BOSS_ICE_BALL,
+    PARTICLE_BLASTMARK,
+    PARTICLE_COIN_PICKUP_ARROW,
+    PARTICLE_PRESENT_PICKUP,
+    PARTICLE_IMITATER_MORPH,
+    PARTICLE_MOWERED_ZOMBIE_HEAD,
+    PARTICLE_MOWERED_ZOMBIE_ARM,
+    PARTICLE_ZOMBIE_HEAD_POOL,
+    PARTICLE_ZOMBIE_BOSS_FIREBALL,
+    PARTICLE_FIREBALL_DEATH,
+    PARTICLE_ICEBALL_DEATH,
+    PARTICLE_ICEBALL_TRAIL,
+    PARTICLE_FIREBALL_TRAIL,
+    PARTICLE_BOSS_EXPLOSION,
+    PARTICLE_SCREEN_FLASH,
+    PARTICLE_TROPHY_SPARKLE,
+    PARTICLE_PORTAL_CIRCLE,
+    PARTICLE_PORTAL_SQUARE,
+    PARTICLE_POTTED_PLANT_GLOW,
+    PARTICLE_POTTED_WATER_PLANT_GLOW,
+    PARTICLE_POTTED_ZEN_GLOW,
+    PARTICLE_MIND_CONTROL,
+    PARTICLE_VASE_SHATTER,
+    PARTICLE_VASE_SHATTER_LEAF,
+    PARTICLE_VASE_SHATTER_ZOMBIE,
+    PARTICLE_AWARD_PICKUP_ARROW,
+    PARTICLE_ZOMBIE_SEAWEED,
+    PARTICLE_ZOMBIE_MUSTACHE,
+    PARTICLE_ZOMBIE_SUNGLASS,
+    PARTICLE_ZOMBIE_PINATA,
+    PARTICLE_DUST_SQUASH,
+    PARTICLE_DUST_FOOT,
+    PARTICLE_ZOMBIE_DAISIES,
+    PARTICLE_CREDIT_STROBE,
+    PARTICLE_CREDITS_RAYSWIPE,
+    PARTICLE_CREDITS_ZOMBIEHEADWIPE,
+    PARTICLE_STARBURST,
+    PARTICLE_CREDITS_FOG,
+    PARTICLE_PERSENT_PICK_UP_ARROW,
+    NUM_PARTICLES
+};
+enum PlantPriority : int32_t
+{
+    TOPPLANT_EATING_ORDER,
+    TOPPLANT_DIGGING_ORDER,
+    TOPPLANT_BUNGEE_ORDER,
+    TOPPLANT_CATAPULT_ORDER,
+    TOPPLANT_ZEN_TOOL_ORDER,
+    TOPPLANT_ANY,
+    TOPPLANT_ONLY_NORMAL_POSITION,
+    TOPPLANT_ONLY_FLYING,
+    TOPPLANT_ONLY_PUMPKIN,
+    TOPPLANT_ONLY_UNDER_PLANT
+};
+enum PlantingReason : int32_t
+{
+    PLANTING_OK,
+    PLANTING_NOT_HERE,
+    PLANTING_ONLY_ON_GRAVES,
+    PLANTING_ONLY_IN_POOL,
+    PLANTING_ONLY_ON_GROUND,
+    PLANTING_NEEDS_POT,
+    PLANTING_NOT_ON_ART,
+    PLANTING_NOT_PASSED_LINE,
+    PLANTING_NEEDS_UPGRADE,
+    PLANTING_NOT_ON_GRAVE,
+    PLANTING_NOT_ON_CRATER,
+    PLANTING_NOT_ON_WATER,
+    PLANTING_NEEDS_GROUND,
+    PLANTING_NEEDS_SLEEPING
+};
+enum PlantRowType : int32_t
+{
+    PLANTROW_DIRT = 0,
+    PLANTROW_NORMAL = 1,
+    PLANTROW_POOL = 2,
+    PLANTROW_HIGH_GROUND = 3
+};
+enum PottedPlantAge : int32_t
+{
+    PLANTAGE_SPROUT = 0,
+    PLANTAGE_SMALL = 1,
+    PLANTAGE_MEDIUM = 2,
+    PLANTAGE_FULL = 3
+};
+enum PottedPlantNeed : int32_t
+{
+    PLANTNEED_NONE = 0,
+    PLANTNEED_WATER = 1,
+    PLANTNEED_FERTILIZER = 2,
+    PLANTNEED_BUGSPRAY = 3,
+    PLANTNEED_PHONOGRAPH = 4
+};
+enum ProjectileMotion : int32_t
+{
+    MOTION_STRAIGHT = 0,  
+    MOTION_LOBBED = 1,  
+    MOTION_THREEPEATER = 2,  
+    MOTION_BEE = 3,  
+    MOTION_BEE_BACKWARDS = 4,  
+    MOTION_PUFF = 5,  
+    MOTION_BACKWARDS = 6,  
+    MOTION_STAR = 7,  
+    MOTION_FLOAT_OVER = 8,  
+    MOTION_HOMING = 9   
+};
+enum ProjectileType : int32_t)`
+- `[ ]` ` NUM_REANIMS(};
+enum ReanimLoopType : int32_t
+{
+    REANIM_LOOP = 0,
+    REANIM_LOOP_FULL_LAST_FRAME = 1,
+    REANIM_PLAY_ONCE = 2,
+    REANIM_PLAY_ONCE_AND_HOLD = 3,
+    REANIM_PLAY_ONCE_FULL_LAST_FRAME = 4,
+    REANIM_PLAY_ONCE_FULL_LAST_FRAME_AND_HOLD = 5
+};
+enum RenderLayer : int32_t
+{
+    RENDER_LAYER_ROW_OFFSET     = 10000,
+    RENDER_LAYER_UI_BOTTOM      = 100000,
+    RENDER_LAYER_GROUND         = 200000,
+    RENDER_LAYER_LAWN           = 300000,
+    RENDER_LAYER_GRAVE_STONE    = 301000,
+    RENDER_LAYER_PLANT          = 302000,
+    RENDER_LAYER_ZOMBIE         = 303000,
+    RENDER_LAYER_BOSS           = 304000,
+    RENDER_LAYER_PROJECTILE     = 305000,
+    RENDER_LAYER_LAWN_MOWER     = 306000,
+    RENDER_LAYER_PARTICLE       = 307000,
+    RENDER_LAYER_TOP            = 400000,
+    RENDER_LAYER_FOG            = 500000,
+    RENDER_LAYER_COIN_BANK      = 600000,
+    RENDER_LAYER_UI_TOP         = 700000,
+    RENDER_LAYER_ABOVE_UI       = 800000,
+    RENDER_LAYER_SCREEN_FADE    = 900000
+};
+enum RenderObjectType : int32_t
+{
+    RENDER_ITEM_COIN,
+    RENDER_ITEM_PROJECTILE,
+    RENDER_ITEM_ZOMBIE,
+    RENDER_ITEM_ZOMBIE_SHADOW,
+    RENDER_ITEM_ZOMBIE_BUNGEE_TARGET,
+    RENDER_ITEM_PLANT,
+    RENDER_ITEM_PLANT_OVERLAY,
+    RENDER_ITEM_PLANT_MAGNET_ITEMS,
+    RENDER_ITEM_CURSOR_PREVIEW,
+    RENDER_ITEM_PARTICLE,
+    RENDER_ITEM_REANIMATION,
+    RENDER_ITEM_ICE,
+    RENDER_ITEM_TOP_UI,
+    RENDER_ITEM_FOG,
+    RENDER_ITEM_STORM,
+    RENDER_ITEM_BOTTOM_UI,
+    RENDER_ITEM_BACKDROP,
+    RENDER_ITEM_DOOR_MASK,
+    RENDER_ITEM_COIN_BANK,
+    RENDER_ITEM_PROJECTILE_SHADOW,
+    RENDER_ITEM_MOWER,
+    RENDER_ITEM_SCREEN_FADE,
+    RENDER_ITEM_BOSS_PART,
+    RENDER_ITEM_GRID_ITEM,
+    RENDER_ITEM_GRID_ITEM_OVERLAY
+};
+enum ScaryPotType : int32_t
+{
+    SCARYPOT_NONE = 0,
+    SCARYPOT_SEED = 1,
+    SCARYPOT_ZOMBIE = 2,
+    SCARYPOT_SUN = 3
+};
+enum SeedChooserState : int32_t
+{
+    CHOOSE_NORMAL = 0,
+    CHOOSE_VIEW_LAWN = 1
+};
+enum SeedType : int32_t
+{
+    SEED_PEASHOOTER = 0,                    
+    SEED_SUNFLOWER = 1,                     
+    SEED_CHERRYBOMB = 2,                    
+    SEED_WALLNUT = 3,                       
+    SEED_POTATOMINE = 4,                    
+    SEED_SNOWPEA = 5,                       
+    SEED_CHOMPER = 6,                       
+    SEED_REPEATER = 7,                      
+    SEED_PUFFSHROOM = 8,                    
+    SEED_SUNSHROOM = 9,                     
+    SEED_FUMESHROOM = 10,                   
+    SEED_GRAVEBUSTER = 11,                  
+    SEED_HYPNOSHROOM = 12,                  
+    SEED_SCAREDYSHROOM = 13,                
+    SEED_ICESHROOM = 14,                    
+    SEED_DOOMSHROOM = 15,                   
+    SEED_LILYPAD = 16,                      
+    SEED_SQUASH = 17,                       
+    SEED_THREEPEATER = 18,                  
+    SEED_TANGLEKELP = 19,                   
+    SEED_JALAPENO = 20,                     
+    SEED_SPIKEWEED = 21,                    
+    SEED_TORCHWOOD = 22,                    
+    SEED_TALLNUT = 23,
+    SEED_SEASHROOM = 24,
+    SEED_PLANTERN = 25,
+    SEED_CACTUS = 26,
+    SEED_BLOVER = 27,
+    SEED_SPLITPEA = 28,
+    SEED_STARFRUIT = 29,
+    SEED_PUMPKINSHELL = 30,
+    SEED_MAGNETSHROOM = 31,
+    SEED_CABBAGEPULT = 32,
+    SEED_FLOWERPOT = 33,
+    SEED_KERNELPULT = 34,
+    SEED_INSTANT_COFFEE = 35,
+    SEED_GARLIC = 36,
+    SEED_UMBRELLA = 37,
+    SEED_MARIGOLD = 38,
+    SEED_MELONPULT = 39,
+    SEED_GATLINGPEA = 40,
+    SEED_TWINSUNFLOWER = 41,
+    SEED_GLOOMSHROOM = 42,
+    SEED_CATTAIL = 43,
+    SEED_WINTERMELON = 44,
+    SEED_GOLD_MAGNET = 45,
+    SEED_SPIKEROCK = 46,
+    SEED_COBCANNON = 47,
+    SEED_IMITATER = 48,
+    SEED_EXPLODE_O_NUT,
+    SEED_GIANT_WALLNUT,
+    SEED_SPROUT,
+    SEED_LEFTPEATER,
+    NUM_SEED_TYPES,
+    SEED_BEGHOULED_BUTTON_SHUFFLE,
+    SEED_BEGHOULED_BUTTON_CRATER,
+    SEED_SLOT_MACHINE_SUN,
+    SEED_SLOT_MACHINE_DIAMOND,
+    SEED_ZOMBIQUARIUM_SNORKLE,
+    SEED_ZOMBIQUARIUM_TROPHY,
+    SEED_ZOMBIE_NORMAL,
+    SEED_ZOMBIE_TRAFFIC_CONE,
+    SEED_ZOMBIE_POLEVAULTER,
+    SEED_ZOMBIE_PAIL,
+    SEED_ZOMBIE_LADDER,
+    SEED_ZOMBIE_DIGGER,
+    SEED_ZOMBIE_BUNGEE,
+    SEED_ZOMBIE_FOOTBALL,
+    SEED_ZOMBIE_BALLOON,
+    SEED_ZOMBIE_SCREEN_DOOR,
+    SEED_ZOMBONI,
+    SEED_ZOMBIE_POGO,
+    SEED_ZOMBIE_DANCER,
+    SEED_ZOMBIE_GARGANTUAR,
+    SEED_ZOMBIE_IMP,
+    NUM_SEEDS_IN_CHOOSER = 49,
+    SEED_NONE = -1
+};
+enum ShieldType : int32_t
+{
+    SHIELDTYPE_NONE,
+    SHIELDTYPE_DOOR,
+    SHIELDTYPE_NEWSPAPER,
+    SHIELDTYPE_LADDER
+};
+enum StoreItem : int32_t
+{
+    STORE_ITEM_PLANT_GATLINGPEA,
+    STORE_ITEM_PLANT_TWINSUNFLOWER,
+    STORE_ITEM_PLANT_GLOOMSHROOM,
+    STORE_ITEM_PLANT_CATTAIL,
+    STORE_ITEM_PLANT_WINTERMELON,
+    STORE_ITEM_PLANT_GOLD_MAGNET,
+    STORE_ITEM_PLANT_SPIKEROCK,
+    STORE_ITEM_PLANT_COBCANNON,
+    STORE_ITEM_PLANT_IMITATER,
+    STORE_ITEM_BONUS_LAWN_MOWER,
+    STORE_ITEM_POTTED_MARIGOLD_1,
+    STORE_ITEM_POTTED_MARIGOLD_2,
+    STORE_ITEM_POTTED_MARIGOLD_3,
+    STORE_ITEM_GOLD_WATERINGCAN,
+    STORE_ITEM_FERTILIZER,
+    STORE_ITEM_BUG_SPRAY,
+    STORE_ITEM_PHONOGRAPH,
+    STORE_ITEM_GARDENING_GLOVE,
+    STORE_ITEM_MUSHROOM_GARDEN,
+    STORE_ITEM_WHEEL_BARROW,
+    STORE_ITEM_STINKY_THE_SNAIL,
+    STORE_ITEM_PACKET_UPGRADE,
+    STORE_ITEM_POOL_CLEANER,
+    STORE_ITEM_ROOF_CLEANER,
+    STORE_ITEM_RAKE,
+    STORE_ITEM_AQUARIUM_GARDEN,
+    STORE_ITEM_CHOCOLATE,
+    STORE_ITEM_TREE_OF_WISDOM,
+    STORE_ITEM_TREE_FOOD,
+    STORE_ITEM_FIRSTAID,
+    STORE_ITEM_PVZ,
+    STORE_ITEM_INVALID = -1
+};
+enum StorePages : int32_t
+{
+    STORE_PAGE_SLOT_UPGRADES = 0,
+    STORE_PAGE_PLANT_UPGRADES = 1,
+    STORE_PAGE_ZEN1 = 2,
+    STORE_PAGE_ZEN2 = 3,
+    NUM_STORE_PAGES = 4
+};
+enum TodCurves : int32_t
+{
+    CURVE_CONSTANT,             
+    CURVE_LINEAR,               
+    CURVE_EASE_IN,              
+    CURVE_EASE_OUT,             
+    CURVE_EASE_IN_OUT,          
+    CURVE_EASE_IN_OUT_WEAK,     
+    CURVE_FAST_IN_OUT,          
+    CURVE_FAST_IN_OUT_WEAK,     
+    CURVE_WEAK_FAST_IN_OUT,     
+    CURVE_BOUNCE,               
+    CURVE_BOUNCE_FAST_MIDDLE,   
+    CURVE_BOUNCE_SLOW_MIDDLE,   
+    CURVE_SIN_WAVE,             
+    CURVE_EASE_SIN_WAVE         
+};
+enum TrialType : int32_t
+{
+    TRIALTYPE_NONE,
+    TRIALTYPE_STAGELOCKED
+};
+enum TutorialState : int32_t
+{
+    TUTORIAL_OFF = 0,
+    TUTORIAL_LEVEL_1_PICK_UP_PEASHOOTER = 1,
+    TUTORIAL_LEVEL_1_PLANT_PEASHOOTER = 2,
+    TUTORIAL_LEVEL_1_REFRESH_PEASHOOTER = 3,
+    TUTORIAL_LEVEL_1_COMPLETED = 4,
+    TUTORIAL_LEVEL_2_PICK_UP_SUNFLOWER = 5,
+    TUTORIAL_LEVEL_2_PLANT_SUNFLOWER = 6,
+    TUTORIAL_LEVEL_2_REFRESH_SUNFLOWER = 7,
+    TUTORIAL_LEVEL_2_COMPLETED = 8,
+    TUTORIAL_MORESUN_PICK_UP_SUNFLOWER = 9,
+    TUTORIAL_MORESUN_PLANT_SUNFLOWER = 10,
+    TUTORIAL_MORESUN_REFRESH_SUNFLOWER = 11,
+    TUTORIAL_MORESUN_COMPLETED = 12,
+    TUTORIAL_SLOT_MACHINE_PULL = 13,
+    TUTORIAL_SLOT_MACHINE_COMPLETED = 14,
+    TUTORIAL_SHOVEL_PICKUP = 15,
+    TUTORIAL_SHOVEL_DIG = 16,
+    TUTORIAL_SHOVEL_KEEP_DIGGING = 17,
+    TUTORIAL_SHOVEL_COMPLETED = 18,
+    TUTORIAL_ZOMBIQUARIUM_BUY_SNORKEL = 19,
+    TUTORIAL_ZOMBIQUARIUM_BOUGHT_SNORKEL = 20,
+    TUTORIAL_ZOMBIQUARIUM_CLICK_TROPHY = 21,
+    TUTORIAL_ZEN_GARDEN_PICKUP_WATER = 22,
+    TUTORIAL_ZEN_GARDEN_WATER_PLANT = 23,
+    TUTORIAL_ZEN_GARDEN_KEEP_WATERING = 24,
+    TUTORIAL_ZEN_GARDEN_VISIT_STORE = 25,
+    TUTORIAL_ZEN_GARDEN_FERTILIZE_PLANTS = 26,
+    TUTORIAL_ZEN_GARDEN_COMPLETED = 27,
+    TUTORIAL_WHACK_A_ZOMBIE_BEFORE_PICK_SEED = 28,
+    TUTORIAL_WHACK_A_ZOMBIE_PICK_SEED = 29,
+    TUTORIAL_WHACK_A_ZOMBIE_COMPLETED = 30
+};
+enum UnlockingState : int32_t
+{
+    UNLOCK_OFF,
+    UNLOCK_SHAKING,
+    UNLOCK_FADING
+};
+enum ZombieHeight : int32_t
+{
+    HEIGHT_ZOMBIE_NORMAL = 0,
+    HEIGHT_IN_TO_POOL = 1,
+    HEIGHT_OUT_OF_POOL = 2,
+    HEIGHT_DRAGGED_UNDER = 3,
+    HEIGHT_UP_TO_HIGH_GROUND = 4,
+    HEIGHT_DOWN_OFF_HIGH_GROUND = 5,
+    HEIGHT_UP_LADDER = 6,
+    HEIGHT_FALLING = 7,
+    HEIGHT_IN_TO_CHIMNEY = 8,
+    HEIGHT_GETTING_BUNGEE_DROPPED = 9,
+    HEIGHT_ZOMBIQUARIUM = 10
+};
+enum ZombiePhase : int32_t
+{
+    PHASE_ZOMBIE_NORMAL,
+    PHASE_ZOMBIE_DYING,
+    PHASE_ZOMBIE_BURNED,
+    PHASE_ZOMBIE_MOWERED,
+    PHASE_BUNGEE_DIVING,
+    PHASE_BUNGEE_DIVING_SCREAMING,
+    PHASE_BUNGEE_AT_BOTTOM,
+    PHASE_BUNGEE_GRABBING,
+    PHASE_BUNGEE_RISING,
+    PHASE_BUNGEE_HIT_OUCHY,
+    PHASE_BUNGEE_CUTSCENE,
+    PHASE_POLEVAULTER_PRE_VAULT,
+    PHASE_POLEVAULTER_IN_VAULT,
+    PHASE_POLEVAULTER_POST_VAULT,
+    PHASE_RISING_FROM_GRAVE,
+    PHASE_JACK_IN_THE_BOX_RUNNING,
+    PHASE_JACK_IN_THE_BOX_POPPING,
+    PHASE_BOBSLED_SLIDING,
+    PHASE_BOBSLED_BOARDING,
+    PHASE_BOBSLED_CRASHING,
+    PHASE_POGO_BOUNCING,
+    PHASE_POGO_HIGH_BOUNCE_1,
+    PHASE_POGO_HIGH_BOUNCE_2,
+    PHASE_POGO_HIGH_BOUNCE_3,
+    PHASE_POGO_HIGH_BOUNCE_4,
+    PHASE_POGO_HIGH_BOUNCE_5,
+    PHASE_POGO_HIGH_BOUNCE_6,
+    PHASE_POGO_FORWARD_BOUNCE_2,
+    PHASE_POGO_FORWARD_BOUNCE_7,
+    PHASE_NEWSPAPER_READING,
+    PHASE_NEWSPAPER_MADDENING,
+    PHASE_NEWSPAPER_MAD,
+    PHASE_DIGGER_TUNNELING,
+    PHASE_DIGGER_RISING,
+    PHASE_DIGGER_TUNNELING_PAUSE_WITHOUT_AXE,
+    PHASE_DIGGER_RISE_WITHOUT_AXE,
+    PHASE_DIGGER_STUNNED,
+    PHASE_DIGGER_WALKING,
+    PHASE_DIGGER_WALKING_WITHOUT_AXE,
+    PHASE_DIGGER_CUTSCENE,
+    PHASE_DANCER_DANCING_IN,
+    PHASE_DANCER_SNAPPING_FINGERS,
+    PHASE_DANCER_SNAPPING_FINGERS_WITH_LIGHT,
+    PHASE_DANCER_SNAPPING_FINGERS_HOLD,
+    PHASE_DANCER_DANCING_LEFT,
+    PHASE_DANCER_WALK_TO_RAISE,
+    PHASE_DANCER_RAISE_LEFT_1,
+    PHASE_DANCER_RAISE_RIGHT_1, 
+    PHASE_DANCER_RAISE_LEFT_2,
+    PHASE_DANCER_RAISE_RIGHT_2, 
+    PHASE_DANCER_RISING,
+    PHASE_DOLPHIN_WALKING,
+    PHASE_DOLPHIN_INTO_POOL,
+    PHASE_DOLPHIN_RIDING,
+    PHASE_DOLPHIN_IN_JUMP,
+    PHASE_DOLPHIN_WALKING_IN_POOL,
+    PHASE_DOLPHIN_WALKING_WITHOUT_DOLPHIN,
+    PHASE_SNORKEL_WALKING,
+    PHASE_SNORKEL_INTO_POOL,
+    PHASE_SNORKEL_WALKING_IN_POOL,
+    PHASE_SNORKEL_UP_TO_EAT,
+    PHASE_SNORKEL_EATING_IN_POOL,
+    PHASE_SNORKEL_DOWN_FROM_EAT,
+    PHASE_ZOMBIQUARIUM_ACCEL,
+    PHASE_ZOMBIQUARIUM_DRIFT,
+    PHASE_ZOMBIQUARIUM_BACK_AND_FORTH,
+    PHASE_ZOMBIQUARIUM_BITE,
+    PHASE_CATAPULT_LAUNCHING,
+    PHASE_CATAPULT_RELOADING,
+    PHASE_GARGANTUAR_THROWING,
+    PHASE_GARGANTUAR_SMASHING,
+    PHASE_IMP_GETTING_THROWN,
+    PHASE_IMP_LANDING,
+    PHASE_BALLOON_FLYING,
+    PHASE_BALLOON_POPPING,
+    PHASE_BALLOON_WALKING,
+    PHASE_LADDER_CARRYING,
+    PHASE_LADDER_PLACING,
+    PHASE_BOSS_ENTER,
+    PHASE_BOSS_IDLE,
+    PHASE_BOSS_SPAWNING,
+    PHASE_BOSS_STOMPING,
+    PHASE_BOSS_BUNGEES_ENTER,
+    PHASE_BOSS_BUNGEES_DROP,
+    PHASE_BOSS_BUNGEES_LEAVE,
+    PHASE_BOSS_DROP_RV,
+    PHASE_BOSS_HEAD_ENTER,
+    PHASE_BOSS_HEAD_IDLE_BEFORE_SPIT,
+    PHASE_BOSS_HEAD_IDLE_AFTER_SPIT,
+    PHASE_BOSS_HEAD_SPIT,
+    PHASE_BOSS_HEAD_LEAVE,
+    PHASE_YETI_RUNNING,
+    PHASE_SQUASH_PRE_LAUNCH,
+    PHASE_SQUASH_RISING,
+    PHASE_SQUASH_FALLING,
+    PHASE_SQUASH_DONE_FALLING
+};
+enum ZombieType : int32_t)`
 
-- [✓] **2.2.1 TodParticleDefinition / TodEmitterDefinition（粒子系统定义数据）**
-  - **C++ 源文件：** `src/Sexy.TodLib/TodParticle.{h,cpp}`（19KB + 68KB）；`Definition.cpp`（也涉及粒子定义加载）
-  - **核心依赖项：** `Image`, `TodStringFile`, `TodCommon`
-  - **Rust 实现要点：**
-    - 已完整翻译：FloatParameterTrack、FloatParameterTrackNode、ParticleField、TodEmitterDefinition、TodParticleDefinition、ParticleParams、ParticleRenderParams
-    - 解析粒子 XML 定义文件
-    - 大量 `FloatParameterTrack`（浮点参数轨道）——每个发射器约 30 个轨道
-    - 粒子场系统（最多 4 个场叠加）：摩擦力、加速度、引力、斥力等
+**翻译备注:**
 
-- [✓] **2.2.2 TodParticleSystem（粒子系统实例——核心类）**
-  - **C++ 源文件：** `src/Sexy.TodLib/TodParticle.{h,cpp}`
-  - **核心依赖项：** `TodParticleDefinition`, `TodParticleEmitter`, `TodParticle`, `TodList`, `Graphics`
-  - **Rust 实现要点：**
-    - 已有结构定义，需要实现：`Update`, `Draw`, `ParticleSystemDie`
-    - 管理发射器列表（`TodList<ParticleEmitterID>`）
-    - 提供 `OverrideColor`, `OverrideScale`, `CrossFade` 等运行时覆盖方法
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
 
-- [✓] **2.2.3 TodParticleEmitter（粒子发射器——核心类）**
-  - **C++ 源文件：** `src/Sexy.TodLib/TodParticle.{h,cpp}`
-  - **核心依赖项：** `TodEmitterDefinition`, `TodParticleSystem`, `TodList<ParticleID>`, `TodParticle`, `Graphics`
-  - **Rust 实现要点：**
-    - 实现粒子生成逻辑：`UpdateSpawning`, `SpawnParticle`
-    - 粒子更新：`UpdateParticle`（物理运动、场计算、生命周期）
-    - 粒子场计算：`UpdateParticleField`, `UpdateSystemField`
-    - 渲染：`Draw`, `DrawParticle`
-    - 交叉淡入淡出：`CrossFadeParticle`, `CrossFadeEmitter`
-    - **性能关键**——每帧处理数百到数千个粒子
+### `[ ]` `src\GameConstants.h`
 
-- [✓] **2.2.4 TodParticle（单个粒子）**
-  - **C++ 源文件：** `src/Sexy.TodLib/TodParticle.h`（内联）
-  - **核心依赖项：** `TodParticleEmitter`, `SexyVector2`
-  - **Rust 实现要点：**
-    - 结构体已有定义
-    - 包含位置、速度、自旋、颜色插值等运行时数据
+- **行数**: 83
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: ConstEnums.h
 
-- [✓] **2.2.5 TodParticleHolder（粒子系统管理器）**
-  - **C++ 源文件：** `src/Sexy.TodLib/TodParticle.{h,cpp}`
-  - **核心依赖项：** `DataArray<TodParticleSystem>`, `DataArray<TodParticleEmitter>`, `DataArray<TodParticle>`, `TodAllocator`
-  - **Rust 实现要点：**
-    - 管理所有粒子系统、发射器、粒子的分配和释放
-    - 提供 `AllocParticleSystem` 工厂方法
+**翻译备注:**
 
-- [✓] **2.2.6 FloatParameterTrack / FloatParameterTrackNode（参数轨道系统）**
-  - **C++ 源文件：** `src/Sexy.TodLib/TodParticle.h`（内联）
-  - **核心依赖项：** `TodCurves`
-  - **Rust 实现要点：**
-    - 评估曲线：给定时间 t，计算轨道值（最小~最大之间的插值）
-    - `TodCurves` 枚举（线性、缓入、缓出、正弦等）已在 `game_enums.rs` 中定义
-    - 这是粒子系统和动画系统的核心数学工具
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
 
-### 2.3 特效与工具系统
+### `[ ]` `src\LawnApp.cpp`
 
-- [✓] **2.3.1 EffectSystem（特效系统管理器）**
-  - **C++ 源文件：** `src/Sexy.TodLib/EffectSystem.{h,cpp}`（23KB + 16KB）
-  - **核心依赖项：** `TodParticleHolder`, `TrailHolder`, `ReanimationHolder`, `AttachmentHolder`
-  - **Rust 实现要点：**
-    - 已有 `effect_system.rs`（91 行骨架）
-    - 全局特效实例（`gEffectSystem`），管理粒子、动画、轨迹、附件
-    - `ProcessDeleteQueue` 清理已标记删除的特效对象
+- **行数**: 3414
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 同步原语, 类型转换
+- **项目内依赖**: LawnApp.h, Lawn/Board.h, Lawn/Plant.h, Lawn/Zombie.h, Lawn/Cutscene.h, GameConstants.h, Lawn/Challenge.h, Lawn/ZenGarden.h, Sexy.TodLib/Trail.h, Lawn/System/Music.h, Lawn/System/SaveGame.h, Sexy.TodLib/TodDebug.h, Sexy.TodLib/TodFoley.h, Sexy.TodLib/Attachment.h, Lawn/System/PlayerInfo.h, Lawn/System/PoolEffect.h, Lawn/System/ProfileMgr.h, Lawn/Widget/GameButton.h, Sexy.TodLib/Reanimator.h, Lawn/Widget/UserDialog.h, Lawn/System/TypingCheck.h, Sexy.TodLib/TodParticle.h, Lawn/Widget/AwardScreen.h, Lawn/Widget/TitleScreen.h, Lawn/Widget/StoreScreen.h, Lawn/Widget/CheatDialog.h, Lawn/Widget/GameSelector.h, Lawn/Widget/CreditScreen.h, Sexy.TodLib/EffectSystem.h, Sexy.TodLib/FilterEffect.h, graphics/Graphics.h, Sexy.TodLib/TodStringFile.h, Lawn/Widget/AlmanacDialog.h, Lawn/Widget/NewUserDialog.h, Lawn/Widget/ContinueDialog.h, Lawn/System/ReanimationLawn.h, Lawn/Widget/ChallengeScreen.h, Lawn/Widget/NewOptionsDialog.h, Lawn/Widget/SeedChooserScreen.h, widget/WidgetManager.h, misc/ResourceManager.h, widget/Checkbox.h, widget/Dialog.h, SexyAppFramework/resource.h
+- **标准库依赖**: corecrt.h, time.h
 
-- [✓] **2.3.2 Attachment（附件系统）**
-  - **C++ 源文件：** `src/Sexy.TodLib/Attachment.{h,cpp}`（5KB + 28KB）
-  - **核心依赖项：** `DataArray`, `Reanimation`, `TodParticleSystem`
-  - **Rust 实现要点：**
-    - 已有 `attachment.rs`（47 行骨架）
-    - `AttachmentID` 引用系统——一个附件可以是粒子系统或动画实例，附着在另一个对象的轨道上
-    - `AttachmentHolder` 管理所有附件（`DataArray`）
-    - `AttachEffect`、`AttacherInfo` 结构体
-    - 附件更新、位置同步
+**翻译备注:**
 
-- [✓] **2.3.3 Trail（轨迹系统）**
-  - **C++ 源文件：** `src/Sexy.TodLib/Trail.{h,cpp}`（3KB + 11KB）
-  - **核心依赖项：** `DataArray`, `Graphics`, `Image`
-  - **Rust 实现要点：**
-    - 已有 `trail.rs`（17 行骨架）
-    - 运动轨迹渲染（如蜗牛 Stinky 的爬行痕迹）
-    - `TrailHolder`、`TrailDefinition`、`TrailNode`、`TrailPoint` 等结构体
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
 
-- [✓] **2.3.4 FilterEffect（滤镜效果）**
-  - **C++ 源文件：** `src/Sexy.TodLib/FilterEffect.{h,cpp}`（1KB + 5KB）
-  - **核心依赖项：** `Color`, `SexyMatrix`
-  - **Rust 实现要点：**
-    - 已有 `filter_effect.rs`（17 行骨架）
-    - 颜色滤镜（I, Zombie 模式中改变植物颜色等）
+### `[ ]` `src\LawnApp.h`
 
-- [✓] **2.3.5 TodFoley（音效管理）**
-  - **C++ 源文件：** `src/Sexy.TodLib/TodFoley.{h,cpp}`（7KB + 25KB）
-  - **核心依赖项：** `SoundManager`, `TodStringFile`
-  - **Rust 实现要点：**
-    - 已有 `tod_foley.rs`（47 行骨架）
-    - 音效 ID 枚举、加载、播放管理
-    - `FoleyType` 枚举（游戏中所有音效类型）
+- **行数**: 352
+- **难度**: 🟡 中
+- **注意**: 裸指针, 同步原语, extern 声明, 宏(1个)
+- **项目内依赖**: ConstEnums.h, SexyAppFramework/SexyApp.h, Sexy.TodLib/TodFoley.h
 
-- [✓] **2.3.6 TodStringFile（字符串/数据文件读取）**
-  - **C++ 源文件：** `src/Sexy.TodLib/TodStringFile.{h,cpp}`（3KB + 16KB）
-  - **核心依赖项：** `Buffer`, `PakInterface`
-  - **Rust 实现要点：**
-    - 已有 `tod_string_file.rs`（62 行骨架）
-    - 加载 `.tod` 格式的数据文件（用于 reanim/粒子定义）
+**类/结构体:**
 
-- [✓] **2.3.7 TodCommon（通用工具函数）**
-  - **C++ 源文件：** `src/Sexy.TodLib/TodCommon.{h,cpp}`（9KB + 45KB）
-  - **核心依赖项：** `TodDebug`, `MTRand`
-  - **Rust 实现要点：**
-    - 已有 `tod_common.rs`（85 行骨架）
-    - **大量内联数学工具**：`TodAnimateCurve`, `FloatLerp`, `TodRandom`, `ClampFloat` 等
-    - 曲线上评估函数：`TodCurves` -> `TodAnimateCurve`（线性、缓动、反弹等各种缓动曲线）
-    - 加权随机选择：`TodPickFromArray`, `TodWeightPickFromArray`
-    - 这些函数在游戏逻辑中被高频调用
+- `[ ]` `class LevelStats` (L45, 0 个方法, 1 个成员)
+- `[ ]` `class LawnApp : SexyApp` (L55, 0 个方法, 10 个成员)
 
-- [✓] **2.3.8 TodList（链表）**
-  - **C++ 源文件：** `src/Sexy.TodLib/TodList.{h,cpp}`（5KB + 3KB）
-  - **核心依赖项：** `TodAllocator`
-  - **Rust 实现要点：**
-    - 已有 `tod_list.rs`（17 行骨架）
-    - 自定义侵入式链表实现，用于粒子系统和发射器的列表管理
-    - 粒子系统和发射器的列表管理需要高效增删
+**自由函数:**
 
-- [✓] **2.3.9 DataArray（数据数组——核心容器）**
-  - **C++ 源文件：** `src/Sexy.TodLib/DataArray.h`（4KB）
-  - **核心依赖项：** `TodDebug`, `TodCommon`
-  - **Rust 实现要点：**
-    - 已有 `data_array.rs`（17 行骨架）
-    - **翻译中最重要的数据结构之一**——整个游戏都用它管理实体
-    - 类似对象池：用 ID（高 16 位为 key，低 16 位为索引）访问元素
-    - 提供 `Alloc`, `Free`, `Get`, `TryToGet`, `IterateNext` 方法
-    - Rust 实现需用 `Vec<Option<(u32, T)>>` 或自定义 `SlotMap` 风格结构
-    - 安全性：ID 验证、迭代器的生命周期
+- `[ ]` `class LawnApp : public SexyApp()`
 
-- [✓] **2.3.10 TodDrawTriangle（三角形绘制函数集）**
-  - **C++ 源文件：** `src/Sexy.TodLib/TodDrawTriangle.{h,cpp}`（2KB + 9KB）
-  - **核心依赖项：** `SWHelper`, `SWVertex`
-  - **Rust 实现要点：**
-    - 已有 `tod_draw_triangle.rs`（9KB 相关代码在 SWTri 中）
-    - ~60 个不同像素格式组合的函数变体
-    - 用 Rust 泛型 + `macro_rules!` 或过程宏来生成变体
+**翻译备注:**
 
-### 2.4 资源与定义
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
 
-- [✓] **2.4.1 定义加载子系统（Reanim/Particle 定义加载）**
-  - **C++ 源文件：** `src/Sexy.TodLib/Definition.cpp` 中的 `ReanimationLoadDefinition`, `ReanimatorEnsureDefinitionLoaded`, `ReanimatorLoadDefinitions`
-  - **核心依赖项：** `TodStringFile`, `ReanimatorDefinition`, `TodParticleDefinition`, `XMLParser`
-  - **Rust 实现要点：**
-    - 从 `.tod` 文件（或 XML）加载动画定义
-    - 从 XML 加载粒子系统定义
-    - 全局定义数组管理
+### `[ ]` `src\Resources.cpp`
 
-- [✓] **2.4.2 资源加载/预加载系统**
-  - **C++ 源文件：** `src/Resources.{h,cpp}`（73KB + 153KB）
-  - **核心依赖项：** `ImageLib`, `PakInterface`, `TodStringFile`, `ReanimatorDefinition`, `TodParticleDefinition`
-  - **Rust 实现要点：**
-    - **极大型文件**——153KB 的 C++ 代码
-    - 定义游戏中所有资源的加载：图像、动画、粒子、字体、声音
-    - 每个资源有字符串名称引用，有类型信息
-    - 建议分模块：`resources::images`, `resources::reanims`, `resources::particles`, `resources::sounds`
+- **行数**: 3274
+- **难度**: 🟡 中
+- **注意**: 裸指针, 异常处理, 同步原语, 类型转换, void* 类型擦除
+- **项目内依赖**: map, Resources.h, misc/ResourceManager.h
+- **标准库依赖**: cstring
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Resources.h`
+
+- **行数**: 1915
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 类型转换, extern 声明, 宏(1个), void* 类型擦除
+- **标准库依赖**: cstdint
+
+**枚举:**
+
+- `[ ]` `enum class ResourceId` → { IMAGE_BLANK_ID, IMAGE_POPCAP_LOGO_ID, IMAGE_PARTNER_LOGO_ID, IMAGE_TITLESCREEN_ID, IMAGE_LOADBAR_DIRT_ID, ... (880 个值) }
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\main.cpp`
+
+- **行数**: 159
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针, 类型转换, extern 声明
+- **项目内依赖**: LawnApp.h, Resources.h, Sexy.TodLib/TodStringFile.h, filesystem, vector, windows.h, shellapi.h, 3ds.h, malloc.h, SDL.h, fstream, emscripten.h
+- **标准库依赖**: cstdlib
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
 
 ---
 
-## 三、Lawn（游戏主逻辑）
+## 模块: `src/Lawn`
 
-### 3.1 核心应用层
+> 文件数: 83 | 行数: 63881 | 类: 77 | 函数: 26
 
-- [✓] **3.1.1 LawnApp（应用主类——核心类）**
-  - **C++ 源文件：** `src/Lawn/LawnApp.{h,cpp}`（13KB + 86KB）（头文件在 `src/LawnApp.h` 13KB + `src/LawnApp.cpp` 86KB）
-  - **核心依赖项：** `SexyAppBase`, `Board`, `CutScene`, `Challenge`, `ZenGarden`, `EffectSystem`, `SoundManager`, `WidgetManager`
-  - **Rust 实现要点：**
-    - 已完整翻译 `lawn_app.rs`（~430 行），包含全部关键字段和方法
-    - 全局游戏状态：当前关卡、模式、分数、解锁状态
-    - 管理 Board / CutScene / Challenge / ZenGarden 的生命周期
-    - 加载线程：`LoadingThreadProc`——加载所有资源
-    - 对话框管理（`DoDialog`, `IsDialogVisible`）
-    - 游戏状态转换：主菜单 -> 关卡选择 -> 游戏中 -> 结果画面
-    - 需要 `Arc<Mutex<>>` 管理全局单例状态
+### `[ ]` `src\Lawn\Board.cpp`
 
-- [✓] **3.1.2 GameConstants（游戏常量）**
-  - **C++ 源文件：** `src/GameConstants.h`（3KB）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：**
-    - 已在 `game_enums.rs` 中翻译大部分常量
-    - 种子类型相关常量、关卡定义等
+- **行数**: 9857
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 同步原语, 类型转换, 宏(2个)
+- **项目内依赖**: algorithm, SDL.h, ZenGarden.h, BoardInclude.h, System/Music.h, System/SaveGame.h, Widget/LawnDialog.h, System/PlayerInfo.h, System/PoolEffect.h, System/TypingCheck.h, Widget/StoreScreen.h, Widget/AwardScreen.h, ../Sexy.TodLib/Trail.h, Widget/ChallengeScreen.h, ../Sexy.TodLib/TodDebug.h, ../Sexy.TodLib/TodFoley.h, Widget/SeedChooserScreen.h, ../Sexy.TodLib/Attachment.h, ../Sexy.TodLib/Reanimator.h, widget/Dialog.h, misc/MTRand.h, ../Sexy.TodLib/TodParticle.h, graphics/SysFont.h, ../Sexy.TodLib/EffectSystem.h, ../Sexy.TodLib/TodStringFile.h, graphics/ImageFont.h, sound/SoundManager.h, widget/ButtonWidget.h, widget/WidgetManager.h, sound/SoundInstance.h, misc/PerfTimer.h, Widget/AchievementsScreen.h, ../SexyAppFramework/memmgr.h
+- **标准库依赖**: time.h
 
-- [✓] **3.1.3 ConstEnums（全部枚举定义）**
-  - **C++ 源文件：** `src/ConstEnums.h`（42KB）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：**
-    - 已有 `game_enums.rs`（856 行），翻译较完整
-    - 包含所有游戏枚举：`SeedType`, `ZombieType`, `PlantState`, `GameMode`, `BackgroundType` 等
-    - 需要检查是否有遗漏的枚举值，确保与 C++ 完全对齐
+**翻译备注:**
 
-### 3.2 游戏实体层
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
 
-- [✓] **3.2.1 GameObject（游戏对象基类）**
-  - **C++ 源文件：** `src/Lawn/GameObject.{h,cpp}`（1KB + 1KB）
-  - **核心依赖项：** `LawnApp`, `Board`, `Graphics`
-  - **Rust 实现要点：**
-    - 已有 `game_object.rs`（67 行骨架）
-    - 所有游戏实体的基类：包含 `mApp`, `mBoard`, 位置、尺寸、可见性、渲染顺序
-    - 内联方法：`BeginDraw`, `EndDraw`, `MakeParentGraphicsFrame`
+### `[ ]` `src\Lawn\Board.h`
 
-- [✓] **3.2.2 Plant（植物——核心类）**
-  - **C++ 源文件：** `src/Lawn/Plant.{h,cpp}`（12KB + 192KB）
-  - **核心依赖项：** `GameObject`, `Board`, `Zombie`, `Reanimation`, `TodParticleSystem`, `SeedType`
-  - **Rust 实现要点：**
-    - 已有 `plant.rs`（376 行骨架 + 字段定义）
-    - **极大型文件**——192KB C++ 代码
-    - 所有植物种类（~48 种）的特有行为实现：
-      - 射手类：`UpdateShooter`, `Fire`, `FindTargetAndFire`（豌豆、双发、三发、裂荚、机枪等）
-      - 生产类：`UpdateProductionPlant`（向日葵、阳光菇等）
-      - 特殊类：`UpdateChomper`, `UpdateSquash`, `UpdatePotato`, `UpdateCobCannon`, `UpdateMagnetShroom`
-      - 辅助类：`UpdateTorchwood`, `UpdateUmbrella`, `UpdateCoffeeBean`
-      - 水上类：`UpdateLilypad`, `UpdateTanglekelp`
-    - 动画管理：`PlayBodyReanim`, `AttachBlinkAnim`, `UpdateReanim`
-    - 绘制：`Draw`, `DrawShadow`, `DrawSeedType`
-    - 伤害/死亡：`Die`, `Squish`, `TakeDamage`, `RemoveEffects`
-    - 静态方法：`GetImage`, `GetCost`, `GetToolTip`, `IsNocturnal`, `IsAquatic`, `IsFlying` 等
-    - `PlantDefinition` 全局定义表——所有植物属性的静态数据
+- **行数**: 519
+- **难度**: 🟡 中
+- **注意**: 裸指针, extern 声明, 宏(9个), void* 类型擦除
+- **项目内依赖**: ../ConstEnums.h, ../Sexy.TodLib/DataArray.h, widget/Widget.h, widget/ButtonListener.h, Plant.h, Zombie.h, Projectile.h, Coin.h, LawnMower.h, GridItem.h
+- **标准库依赖**: cstdint
 
-- [✓] **3.2.3 Zombie（僵尸——核心类）**
-  - **C++ 源文件：** `src/Lawn/Zombie.{h,cpp}`（22KB + 346KB）
-  - **核心依赖项：** `GameObject`, `Board`, `Plant`, `Reanimation`, `TodParticleSystem`, `Attachment`, `ZombieType`
-  - **Rust 实现要点：**
-    - 已有 `zombie.rs`（478 行骨架 + 字段定义）
-    - **极大型文件**——346KB C++ 代码，项目中最大的文件
-    - 所有僵尸种类（~26 种）的特有行为：
-      - 普通僵尸：`UpdateZombieWalking`, `EatPlant`, `FindPlantTarget`
-      - 特殊僵尸：`UpdateZombiePolevaulter`, `UpdateZombieDolphinRider`, `UpdateZombieBungee`, `UpdateZombiePogo`, `UpdateZombieDigger`
-      - Boss 僵尸：`UpdateBoss`, `BossRVAttack`, `BossStompAttack`, `BossHeadAttack`
-      - 其他：`UpdateYeti`, `UpdateZombieDancer`, `UpdateZombieNewspaper`, `UpdateZombieCatapult`
-    - 伤害系统：`TakeDamage`, `TakeBodyDamage`, `TakeHelmDamage`, `TakeShieldDamage`
-    - 状态效果：`ApplyChill`, `ApplyButter`, `ApplyBurn`, `MindControlled`
-    - 动画：`LoadReanim`, `DrawReanim`, `SetupReanimLayers`, `PlayZombieReanim`
-    - 绘制：`Draw`, `DrawZombiePart`, `DrawBossFireBall`, `DrawShadow`, `DrawIceTrap`
-    - `ZombieDefinition` 全局定义表
+**类/结构体:**
 
-- [✓] **3.2.4 Projectile（弹射物）**
-  - **C++ 源文件：** `src/Lawn/Projectile.{h,cpp}`（3KB + 33KB）
-  - **核心依赖项：** `GameObject`, `Board`, `Zombie`, `Plant`
-  - **Rust 实现要点：**
-    - 已有 `projectile.rs`（201 行骨架 + 字段定义）
-    - 不同弹射物行为：
-      - `UpdateNormalMotion`（豌豆、冰豆、火豆等直线弹道）
-      - `UpdateLobMotion`（西瓜、玉米等抛物线）
-      - `UpdateCobCannonMotion`（玉米加农炮）
-    - 碰撞检测：`FindCollisionTarget`, `DoImpact`, `DoSplashDamage`
-    - 火炬木转换：`ConvertToFireball`, `ConvertToPea`
+- `[ ]` `class HitResult` (L52, 0 个方法, 2 个成员)
+- `[ ]` `class RenderItem` (L59, 0 个方法, 10 个成员)
+- `[ ]` `struct ZombiePicker` (L82, 0 个方法, 4 个成员)
+- `[ ]` `struct PlantsOnLawn` (L93, 0 个方法, 4 个成员)
+- `[ ]` `struct BungeeDropGrid` (L101, 0 个方法, 2 个成员)
+- `[ ]` `class Board : Widget, ButtonListener` (L107, 0 个方法, 10 个成员)
 
-- [✓] **3.2.5 Coin（硬币/掉落物）**
-  - **C++ 源文件：** `src/Lawn/Coin.{h,cpp}`（3KB + 48KB）
-  - **核心依赖项：** `GameObject`, `Board`, `PottedPlant`
-  - **Rust 实现要点：**
-    - 已有 `coin.rs`（145 行骨架 + 字段定义）
-    - 掉落物行为：阳光、金币、钻石、钥匙、奖杯等
-    - 物理：`UpdateFall`, `UpdateCollected`
-    - 收集动画：`Collect`, `StartFade`, `ScoreCoin`
+**翻译备注:**
 
-- [✓] **3.2.6 LawnMower（割草机）**
-  - **C++ 源文件：** `src/Lawn/LawnMower.{h,cpp}`（2KB + 14KB）
-  - **核心依赖项：** `Board`, `Zombie`, `Reanimation`
-  - **Rust 实现要点：**
-    - 已有 `lawn_mower.rs`（90 行骨架 + 字段定义）
-    - 启动、移动、碰撞僵尸、碾死僵尸
-    - 水池中的割草机行为：`UpdatePool`
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
 
-- [✓] **3.2.7 GridItem（网格物品）**
-  - **C++ 源文件：** `src/Lawn/GridItem.{h,cpp}`（2KB + 23KB）
-  - **核心依赖项：** `Board`, `Zombie`, `Reanimation`, `TodParticleSystem`
-  - **Rust 实现要点：**
-    - 已有 `grid_item.rs`（79 行骨架 + 字段定义）
-    - 多种类型：墓碑、弹坑、梯子、传送门、花盆(Scary Potter)、松鼠、蜗牛、智慧树工具
-    - 每个类型有独立的绘制和更新逻辑：
-      - `DrawGraveStone`, `DrawCrater`, `DrawLadder`, `DrawPortal`, `DrawScaryPot`, `DrawSquirrel`, `DrawStinky`
-      - `UpdateScaryPot`, `UpdatePortal`, `UpdateRake`, `UpdateBrain`
+### `[ ]` `src\Lawn\BoardInclude.h`
 
-- [✓] **3.2.8 CursorObject / CursorPreview（光标对象/预览）**
-  - **C++ 源文件：** `src/Lawn/CursorObject.{h,cpp}`（1KB + 11KB）
-  - **核心依赖项：** `GameObject`, `SeedType`, `CursorType`, `Reanimation`
-  - **Rust 实现要点：**
-    - 已有 `cursor_object.rs`（62 行）
-    - 手持植物/工具的绘制与更新（种植时跟随鼠标的动画）
+- **行数**: 40
+- **难度**: 🟢 低
+- **项目内依赖**: Coin.h, Board.h, Plant.h, Zombie.h, Cutscene.h, GridItem.h, Challenge.h, LawnMower.h, SeedPacket.h, ../LawnApp.h, Projectile.h, ../Resources.h, CursorObject.h, ToolTipWidget.h, MessageWidget.h, ../GameConstants.h, Widget/GameButton.h, misc/Debug.h, graphics/Graphics.h
 
-- [✓] **3.2.9 SeedPacket / SeedBank（种子包/种子库）**
-  - **C++ 源文件：** `src/Lawn/SeedPacket.{h,cpp}`（3KB + 32KB）
-  - **核心依赖项：** `GameObject`, `Board`, `HitResult`
-  - **Rust 实现要点：**
-    - 已有 `seed_packet.rs`（62 行骨架 + 字段定义）
-    - 冷却计时、刷新、绘制种子图标
-    - 传送带模式：`UpdateConveyorBelt`
-    - 老虎机模式：`SlotMachineStart`, `PickNextSlotMachineSeed`
-    - `SeedBank` 管理多个 `SeedPacket`
+**翻译备注:**
 
-- [✓] **3.2.10 MessageWidget（消息/提示控件）**
-  - **C++ 源文件：** `src/Lawn/MessageWidget.{h,cpp}`（2KB + 14KB）
-  - **核心依赖项：** `GameObject`, `Board`
-  - **Rust 实现要点：** 游戏中出现的提示文字（如"一大波僵尸即将来袭"）
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
 
-- [✓] **3.2.11 ToolTipWidget（悬停提示）**
-  - **C++ 源文件：** `src/Lawn/ToolTipWidget.{h,cpp}`（2KB + 6KB）
-  - **核心依赖项：** `GameObject`, `Board`
-  - **Rust 实现要点：**
-    - 已有 `tool_tip_widget.rs`（17 行骨架）
-    - 植物/按钮悬停时的说明文字
+### `[ ]` `src\Lawn\Challenge.cpp`
 
-### 3.3 游戏模式/场景层
+- **行数**: 5583
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换
+- **项目内依赖**: Coin.h, Board.h, Plant.h, Zombie.h, GridItem.h, Cutscene.h, ZenGarden.h, LawnMower.h, Challenge.h, SeedPacket.h, Projectile.h, ../LawnApp.h, ../Resources.h, CursorObject.h, System/Music.h, ToolTipWidget.h, MessageWidget.h, ../GameConstants.h, System/PlayerInfo.h, Widget/GameButton.h, Widget/StoreScreen.h, ../Sexy.TodLib/TodDebug.h, ../Sexy.TodLib/TodFoley.h, ../Sexy.TodLib/TodCommon.h, graphics/Font.h, ../Sexy.TodLib/Reanimator.h, misc/Debug.h, misc/MTRand.h, ../Sexy.TodLib/TodParticle.h, ../Sexy.TodLib/TodStringFile.h, widget/WidgetManager.h, Widget/AchievementsScreen.h
 
-- [✓] **3.3.1 Board（游戏主面板——核心类）**
-  - **C++ 源文件：** `src/Lawn/Board.{h,cpp}`（21KB + 289KB）
-  - **核心依赖项：** `LawnApp`, `DataArray<Zombie>`, `DataArray<Plant>`, `DataArray<Projectile>`, `DataArray<Coin>`, `DataArray<LawnMower>`, `DataArray<GridItem>`, `Challenge`, `CutScene`, `SeedBank`
-  - **Rust 实现要点：**
-    - 已有 `board.rs`（604 行骨架）
-    - **极大型文件**——289KB C++ 代码，游戏中最大的核心调度类
-    - 游戏主循环：`Update` → `UpdateGameObjects` → `Draw` → `DrawGameObjects`
-    - 渲染排序：`RenderItem` 数组按 Z 深度排序 + 分类型渲染
-    - 关卡初始化：`InitLevel`, `InitZombieWaves`, `LoadBackgroundImages`
-    - 实体工厂：`AddPlant`, `AddZombie`, `AddProjectile`, `AddCoin`
-    - 碰撞检测：`MouseHitTest`, `ZombieHitTest`
-    - 网格坐标转换：`PixelToGridX/Y`, `GridToPixelX/Y`
-    - 逐波生成：`SpawnZombieWave`, `UpdateZombieSpawning`, `UpdateSunSpawning`
-    - 游戏状态：胜利/失败判定、暂停、关卡结束序列
-    - 大约 100+ 个方法需要翻译
+**翻译备注:**
 
-- [✓] **3.3.2 Challenge（挑战模式——核心类）**
-  - **C++ 源文件：** `src/Lawn/Challenge.{h,cpp}`（15KB + 174KB）
-  - **核心依赖项：** `Board`, `Plant`, `Zombie`, `GridItem`, `SeedPacket`, `FilterEffect`
-  - **Rust 实现要点：**
-    - 已有 `challenge.rs`（33 行骨架）
-    - **极大型文件**——174KB C++ 代码
-    - 所有特殊关卡逻辑：
-      - 消消乐（Beghouled）：`UpdateBeghouled`, `BeghouledPopulateBoard`, `BeghouledRemoveMatches`
-      - 老虎机（Slot Machine）：`UpdateSlotMachine`, `DrawSlotMachine`
-      - 植物僵尸（I, Zombie）：`IZombieStart`, `IZombieUpdate`, `IZombieEatBrain`
-      - 打地鼠（Whack-A-Zombie）：`WhackAZombieSpawning`, `MouseDownWhackAZombie`
-      - 最后防线（Last Stand）：`LastStandUpdate`, `LastStandCompletedStage`
-      - 暴风雨夜（Stormy Night）：`DrawStormNight`, `UpdateStormyNight`
-      - 传送门（Portal）：`PortalStart`, `UpdatePortalCombat`, `MoveAPortal`
-      - 花盆挑战（Scary Potter）：`ScaryPotterStart`, `ScaryPotterUpdate`
-      - 智慧树（Tree of Wisdom）：`TreeOfWisdomUpdate`, `TreeOfWisdomFertilize`
-      - 松鼠（Squirrel）：`SquirrelUpdate`, `SquirrelFound`
-      - 传送带模式（Conveyor Belt）：`UpdateConveyorBelt`
-    - 约 100+ 个方法
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
 
-- [✓] **3.3.3 CutScene（开场/过场动画）**
-  - **C++ 源文件：** `src/Lawn/Cutscene.{h,cpp}`（5KB + 81KB）
-  - **核心依赖项：** `Board`, `ChallengeScreen`, `Zombie`
-  - **Rust 实现要点：**
-    - 已有 `cutscene.rs`（17 行骨架）
-    - 关卡开场动画（僵尸入场、棋盘展示）
-    - 种子选择界面管理
-    - Crazy Dave 对话系统
-    - 升级包推荐展示
+### `[ ]` `src\Lawn\Challenge.h`
 
-- [✓] **3.3.4 ZenGarden（禅境花园）**
-  - **C++ 源文件：** `src/Lawn/ZenGarden.{h,cpp}`（7KB + 87KB）
-  - **核心依赖项：** `Board`, `Plant`, `GridItem`, `PottedPlant`
-  - **Rust 实现要点：**
-    - 已有 `zen_garden.rs`（17 行骨架）
-    - 盆栽植物系统：种植、浇水、施肥、音乐、虫害处理
-    - 蜗牛 Stinky 管理
-    - 商店交互
+- **行数**: 273
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(5个)
+- **项目内依赖**: ../ConstEnums.h, ../GameConstants.h, ../Sexy.TodLib/FilterEffect.h, graphics/Graphics.h
+- **标准库依赖**: cstdint
 
-### 3.4 UI 控件层（Lawn 定制）
+**类/结构体:**
 
-- [✓] **3.4.1 GameButton（游戏按钮）**
-  - **C++ 源文件：** `src/Lawn/Widget/GameButton.{h,cpp}`——已查看实现
-  - **核心依赖项：** `ButtonWidget`, `LawnApp`
-  - **Rust 实现要点：**
-    - 已有 `game_button.rs`（15 行骨架）
-    - 游戏中使用的各种按钮（菜单、铲子、商店等）
+- `[ ]` `struct BeghouledBoardState` (L45, 0 个方法, 1 个成员)
+- `[ ]` `class Challenge` (L50, 0 个方法, 10 个成员)
+- `[ ]` `class ZombieAllowedLevels` (L245, 0 个方法, 2 个成员)
 
-- [✓] **3.4.2 ChallengeScreen（挑战选择界面）**
-  - **C++ 源文件：** `src/Lawn/Widget/ChallengeScreen.{h,cpp}`
-  - **核心依赖项：** `Widget`, `LawnApp`, `GameButton`
-  - **Rust 实现要点：**
-    - 已有 `challenge_screen.rs`（15 行骨架）
-    - 挑战/生存模式选择页
+**枚举:**
 
-- [✓] **3.4.3 SeedChooserScreen（种子选择界面）**
-  - **C++ 源文件：** `src/Lawn/Widget/SeedChooserScreen.{h,cpp}`
-  - **核心依赖项：** `Widget`, `LawnApp`, `SeedPacket`
-  - **Rust 实现要点：**
-    - 已有 `seed_chooser_screen.rs`（15 行骨架）
-    - 关卡开始前选择携带的植物
+- `[ ]` `enum BeghouledUpgrade` → { BEGHOULED_UPGRADE_REPEATER, BEGHOULED_UPGRADE_FUMESHROOM, BEGHOULED_UPGRADE_TALLNUT, NUM_BEGHOULED_UPGRADES }
 
-- [✓] **3.4.4 AlmanacDialog（图鉴对话框）**
-  - **C++ 源文件：** `src/Lawn/Widget/AlmanacDialog.{h,cpp}`
-  - **核心依赖项：** `Dialog`, `LawnApp`, `Plant`, `Zombie`
-  - **Rust 实现要点：**
-    - 已有 `almanac_dialog.rs`（15 行骨架）
-    - 植物/僵尸百科
+**自由函数:**
 
-- [✓] **3.4.5 StoreScreen（商店界面）**
-  - **C++ 源文件：** `src/Lawn/Widget/StoreScreen.{h,cpp}`
-  - **核心依赖项：** `Widget`, `LawnApp`, `GameButton`
-  - **Rust 实现要点：**
-    - 已有 `store_screen.rs`（15 行骨架）
-    - Crazy Dave 的汽车后备箱商店
+- `[ ]` `enum BeghouledUpgrade : int32_t({
+    BEGHOULED_UPGRADE_REPEATER,
+    BEGHOULED_UPGRADE_FUMESHROOM,
+    BEGHOULED_UPGRADE_TALLNUT,
+    NUM_BEGHOULED_UPGRADES
+};
 
-- [✓] **3.4.6 TitleScreen（标题界面）**
-  - **C++ 源文件：** `src/Lawn/Widget/TitleScreen.{h,cpp}`
-  - **核心依赖项：** `Widget`, `LawnApp`, `GameButton`
-  - **Rust 实现要点：**
-    - 已有 `title_screen.rs`（15 行骨架）
-    - 主标题界面
+struct BeghouledBoardState
+{
+	SeedType		        mSeedType[9][6];
+};
 
-- [✓] **3.4.7 AwardScreen（通关奖励界面）**
-  - **C++ 源文件：** `src/Lawn/Widget/AwardScreen.{h,cpp}`
-  - **核心依赖项：** `Widget`, `LawnApp`, `GameButton`
-  - **Rust 实现要点：**
-    - 已有 `award_screen.rs`（15 行骨架）
-    - 关卡通关后展示奖杯和成绩
+class Challenge)`
 
-- [✓] **3.4.8 CreditScreen（制作人员列表）**
-  - **C++ 源文件：** `src/Lawn/Widget/CreditScreen.{h,cpp}`
-  - **核心依赖项：** `Widget`, `LawnApp`
-  - **Rust 实现要点：**
-    - 已有 `credit_screen.rs`（15 行骨架）
+**翻译备注:**
 
-- [✓] **3.4.9 其他对话框（Lawn 定制）**
-  - **C++ 源文件：** 以下文件各 15 行骨架在 Rust 中
-    - `AchievementsScreen`（成就界面）
-    - `CheatDialog`（作弊对话框）
-    - `ContinueDialog`（继续游戏对话框）
-    - `ImitaterDialog`（模仿者选择对话框）
-    - `LawnDialog`（游戏通用对话框）
-    - `NewOptionsDialog`（新选项界面）
-    - `NewUserDialog`（新用户对话框）
-    - `UserDialog`（用户选择对话框）
-  - **核心依赖项：** `Dialog`, `LawnApp`
-  - **Rust 实现要点：** 以上文件均已有 15 行 Rust 骨架，需翻译完整 C++ 逻辑
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
 
-### 3.5 工具与辅助层
+### `[ ]` `src\Lawn\Coin.cpp`
 
-- [✓] **3.5.1 LawnCommon（游戏通用函数）**
-  - **C++ 源文件：** `src/Lawn/LawnCommon.{h,cpp}`（3KB + 4KB）
-  - **核心依赖项：** `EditWidget`, `Dialog`, `Checkbox`, `Graphics`
-  - **Rust 实现要点：**
-    - 已有 `lawn_common.rs`（81 行骨架）
-    - `TileImageHorizontally`, `TileImageVertically`（平铺绘制辅助）
-    - 存档文件名生成
-    - 编辑框控件创建辅助
+- **行数**: 1533
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 类型转换
+- **项目内依赖**: Coin.h, Board.h, Cutscene.h, ZenGarden.h, Challenge.h, ../LawnApp.h, SeedPacket.h, CursorObject.h, ../Resources.h, MessageWidget.h, ../GameConstants.h, System/PlayerInfo.h, ../Sexy.TodLib/TodFoley.h, ../Sexy.TodLib/TodDebug.h, ../Sexy.TodLib/Reanimator.h, ../Sexy.TodLib/Attachment.h, Widget/AchievementsScreen.h
 
-- [✓] **3.5.2 系统模块（存档/玩家/配置）**
-  - **C++ 源文件：** `src/Lawn/System/` 目录下的文件
-  - **核心依赖项：** `LawnApp`, `Board`, `SexyAppBase`
-  - **Rust 实现要点：**
-    - 已有骨架文件：
-      - `data_sync.rs`（17 行）——数据同步
-      - `player_info.rs`（17 行）——玩家信息
-      - `profile_mgr.rs`（17 行）——玩家档案管理
-      - `save_game.rs`（17 行）——游戏存档
-      - `music.rs`（17 行）——音乐管理
-      - `reanimation_lawn.rs`（17 行）——Lawn 动画扩展
-      - `typing_check.rs`（17 行）——打字检查（DoTypingCheck）
-    - 需要完整的存档/读档序列化逻辑
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Coin.h`
+
+- **行数**: 101
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: GameObject.h, System/PlayerInfo.h
+- **标准库依赖**: cstdint
+
+**类/结构体:**
+
+- `[ ]` `class Coin : GameObject` (L17, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\CursorObject.cpp`
+
+- **行数**: 341
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换
+- **项目内依赖**: Board.h, Cutscene.h, ZenGarden.h, ../LawnApp.h, CursorObject.h, ../Resources.h, ../Sexy.TodLib/Reanimator.h, widget/WidgetManager.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\CursorObject.h`
+
+- **行数**: 63
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: GameObject.h
+- **标准库依赖**: cstdint
+
+**类/结构体:**
+
+- `[ ]` `class CursorObject : GameObject` (L9, 0 个方法, 10 个成员)
+- `[ ]` `class CursorPreview : GameObject` (L31, 0 个方法, 2 个成员)
+
+**自由函数:**
+
+- `[ ]` `class CursorObject : public GameObject()`
+- `[ ]` `class CursorPreview : public GameObject()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\CutScene.cpp`
+
+- **行数**: 2383
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 类型转换
+- **项目内依赖**: Board.h, Plant.h, Zombie.h, GridItem.h, Cutscene.h, Challenge.h, LawnMower.h, SeedPacket.h, ../LawnApp.h, System/Music.h, ../Resources.h, MessageWidget.h, ../GameConstants.h, Widget/LawnDialog.h, Widget/GameButton.h, System/PlayerInfo.h, Widget/StoreScreen.h, Widget/ChallengeScreen.h, ../Sexy.TodLib/TodFoley.h, Widget/SeedChooserScreen.h, ../Sexy.TodLib/TodCommon.h, ../Sexy.TodLib/Attachment.h, ../Sexy.TodLib/Reanimator.h, ../Sexy.TodLib/TodParticle.h, ../Sexy.TodLib/TodStringFile.h, misc/PerfTimer.h, widget/WidgetManager.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Cutscene.h`
+
+- **行数**: 115
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: misc/KeyCodes.h, Zombie.h
+
+**类/结构体:**
+
+- `[ ]` `class CutScene` (L14, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\GameObject.cpp`
+
+- **行数**: 55
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: GameObject.h, ../LawnApp.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\GameObject.h`
+
+- **行数**: 52
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: ../ConstEnums.h, ../SexyAppFramework/graphics/Graphics.h
+- **标准库依赖**: cstdint
+
+**类/结构体:**
+
+- `[ ]` `class GameObject` (L15, 0 个方法, 9 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\GridItem.cpp`
+
+- **行数**: 673
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换
+- **项目内依赖**: Board.h, GridItem.h, Challenge.h, ZenGarden.h, ../LawnApp.h, SeedPacket.h, CursorObject.h, ../Resources.h, MessageWidget.h, System/ReanimationLawn.h, ../Sexy.TodLib/TodFoley.h, ../Sexy.TodLib/Reanimator.h, ../Sexy.TodLib/TodParticle.h, widget/WidgetManager.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\GridItem.h`
+
+- **行数**: 98
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(2个)
+- **项目内依赖**: ../ConstEnums.h
+- **标准库依赖**: cstdint
+
+**类/结构体:**
+
+- `[ ]` `class MotionTrailFrame` (L19, 0 个方法, 3 个成员)
+- `[ ]` `class GridItem` (L27, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\LawnCommon.cpp`
+
+- **行数**: 152
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针, 类型转换
+- **项目内依赖**: Board.h, Plant.h, ../LawnApp.h, LawnCommon.h, ../Resources.h, ../GameConstants.h, ../Sexy.TodLib/TodCommon.h, graphics/Font.h, widget/Dialog.h, misc/SexyMatrix.h, widget/Checkbox.h
+- **标准库依赖**: time.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\LawnCommon.h`
+
+- **行数**: 83
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: ../ConstEnums.h, graphics/Graphics.h, widget//EditWidget.h
+
+**类/结构体:**
+
+- `[ ]` `class LawnEditWidget : EditWidget` (L24, 0 个方法, 2 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\LawnMower.cpp`
+
+- **行数**: 428
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: Board.h, Cutscene.h, LawnMower.h, ../LawnApp.h, System/ReanimationLawn.h, ../Sexy.TodLib/TodFoley.h, ../Sexy.TodLib/Reanimator.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\LawnMower.h`
+
+- **行数**: 73
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: ../ConstEnums.h, misc/Rect.h
+- **标准库依赖**: cstdint
+
+**类/结构体:**
+
+- `[ ]` `class LawnMower` (L19, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\MessageWidget.cpp`
+
+- **行数**: 483
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 类型转换
+- **项目内依赖**: Board.h, Challenge.h, ../LawnApp.h, ../Resources.h, MessageWidget.h, graphics/Font.h, ../Sexy.TodLib/TodCommon.h, ../Sexy.TodLib/Reanimator.h, ../Sexy.TodLib/TodStringFile.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\MessageWidget.h`
+
+- **行数**: 69
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(3个)
+- **项目内依赖**: ../ConstEnums.h, ../SexyAppFramework/Common.h, ../LawnApp.h
+- **标准库依赖**: cstdint
+
+**类/结构体:**
+
+- `[ ]` `class MessageWidget` (L21, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Plant.cpp`
+
+- **行数**: 5232
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 类型转换
+- **项目内依赖**: Coin.h, Plant.h, Board.h, Zombie.h, Cutscene.h, GridItem.h, ZenGarden.h, Challenge.h, Projectile.h, SeedPacket.h, ../LawnApp.h, CursorObject.h, ../GameConstants.h, System/PlayerInfo.h, System/ReanimationLawn.h, ../Sexy.TodLib/TodFoley.h, ../Sexy.TodLib/TodDebug.h, ../Sexy.TodLib/Attachment.h, ../Sexy.TodLib/Reanimator.h, ../Sexy.TodLib/TodParticle.h, ../Sexy.TodLib/EffectSystem.h, ../Sexy.TodLib/TodStringFile.h, Widget/AchievementsScreen.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Plant.h`
+
+- **行数**: 339
+- **难度**: 🟡 中
+- **注意**: 裸指针, extern 声明, 宏(1个)
+- **项目内依赖**: GameObject.h
+- **标准库依赖**: cstdint, string
+
+**类/结构体:**
+
+- `[ ]` `class MagnetItem` (L130, 0 个方法, 5 个成员)
+- `[ ]` `class Plant : GameObject` (L145, 0 个方法, 10 个成员)
+- `[ ]` `class PlantDefinition` (L305, 0 个方法, 9 个成员)
+
+**枚举:**
+
+- `[ ]` `enum PlantSubClass` → { SUBCLASS_NORMAL, SUBCLASS_SHOOTER }
+- `[ ]` `enum PlantWeapon` → { WEAPON_PRIMARY, WEAPON_SECONDARY }
+- `[ ]` `enum PlantOnBungeeState` → { NOT_ON_BUNGEE, GETTING_GRABBED_BY_BUNGEE, RISING_WITH_BUNGEE }
+- `[ ]` `enum PlantState` → { STATE_NOTREADY, STATE_READY, STATE_DOINGSPECIAL, STATE_SQUASH_LOOK, STATE_SQUASH_PRE_LAUNCH, ... (49 个值) }
+- `[ ]` `enum PLANT_LAYER` → { PLANT_LAYER_BELOW, PLANT_LAYER_MAIN, PLANT_LAYER_REANIM, PLANT_LAYER_REANIM_HEAD, PLANT_LAYER_REANIM_BLINK, ... (7 个值) }
+- `[ ]` `enum PLANT_ORDER` → { PLANT_ORDER_LILYPAD, PLANT_ORDER_NORMAL, PLANT_ORDER_PUMPKIN, PLANT_ORDER_FLYER, PLANT_ORDER_CHERRYBOMB }
+- `[ ]` `enum MagnetItemType` → { MAGNET_ITEM_NONE, MAGNET_ITEM_PAIL_1, MAGNET_ITEM_PAIL_2, MAGNET_ITEM_PAIL_3, MAGNET_ITEM_FOOTBALL_HELMET_1, ... (22 个值) }
+
+**自由函数:**
+
+- `[ ]` `enum PlantSubClass : int32_t({
+    SUBCLASS_NORMAL = 0,
+    SUBCLASS_SHOOTER = 1
+};
+
+enum PlantWeapon : int32_t
+{
+    WEAPON_PRIMARY,
+    WEAPON_SECONDARY
+};
+
+enum PlantOnBungeeState : int32_t
+{
+    NOT_ON_BUNGEE,
+    GETTING_GRABBED_BY_BUNGEE,
+    RISING_WITH_BUNGEE
+};
+
+enum PlantState : int32_t
+{
+    STATE_NOTREADY,
+    STATE_READY,
+    STATE_DOINGSPECIAL,
+    STATE_SQUASH_LOOK,
+    STATE_SQUASH_PRE_LAUNCH,
+    STATE_SQUASH_RISING,
+    STATE_SQUASH_FALLING,
+    STATE_SQUASH_DONE_FALLING,
+    STATE_GRAVEBUSTER_LANDING,
+    STATE_GRAVEBUSTER_EATING,
+    STATE_CHOMPER_BITING,
+    STATE_CHOMPER_BITING_GOT_ONE,
+    STATE_CHOMPER_BITING_MISSED,
+    STATE_CHOMPER_DIGESTING,
+    STATE_CHOMPER_SWALLOWING,
+    STATE_POTATO_RISING,
+    STATE_POTATO_ARMED,
+    STATE_POTATO_MASHED,
+    STATE_SPIKEWEED_ATTACKING,
+    STATE_SPIKEWEED_ATTACKING_2,
+    STATE_SCAREDYSHROOM_LOWERING,
+    STATE_SCAREDYSHROOM_SCARED,
+    STATE_SCAREDYSHROOM_RAISING,
+    STATE_SUNSHROOM_SMALL,
+    STATE_SUNSHROOM_GROWING,
+    STATE_SUNSHROOM_BIG,
+    STATE_MAGNETSHROOM_SUCKING,
+    STATE_MAGNETSHROOM_CHARGING,
+    STATE_BOWLING_UP,
+    STATE_BOWLING_DOWN,
+    STATE_CACTUS_LOW,
+    STATE_CACTUS_RISING,
+    STATE_CACTUS_HIGH,
+    STATE_CACTUS_LOWERING,
+    STATE_TANGLEKELP_GRABBING,
+    STATE_COBCANNON_ARMING,
+    STATE_COBCANNON_LOADING,
+    STATE_COBCANNON_READY,
+    STATE_COBCANNON_FIRING,
+    STATE_KERNELPULT_BUTTER,
+    STATE_UMBRELLA_TRIGGERED,
+    STATE_UMBRELLA_REFLECTING,
+    STATE_IMITATER_MORPHING,
+    STATE_ZEN_GARDEN_WATERED,
+    STATE_ZEN_GARDEN_NEEDY,
+    STATE_ZEN_GARDEN_HAPPY,
+    STATE_MARIGOLD_ENDING,
+    STATE_FLOWERPOT_INVULNERABLE,
+    STATE_LILYPAD_INVULNERABLE
+};
+
+enum PLANT_LAYER : int32_t
+{
+    PLANT_LAYER_BELOW = -1,
+    PLANT_LAYER_MAIN,
+    PLANT_LAYER_REANIM,
+    PLANT_LAYER_REANIM_HEAD,
+    PLANT_LAYER_REANIM_BLINK,
+    PLANT_LAYER_ON_TOP,
+    NUM_PLANT_LAYERS
+};
+
+enum PLANT_ORDER : int32_t
+{
+    PLANT_ORDER_LILYPAD,
+    PLANT_ORDER_NORMAL,
+    PLANT_ORDER_PUMPKIN,
+    PLANT_ORDER_FLYER,
+    PLANT_ORDER_CHERRYBOMB
+};
+
+enum MagnetItemType : int32_t
+{
+    MAGNET_ITEM_NONE,
+    MAGNET_ITEM_PAIL_1,
+    MAGNET_ITEM_PAIL_2,
+    MAGNET_ITEM_PAIL_3,
+    MAGNET_ITEM_FOOTBALL_HELMET_1,
+    MAGNET_ITEM_FOOTBALL_HELMET_2,
+    MAGNET_ITEM_FOOTBALL_HELMET_3,
+    MAGNET_ITEM_DOOR_1,
+    MAGNET_ITEM_DOOR_2,
+    MAGNET_ITEM_DOOR_3,
+    
+    MAGNET_ITEM_POGO_1,
+    MAGNET_ITEM_POGO_2,
+    MAGNET_ITEM_POGO_3,
+    MAGNET_ITEM_JACK_IN_THE_BOX,
+    MAGNET_ITEM_LADDER_1,
+    MAGNET_ITEM_LADDER_2,
+    MAGNET_ITEM_LADDER_3,
+    MAGNET_ITEM_LADDER_PLACED,
+    MAGNET_ITEM_SILVER_COIN,
+    MAGNET_ITEM_GOLD_COIN,
+    MAGNET_ITEM_DIAMOND,
+    MAGNET_ITEM_PICK_AXE
+};
+
+class MagnetItem
+{
+public:
+    float                   mPosX;
+    float                   mPosY;
+    float                   mDestOffsetX;
+    float                   mDestOffsetY;
+    MagnetItemType          mItemType;
+};
+
+class Coin;
+class Zombie;
+class Reanimation;
+class TodParticleSystem;
+
+class Plant : public GameObject)`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Projectile.cpp`
+
+- **行数**: 1234
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换
+- **项目内依赖**: Board.h, Plant.h, Zombie.h, Cutscene.h, Projectile.h, ../LawnApp.h, ../Resources.h, ../GameConstants.h, ../Sexy.TodLib/TodFoley.h, ../Sexy.TodLib/TodDebug.h, ../Sexy.TodLib/Reanimator.h, ../Sexy.TodLib/Attachment.h, Widget/AchievementsScreen.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Projectile.h`
+
+- **行数**: 108
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(1个)
+- **项目内依赖**: ../ConstEnums.h, GameObject.h
+- **标准库依赖**: cstdint
+
+**类/结构体:**
+
+- `[ ]` `class ProjectileDefinition` (L18, 0 个方法, 3 个成员)
+- `[ ]` `class Projectile : GameObject` (L27, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\SeedPacket.cpp`
+
+- **行数**: 1191
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换
+- **项目内依赖**: Board.h, Cutscene.h, Challenge.h, SeedPacket.h, ../LawnApp.h, CursorObject.h, ../Resources.h, MessageWidget.h, graphics/Font.h, ../Sexy.TodLib/FilterEffect.h, misc/SexyMatrix.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\SeedPacket.h`
+
+- **行数**: 95
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: GameObject.h, ../GameConstants.h
+- **标准库依赖**: cstdint
+
+**类/结构体:**
+
+- `[ ]` `class SeedPacket : GameObject` (L14, 0 个方法, 10 个成员)
+- `[ ]` `class SeedBank : GameObject` (L48, 0 个方法, 4 个成员)
+
+**自由函数:**
+
+- `[ ]` `class SeedPacket : public GameObject()`
+- `[ ]` `class SeedBank : public GameObject()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\System\DataSync.cpp`
+
+- **行数**: 550
+- **难度**: 🔴 高
+- **注意**: 裸 new/delete, 裸指针, 异常处理, 类型转换, void* 类型擦除
+- **项目内依赖**: DataSync.h, fcaseopen/fcaseopen.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\System\DataSync.h`
+
+- **行数**: 162
+- **难度**: 🟡 中
+- **注意**: 裸指针, 模板, 类型转换, 宏(1个), void* 类型擦除
+- **项目内依赖**: type_traits, ../../SexyAppFramework/Common.h
+
+**类/结构体:**
+
+- `[ ]` `class DataReader` (L9, 0 个方法, 5 个成员)
+- `[ ]` `class DataWriter` (L40, 0 个方法, 4 个成员)
+- `[ ]` `class DataSync` (L79, 0 个方法, 7 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\System\Music.cpp`
+
+- **行数**: 706
+- **难度**: 🟢 低
+- **注意**: 裸指针, 运算符重载(new[](aSize);), void* 类型擦除
+- **项目内依赖**: Music.h, ../Board.h, PlayerInfo.h, ../../LawnApp.h, paklib/PakInterface.h, ../../Sexy.TodLib/TodDebug.h, ../../Sexy.TodLib/TodCommon.h, sound/SDLMusicInterface.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\System\Music.h`
+
+- **行数**: 139
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(1个)
+- **项目内依赖**: SDL_mixer_ext/SDL_mixer_ext.h
+- **标准库依赖**: cstdint, string
+
+**类/结构体:**
+
+- `[ ]` `class MusicFileData` (L62, 0 个方法, 1 个成员)
+- `[ ]` `class Music` (L69, 0 个方法, 10 个成员)
+
+**枚举:**
+
+- `[ ]` `enum MusicTune` → { MUSIC_TUNE_NONE, MUSIC_TUNE_DAY_GRASSWALK, MUSIC_TUNE_NIGHT_MOONGRAINS, MUSIC_TUNE_POOL_WATERYGRAVES, MUSIC_TUNE_FOG_RIGORMORMIST, ... (15 个值) }
+- `[ ]` `enum MusicFile` → { MUSIC_FILE_NONE, MUSIC_FILE_MAIN_MUSIC, MUSIC_FILE_DRUMS, MUSIC_FILE_HIHATS, MUSIC_FILE_CREDITS_ZOMBIES_ON_YOUR_LAWN, ... (6 个值) }
+- `[ ]` `enum MusicBurstState` → { MUSIC_BURST_OFF, MUSIC_BURST_STARTING, MUSIC_BURST_ON, MUSIC_BURST_FINISHING }
+- `[ ]` `enum MusicDrumsState` → { MUSIC_DRUMS_OFF, MUSIC_DRUMS_ON_QUEUED, MUSIC_DRUMS_ON, MUSIC_DRUMS_OFF_QUEUED, MUSIC_DRUMS_FADING }
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\System\PlayerInfo.cpp`
+
+- **行数**: 285
+- **难度**: 🟢 低
+- **注意**: 异常处理, 同步原语, 类型转换
+- **项目内依赖**: bit, DataSync.h, PlayerInfo.h, ../LawnCommon.h, ../Widget/ChallengeScreen.h, ../../Sexy.TodLib/TodDebug.h, ../../Sexy.TodLib/TodCommon.h, misc/Buffer.h, ../../SexyAppFramework/SexyAppBase.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\System\PlayerInfo.h`
+
+- **行数**: 123
+- **难度**: 🟢 低
+- **注意**: 同步原语, 宏(3个)
+- **项目内依赖**: vector, ../../ConstEnums.h, ../../SexyAppFramework/Common.h
+- **标准库依赖**: cstdint, ctime
+
+**类/结构体:**
+
+- `[ ]` `class PottedPlant` (L15, 0 个方法, 10 个成员)
+- `[ ]` `class PlayerInfo` (L48, 0 个方法, 10 个成员)
+
+**枚举:**
+
+- `[ ]` `enum FacingDirection` → { FACING_RIGHT, FACING_LEFT }
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\System\PoolEffect.cpp`
+
+- **行数**: 260
+- **难度**: 🟡 中
+- **注意**: 智能指针, 裸 new/delete, 裸指针, 类型转换
+- **项目内依赖**: memory, PoolEffect.h, ../../LawnApp.h, ../../Resources.h, ../../GameConstants.h, ../../Sexy.TodLib/TodDebug.h, graphics/GLImage.h, graphics/Graphics.h, graphics/GLInterface.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\System\PoolEffect.h`
+
+- **行数**: 56
+- **难度**: 🟢 低
+- **注意**: 智能指针, 裸指针, 宏(1个)
+- **项目内依赖**: memory, vector, ../../ConstEnums.h
+
+**类/结构体:**
+
+- `[ ]` `class PoolEffect` (L20, 0 个方法, 4 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\System\ProfileMgr.cpp`
+
+- **行数**: 210
+- **难度**: 🟡 中
+- **注意**: 裸指针, 异常处理
+- **项目内依赖**: DataSync.h, ProfileMgr.h, PlayerInfo.h, ../../SexyAppFramework/SexyAppBase.h
+
+**自由函数:**
+
+- `[ ]` ` try()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\System\ProfileMgr.h`
+
+- **行数**: 67
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: map, ../../SexyAppFramework/Common.h
+- **标准库依赖**: string
+
+**类/结构体:**
+
+- `[ ]` `class ProfileMgr` (L15, 0 个方法, 3 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\System\ReanimationLawn.cpp`
+
+- **行数**: 438
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 类型转换
+- **项目内依赖**: ../Plant.h, ../Zombie.h, ../../LawnApp.h, ReanimationLawn.h, ../../Sexy.TodLib/TodDebug.h, graphics/Color.h, ../../Sexy.TodLib/Reanimator.h, graphics/MemoryImage.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\System\ReanimationLawn.h`
+
+- **行数**: 71
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: ../../ConstEnums.h, ../../Sexy.TodLib/TodList.h
+
+**类/结构体:**
+
+- `[ ]` `class ReanimCacheImageVariation` (L16, 0 个方法, 3 个成员)
+- `[ ]` `class ReanimatorCache` (L26, 0 个方法, 5 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\System\SaveGame.cpp`
+
+- **行数**: 3115
+- **难度**: 🔴 高
+- **注意**: 裸指针, 模板, 异常处理, 同步原语, 类型转换, void* 类型擦除
+- **项目内依赖**: Music.h, SaveGame.h, ../Board.h, ../Challenge.h, ../SeedPacket.h, ../../LawnApp.h, ../CursorObject.h, ../../Resources.h, ../../ConstEnums.h, ../MessageWidget.h, ../../Sexy.TodLib/Trail.h, zlib.h, ../../Sexy.TodLib/Attachment.h, ../../Sexy.TodLib/Reanimator.h, ../../Sexy.TodLib/TodParticle.h, ../../Sexy.TodLib/EffectSystem.h, ../../Sexy.TodLib/DataArray.h, ../../Sexy.TodLib/TodList.h, DataSync.h, misc/Buffer.h, algorithm, vector
+- **标准库依赖**: cstdint
+
+**类/结构体:**
+
+- `[ ]` `struct SaveFileHeaderV4` (L36, 0 个方法, 4 个成员)
+- `[ ]` `struct SaveFileHeader` (L44, 0 个方法, 3 个成员)
+- `[ ]` `class TLVReader` (L100, 0 个方法, 10 个成员)
+- `[ ]` `class PortableSaveContext` (L144, 0 个方法, 10 个成员)
+- `[ ]` `class SaveGameContext` (L2609, 0 个方法, 3 个成员)
+
+**枚举:**
+
+- `[ ]` `enum SaveChunkTypeV4` → { SAVE4_CHUNK_BOARD_BASE, SAVE4_CHUNK_ZOMBIES, SAVE4_CHUNK_PLANTS, SAVE4_CHUNK_PROJECTILES, SAVE4_CHUNK_COINS, ... (20 个值) }
+- `[ ]` `enum BoardBaseFieldId` → { BOARD_FIELD_PAUSED, BOARD_FIELD_GRID_SQUARE_TYPE, BOARD_FIELD_GRID_CEL_LOOK, BOARD_FIELD_GRID_CEL_OFFSET, BOARD_FIELD_GRID_CEL_FOG, ... (103 个值) }
+
+**自由函数:**
+
+- `[ ]` ` try()`
+- `[ ]` ` try()`
+- `[ ]` ` try()`
+- `[ ]` ` try()`
+- `[ ]` ` try()`
+- `[ ]` `enum BoardBaseFieldId : uint32_t()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\System\SaveGame.h`
+
+- **行数**: 32
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **标准库依赖**: string
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\System\TypingCheck.cpp`
+
+- **行数**: 69
+- **难度**: 🟢 低
+- **注意**: 类型转换
+- **项目内依赖**: TypingCheck.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\System\TypingCheck.h`
+
+- **行数**: 45
+- **难度**: 🟢 低
+- **注意**: 宏(1个)
+- **项目内依赖**: misc/KeyCodes.h
+- **标准库依赖**: string
+
+**类/结构体:**
+
+- `[ ]` `class TypingCheck` (L9, 0 个方法, 2 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\ToolTipWidget.cpp`
+
+- **行数**: 248
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换
+- **项目内依赖**: ../Resources.h, ToolTipWidget.h, ../GameConstants.h, ../Sexy.TodLib/TodCommon.h, graphics/Font.h, ../Sexy.TodLib/TodStringFile.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\ToolTipWidget.h`
+
+- **行数**: 63
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: ../SexyAppFramework/Common.h
+
+**类/结构体:**
+
+- `[ ]` `class ToolTipWidget` (L12, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\AchievementsScreen.cpp`
+
+- **行数**: 288
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: AchievementsScreen.h, ../Board.h, GameButton.h, GameSelector.h, ../../LawnApp.h, AlmanacDialog.h, ../../Resources.h, ../System/Music.h, ../../GameConstants.h, ../System/PlayerInfo.h, ../System/ProfileMgr.h, ../../Sexy.TodLib/TodFoley.h, ../../Sexy.TodLib/TodDebug.h, graphics/Font.h, ../../Sexy.TodLib/Reanimator.h, ../../Sexy.TodLib/TodParticle.h, widget/Dialog.h, widget/WidgetManager.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\AchievementsScreen.h`
+
+- **行数**: 93
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(1个)
+- **项目内依赖**: ../../ConstEnums.h, widget/Widget.h
+
+**类/结构体:**
+
+- `[ ]` `class AchievementItem` (L39, 0 个方法, 2 个成员)
+- `[ ]` `class AchievementsWidget : Widget` (L47, 0 个方法, 7 个成员)
+- `[ ]` `class ReportAchievement` (L68, 0 个方法, 0 个成员)
+
+**枚举:**
+
+- `[ ]` `enum AchievementId` → { HomeSecurity, NovelPeasPrize, BetterOffDead, ChinaShop, Spudow, ... (21 个值) }
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\AlmanacDialog.cpp`
+
+- **行数**: 704
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 同步原语
+- **项目内依赖**: ../Board.h, ../Plant.h, ../Zombie.h, GameButton.h, ../SeedPacket.h, ../../LawnApp.h, AlmanacDialog.h, ../../Resources.h, ../System/Music.h, ../../GameConstants.h, ../System/PlayerInfo.h, ../System/PoolEffect.h, ../System/ReanimationLawn.h, ../../Sexy.TodLib/TodStringFile.h, widget/WidgetManager.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\AlmanacDialog.h`
+
+- **行数**: 103
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(3个)
+- **项目内依赖**: LawnDialog.h
+
+**类/结构体:**
+
+- `[ ]` `class AlmanacDialog : LawnDialog` (L25, 0 个方法, 10 个成员)
+
+**自由函数:**
+
+- `[ ]` `class AlmanacDialog : public LawnDialog({
+private:
+	enum)`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\AwardScreen.cpp`
+
+- **行数**: 664
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 同步原语
+- **项目内依赖**: ../Plant.h, ../Board.h, GameButton.h, StoreScreen.h, AwardScreen.h, ../ZenGarden.h, ../SeedPacket.h, ../../LawnApp.h, AlmanacDialog.h, ../System/Music.h, ../../Resources.h, ../../GameConstants.h, ../System/PlayerInfo.h, ../../Sexy.TodLib/TodFoley.h, ../../Sexy.TodLib/TodCommon.h, ../../Sexy.TodLib/TodStringFile.h, AchievementsScreen.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\AwardScreen.h`
+
+- **行数**: 86
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: ../../ConstEnums.h, widget/Widget.h
+
+**类/结构体:**
+
+- `[ ]` `class AchievementScreenItem` (L13, 0 个方法, 6 个成员)
+- `[ ]` `class AwardScreen : Widget` (L23, 0 个方法, 10 个成员)
+
+**自由函数:**
+
+- `[ ]` `class AwardScreen : public Widget({
+private:
+	enum)`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\ChallengeScreen.cpp`
+
+- **行数**: 742
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 同步原语
+- **项目内依赖**: GameButton.h, ../../LawnApp.h, ../System/Music.h, ChallengeScreen.h, ../../Resources.h, ../ToolTipWidget.h, ../System/PlayerInfo.h, ../../Sexy.TodLib/TodDebug.h, ../../Sexy.TodLib/TodFoley.h, ../../Sexy.TodLib/TodCommon.h, misc/Debug.h, ../../Sexy.TodLib/TodStringFile.h, widget/WidgetManager.h, SDL.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\ChallengeScreen.h`
+
+- **行数**: 102
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 类型转换, extern 声明, 宏(2个)
+- **项目内依赖**: ../../ConstEnums.h, widget/Dialog.h
+
+**类/结构体:**
+
+- `[ ]` `class ChallengeScreen : Widget, ButtonListener` (L15, 0 个方法, 10 个成员)
+- `[ ]` `class ChallengeDefinition` (L69, 0 个方法, 6 个成员)
+
+**自由函数:**
+
+- `[ ]` `private: enum()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\CheatDialog.cpp`
+
+- **行数**: 154
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针, 类型转换
+- **项目内依赖**: CheatDialog.h, ../../LawnApp.h, ../LawnCommon.h, ChallengeScreen.h, ../../Resources.h, ../../GameConstants.h, ../System/PlayerInfo.h, widget/WidgetManager.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\CheatDialog.h`
+
+- **行数**: 48
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: LawnDialog.h, widget/EditListener.h
+
+**类/结构体:**
+
+- `[ ]` `class CheatDialog : LawnDialog, EditListener` (L9, 0 个方法, 2 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\ContinueDialog.cpp`
+
+- **行数**: 186
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针
+- **项目内依赖**: ../Board.h, ../Zombie.h, GameButton.h, ../../LawnApp.h, ContinueDialog.h, ../../Resources.h, ../../Sexy.TodLib/TodFoley.h, ../../Sexy.TodLib/TodStringFile.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\ContinueDialog.h`
+
+- **行数**: 52
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: LawnDialog.h
+
+**类/结构体:**
+
+- `[ ]` `class ContinueDialog : LawnDialog` (L8, 0 个方法, 2 个成员)
+
+**自由函数:**
+
+- `[ ]` `class ContinueDialog : public LawnDialog({
+public:
+	enum)`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\CreditScreen.cpp`
+
+- **行数**: 1783
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 类型转换
+- **项目内依赖**: GameButton.h, CreditScreen.h, ../../LawnApp.h, ../../Resources.h, ../System/Music.h, ../../GameConstants.h, ../System/PoolEffect.h, ../../Sexy.TodLib/TodFoley.h, ../../Sexy.TodLib/Attachment.h, ../../Sexy.TodLib/Reanimator.h, ../../Sexy.TodLib/TodParticle.h, widget/Dialog.h, ../../Sexy.TodLib/EffectSystem.h, ../../Sexy.TodLib/TodStringFile.h, graphics/Font.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\CreditScreen.h`
+
+- **行数**: 158
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: ../../ConstEnums.h, widget/Widget.h, misc/PerfTimer.h, widget/ButtonListener.h
+
+**类/结构体:**
+
+- `[ ]` `class CreditsTiming` (L47, 0 个方法, 4 个成员)
+- `[ ]` `class CreditScreen : Widget, ButtonListener` (L62, 0 个方法, 10 个成员)
+- `[ ]` `class CreditsOverlay : Widget` (L128, 0 个方法, 1 个成员)
+
+**枚举:**
+
+- `[ ]` `enum CreditsPhase` → { CREDITS_MAIN1, CREDITS_MAIN2, CREDITS_MAIN3, CREDITS_END }
+- `[ ]` `enum CreditLayer` → { CREDIT_LAYER_BACKGROUND, CREDIT_LAYER_ZOMBIE, CREDIT_LAYER_TOP }
+- `[ ]` `enum CreditWordType` → { WORD_AA, WORD_EE, WORD_AW, WORD_OH, WORD_OFF }
+- `[ ]` `enum CreditBrainType` → { BRAIN_FLY_ON, BRAIN_FAST_ON, BRAIN_NEXT_WORD, BRAIN_FAST_OFF, BRAIN_FLY_OFF, ... (6 个值) }
+
+**自由函数:**
+
+- `[ ]` `class CreditsOverlay : public Widget()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\GameButton.cpp`
+
+- **行数**: 427
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针
+- **项目内依赖**: GameButton.h, ../../LawnApp.h, ../../Resources.h, ../../Sexy.TodLib/TodCommon.h, graphics/Font.h, graphics/SysFont.h, graphics/Graphics.h, ../../Sexy.TodLib/TodStringFile.h, widget/WidgetManager.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\GameButton.h`
+
+- **行数**: 139
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: misc/SexyVector.h, widget/DialogButton.h
+
+**类/结构体:**
+
+- `[ ]` `class GameButton` (L13, 0 个方法, 10 个成员)
+- `[ ]` `class LawnStoneButton : DialogButton` (L85, 0 个方法, 0 个成员)
+- `[ ]` `class NewLawnButton : DialogButton` (L94, 0 个方法, 7 个成员)
+
+**自由函数:**
+
+- `[ ]` `class LawnStoneButton : public DialogButton()`
+- `[ ]` `class NewLawnButton : public DialogButton()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\GameSelector.cpp`
+
+- **行数**: 1503
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 同步原语, 类型转换, 可变参数
+- **项目内依赖**: ../Board.h, GameButton.h, StoreScreen.h, ../ZenGarden.h, GameSelector.h, ../../LawnApp.h, AlmanacDialog.h, ../../Resources.h, ../System/Music.h, ../ToolTipWidget.h, ../System/SaveGame.h, ../../GameConstants.h, ../System/PlayerInfo.h, ../System/ProfileMgr.h, ../System/TypingCheck.h, ../../Sexy.TodLib/TodFoley.h, ../../Sexy.TodLib/TodDebug.h, graphics/Font.h, ../../Sexy.TodLib/Reanimator.h, ../../Sexy.TodLib/TodParticle.h, widget/Dialog.h, widget/WidgetManager.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\GameSelector.h`
+
+- **行数**: 159
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 宏(1个)
+- **项目内依赖**: ../../ConstEnums.h, widget/Widget.h, widget/ButtonListener.h, AchievementsScreen.h, GameButton.h
+
+**类/结构体:**
+
+- `[ ]` `class GameSelector : Widget, ButtonListener` (L29, 0 个方法, 10 个成员)
+- `[ ]` `class GameSelectorOverlay : Widget` (L128, 0 个方法, 1 个成员)
+
+**枚举:**
+
+- `[ ]` `enum SelectorAnimState` → { SELECTOR_OPEN, SELECTOR_NEW_USER, SELECTOR_SHOW_SIGN, SELECTOR_IDLE }
+
+**自由函数:**
+
+- `[ ]` `class GameSelectorOverlay : public Widget()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\ImitaterDialog.cpp`
+
+- **行数**: 186
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针
+- **项目内依赖**: ../Plant.h, GameButton.h, ../SeedPacket.h, ../../LawnApp.h, ImitaterDialog.h, SeedChooserScreen.h, ../ToolTipWidget.h, ../../GameConstants.h, widget/WidgetManager.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\ImitaterDialog.h`
+
+- **行数**: 49
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: LawnDialog.h
+
+**类/结构体:**
+
+- `[ ]` `class ImitaterDialog : LawnDialog` (L9, 0 个方法, 2 个成员)
+
+**自由函数:**
+
+- `[ ]` `class ImitaterDialog : public LawnDialog()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\LawnDialog.cpp`
+
+- **行数**: 536
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针
+- **项目内依赖**: ../Board.h, LawnDialog.h, GameButton.h, ../../LawnApp.h, ../LawnCommon.h, ../../Resources.h, ChallengeScreen.h, ../../Sexy.TodLib/TodDebug.h, ../../Sexy.TodLib/Reanimator.h, ../../Sexy.TodLib/EffectSystem.h, ../../Sexy.TodLib/TodStringFile.h, graphics/ImageFont.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\LawnDialog.h`
+
+- **行数**: 111
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: ../../Sexy.TodLib/TodCommon.h, widget/Dialog.h
+
+**类/结构体:**
+
+- `[ ]` `class ReanimationWidget : Widget` (L26, 0 个方法, 5 个成员)
+- `[ ]` `class LawnDialog : Dialog` (L45, 0 个方法, 8 个成员)
+- `[ ]` `class GameOverDialog : LawnDialog` (L77, 0 个方法, 1 个成员)
+
+**自由函数:**
+
+- `[ ]` `class LawnDialog : public Dialog()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\NewOptionsDialog.cpp`
+
+- **行数**: 399
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 同步原语, 类型转换
+- **项目内依赖**: ../Board.h, GameButton.h, ../Cutscene.h, AlmanacDialog.h, ../LawnCommon.h, ../../LawnApp.h, ../System/Music.h, ../../Resources.h, NewOptionsDialog.h, ../../ConstEnums.h, ../../Sexy.TodLib/TodFoley.h, widget/Slider.h, widget/Checkbox.h, ../../Sexy.TodLib/TodStringFile.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\NewOptionsDialog.h`
+
+- **行数**: 81
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: widget/Dialog.h, widget/SliderListener.h, widget/CheckboxListener.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\NewUserDialog.cpp`
+
+- **行数**: 125
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针
+- **项目内依赖**: NewUserDialog.h, ../../LawnApp.h, ../../Resources.h, widget/WidgetManager.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\NewUserDialog.h`
+
+- **行数**: 49
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: LawnDialog.h, widget/EditListener.h
+
+**类/结构体:**
+
+- `[ ]` `class NewUserDialog : LawnDialog, EditListener` (L9, 0 个方法, 2 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\SeedChooserScreen.cpp`
+
+- **行数**: 1149
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 同步原语
+- **项目内依赖**: ../Board.h, ../Zombie.h, GameButton.h, StoreScreen.h, ../Cutscene.h, ../SeedPacket.h, ../../LawnApp.h, AlmanacDialog.h, ImitaterDialog.h, ../System/Music.h, ../../Resources.h, ../../Lawn/Plant.h, ../ToolTipWidget.h, SeedChooserScreen.h, ../../GameConstants.h, ../System/PlayerInfo.h, misc/Debug.h, widget/Dialog.h, misc/MTRand.h, ../../Sexy.TodLib/TodStringFile.h, widget/WidgetManager.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\SeedChooserScreen.h`
+
+- **行数**: 137
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: ../../ConstEnums.h, ../../Sexy.TodLib/TodCommon.h, widget/Widget.h
+
+**类/结构体:**
+
+- `[ ]` `class ChosenSeed` (L20, 0 个方法, 10 个成员)
+- `[ ]` `class SeedChooserScreen : Widget` (L40, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\StoreScreen.cpp`
+
+- **行数**: 1173
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 同步原语, 类型转换
+- **项目内依赖**: ../Coin.h, ../Board.h, ../Plant.h, LawnDialog.h, GameButton.h, StoreScreen.h, ../ZenGarden.h, ../SeedPacket.h, ../../LawnApp.h, ../../Resources.h, ../System/Music.h, SeedChooserScreen.h, ../../GameConstants.h, ../../Sexy.TodLib/TodFoley.h, ../../Sexy.TodLib/TodCommon.h, ../../Sexy.TodLib/Reanimator.h, misc/Debug.h, ../../Sexy.TodLib/TodStringFile.h, graphics/ImageFont.h, widget/WidgetManager.h, AchievementsScreen.h
+- **标准库依赖**: cstdint, time.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\StoreScreen.h`
+
+- **行数**: 123
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 宏(3个)
+- **项目内依赖**: ../../ConstEnums.h, ../System/PlayerInfo.h, ../../Sexy.TodLib/DataArray.h, widget/Dialog.h
+
+**类/结构体:**
+
+- `[ ]` `class StoreScreen : Dialog` (L20, 0 个方法, 10 个成员)
+- `[ ]` `class StoreScreenOverlay : Widget` (L93, 0 个方法, 1 个成员)
+
+**自由函数:**
+
+- `[ ]` `class StoreScreen : public Dialog({
+private:
+    enum)`
+- `[ ]` `class StoreScreenOverlay : public Widget()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\TitleScreen.cpp`
+
+- **行数**: 562
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针
+- **项目内依赖**: TitleScreen.h, widget/HyperlinkWidget.h, widget/WidgetManager.h, graphics/ImageFont.h, sound/SoundManager.h, ../../LawnApp.h, ../../Resources.h, ../../Sexy.TodLib/TodCommon.h, misc/SexyMatrix.h, ../../Sexy.TodLib/TodStringFile.h, ../../Sexy.TodLib/EffectSystem.h, ../../Sexy.TodLib/TodDebug.h, ../../Sexy.TodLib/Reanimator.h, ../../GameConstants.h, ../System/Music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\TitleScreen.h`
+
+- **行数**: 97
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: widget/Widget.h, widget/ButtonListener.h
+
+**枚举:**
+
+- `[ ]` `enum TitleState` → { TITLESTATE_WAITING_FOR_FIRST_DRAW, TITLESTATE_POPCAP_LOGO, TITLESTATE_PARTNER_LOGO, TITLESTATE_SCREEN }
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\UserDialog.cpp`
+
+- **行数**: 207
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针
+- **项目内依赖**: UserDialog.h, GameButton.h, ../../LawnApp.h, ../../Resources.h, ../System/ProfileMgr.h, ../System/PlayerInfo.h, ../../Sexy.TodLib/TodStringFile.h, widget/ListWidget.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Widget\UserDialog.h`
+
+- **行数**: 69
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: LawnDialog.h, widget/ListListener.h, widget/EditListener.h
+
+**类/结构体:**
+
+- `[ ]` `class UserDialog : LawnDialog, ListListener, EditListener` (L15, 0 个方法, 4 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\ZenGarden.cpp`
+
+- **行数**: 2452
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换
+- **项目内依赖**: Plant.h, Board.h, Challenge.h, ZenGarden.h, ../LawnApp.h, CursorObject.h, System/Music.h, Widget/GameButton.h, System/PlayerInfo.h, Widget/LawnDialog.h, Widget/StoreScreen.h, System/ReanimationLawn.h, ../Sexy.TodLib/TodFoley.h, ../Sexy.TodLib/Reanimator.h, ../Sexy.TodLib/Attachment.h, ../Sexy.TodLib/TodParticle.h, ../Sexy.TodLib/EffectSystem.h, graphics/Graphics.h, ../Sexy.TodLib/TodStringFile.h
+- **标准库依赖**: cstdint, time.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\ZenGarden.h`
+
+- **行数**: 154
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(3个)
+- **项目内依赖**: ../ConstEnums.h, vector
+- **标准库依赖**: string, stdint.h, time.h
+
+**类/结构体:**
+
+- `[ ]` `class SpecialGridPlacement` (L29, 0 个方法, 4 个成员)
+- `[ ]` `class ZenGarden` (L38, 0 个方法, 6 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Zombie.cpp`
+
+- **行数**: 10584
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 类型转换
+- **项目内依赖**: Plant.h, Board.h, ../ConstEnums.h, Zombie.h, Cutscene.h, GridItem.h, LawnMower.h, Challenge.h, Projectile.h, ../LawnApp.h, ../Resources.h, System/Music.h, Widget/AlmanacDialog.h, ../Sexy.TodLib/TodFoley.h, ../Sexy.TodLib/TodDebug.h, ../Sexy.TodLib/TodCommon.h, ../Sexy.TodLib/Reanimator.h, ../Sexy.TodLib/Attachment.h, ../Sexy.TodLib/TodParticle.h
+- **标准库依赖**: climits
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Lawn\Zombie.h`
+
+- **行数**: 435
+- **难度**: 🟡 中
+- **注意**: 裸指针, extern 声明, 宏(5个)
+- **项目内依赖**: GameObject.h, ../GameConstants.h
+- **标准库依赖**: cstdint
+
+**类/结构体:**
+
+- `[ ]` `class ZombieDrawPosition` (L66, 0 个方法, 7 个成员)
+- `[ ]` `class Zombie : GameObject` (L81, 0 个方法, 10 个成员)
+- `[ ]` `class ZombieDefinition` (L401, 0 个方法, 7 个成员)
+
+**枚举:**
+
+- `[ ]` `enum ZombieAttackType` → { ATTACKTYPE_CHEW, ATTACKTYPE_DRIVE_OVER, ATTACKTYPE_VAULT, ATTACKTYPE_LADDER }
+- `[ ]` `enum ZombieParts` → { PART_BODY, PART_HEAD, PART_HEAD_EATING, PART_TONGUE, PART_ARM, ... (13 个值) }
+
+**自由函数:**
+
+- `[ ]` `enum ZombieAttackType : int32_t({
+    ATTACKTYPE_CHEW,
+    ATTACKTYPE_DRIVE_OVER,
+    ATTACKTYPE_VAULT,
+    ATTACKTYPE_LADDER
+};
+
+enum ZombieParts : int32_t
+{
+    PART_BODY,
+    PART_HEAD,
+    PART_HEAD_EATING,
+    PART_TONGUE,
+    PART_ARM,
+    PART_HAIR,
+    PART_HEAD_YUCKY,
+    PART_ARM_PICKAXE,
+    PART_ARM_POLEVAULT,
+    PART_ARM_LEASH,
+    PART_ARM_FLAG,
+    PART_POGO,
+    PART_DIGGER
+};
+
+class ZombieDrawPosition
+{
+public:
+    int                             mHeadX;
+    int                             mHeadY;
+    int                             mArmY;
+    float                           mBodyY;
+    float                           mImageOffsetX;
+    float                           mImageOffsetY;
+    float                           mClipHeight;
+};
+
+class Plant;
+class Reanimation;
+class TodParticleSystem;
+class Zombie : public GameObject
+{
+public:
+    enum)`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
 
 ---
 
-## 四、FFI / 外部绑定层
+## 模块: `src/Sexy.TodLib`
 
-- [✓] **4.1 SDL2 FFI 绑定**
-  - **C++ 源文件：** 无（C 库对应 SDL2）
-  - **Rust 文件：** `rust/src/ffi/sdl2.rs`（871 行）
-  - **核心依赖项：** SDL2 原生库
-  - **Rust 实现要点：**
-    - 已有较完整绑定
-    - 检查 `SDL_Init`, `SDL_CreateWindow`, `SDL_PollEvent`, `SDL_GL_SwapWindow` 等关键函数是否都绑定了
-    - 确保和 SDL2 的 ABI 兼容
+> 文件数: 29 | 行数: 12467 | 类: 58 | 函数: 7
 
-- [✓] **4.2 OpenGL FFI 绑定**
-  - **C++ 源文件：** 无（对应 glad/gles2.h）
-  - **Rust 文件：** `rust/src/ffi/opengl.rs`（726 行）
-  - **核心依赖项：** OpenGL 库
-  - **Rust 实现要点：**
-    - 已有较完整绑定
-    - OpenGL 函数指针加载，需要 `glGetProcAddress` 包装
+### `[ ]` `src\Sexy.TodLib\Attachment.cpp`
 
-- [✓] **4.3 libc FFI 绑定**
-  - **Rust 文件：** `rust/src/ffi/libc.rs`（39 行）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：** 基本 libc 函数绑定，已有
+- **行数**: 1015
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换
+- **项目内依赖**: Trail.h, TodDebug.h, Attachment.h, Reanimator.h, TodParticle.h, EffectSystem.h, graphics/Graphics.h
 
-- [✓] **4.4 Loader（动态库加载器）**
-  - **Rust 文件：** `rust/src/ffi/loader.rs`（17 行）
-  - **核心依赖项：** 无
-  - **Rust 实现要点：** OpenGL 函数加载辅助，已有
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\Attachment.h`
+
+- **行数**: 120
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(2个)
+- **项目内依赖**: ../ConstEnums.h, DataArray.h, misc/SexyMatrix.h
+- **标准库依赖**: cstdint
+
+**类/结构体:**
+
+- `[ ]` `class AttachEffect` (L23, 0 个方法, 5 个成员)
+- `[ ]` `class AttacherInfo` (L33, 0 个方法, 4 个成员)
+- `[ ]` `class Attachment` (L45, 0 个方法, 3 个成员)
+- `[ ]` `class AttachmentHolder` (L87, 0 个方法, 1 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\DataArray.h`
+
+- **行数**: 186
+- **难度**: 🟡 中
+- **注意**: 裸指针, 模板, 同步原语, 类型转换, 运算符重载(delete(mBlock);, new(sizeof(DataArrayItem)), 宏(1个)
+- **项目内依赖**: TodDebug.h, TodCommon.h
+- **标准库依赖**: string.h
+
+**类/结构体:**
+
+- `[ ]` `class DataArray` (L19, 0 个方法, 10 个成员)
+- `[ ]` `class DataArrayItem` (L22, 0 个方法, 2 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\Definition.cpp`
+
+- **行数**: 1448
+- **难度**: 🟡 中
+- **注意**: 智能指针, 裸指针, 类型转换, 运算符重载(new[](theSize);), 可变参数, void* 类型擦除
+- **项目内依赖**: TodCommon.h, TodParticle.h, Trail.h, filesystem, fstream, memory, TodDebug.h, Definition.h, zlib.h, paklib/PakInterface.h, misc/PerfTimer.h, misc/XMLParser.h, ../Resources.h, Common.h
+- **标准库依赖**: assert.h, cstring, stddef.h, sys/stat.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\Definition.h`
+
+- **行数**: 229
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(1个), 可变参数, void* 类型擦除
+- **项目内依赖**: TodList.h, Reanimator.h, TodParticle.h
+- **标准库依赖**: string
+
+**类/结构体:**
+
+- `[ ]` `class DefSymbol` (L33, 0 个方法, 2 个成员)
+- `[ ]` `class DefField` (L48, 0 个方法, 4 个成员)
+- `[ ]` `class DefMap` (L67, 0 个方法, 2 个成员)
+- `[ ]` `class DefinitionArrayDef` (L108, 0 个方法, 2 个成员)
+- `[ ]` `class CompressedDefinitionHeader` (L123, 0 个方法, 2 个成员)
+- `[ ]` `class DefLoadResPath` (L135, 0 个方法, 2 个成员)
+
+**枚举:**
+
+- `[ ]` `enum class DefFieldType` → { DT_INVALID, DT_INT, DT_FLOAT, DT_STRING, DT_ENUM, ... (11 个值) }
+
+**自由函数:**
+
+- `[ ]` `enum class DefFieldType : int({
+    DT_INVALID,
+    DT_INT,
+    DT_FLOAT,
+    DT_STRING,
+    DT_ENUM,
+    DT_VECTOR2,
+    DT_ARRAY,
+    DT_TRACK_FLOAT,
+    DT_FLAGS,
+    DT_IMAGE,
+    DT_FONT
+};
+
+
+
+
+
+
+
+
+class DefSymbol
+{
+public:
+    int                 mSymbolValue;                   
+    const char*         mSymbolName;                    
+};
+
+
+
+
+
+
+
+
+
+class DefField
+{
+public:
+    const char*         mFieldName;                     
+    int                 mFieldOffset;                   
+    DefFieldType        mFieldType;                     
+    const void*         mExtraData;                     
+    
+    
+    
+    
+    
+};
+
+
+
+
+
+
+class DefMap)`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\EffectSystem.cpp`
+
+- **行数**: 541
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换
+- **项目内依赖**: Trail.h, TodDebug.h, Attachment.h, Reanimator.h, TodParticle.h, EffectSystem.h, ../GameConstants.h, graphics/GLImage.h, graphics/GLInterface.h, TodDrawTriangleInc.cpp
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\EffectSystem.h`
+
+- **行数**: 178
+- **难度**: 🟢 低
+- **注意**: 智能指针, 裸指针, extern 声明, 宏(2个), void* 类型擦除
+- **项目内依赖**: memory, DataArray.h, ../ConstEnums.h, graphics/SWTri.h, graphics/Graphics.h
+
+**类/结构体:**
+
+- `[ ]` `class TodTriVertex` (L16, 0 个方法, 5 个成员)
+- `[ ]` `class TodTriangleGroup` (L26, 0 个方法, 4 个成员)
+- `[ ]` `class EffectSystem` (L139, 0 个方法, 4 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\FilterEffect.cpp`
+
+- **行数**: 195
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针, 类型转换
+- **项目内依赖**: TodDebug.h, TodCommon.h, FilterEffect.h, graphics/MemoryImage.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\FilterEffect.h`
+
+- **行数**: 56
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(1个)
+- **项目内依赖**: map
+- **标准库依赖**: cstdint
+
+**枚举:**
+
+- `[ ]` `enum FilterEffect` → { FILTER_EFFECT_NONE, FILTER_EFFECT_WASHED_OUT, FILTER_EFFECT_LESS_WASHED_OUT, FILTER_EFFECT_WHITE, NUM_FILTER_EFFECTS }
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\ReanimAtlas.cpp`
+
+- **行数**: 266
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 类型转换
+- **项目内依赖**: algorithm, TodDebug.h, TodCommon.h, Reanimator.h, ReanimAtlas.h, misc/PerfTimer.h, graphics/MemoryImage.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\ReanimAtlas.h`
+
+- **行数**: 75
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: vector, misc/Rect.h
+
+**类/结构体:**
+
+- `[ ]` `class ReanimAtlasImage` (L17, 0 个方法, 5 个成员)
+- `[ ]` `class ReanimAtlas` (L32, 0 个方法, 2 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\Reanimator.cpp`
+
+- **行数**: 1501
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 类型转换, void* 类型擦除
+- **项目内依赖**: TodDebug.h, TodCommon.h, Definition.h, Reanimator.h, ../LawnApp.h, Attachment.h, ReanimAtlas.h, EffectSystem.h, ../GameConstants.h, graphics/Font.h, misc/PerfTimer.h, graphics/MemoryImage.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\Reanimator.h`
+
+- **行数**: 286
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换, extern 声明, 宏(1个), void* 类型擦除
+- **项目内依赖**: DataArray.h, FilterEffect.h, misc/SexyMatrix.h
+- **标准库依赖**: cstdint
+
+**类/结构体:**
+
+- `[ ]` `struct ReanimatorTransformArray` (L42, 0 个方法, 2 个成员)
+- `[ ]` `class ReanimatorTrack` (L47, 0 个方法, 2 个成员)
+- `[ ]` `struct ReanimatorTrackArray` (L57, 0 个方法, 2 个成员)
+- `[ ]` `class ReanimatorDefinition` (L67, 0 个方法, 3 个成员)
+- `[ ]` `class ReanimationParams` (L85, 0 个方法, 3 个成员)
+- `[ ]` `class ReanimationHolder` (L117, 0 个方法, 1 个成员)
+- `[ ]` `class ReanimatorFrameTime` (L136, 0 个方法, 3 个成员)
+- `[ ]` `class ReanimatorTransform` (L144, 0 个方法, 10 个成员)
+- `[ ]` `class ReanimatorTrackInstance` (L163, 0 个方法, 10 个成员)
+- `[ ]` `class Reanimation` (L185, 0 个方法, 10 个成员)
+
+**枚举:**
+
+- `[ ]` `enum ReanimFlags` → { REANIM_NO_ATLAS, REANIM_FAST_DRAW_IN_SW_MODE }
+
+**自由函数:**
+
+- `[ ]` ` enum({
+    RENDER_GROUP_HIDDEN = -1,
+    RENDER_GROUP_NORMAL = 0
+};
+
+constexpr const int NO_BASE_POSE = -2;
+
+class ReanimationHolder)`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\TodCommon.cpp`
+
+- **行数**: 1324
+- **难度**: 🔴 高
+- **注意**: 裸 new/delete, 裸指针, 异常处理, 类型转换, 可变参数
+- **项目内依赖**: SexyAppBase.h, TodList.h, TodDebug.h, TodCommon.h, ../LawnApp.h, EffectSystem.h, ../Resources.h, TodStringFile.h, ../GameConstants.h, graphics/Font.h, misc/Debug.h, graphics/GLImage.h, graphics/Graphics.h, graphics/ImageFont.h, misc/PerfTimer.h, misc/SexyMatrix.h, graphics/GLInterface.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\TodCommon.h`
+
+- **行数**: 179
+- **难度**: 🔴 高
+- **注意**: 裸指针, 模板, 宏(5个), 可变参数
+- **项目内依赖**: ../Lawn/LawnCommon.h, ../SexyAppFramework/Common.h, TodDebug.h, misc/ResourceManager.h
+- **标准库依赖**: cstdint, stdlib.h, cmath, cfloat
+
+**类/结构体:**
+
+- `[ ]` `struct TodWeightedArray` (L29, 0 个方法, 2 个成员)
+- `[ ]` `struct TodWeightedGridArray` (L35, 0 个方法, 3 个成员)
+- `[ ]` `class TodSmoothArray` (L42, 0 个方法, 4 个成员)
+- `[ ]` `class TodResourceManager : ResourceManager` (L67, 0 个方法, 0 个成员)
+
+**自由函数:**
+
+- `[ ]` `class TodResourceManager : public ResourceManager()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\TodDebug.cpp`
+
+- **行数**: 248
+- **难度**: 🟡 中
+- **注意**: 裸指针, 异常处理, 同步原语, 类型转换, 可变参数, void* 类型擦除
+- **项目内依赖**: inttypes.h, fstream, switch.h, TodDebug.h, TodCommon.h, misc/Debug.h, ../SexyAppFramework/Common.h, ../SexyAppFramework/SexyAppBase.h
+- **标准库依赖**: time.h, stdarg.h, stdexcept
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\TodDebug.h`
+
+- **行数**: 62
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 宏(3个), 可变参数, void* 类型擦除
+
+**类/结构体:**
+
+- `[ ]` `class TodHesitationBracket` (L6, 0 个方法, 2 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\TodDrawTriangle.cpp`
+
+- **行数**: 315
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换, 宏(34个), void* 类型擦除
+- **项目内依赖**: graphics/SWTri/SWTri_Loop.cpp, graphics/SWTri/SWTri_Loop.cpp, graphics/SWTri/SWTri_Loop.cpp, graphics/SWTri/SWTri_Loop.cpp
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\TodDrawTriangleInc.cpp`
+
+- **行数**: 517
+- **难度**: 🟢 低
+- **注意**: 宏(152个)
+- **项目内依赖**: TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp, TodDrawTriangle.cpp
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\TodFoley.cpp`
+
+- **行数**: 430
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: TodFoley.h, TodDebug.h, TodCommon.h, sound/SoundManager.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\TodFoley.h`
+
+- **行数**: 232
+- **难度**: 🟡 中
+- **注意**: 裸指针, 类型转换, extern 声明, 宏(3个)
+- **项目内依赖**: ../Resources.h, sound/SDLSoundInstance.h
+- **标准库依赖**: cstdint
+
+**类/结构体:**
+
+- `[ ]` `class FoleyParams` (L136, 0 个方法, 4 个成员)
+- `[ ]` `class TodDSoundInstance : SDLSoundInstance` (L158, 0 个方法, 1 个成员)
+- `[ ]` `class FoleyInstance` (L169, 0 个方法, 5 个成员)
+- `[ ]` `class FoleyTypeData` (L182, 0 个方法, 2 个成员)
+- `[ ]` `class TodFoley` (L192, 0 个方法, 1 个成员)
+
+**枚举:**
+
+- `[ ]` `enum FoleyFlags` → { FOLEYFLAGS_LOOP, FOLEYFLAGS_ONE_AT_A_TIME, FOLEYFLAGS_MUTE_ON_PAUSE, FOLEYFLAGS_USES_MUSIC_VOLUME, FOLEYFLAGS_DONT_REPEAT }
+- `[ ]` `enum FoleyType` → { FOLEY_SUN, FOLEY_SPLAT, FOLEY_LAWNMOWER, FOLEY_THROW, FOLEY_SPAWN_SUN, ... (105 个值) }
+
+**自由函数:**
+
+- `[ ]` `enum FoleyFlags : int32_t({
+    FOLEYFLAGS_LOOP,                
+    FOLEYFLAGS_ONE_AT_A_TIME,       
+    FOLEYFLAGS_MUTE_ON_PAUSE,       
+    FOLEYFLAGS_USES_MUSIC_VOLUME,   
+    FOLEYFLAGS_DONT_REPEAT          
+};
+
+enum FoleyType : int32_t
+{
+    FOLEY_SUN,
+    FOLEY_SPLAT,
+    FOLEY_LAWNMOWER,
+    FOLEY_THROW,
+    FOLEY_SPAWN_SUN,
+    FOLEY_CHOMP,
+    FOLEY_CHOMP_SOFT,
+    FOLEY_PLANT,
+    FOLEY_USE_SHOVEL,
+    FOLEY_DROP,
+    FOLEY_BLEEP,
+    FOLEY_GROAN,
+    FOLEY_BRAINS,
+    FOLEY_SUKHBIR,
+    FOLEY_JACKINTHEBOX,
+    FOLEY_ART_CHALLENGE,
+    FOLEY_ZAMBONI,
+    FOLEY_THUNDER,
+    FOLEY_FROZEN,
+    FOLEY_ZOMBIESPLASH,
+    FOLEY_BOWLINGIMPACT,
+    FOLEY_SQUISH,
+    FOLEY_TIRE_POP,
+    FOLEY_EXPLOSION,
+    FOLEY_SLURP,
+    FOLEY_LIMBS_POP,
+    FOLEY_POGO_ZOMBIE,
+    FOLEY_SNOW_PEA_SPARKLES,
+    FOLEY_ZOMBIE_FALLING,
+    FOLEY_PUFF,
+    FOLEY_FUME,
+    FOLEY_COIN,
+    FOLEY_KERNEL_SPLAT,
+    FOLEY_DIGGER,
+    FOLEY_JACK_SURPRISE,
+    FOLEY_VASE_BREAKING,
+    FOLEY_POOL_CLEANER,
+    FOLEY_BASKETBALL,
+    FOLEY_IGNITE,
+    FOLEY_FIREPEA,
+    FOLEY_THUMP,
+    FOLEY_SQUASH_HMM,
+    FOLEY_MAGNETSHROOM,
+    FOLEY_BUTTER,
+    FOLEY_BUNGEE_SCREAM,
+    FOLEY_BOSS_EXPLOSION_SMALL,
+    FOLEY_SHIELD_HIT,
+    FOLEY_SWING,
+    FOLEY_BONK,
+    FOLEY_RAIN,
+    FOLEY_DOLPHIN_BEFORE_JUMPING,
+    FOLEY_DOLPHIN_APPEARS,
+    FOLEY_PLANT_WATER,
+    FOLEY_ZOMBIE_ENTERING_WATER,
+    FOLEY_GRAVEBUSTERCHOMP,
+    FOLEY_CHERRYBOMB,
+    FOLEY_JALAPENO_IGNITE,
+    FOLEY_REVERSE_EXPLOSION,
+    FOLEY_PLASTIC_HIT,
+    FOLEY_WINMUSIC,
+    FOLEY_BALLOONINFLATE,
+    FOLEY_BIGCHOMP,
+    FOLEY_MELONIMPACT,
+    FOLEY_PLANTGROW,
+    FOLEY_SHOOP,
+    FOLEY_JUICY,
+    FOLEY_NEWSPAPER_RARRGH,
+    FOLEY_NEWSPAPER_RIP,
+    FOLEY_FLOOP,
+    FOLEY_COFFEE,
+    FOLEY_LOW_GROAN,
+    FOLEY_PRIZE,
+    FOLEY_YUCK,
+    FOLEY_UMBRELLA,
+    FOLEY_GRASSSTEP,
+    FOLEY_SHOVEL,
+    FOLEY_COB_LAUNCH,
+    FOLEY_WATERING,
+    FOLEY_POLEVAULT,
+    FOLEY_GRAVESTONE_RUMBLE,
+    FOLEY_DIRT_RISE,
+    FOLEY_FERTILIZER,
+    FOLEY_PORTAL,
+    FOLEY_WAKEUP,
+    FOLEY_BUGSPRAY,
+    FOLEY_SCREAM,
+    FOLEY_PAPER,
+    FOLEY_MONEYFALLS,
+    FOLEY_IMP,
+    FOLEY_HYDRAULIC_SHORT,
+    FOLEY_HYDRAULIC,
+    FOLEY_GARGANTUDEATH,
+    FOLEY_CERAMIC,
+    FOLEY_BOSS_BOULDER_ATTACK,
+    FOLEY_CHIME,
+    FOLEY_CRAZY_DAVE_SHORT,
+    FOLEY_CRAZY_DAVE_LONG,
+    FOLEY_CRAZY_DAVE_EXTRA_LONG,
+    FOLEY_CRAZY_DAVE_CRAZY,
+    FOLEY_PHONOGRAPH,
+    FOLEY_DANCER,
+    FOLEY_FINAL_FANFARE,
+    FOLEY_CRAZY_DAVE_SCREAM,
+    FOLEY_CRAZY_DAVE_SCREAM_2,
+    NUM_FOLEY
+};
+
+class FoleyParams)`
+- `[ ]` `class TodDSoundInstance : public SDLSoundInstance()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\TodList.cpp`
+
+- **行数**: 127
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 类型转换, void* 类型擦除
+- **项目内依赖**: TodList.h, TodDebug.h, TodCommon.h, misc/Debug.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\TodList.h`
+
+- **行数**: 193
+- **难度**: 🟡 中
+- **注意**: 裸指针, 模板, 同步原语, extern 声明, 宏(2个), void* 类型擦除
+- **项目内依赖**: TodDebug.h, TodCommon.h
+
+**类/结构体:**
+
+- `[ ]` `struct TodAllocator` (L11, 0 个方法, 5 个成员)
+- `[ ]` `class TodListNode` (L32, 0 个方法, 3 个成员)
+- `[ ]` `class TodList` (L40, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\TodParticle.cpp`
+
+- **行数**: 1290
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 同步原语, 类型转换
+- **项目内依赖**: TodDebug.h, Definition.h, TodParticle.h, EffectSystem.h, ../GameConstants.h, graphics/Graphics.h, graphics/GLInterface.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\TodParticle.h`
+
+- **行数**: 413
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换, extern 声明, 宏(3个)
+- **项目内依赖**: TodList.h, DataArray.h, misc/SexyVector.h
+- **标准库依赖**: cstdint
+
+**类/结构体:**
+
+- `[ ]` `class FloatParameterTrackNode` (L74, 0 个方法, 5 个成员)
+- `[ ]` `class FloatParameterTrack` (L89, 0 个方法, 2 个成员)
+- `[ ]` `class ParticleField` (L101, 0 个方法, 3 个成员)
+- `[ ]` `struct EmitterFieldArray` (L109, 0 个方法, 2 个成员)
+- `[ ]` `class TodEmitterDefinition` (L121, 0 个方法, 10 个成员)
+- `[ ]` `class TodParticleDefinition` (L180, 0 个方法, 2 个成员)
+- `[ ]` `class ParticleParams` (L195, 0 个方法, 2 个成员)
+- `[ ]` `class TodParticleHolder` (L253, 0 个方法, 5 个成员)
+- `[ ]` `class ParticleRenderParams` (L272, 0 个方法, 10 个成员)
+- `[ ]` `class TodParticle` (L294, 0 个方法, 10 个成员)
+- `[ ]` `class TodParticleEmitter` (L315, 0 个方法, 10 个成员)
+- `[ ]` `class TodParticleSystem` (L363, 0 个方法, 8 个成员)
+
+**枚举:**
+
+- `[ ]` `enum ParticleFlags` → { PARTICLE_RANDOM_LAUNCH_SPIN, PARTICLE_ALIGN_LAUNCH_SPIN, PARTICLE_ALIGN_TO_PIXELS, PARTICLE_SYSTEM_LOOPS, PARTICLE_PARTICLE_LOOPS, ... (12 个值) }
+- `[ ]` `enum ParticleFieldType` → { FIELD_INVALID, FIELD_FRICTION, FIELD_ACCELERATION, FIELD_ATTRACTOR, FIELD_MAX_VELOCITY, ... (13 个值) }
+- `[ ]` `enum ParticleSystemTracks` → { TRACK_SPAWN_RATE, TRACK_SPAWN_MIN_ACTIVE, TRACK_SPAWN_MAX_ACTIVE, TRACK_SPAWN_MAX_LAUNCHED, TRACK_EMITTER_PATH, ... (11 个值) }
+- `[ ]` `enum ParticleTracks` → { TRACK_PARTICLE_RED, TRACK_PARTICLE_GREEN, TRACK_PARTICLE_BLUE, TRACK_PARTICLE_ALPHA, TRACK_PARTICLE_BRIGHTNESS, ... (17 个值) }
+
+**自由函数:**
+
+- `[ ]` `enum ParticleSystemTracks : int32_t({
+	TRACK_SPAWN_RATE,
+	TRACK_SPAWN_MIN_ACTIVE,
+	TRACK_SPAWN_MAX_ACTIVE,
+	TRACK_SPAWN_MAX_LAUNCHED,
+	TRACK_EMITTER_PATH,
+	TRACK_SYSTEM_RED,
+	TRACK_SYSTEM_GREEN,
+	TRACK_SYSTEM_BLUE,
+	TRACK_SYSTEM_ALPHA,
+	TRACK_SYSTEM_BRIGHTNESS,
+	NUM_SYSTEM_TRACKS
+};
+
+enum ParticleTracks : int32_t
+{
+	TRACK_PARTICLE_RED,
+	TRACK_PARTICLE_GREEN,
+	TRACK_PARTICLE_BLUE,
+	TRACK_PARTICLE_ALPHA,
+	TRACK_PARTICLE_BRIGHTNESS,
+	TRACK_PARTICLE_SPIN_SPEED,
+	TRACK_PARTICLE_SPIN_ANGLE,
+	TRACK_PARTICLE_SCALE,
+	TRACK_PARTICLE_STRETCH,
+	TRACK_PARTICLE_COLLISION_REFLECT,
+	TRACK_PARTICLE_COLLISION_SPIN,
+	TRACK_PARTICLE_CLIP_TOP,
+	TRACK_PARTICLE_CLIP_BOTTOM,
+	TRACK_PARTICLE_CLIP_LEFT,
+	TRACK_PARTICLE_CLIP_RIGHT,
+	TRACK_PARTICLE_ANIMATION_RATE,
+	NUM_PARTICLE_TRACKS
+};
+
+class TodParticleSystem;
+class TodParticleEmitter;
+class TodParticle;
+class TodParticleHolder)`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\TodStringFile.cpp`
+
+- **行数**: 510
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换
+- **项目内依赖**: TodDebug.h, TodCommon.h, TodStringFile.h, paklib/PakInterface.h, graphics/Font.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\TodStringFile.h`
+
+- **行数**: 73
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(1个)
+- **项目内依赖**: graphics/Graphics.h, ../ConstEnums.h
+
+**类/结构体:**
+
+- `[ ]` `class TodStringListFormat` (L17, 0 个方法, 5 个成员)
+
+**枚举:**
+
+- `[ ]` `enum TodStringFormatFlag` → { TOD_FORMAT_IGNORE_NEWLINES, TOD_FORMAT_HIDE_UNTIL_MAGNETSHROOM }
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\Trail.cpp`
+
+- **行数**: 318
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 类型转换
+- **项目内依赖**: Trail.h, Definition.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\Sexy.TodLib\Trail.h`
+
+- **行数**: 140
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换, extern 声明, 宏(2个)
+- **项目内依赖**: TodParticle.h
+- **标准库依赖**: cstdint
+
+**类/结构体:**
+
+- `[ ]` `class TrailParams` (L32, 0 个方法, 2 个成员)
+- `[ ]` `class TrailDefinition` (L44, 0 个方法, 9 个成员)
+- `[ ]` `class TrailPoint` (L70, 0 个方法, 1 个成员)
+- `[ ]` `class Trail` (L81, 0 个方法, 10 个成员)
+- `[ ]` `class TrailHolder` (L106, 0 个方法, 1 个成员)
+
+**枚举:**
+
+- `[ ]` `enum TrailType` → { TRAIL_NONE, TRAIL_ICE, NUM_TRAILS }
+- `[ ]` `enum TrailTracks` → { TRACK_WIDTH_OVER_LENGTH, TRACK_WIDTH_OVER_TIME, TRACK_ALPHA_OVER_LENGTH, TRACK_ALPHA_OVER_TIME, NUM_TRAIL_TRACKS }
+- `[ ]` `enum TrailFlags` → { TRAIL_FLAG_LOOPS }
+
+**自由函数:**
+
+- `[ ]` `enum TrailType : int32_t({
+	TRAIL_NONE = -1,
+	TRAIL_ICE,
+	NUM_TRAILS
+};
+
+enum TrailTracks : int32_t
+{
+	TRACK_WIDTH_OVER_LENGTH,
+	TRACK_WIDTH_OVER_TIME,
+	TRACK_ALPHA_OVER_LENGTH,
+	TRACK_ALPHA_OVER_TIME,
+	NUM_TRAIL_TRACKS
+};
+
+enum TrailFlags : int32_t
+{
+	TRAIL_FLAG_LOOPS = 0
+};
+
+class TrailParams)`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
 
 ---
 
-## 五、主入口与构建
+## 模块: `src/SexyAppFramework`
 
-- [✓] **5.1 main.rs（主入口）**
-  - **C++ 源文件：** `src/main.cpp`（4KB）
-  - **核心依赖项：** `LawnApp`
-  - **Rust 实现要点：**
-    - 已有 `main.rs`（33 行）
-    - 创建 LawnApp → init → start → shutdown
+> 文件数: 374 | 行数: 151073 | 类: 234 | 函数: 56
 
-- [✓] **5.2 lib.rs（模块声明）**
-  - **Rust 文件：** `rust/src/lib.rs`（18 行）
-  - **Rust 实现要点：**
-    - 已有，声明 `ffi`, `framework`, `todlib`, `lawn` 四个模块
+### `[ ]` `src\SexyAppFramework\Common.cpp`
 
-- [✓] **5.3 build.rs（构建脚本）**
-  - **Rust 文件：** `rust/build.rs`（442 行）
-  - **Rust 实现要点：**
-    - 已有构建脚本
-    - 可能包含 C 源码编译、链接标志、资源打包等
+- **行数**: 607
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换, 可变参数, void* 类型擦除
+- **项目内依赖**: Common.h, misc/MTRand.h, algorithm, filesystem, switch.h, 3ds.h, android/log.h, misc/PerfTimer.h
+- **标准库依赖**: cctype, cstdlib, chrono, cstdarg, cstdio
 
-- [✓] **5.4 Cargo.toml（项目配置）**
-  - **Rust 文件：** `rust/Cargo.toml`（376 行）
-  - **Rust 实现要点：**
-    - 已有，需确认依赖项（sdl2, image, quick-xml 等）是否齐全
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\Common.h`
+
+- **行数**: 395
+- **难度**: 🟡 中
+- **注意**: 裸指针, 模板, 类型转换, 运算符重载(()(const), extern 声明, 宏(13个), 可变参数, void* 类型擦除
+- **项目内依赖**: vector, map, filesystem, type_traits, bit, intrin.h, windows.h, shellapi.h, mmsystem.h, direct.h, io.h
+- **标准库依赖**: string, cstring, cstdlib, cstdint, ctime, string_view, strings.h
+
+**类/结构体:**
+
+- `[ ]` `struct StringLessNoCase` (L369, 0 个方法, 0 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\SexyApp.cpp`
+
+- **行数**: 148
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: SexyApp.h, fstream
+- **标准库依赖**: time.h, sys/stat.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\SexyApp.h`
+
+- **行数**: 64
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(1个)
+- **项目内依赖**: SexyAppBase.h
+
+**类/结构体:**
+
+- `[ ]` `class SexyApp : SexyAppBase` (L11, 0 个方法, 3 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\SexyAppBase.cpp`
+
+- **行数**: 4213
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 多线程, 同步原语, 类型转换, 宏(4个), 可变参数, void* 类型擦除
+- **项目内依赖**: fstream, vector, algorithm, filesystem, SDL.h, switch.h, 3ds.h, emscripten.h, emscripten/html5.h, SexyAppBase.h, misc/SEHCatcher.h, widget/WidgetManager.h, widget/Widget.h, misc/Debug.h, misc/KeyCodes.h, graphics/GLInterface.h, graphics/GLImage.h, graphics/MemoryImage.h, misc/HTTPTransfer.h, widget/Dialog.h, imagelib/ImageLib.h, sound/SDLSoundManager.h, sound/SDLSoundInstance.h, misc/Rect.h, misc/PropertiesParser.h, misc/PerfTimer.h, misc/MTRand.h, misc/ModVal.h, graphics/SysFont.h, misc/ResourceManager.h, sound/SDLMusicInterface.h, mutex, misc/Debug.h, paklib/PakInterface.h, sound/DummyMusicInterface.h, misc/memmgr.h, misc/RegEmu.h
+- **标准库依赖**: string, time.h, math.h, cstdlib, cstring, locale, codecvt
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\SexyAppBase.h`
+
+- **行数**: 600
+- **难度**: 🟡 中
+- **注意**: 裸指针, 多线程, 同步原语, extern 声明, 宏(1个), void* 类型擦除
+- **项目内依赖**: Common.h, misc/Rect.h, graphics/Color.h, widget/ButtonListener.h, widget/DialogListener.h, misc/Buffer.h, mutex, thread, set, graphics/SharedImage.h, misc/Ratio.h, atomic
+
+**类/结构体:**
+
+- `[ ]` `class WidgetSafeDeleteInfo` (L42, 0 个方法, 2 个成员)
+- `[ ]` `class SexyAppBase : ButtonListener, DialogListener` (L123, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\fcaseopen\fcaseopen.c`
+
+- **行数**: 340
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: fcaseopen.h, direct.h, malloc.h, windows.h, unistd.h, dirent.h
+- **标准库依赖**: stdlib.h, string.h, stdlib.h, string.h, errno.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\fcaseopen\fcaseopen.h`
+
+- **行数**: 39
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(1个)
+- **标准库依赖**: stdio.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\glad\gles2.h`
+
+- **行数**: 1784
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(501个), 可变参数, void* 类型擦除
+- **项目内依赖**: winapifamily.h, KHR/khrplatform.h, inttypes.h
+- **标准库依赖**: stdint.h, stdint.h, stdio.h, stdlib.h, string.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\Color.cpp`
+
+- **行数**: 164
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换, 运算符重载([](int32_t)
+- **项目内依赖**: Color.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\Color.h`
+
+- **行数**: 67
+- **难度**: 🟢 低
+- **注意**: 裸指针, 运算符重载(==(const, [](int32_t), 宏(1个)
+- **项目内依赖**: Common.h
+
+**类/结构体:**
+
+- `[ ]` `class Color` (L11, 0 个方法, 8 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\Font.cpp`
+
+- **行数**: 77
+- **难度**: 🟢 低
+- **项目内依赖**: Font.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\Font.h`
+
+- **行数**: 67
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: Common.h, misc/Rect.h, Color.h
+- **标准库依赖**: string
+
+**类/结构体:**
+
+- `[ ]` `class _Font` (L16, 0 个方法, 4 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\GLImage.cpp`
+
+- **行数**: 220
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针
+- **项目内依赖**: GLImage.h, misc/Debug.h, graphics/GLInterface.h, SexyAppBase.h, Image.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\GLImage.h`
+
+- **行数**: 76
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: MemoryImage.h
+
+**类/结构体:**
+
+- `[ ]` `class GLImage : MemoryImage` (L14, 0 个方法, 1 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\GLInterface.cpp`
+
+- **行数**: 1595
+- **难度**: 🔴 高
+- **注意**: 裸 new/delete, 裸指针, 模板, 同步原语, 类型转换, 宏(6个), void* 类型擦除
+- **项目内依赖**: graphics/GLPlatform.h, SDL.h, graphics/GLInterface.h, graphics/GLImage.h, graphics/Graphics.h, graphics/MemoryImage.h, SexyAppBase.h, mutex, vector
+- **标准库依赖**: cstdlib, cstring
+
+**类/结构体:**
+
+- `[ ]` `struct PointClipper` (L796, 0 个方法, 3 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\GLInterface.h`
+
+- **行数**: 252
+- **难度**: 🔴 高
+- **注意**: 裸 new/delete, 裸指针, 同步原语, 运算符重载(=(const, [](int), 宏(1个)
+- **项目内依赖**: mutex, set, Common.h, graphics/GLPlatform.h, graphics/MemoryImage.h, graphics/NativeDisplay.h, misc/Rect.h, misc/Ratio.h, misc/SexyMatrix.h
+
+**类/结构体:**
+
+- `[ ]` `struct TextureDataPiece` (L36, 0 个方法, 1 个成员)
+- `[ ]` `struct GLVertex` (L51, 0 个方法, 6 个成员)
+- `[ ]` `struct VertexList` (L61, 0 个方法, 10 个成员)
+- `[ ]` `struct TextureData` (L124, 0 个方法, 5 个成员)
+- `[ ]` `class GLInterface : NativeDisplay` (L156, 0 个方法, 10 个成员)
+
+**枚举:**
+
+- `[ ]` `enum RenderImageFlags` → { RenderImageFlag_MinimizeNumSubdivisions, RenderImageFlag_Use64By64Subdivisions, RenderImageFlag_UseA4R4G4B4, RenderImageFlag_UseA8R8G8B8, RenderImageFlag_Repeat, ... (6 个值) }
+- `[ ]` `enum PixelFormat` → { PixelFormat_Unknown, PixelFormat_A8R8G8B8, PixelFormat_A4R4G4B4, PixelFormat_R5G6B5, PixelFormat_Palette8 }
+
+**自由函数:**
+
+- `[ ]` `class GLInterface : public NativeDisplay()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\GLPlatform.h`
+
+- **行数**: 69
+- **难度**: 🟢 低
+- **注意**: extern 声明, 宏(8个)
+- **项目内依赖**: switch.h, EGL/egl.h, EGL/eglext.h, glad/gles2.h, SDL.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\Graphics.cpp`
+
+- **行数**: 1407
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, void* 类型擦除
+- **项目内依赖**: Graphics.h, Image.h, Font.h, GLImage.h, MemoryImage.h, misc/Rect.h, misc/Debug.h, misc/SexyMatrix.h
+- **标准库依赖**: math.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\Graphics.h`
+
+- **行数**: 224
+- **难度**: 🟡 中
+- **注意**: 裸指针, 宏(1个), void* 类型擦除
+- **项目内依赖**: Common.h, misc/Rect.h, Color.h, Image.h, TriVertex.h
+
+**类/结构体:**
+
+- `[ ]` `struct Edge` (L21, 0 个方法, 4 个成员)
+- `[ ]` `class GraphicsState` (L31, 0 个方法, 10 个成员)
+- `[ ]` `class Graphics : GraphicsState` (L58, 0 个方法, 4 个成员)
+- `[ ]` `class GraphicsAutoState` (L182, 0 个方法, 1 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\Image.cpp`
+
+- **行数**: 279
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针
+- **项目内依赖**: Image.h, Graphics.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\Image.h`
+
+- **行数**: 129
+- **难度**: 🟢 低
+- **注意**: 裸指针, 运算符重载(=(const), 宏(1个)
+- **项目内依赖**: Common.h, Color.h, misc/Rect.h, misc/Point.h
+
+**类/结构体:**
+
+- `[ ]` `struct Span` (L14, 0 个方法, 3 个成员)
+- `[ ]` `struct AnimInfo` (L29, 0 个方法, 6 个成员)
+- `[ ]` `class Image` (L51, 0 个方法, 7 个成员)
+
+**枚举:**
+
+- `[ ]` `enum AnimType` → { AnimType_None, AnimType_Once, AnimType_PingPong, AnimType_Loop }
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\ImageFont.cpp`
+
+- **行数**: 1748
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 同步原语, 运算符重载(=(const)
+- **项目内依赖**: ImageFont.h, Graphics.h, Image.h, SexyAppBase.h, MemoryImage.h, graphics/GLImage.h, algorithm, mutex, fcaseopen/fcaseopen.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\ImageFont.h`
+
+- **行数**: 213
+- **难度**: 🟡 中
+- **注意**: 裸指针, 运算符重载(=(const), 宏(1个)
+- **项目内依赖**: Font.h, misc/DescParser.h, SexyAppBase.h, SharedImage.h, atomic
+
+**类/结构体:**
+
+- `[ ]` `class CharData` (L20, 0 个方法, 5 个成员)
+- `[ ]` `class FontLayer` (L36, 0 个方法, 10 个成员)
+- `[ ]` `class FontData : DescParser` (L75, 0 个方法, 9 个成员)
+- `[ ]` `class ActiveFontLayer` (L110, 0 个方法, 5 个成员)
+- `[ ]` `class RenderCommand` (L128, 0 个方法, 7 个成员)
+- `[ ]` `class ImageFont : _Font` (L142, 0 个方法, 8 个成员)
+
+**自由函数:**
+
+- `[ ]` `class FontData : public DescParser()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\MemoryImage.cpp`
+
+- **行数**: 1848
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 类型转换, 宏(26个), void* 类型擦除
+- **项目内依赖**: MemoryImage.h, GLImage.h, graphics/GLInterface.h, SexyAppBase.h, Graphics.h, NativeDisplay.h, misc/Debug.h, Quantize.h, misc/PerfTimer.h, SWTri.h, inc_routines/GENERIC_DrawLineAA.inc, inc_routines/GENERIC_DrawLineAA.inc, inc_routines/MI_GetRLAlphaData.inc, inc_routines/MI_GetRLAlphaData.inc, inc_routines/MI_AdditiveBlt.inc, inc_routines/MI_AdditiveBlt.inc, inc_routines/MI_NormalBlt.inc, inc_routines/MI_NormalBlt.inc, inc_routines/MI_BltRotated.inc, inc_routines/MI_BltRotated_Additive.inc, inc_routines/MI_BltRotated.inc, inc_routines/MI_BltRotated_Additive.inc, inc_routines/MI_SlowStretchBlt.inc, inc_routines/MI_SlowStretchBlt.inc
+- **标准库依赖**: math.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\MemoryImage.h`
+
+- **行数**: 137
+- **难度**: 🟢 低
+- **注意**: 裸指针, 运算符重载(=(const), extern 声明, 宏(2个), void* 类型擦除
+- **项目内依赖**: Image.h
+
+**类/结构体:**
+
+- `[ ]` `class MemoryImage : Image` (L21, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\NativeDisplay.cpp`
+
+- **行数**: 52
+- **难度**: 🟢 低
+- **项目内依赖**: NativeDisplay.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\NativeDisplay.h`
+
+- **行数**: 56
+- **难度**: 🟢 低
+- **注意**: 宏(1个)
+- **项目内依赖**: Common.h
+
+**类/结构体:**
+
+- `[ ]` `class NativeDisplay` (L12, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\Quantize.cpp`
+
+- **行数**: 101
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: Quantize.h
+- **标准库依赖**: assert.h, math.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\Quantize.h`
+
+- **行数**: 37
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: Common.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\SWTri.cpp`
+
+- **行数**: 679
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换
+- **项目内依赖**: SWTri.h, misc/Debug.h, SWTri/SWTri_DrawTriangleInc1.cpp, SWTri_DrawTriangleInc2.cpp
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\SWTri.h`
+
+- **行数**: 207
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明
+- **项目内依赖**: Color.h, MemoryImage.h, misc/Rect.h, misc/SexyMatrix.h
+
+**类/结构体:**
+
+- `[ ]` `class SWHelper` (L13, 0 个方法, 10 个成员)
+- `[ ]` `struct XYZStruct` (L16, 0 个方法, 5 个成员)
+- `[ ]` `struct SWVertex` (L25, 0 个方法, 0 个成员)
+- `[ ]` `struct SWTextureInfo` (L31, 0 个方法, 4 个成员)
+- `[ ]` `struct SWDiffuse` (L39, 0 个方法, 0 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\SWTri\SWTri_DrawTriangle.cpp`
+
+- **行数**: 303
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换, 宏(31个)
+- **项目内依赖**: SWTri_Loop.cpp, SWTri_Loop.cpp, SWTri_Loop.cpp, SWTri_Loop.cpp
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\SWTri\SWTri_DrawTriangleInc1.cpp`
+
+- **行数**: 786
+- **难度**: 🟢 低
+- **注意**: 宏(252个)
+- **项目内依赖**: SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp, SWTri_DrawTriangle.cpp
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\SWTri\SWTri_DrawTriangleInc2.cpp`
+
+- **行数**: 166
+- **难度**: 🟢 低
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\SWTri\SWTri_GetTexel.cpp`
+
+- **行数**: 67
+- **难度**: 🟢 低
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\SWTri\SWTri_Loop.cpp`
+
+- **行数**: 83
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\SWTri\SWTri_Pixel555.cpp`
+
+- **行数**: 92
+- **难度**: 🟢 低
+- **项目内依赖**: SWTri_GetTexel.cpp, SWTri_TexelARGB.cpp
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\SWTri\SWTri_Pixel565.cpp`
+
+- **行数**: 92
+- **难度**: 🟢 低
+- **项目内依赖**: SWTri_GetTexel.cpp, SWTri_TexelARGB.cpp
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\SWTri\SWTri_Pixel888.cpp`
+
+- **行数**: 88
+- **难度**: 🟢 低
+- **项目内依赖**: SWTri_GetTexel.cpp, SWTri_TexelARGB.cpp
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\SWTri\SWTri_Pixel8888.cpp`
+
+- **行数**: 109
+- **难度**: 🟢 低
+- **项目内依赖**: SWTri_GetTexel.cpp, SWTri_TexelARGB.cpp
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\SWTri\SWTri_TexelARGB.cpp`
+
+- **行数**: 63
+- **难度**: 🟢 低
+- **注意**: 裸指针
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\SharedImage.cpp`
+
+- **行数**: 130
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针, 运算符重载(Image*(), =(MemoryImage*, =(const, MemoryImage*(), ->(), =(SharedImage*, GLImage*())
+- **项目内依赖**: SharedImage.h, graphics/GLImage.h, SexyAppBase.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\SharedImage.h`
+
+- **行数**: 75
+- **难度**: 🟢 低
+- **注意**: 裸指针, 运算符重载(=(MemoryImage*, =(const, MemoryImage*();, ->();, GLImage*();, =(SharedImage*, Image*();), 宏(1个)
+- **项目内依赖**: Common.h, atomic
+
+**类/结构体:**
+
+- `[ ]` `class SharedImage` (L16, 0 个方法, 2 个成员)
+- `[ ]` `class SharedImageRef` (L27, 0 个方法, 6 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\graphics\TriVertex.h`
+
+- **行数**: 51
+- **难度**: 🟢 低
+- **注意**: 宏(1个)
+- **标准库依赖**: cstdint
+
+**类/结构体:**
+
+- `[ ]` `class TriVertex` (L13, 0 个方法, 1 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\imagelib\ImageLib.cpp`
+
+- **行数**: 1481
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 同步原语, 类型转换, extern 声明, 宏(6个)
+- **项目内依赖**: Common.h, ImageLib.h, png.h, algorithm, array, mutex, unordered_set, paklib/PakInterface.h, jpeglib.h, jerror.h
+- **标准库依赖**: math.h, cctype, string_view
+
+**类/结构体:**
+
+- `[ ]` `struct my_error_mgr` (L725, 0 个方法, 2 个成员)
+- `[ ]` `struct cinfo` (L754, 0 个方法, 0 个成员)
+- `[ ]` `struct cinfo` (L1060, 0 个方法, 0 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\imagelib\ImageLib.h`
+
+- **行数**: 65
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(1个)
+- **标准库依赖**: cstdint, string
+
+**类/结构体:**
+
+- `[ ]` `class Image` (L12, 0 个方法, 3 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\Buffer.cpp`
+
+- **行数**: 526
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换, 宏(1个)
+- **项目内依赖**: Buffer.h, SDL_stdinc.h, array
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\Buffer.h`
+
+- **行数**: 88
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: Common.h
+- **标准库依赖**: string
+
+**类/结构体:**
+
+- `[ ]` `class Buffer` (L14, 0 个方法, 4 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\Debug.cpp`
+
+- **行数**: 269
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 可变参数, void* 类型擦除
+- **项目内依赖**: Common.h, Debug.h, mutex, memmgr.h
+- **标准库依赖**: time.h, stdarg.h
+
+**类/结构体:**
+
+- `[ ]` `struct SEXY_ALLOC_INFO` (L25, 0 个方法, 3 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\Debug.h`
+
+- **行数**: 55
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(7个), 可变参数
+- **项目内依赖**: Common.h
+- **标准库依赖**: cassert
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\DescParser.cpp`
+
+- **行数**: 580
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针
+- **项目内依赖**: DescParser.h, SexyAppBase.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\DescParser.h`
+
+- **行数**: 123
+- **难度**: 🟡 中
+- **注意**: 裸指针, 运算符重载(=(const), 宏(1个)
+- **项目内依赖**: Common.h
+
+**类/结构体:**
+
+- `[ ]` `class DataElement` (L11, 0 个方法, 1 个成员)
+- `[ ]` `class SingleDataElement : DataElement` (L23, 0 个方法, 1 个成员)
+- `[ ]` `class ListDataElement : DataElement` (L38, 0 个方法, 2 个成员)
+- `[ ]` `class DescParser` (L56, 0 个方法, 5 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\Flags.cpp`
+
+- **行数**: 25
+- **难度**: 🟢 低
+- **项目内依赖**: Flags.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\Flags.h`
+
+- **行数**: 100
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+
+**类/结构体:**
+
+- `[ ]` `class FlagsMod` (L9, 0 个方法, 2 个成员)
+- `[ ]` `class ModalFlags` (L33, 0 个方法, 3 个成员)
+- `[ ]` `class AutoModalFlags` (L53, 0 个方法, 3 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\KeyCodes.cpp`
+
+- **行数**: 184
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 宏(1个)
+- **项目内依赖**: KeyCodes.h
+- **标准库依赖**: stdio.h, string.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\KeyCodes.h`
+
+- **行数**: 134
+- **难度**: 🟢 低
+- **注意**: 同步原语, 宏(1个)
+- **项目内依赖**: Common.h
+
+**枚举:**
+
+- `[ ]` `enum KeyCode` → { KEYCODE_UNKNOWN, KEYCODE_LBUTTON, KEYCODE_RBUTTON, KEYCODE_CANCEL, KEYCODE_MBUTTON, ... (91 个值) }
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\MTRand.cpp`
+
+- **行数**: 196
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(10个)
+- **项目内依赖**: MTRand.h, Debug.h
+- **标准库依赖**: stdio.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\MTRand.h`
+
+- **行数**: 43
+- **难度**: 🟢 低
+- **注意**: 宏(2个)
+- **标准库依赖**: string
+
+**类/结构体:**
+
+- `[ ]` `class MTRand` (L11, 0 个方法, 2 个成员)
+- `[ ]` `struct MTAutoDisallowRand` (L35, 0 个方法, 0 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\ModVal.cpp`
+
+- **行数**: 407
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 可变参数
+- **项目内依赖**: ModVal.h, Common.h, algorithm, fstream
+
+**类/结构体:**
+
+- `[ ]` `struct ModStorage` (L8, 0 个方法, 4 个成员)
+- `[ ]` `struct ModPointer` (L16, 0 个方法, 1 个成员)
+- `[ ]` `struct FileMod` (L27, 0 个方法, 2 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\ModVal.h`
+
+- **行数**: 96
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(24个)
+- **标准库依赖**: string
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\PerfTimer.cpp`
+
+- **行数**: 322
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换, 运算符重载(<(const)
+- **项目内依赖**: PerfTimer.h, map, set, SDL.h
+
+**类/结构体:**
+
+- `[ ]` `struct PerfInfo` (L115, 0 个方法, 6 个成员)
+- `[ ]` `struct PerfRecord` (L143, 0 个方法, 2 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\PerfTimer.h`
+
+- **行数**: 142
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(22个)
+- **项目内依赖**: Common.h
+
+**类/结构体:**
+
+- `[ ]` `class PerfTimer` (L13, 0 个方法, 3 个成员)
+- `[ ]` `class SexyPerf` (L36, 0 个方法, 0 个成员)
+- `[ ]` `class SexyAutoPerf` (L51, 0 个方法, 3 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\Point.h`
+
+- **行数**: 79
+- **难度**: 🟡 中
+- **注意**: 裸指针, 模板, 运算符重载(-=(const, -(const, *=(const, +=(const, ==(const, *(const, /(_T, +(const, *(_T, /=(const, /(const), 宏(1个)
+- **项目内依赖**: Common.h
+
+**类/结构体:**
+
+- `[ ]` `class TPoint` (L11, 0 个方法, 3 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\PropertiesParser.cpp`
+
+- **行数**: 296
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针
+- **项目内依赖**: PropertiesParser.h, XMLParser.h
+- **标准库依赖**: stdlib.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\PropertiesParser.h`
+
+- **行数**: 65
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: SexyAppBase.h
+
+**类/结构体:**
+
+- `[ ]` `class PropertiesParser` (L14, 0 个方法, 4 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\Ratio.cpp`
+
+- **行数**: 59
+- **难度**: 🟢 低
+- **项目内依赖**: Ratio.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\Ratio.h`
+
+- **行数**: 82
+- **难度**: 🟢 低
+- **注意**: 裸指针, 运算符重载(/(int, *(int, ==(const, !=(const, <(const), 宏(1个)
+
+**类/结构体:**
+
+- `[ ]` `struct Ratio` (L8, 0 个方法, 3 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\Rect.h`
+
+- **行数**: 132
+- **难度**: 🟡 中
+- **注意**: 裸指针, 模板, 运算符重载(==(const), 宏(1个)
+- **项目内依赖**: Common.h, Point.h, list
+
+**类/结构体:**
+
+- `[ ]` `class TRect` (L14, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\RegEmu.cpp`
+
+- **行数**: 214
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换, 宏(1个)
+- **项目内依赖**: RegEmu.h, Common.h, map, fstream, vector
+- **标准库依赖**: cstdio, cstring
+
+**类/结构体:**
+
+- `[ ]` `struct RegValue` (L16, 0 个方法, 3 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\RegEmu.h`
+
+- **行数**: 56
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **标准库依赖**: string, cstdint
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\ResourceManager.cpp`
+
+- **行数**: 1192
+- **难度**: 🔴 高
+- **注意**: 智能指针, 裸 new/delete, 裸指针, 异常处理, 宏(1个)
+- **项目内依赖**: memory, ResourceManager.h, XMLParser.h, sound/SoundManager.h, graphics/GLImage.h, graphics/GLInterface.h, graphics/ImageFont.h, graphics/SysFont.h, imagelib/ImageLib.h, ../../Sexy.TodLib/TodCommon.h, PerfTimer.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\ResourceManager.h`
+
+- **行数**: 242
+- **难度**: 🟡 中
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: Common.h, graphics/Image.h, SexyAppBase.h, XMLParser.h, map
+- **标准库依赖**: string
+
+**类/结构体:**
+
+- `[ ]` `class ResourceManager` (L30, 0 个方法, 10 个成员)
+- `[ ]` `struct BaseRes` (L41, 0 个方法, 6 个成员)
+- `[ ]` `struct ImageRes : BaseRes` (L54, 0 个方法, 10 个成员)
+- `[ ]` `struct SoundRes : BaseRes` (L76, 0 个方法, 3 个成员)
+- `[ ]` `struct FontRes : BaseRes` (L86, 0 个方法, 8 个成员)
+
+**枚举:**
+
+- `[ ]` `enum ResType` → { ResType_Image, ResType_Sound, ResType_Font }
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\SexyMatrix.cpp`
+
+- **行数**: 319
+- **难度**: 🟢 低
+- **注意**: 裸指针, 运算符重载(=(const, *=(const, *(const, =(theMat);, =(operator*(theMat));)
+- **项目内依赖**: SexyMatrix.h
+- **标准库依赖**: math.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\SexyMatrix.h`
+
+- **行数**: 115
+- **难度**: 🟢 低
+- **注意**: 运算符重载(=(const, *(const, *=(const), 宏(1个)
+- **项目内依赖**: SexyVector.h
+
+**类/结构体:**
+
+- `[ ]` `class SexyMatrix3` (L13, 0 个方法, 1 个成员)
+- `[ ]` `class SexyTransform2D : SexyMatrix3` (L41, 0 个方法, 1 个成员)
+- `[ ]` `class Transform` (L63, 0 个方法, 3 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\SexyVector.h`
+
+- **行数**: 101
+- **难度**: 🟢 低
+- **注意**: 裸指针, 运算符重载(-=(const, *(float, *=(float, -(const, +=(const, /=(float, ==(const, +(const, -(), /(float), 宏(1个)
+- **标准库依赖**: math.h
+
+**类/结构体:**
+
+- `[ ]` `class SexyVector2` (L13, 0 个方法, 2 个成员)
+- `[ ]` `class SexyVector3` (L52, 0 个方法, 2 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\XMLParser.cpp`
+
+- **行数**: 738
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换
+- **项目内依赖**: XMLParser.h, paklib/PakInterface.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\XMLParser.h`
+
+- **行数**: 131
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: Common.h, list, PerfTimer.h
+
+**类/结构体:**
+
+- `[ ]` `class XMLParam` (L17, 0 个方法, 2 个成员)
+- `[ ]` `class XMLElement` (L29, 0 个方法, 6 个成员)
+- `[ ]` `class XMLParser` (L51, 0 个方法, 10 个成员)
+
+**枚举:**
+
+- `[ ]` `enum XMLEncodingType` → { ASCII, UTF_8, UTF_16, UTF_16_LE, UTF_16_BE }
+
+**自由函数:**
+
+- `[ ]` `public:
+	enum XMLEncodingType()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\misc\memmgr.h`
+
+- **行数**: 120
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针, 运算符重载(new(unsigned, delete(void*, delete[](void*, new[](unsigned), extern 声明, 宏(3个), void* 类型擦除
+- **项目内依赖**: memmgr.h, list
+- **标准库依赖**: stdio.h, stdlib.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\paklib\PakInterface.cpp`
+
+- **行数**: 341
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 类型转换, void* 类型擦除
+- **项目内依赖**: algorithm, filesystem, Common.h, PakInterface.h, fcaseopen/fcaseopen.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\paklib\PakInterface.h`
+
+- **行数**: 182
+- **难度**: 🟡 中
+- **注意**: 裸指针, extern 声明, 宏(1个), void* 类型擦除
+- **项目内依赖**: map, list
+- **标准库依赖**: string, string_view, cstdint
+
+**类/结构体:**
+
+- `[ ]` `class PakRecord` (L20, 0 个方法, 5 个成员)
+- `[ ]` `class PakCollection` (L35, 0 个方法, 1 个成员)
+- `[ ]` `struct PFILE` (L49, 0 个方法, 3 个成员)
+- `[ ]` `class PakInterfaceBase` (L56, 0 个方法, 0 个成员)
+- `[ ]` `class PakInterface : PakInterfaceBase` (L70, 0 个方法, 2 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\platform\3ds\Input.cpp`
+
+- **行数**: 154
+- **难度**: 🟢 低
+- **项目内依赖**: 3ds.h, unordered_map, SexyAppBase.h, graphics/GLInterface.h, graphics/GLImage.h, widget/WidgetManager.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\platform\3ds\graphics\GLInterface.cpp`
+
+- **行数**: 1912
+- **难度**: 🔴 高
+- **注意**: 裸 new/delete, 裸指针, 模板, 同步原语, 宏(3个)
+- **项目内依赖**: 3ds.h, graphics/GLInterface.h, graphics/GLImage.h, SexyAppBase.h, mutex, graphics/Graphics.h, graphics/MemoryImage.h, textured_shbin.h
+- **标准库依赖**: colored_shbin.h
+
+**类/结构体:**
+
+- `[ ]` `struct Shader` (L39, 0 个方法, 3 个成员)
+- `[ ]` `struct PointClipper` (L992, 0 个方法, 3 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\platform\3ds\graphics\GLInterface.h`
+
+- **行数**: 262
+- **难度**: 🔴 高
+- **注意**: 裸 new/delete, 裸指针, 同步原语, 运算符重载(=(const, [](int), 宏(1个)
+- **项目内依赖**: Common.h, graphics/MemoryImage.h, mutex, graphics/NativeDisplay.h, misc/Rect.h, misc/Ratio.h, misc/SexyMatrix.h
+- **标准库依赖**: citro3d.h
+
+**类/结构体:**
+
+- `[ ]` `struct TextureDataPiece` (L38, 0 个方法, 1 个成员)
+- `[ ]` `struct GLVertex` (L57, 0 个方法, 6 个成员)
+- `[ ]` `struct VertexList` (L69, 0 个方法, 10 个成员)
+- `[ ]` `struct TextureData` (L133, 0 个方法, 5 个成员)
+- `[ ]` `class GLInterface : NativeDisplay` (L166, 0 个方法, 10 个成员)
+
+**枚举:**
+
+- `[ ]` `enum RenderImageFlags` → { RenderImageFlag_MinimizeNumSubdivisions, RenderImageFlag_Use64By64Subdivisions, RenderImageFlag_UseA4R4G4B4, RenderImageFlag_UseA8R8G8B8, RenderImageFlag_Repeat, ... (6 个值) }
+- `[ ]` `enum PixelFormat` → { PixelFormat_Unknown, PixelFormat_A8R8G8B8, PixelFormat_A4R4G4B4, PixelFormat_R5G6B5, PixelFormat_Palette8 }
+
+**自由函数:**
+
+- `[ ]` `class GLInterface : public NativeDisplay()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\platform\3ds\graphics\Window.cpp`
+
+- **行数**: 67
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete
+- **项目内依赖**: 3ds.h, SexyAppBase.h, graphics/GLInterface.h, graphics/GLImage.h, widget/WidgetManager.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\platform\default\Input.cpp`
+
+- **行数**: 517
+- **难度**: 🟢 低
+- **注意**: 同步原语, 类型转换
+- **项目内依赖**: SDL.h, SexyAppBase.h, graphics/GLInterface.h, graphics/GLImage.h, widget/WidgetManager.h, misc/KeyCodes.h, emscripten.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\platform\default\Window.cpp`
+
+- **行数**: 154
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针, 宏(1个), void* 类型擦除
+- **项目内依赖**: SDL.h, SexyAppBase.h, graphics/GLInterface.h, graphics/GLImage.h, graphics/GLPlatform.h, widget/WidgetManager.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\platform\emscripten\Window.cpp`
+
+- **行数**: 112
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针, void* 类型擦除
+- **项目内依赖**: SDL.h, emscripten.h, emscripten/html5.h, SexyAppBase.h, graphics/GLInterface.h, graphics/GLImage.h, widget/WidgetManager.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\platform\switch\Input.cpp`
+
+- **行数**: 146
+- **难度**: 🟢 低
+- **注意**: 可变参数
+- **项目内依赖**: switch.h, unordered_map, SexyAppBase.h, graphics/GLInterface.h, graphics/GLImage.h, widget/WidgetManager.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\platform\switch\Window.cpp`
+
+- **行数**: 127
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete
+- **项目内依赖**: EGL/egl.h, EGL/eglext.h, switch.h, SexyAppBase.h, graphics/GLInterface.h, graphics/GLImage.h, widget/WidgetManager.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\resource.h`
+
+- **行数**: 17
+- **难度**: 🟢 低
+- **注意**: 宏(6个)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\DummyMusicInterface.h`
+
+- **行数**: 56
+- **难度**: 🟢 低
+- **项目内依赖**: MusicInterface.h, SexyAppBase.h
+
+**类/结构体:**
+
+- `[ ]` `class DummyMusicInterface : MusicInterface` (L8, 0 个方法, 0 个成员)
+
+**自由函数:**
+
+- `[ ]` `class DummyMusicInterface : public MusicInterface()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\MusicInterface.h`
+
+- **行数**: 64
+- **难度**: 🟢 低
+- **注意**: 宏(1个)
+- **项目内依赖**: Common.h
+
+**类/结构体:**
+
+- `[ ]` `class MusicInterface` (L11, 0 个方法, 0 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\VB6_Wrapper\vb6_sdl_binds.c`
+
+- **行数**: 134
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(1个), void* 类型擦除
+- **项目内依赖**: SDL_mixer.h, SDL_rwops.h, music_midi_adl.h
+- **标准库依赖**: stdio.h, stdlib.h, string.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\adlmidi_channel_alloc_mode.c`
+
+- **行数**: 7
+- **难度**: 🟢 低
+- **项目内依赖**: adlmidi.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\adlmidi_get_songs_count.c`
+
+- **行数**: 6
+- **难度**: 🟢 低
+- **项目内依赖**: adlmidi.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\adlmidi_select_song_num.c`
+
+- **行数**: 7
+- **难度**: 🟢 低
+- **项目内依赖**: adlmidi.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\cpp_needed\adlmidi.c`
+
+- **行数**: 8
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: adlmidi.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\cpp_needed\edmidi.c`
+
+- **行数**: 8
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: emu_de_midi.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\cpp_needed\gme.c`
+
+- **行数**: 7
+- **难度**: 🟢 低
+- **项目内依赖**: gme.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\cpp_needed\modplug.c`
+
+- **行数**: 11
+- **难度**: 🟢 低
+- **项目内依赖**: libmodplug/modplug.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\cpp_needed\opnmidi.c`
+
+- **行数**: 8
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: opnmidi.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\dummy.c`
+
+- **行数**: 2
+- **难度**: 🟢 低
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\gme_has_gme_disable_echo.c`
+
+- **行数**: 7
+- **难度**: 🟢 低
+- **项目内依赖**: gme.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\gme_has_gme_set_autoload_playback_limit.c`
+
+- **行数**: 7
+- **难度**: 🟢 低
+- **项目内依赖**: gme.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\modplug_tell.c`
+
+- **行数**: 11
+- **难度**: 🟢 低
+- **项目内依赖**: libmodplug/modplug.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\opnmidi_channel_alloc_mode.c`
+
+- **行数**: 7
+- **难度**: 🟢 低
+- **项目内依赖**: opnmidi.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\opnmidi_get_songs_count.c`
+
+- **行数**: 6
+- **难度**: 🟢 低
+- **项目内依赖**: opnmidi.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\opnmidi_select_song_num.c`
+
+- **行数**: 7
+- **难度**: 🟢 低
+- **项目内依赖**: opnmidi.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\AssocFiles\assoc_files.cpp`
+
+- **行数**: 416
+- **难度**: 🔴 高
+- **注意**: 裸 new/delete, 裸指针, 模板
+- **项目内依赖**: assoc_files.h, ui_assoc_files.h, QListWidgetItem, QList, QPair, QDir, QFile, QTextStream, QSettings, QProcess, QMessageBox, QtDebug
+
+**类/结构体:**
+
+- `[ ]` `struct tentry` (L14, 0 个方法, 3 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\AssocFiles\assoc_files.h`
+
+- **行数**: 33
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: QDialog, QListWidgetItem, QList
+
+**类/结构体:**
+
+- `[ ]` `class AssocFiles : QDialog` (L14, 0 个方法, 1 个成员)
+
+**自由函数:**
+
+- `[ ]` `class AssocFiles : public QDialog()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Effects\fx_common.hpp`
+
+- **行数**: 315
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(10个)
+- **项目内依赖**: fx_format.h
+- **标准库依赖**: stdint.h
+
+**自由函数:**
+
+- `[ ]` ` union()`
+- `[ ]` ` union()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Effects\fx_format.h`
+
+- **行数**: 22
+- **难度**: 🟢 低
+- **注意**: 宏(15个)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Effects\reverb.cpp`
+
+- **行数**: 822
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 类型转换, void* 类型擦除
+- **项目内依赖**: vector, deque, tgmath.h, reverb.h, fx_common.hpp
+- **标准库依赖**: cmath
+
+**类/结构体:**
+
+- `[ ]` `class comb` (L73, 0 个方法, 10 个成员)
+- `[ ]` `class allpass` (L144, 0 个方法, 10 个成员)
+- `[ ]` `class revmodel` (L200, 0 个方法, 10 个成员)
+- `[ ]` `struct FxReverb` (L532, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Effects\reverb.h`
+
+- **行数**: 60
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(1个)
+- **项目内依赖**: fx_format.h
+- **标准库依赖**: stdint.h
+
+**类/结构体:**
+
+- `[ ]` `struct ReverbSetup` (L11, 0 个方法, 6 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Effects\spc_echo.cpp`
+
+- **行数**: 423
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 类型转换, 宏(5个)
+- **项目内依赖**: tgmath.h, spc_echo.h, fx_common.hpp
+- **标准库依赖**: string.h
+
+**类/结构体:**
+
+- `[ ]` `struct SpcEcho` (L51, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Effects\spc_echo.h`
+
+- **行数**: 65
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(1个)
+- **项目内依赖**: fx_format.h
+- **标准库依赖**: stdint.h
+
+**枚举:**
+
+- `[ ]` `enum EchoSetup` → { ECHO_EON, ECHO_EDL, ECHO_EFB, ECHO_MVOLL, ECHO_MVOLR, ... (15 个值) }
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\_garbage\defines.h`
+
+- **行数**: 28
+- **难度**: 🟢 低
+- **注意**: 宏(1个)
+- **项目内依赖**: windows.h
+- **标准库依赖**: string
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\_garbage\musplayer_winapi.cpp`
+
+- **行数**: 805
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换, 可变参数
+- **项目内依赖**: windows.h, ../Effects/reverb.h, ../Player/mus_player.h, musplayer_winapi.h, ../version.h
+- **标准库依赖**: assert.h, commctrl.h, math.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\_garbage\musplayer_winapi.h`
+
+- **行数**: 111
+- **难度**: 🟡 中
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: musplayer_base.h, defines.h
+
+**类/结构体:**
+
+- `[ ]` `class MusPlayer_WinAPI : MusPlayerBase` (L8, 0 个方法, 10 个成员)
+- `[ ]` `struct GroupGME` (L67, 0 个方法, 3 个成员)
+- `[ ]` `struct GroupMIDI` (L75, 0 个方法, 2 个成员)
+- `[ ]` `struct GroupADLMIDI` (L82, 0 个方法, 7 个成员)
+
+**枚举:**
+
+- `[ ]` `enum Commands` → { CMD_Open, CMD_Play, CMD_Stop, CMD_Volume, CMD_TrackID, ... (22 个值) }
+
+**自由函数:**
+
+- `[ ]` `class MusPlayer_WinAPI: public MusPlayerBase({
+public:
+    enum Commands)`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\_garbage\mw_qt\playlist_model.cpp`
+
+- **行数**: 105
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: playlist_model.h
+- **标准库依赖**: ctime
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\_garbage\mw_qt\playlist_model.h`
+
+- **行数**: 52
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: QAbstractListModel, QString, QList, QSet
+
+**类/结构体:**
+
+- `[ ]` `struct PlayListEntry` (L9, 0 个方法, 10 个成员)
+- `[ ]` `class PlayListModel : QAbstractListModel` (L25, 0 个方法, 3 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\echo_tune.cpp`
+
+- **行数**: 480
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 同步原语, void* 类型擦除
+- **项目内依赖**: echo_tune.h, ui_echo_tune.h, QSettings, QTimer, QClipboard, QFileDialog, QDragEnterEvent, QDropEvent, QMimeData, QtDebug, ../Player/mus_player.h, ../Effects/spc_echo.h, snes_spc/spc.h, qfile_dialogs_default_options.hpp
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\echo_tune.h`
+
+- **行数**: 62
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: QDialog
+
+**类/结构体:**
+
+- `[ ]` `class EchoTune : QDialog` (L10, 0 个方法, 0 个成员)
+
+**自由函数:**
+
+- `[ ]` `class EchoTune : public QDialog()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\flowlayout.cpp`
+
+- **行数**: 190
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针, 类型转换
+- **项目内依赖**: flowlayout.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\flowlayout.h`
+
+- **行数**: 79
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: QLayout, QWidget, QRect, QStyle
+
+**类/结构体:**
+
+- `[ ]` `class FlowLayout : QLayout` (L12, 0 个方法, 3 个成员)
+
+**自由函数:**
+
+- `[ ]` `class FlowLayout : public QLayout()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\label_marquee.cpp`
+
+- **行数**: 101
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: label_marquee.h, QMouseEvent, QResizeEvent, QFontMetrics, QPaintEvent, QPainter, QStyle, QtDebug
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\label_marquee.h`
+
+- **行数**: 38
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: QWidget, QTimer, QLabel
+
+**类/结构体:**
+
+- `[ ]` `class LabelMarquee : QLabel` (L8, 0 个方法, 5 个成员)
+
+**自由函数:**
+
+- `[ ]` `class LabelMarquee : public QLabel()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_music_item.cpp`
+
+- **行数**: 416
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 同步原语, 类型转换
+- **项目内依赖**: QMessageBox, QToolTip, QtDebug, QDateTime, QFileInfo, multi_music_item.h, ui_multi_music_item.h, seek_bar.h, musicfx.h, track_muter.h
+- **标准库依赖**: cmath
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_music_item.h`
+
+- **行数**: 74
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 宏(1个)
+- **项目内依赖**: QWidget, QTimer, SDL.h
+
+**类/结构体:**
+
+- `[ ]` `class MultiMusicItem : QWidget` (L23, 0 个方法, 4 个成员)
+
+**自由函数:**
+
+- `[ ]` `class MultiMusicItem : public QWidget()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_music_test.cpp`
+
+- **行数**: 125
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针
+- **项目内依赖**: QFileDialog, QVBoxLayout, QDragEnterEvent, QDropEvent, QMimeData, multi_music_test.h, multi_music_item.h, ui_multi_music_test.h, qfile_dialogs_default_options.hpp
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_music_test.h`
+
+- **行数**: 53
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: QDialog, QVector
+
+**类/结构体:**
+
+- `[ ]` `class MultiMusicTest : QDialog` (L13, 0 个方法, 2 个成员)
+
+**自由函数:**
+
+- `[ ]` `class MultiMusicTest : public QDialog()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_sfx_item.cpp`
+
+- **行数**: 145
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针
+- **项目内依赖**: QFileInfo, QMessageBox, QtDebug, multi_sfx_item.h, ui_multi_sfx_item.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_sfx_item.h`
+
+- **行数**: 65
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: QWidget, SDL.h
+
+**类/结构体:**
+
+- `[ ]` `class MultiSfxItem : QWidget` (L17, 0 个方法, 3 个成员)
+
+**自由函数:**
+
+- `[ ]` `class MultiSfxItem : public QWidget()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_sfx_test.cpp`
+
+- **行数**: 254
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 宏(3个)
+- **项目内依赖**: QFileDialog, QVBoxLayout, QDragEnterEvent, QDropEvent, QMimeData, QSettings, QMessageBox, QRandomGenerator, multi_sfx_test.h, multi_sfx_item.h, ui_multi_sfx_test.h, qfile_dialogs_default_options.hpp
+- **标准库依赖**: ctime
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_sfx_test.h`
+
+- **行数**: 62
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: QDialog, QTimer, QVector
+
+**类/结构体:**
+
+- `[ ]` `class MultiSfxTester : QDialog` (L15, 0 个方法, 4 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\musicfx.cpp`
+
+- **行数**: 153
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针, 同步原语
+- **项目内依赖**: musicfx.h, ui_musicfx.h, ../Player/mus_player.h, QToolTip
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\musicfx.h`
+
+- **行数**: 56
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: QDialog
+
+**类/结构体:**
+
+- `[ ]` `class MusicFX : QDialog` (L12, 0 个方法, 6 个成员)
+
+**自由函数:**
+
+- `[ ]` `class MusicFX : public QDialog()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\musplayer_base.cpp`
+
+- **行数**: 37
+- **难度**: 🟢 低
+- **项目内依赖**: musplayer_base.h, ../Player/mus_player.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\musplayer_base.h`
+
+- **行数**: 73
+- **难度**: 🟢 低
+- **注意**: 宏(1个)
+- **项目内依赖**: QMainWindow, QUrl, QDragEnterEvent, QMimeData, QTimer
+
+**类/结构体:**
+
+- `[ ]` `class MusPlayerBase` (L11, 0 个方法, 3 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\musplayer_qt.cpp`
+
+- **行数**: 1016
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 同步原语, 可变参数
+- **项目内依赖**: QtDebug, QFileDialog, QMessageBox, QSlider, QDateTime, QTime, QSettings, QMenu, QDesktopServices, QUrl, QMoveEvent, QToolTip, ui_player_main.h, musplayer_qt.h, multi_music_test.h, multi_sfx_test.h, musicfx.h, track_muter.h, ../Player/mus_player.h, ../AssocFiles/assoc_files.h, ../version.h, sfx_tester.h, setup_midi.h, setup_audio.h, echo_tune.h, reverb_tune.h, seek_bar.h, qfile_dialogs_default_options.hpp
+- **标准库依赖**: cmath, math.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\musplayer_qt.h`
+
+- **行数**: 145
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 宏(1个)
+- **项目内依赖**: musplayer_base.h, QMainWindow, QUrl, QDragEnterEvent, QMimeData, QTimer
+
+**类/结构体:**
+
+- `[ ]` `class MusPlayer_Qt : QMainWindow, MusPlayerBase` (L29, 0 个方法, 5 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\qfile_dialogs_default_options.hpp`
+
+- **行数**: 17
+- **难度**: 🟢 低
+- **注意**: 宏(1个)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\reverb_tune.cpp`
+
+- **行数**: 229
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 同步原语
+- **项目内依赖**: reverb_tune.h, ui_reverb_tune.h, QSettings, QTimer, QClipboard, ../Player/mus_player.h, ../Effects/reverb.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\reverb_tune.h`
+
+- **行数**: 43
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: QDialog
+
+**类/结构体:**
+
+- `[ ]` `class ReverbTune : QDialog` (L10, 0 个方法, 0 个成员)
+
+**自由函数:**
+
+- `[ ]` `class ReverbTune : public QDialog()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\seek_bar.cpp`
+
+- **行数**: 169
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换
+- **项目内依赖**: seek_bar.h, QMouseEvent, QPaintEvent, QPainter
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\seek_bar.h`
+
+- **行数**: 48
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: QWidget
+
+**类/结构体:**
+
+- `[ ]` `class SeekBar : QWidget` (L6, 0 个方法, 7 个成员)
+
+**自由函数:**
+
+- `[ ]` `class SeekBar : public QWidget()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\setup_audio.cpp`
+
+- **行数**: 78
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针, 类型转换
+- **项目内依赖**: QMessageBox, setup_audio.h, ui_setup_audio.h, ../Player/mus_player.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\setup_audio.h`
+
+- **行数**: 28
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: QDialog
+
+**类/结构体:**
+
+- `[ ]` `class SetupAudio : QDialog` (L10, 0 个方法, 0 个成员)
+
+**自由函数:**
+
+- `[ ]` `class SetupAudio : public QDialog()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\setup_midi.cpp`
+
+- **行数**: 829
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 同步原语
+- **项目内依赖**: setup_midi.h, ui_setup_midi.h, ../Player/mus_player.h, qfile_dialogs_default_options.hpp, QDragEnterEvent, QDropEvent, QMimeData, QSettings
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\setup_midi.h`
+
+- **行数**: 88
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 宏(1个)
+- **项目内依赖**: QDialog, QFileDialog
+
+**类/结构体:**
+
+- `[ ]` `class SetupMidi : QDialog` (L11, 0 个方法, 3 个成员)
+
+**自由函数:**
+
+- `[ ]` `class SetupMidi : public QDialog()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\sfx_tester.cpp`
+
+- **行数**: 268
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 同步原语
+- **项目内依赖**: sfx_tester.h, ui_sfx_tester.h, QFocusEvent, QMainWindow, QFileDialog, QMessageBox, QSettings, QCloseEvent, QDragEnterEvent, QDropEvent, QMimeData, qfile_dialogs_default_options.hpp, ../Player/mus_player.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\sfx_tester.h`
+
+- **行数**: 63
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: QDialog
+
+**类/结构体:**
+
+- `[ ]` `class SfxTester : QDialog` (L12, 0 个方法, 8 个成员)
+
+**自由函数:**
+
+- `[ ]` `class SfxTester : public QDialog()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SNES_SPC.cpp`
+
+- **行数**: 564
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 宏(16个)
+- **项目内依赖**: SNES_SPC.h, blargg_source.h, SPC_CPU.h
+- **标准库依赖**: string.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SNES_SPC.h`
+
+- **行数**: 279
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 宏(1个), void* 类型擦除
+- **项目内依赖**: SPC_DSP.h, blargg_endian.h
+- **标准库依赖**: assert.h
+
+**类/结构体:**
+
+- `[ ]` `struct SNES_SPC` (L10, 0 个方法, 10 个成员)
+- `[ ]` `struct Timer` (L117, 0 个方法, 6 个成员)
+- `[ ]` `struct state_t` (L140, 0 个方法, 10 个成员)
+- `[ ]` `struct spc_file_t` (L232, 0 个方法, 10 个成员)
+
+**自由函数:**
+
+- `[ ]` `public: BLARGG_DISABLE_NOTHROW(typedef BOOST::uint16_t uint16_t;
+
+	
+	
+	
+	typedef int rel_time_t;
+
+	struct Timer
+	{
+		rel_time_t next_time; 
+		int prescaler;
+		int period;
+		int divider;
+		int enabled;
+		int counter;
+	};
+	enum { reg_count = 0x10 };
+	enum { timer_count = 3 };
+	enum { extra_size = SPC_DSP::extra_size };
+
+	enum { signature_size = 35 };
+
+private:
+	SPC_DSP dsp;
+
+	#if SPC_LESS_ACCURATE
+		static signed char const reg_times_ [256];
+		signed char reg_times [256];
+	#endif
+
+	struct state_t
+	{
+		Timer timers [timer_count];
+
+		uint8_t smp_regs [2] [reg_count];
+
+		struct
+		{
+			int pc;
+			int a;
+			int x;
+			int y;
+			int psw;
+			int sp;
+		} cpu_regs;
+
+		rel_time_t  dsp_time;
+		time_t      spc_time;
+		bool        echo_accessed;
+
+		int         tempo;
+		int         skipped_kon;
+		int         skipped_koff;
+		const char* cpu_error;
+
+		int         extra_clocks;
+		sample_t*   buf_begin;
+		sample_t const* buf_end;
+		sample_t*   extra_pos;
+		sample_t    extra_buf [extra_size];
+
+		int         rom_enabled;
+		uint8_t     rom    [rom_size];
+		uint8_t     hi_ram [rom_size];
+
+		unsigned char cycle_table [256];
+
+		struct)`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SNES_SPC_misc.cpp`
+
+- **行数**: 380
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 宏(4个)
+- **项目内依赖**: SNES_SPC.h, blargg_source.h
+- **标准库依赖**: string.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SNES_SPC_state.cpp`
+
+- **行数**: 129
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(3个), void* 类型擦除
+- **项目内依赖**: SNES_SPC.h, blargg_source.h
+- **标准库依赖**: string.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SPC_CPU.h`
+
+- **行数**: 1241
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(41个)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SPC_DSP.cpp`
+
+- **行数**: 1018
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 宏(16个), void* 类型擦除
+- **项目内依赖**: SPC_DSP.h, blargg_endian.h, blargg_source.h
+- **标准库依赖**: string.h
+
+**自由函数:**
+
+- `[ ]` ` 1(};
+
+static unsigned const counter_offsets [32] =)`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SPC_DSP.h`
+
+- **行数**: 304
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, extern 声明, 宏(2个), void* 类型擦除
+- **项目内依赖**: blargg_common.h
+- **标准库依赖**: assert.h
+
+**类/结构体:**
+
+- `[ ]` `class SPC_DSP` (L11, 0 个方法, 10 个成员)
+- `[ ]` `struct voice_t` (L107, 0 个方法, 10 个成员)
+- `[ ]` `struct state_t` (L125, 0 个方法, 10 个成员)
+- `[ ]` `class SPC_State_Copier` (L285, 0 个方法, 2 个成员)
+
+**枚举:**
+
+- `[ ]` `enum env_mode_t` → { env_release, env_attack, env_decay, env_sustain }
+
+**自由函数:**
+
+- `[ ]` `public: BLARGG_DISABLE_NOTHROW(typedef BOOST::int8_t   int8_t;
+	typedef BOOST::int16_t int16_t;
+
+	enum { echo_hist_size = 8 };
+
+	enum env_mode_t { env_release, env_attack, env_decay, env_sustain };
+	enum { brr_buf_size = 12 };
+	struct voice_t
+	{
+		int buf [brr_buf_size*2];
+		int buf_pos;            
+		int interp_pos;         
+		int brr_addr;           
+		int brr_offset;         
+		uint8_t* regs;          
+		int vbit;               
+		int kon_delay;          
+		env_mode_t env_mode;
+		int env;                
+		int hidden_env;         
+		uint8_t t_envx_out;
+	};
+private:
+	enum { brr_block_size = 9 };
+
+	struct state_t)`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SPC_Filter.cpp`
+
+- **行数**: 68
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: SPC_Filter.h, blargg_source.h
+- **标准库依赖**: string.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SPC_Filter.h`
+
+- **行数**: 47
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: blargg_common.h
+
+**类/结构体:**
+
+- `[ ]` `struct SPC_Filter` (L9, 0 个方法, 4 个成员)
+- `[ ]` `struct chan_t` (L39, 0 个方法, 0 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\blargg_common.h`
+
+- **行数**: 186
+- **难度**: 🔴 高
+- **注意**: 裸 new/delete, 裸指针, 模板, 异常处理, 运算符重载([], new, delete), 宏(18个), void* 类型擦除
+- **项目内依赖**: blargg_config.h, new, inttypes.h
+- **标准库依赖**: stddef.h, stdlib.h, assert.h, limits.h, stdint.h
+
+**类/结构体:**
+
+- `[ ]` `class blargg_vector` (L38, 0 个方法, 7 个成员)
+- `[ ]` `struct BOOST` (L151, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\blargg_config.h`
+
+- **行数**: 24
+- **难度**: 🟢 低
+- **注意**: 宏(5个)
+- **标准库依赖**: config.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\blargg_endian.h`
+
+- **行数**: 185
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(34个), void* 类型擦除
+- **项目内依赖**: blargg_common.h, endian.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\blargg_source.h`
+
+- **行数**: 100
+- **难度**: 🟢 低
+- **注意**: 宏(10个), 可变参数
+- **标准库依赖**: assert.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\dsp.cpp`
+
+- **行数**: 48
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针, 同步原语, void* 类型擦除
+- **项目内依赖**: dsp.h, SPC_DSP.h, blargg_source.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\dsp.h`
+
+- **行数**: 83
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, extern 声明, 宏(1个), void* 类型擦除
+- **标准库依赖**: stddef.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\spc.cpp`
+
+- **行数**: 73
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针, 同步原语, void* 类型擦除
+- **项目内依赖**: spc.h, SNES_SPC.h, SPC_Filter.h, blargg_source.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\spc.h`
+
+- **行数**: 147
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, extern 声明, 宏(1个), void* 类型擦除
+- **标准库依赖**: stddef.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\track_muter.cpp`
+
+- **行数**: 88
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针, 类型转换
+- **项目内依赖**: QCheckBox, QScrollArea, QGridLayout, flowlayout.h, track_muter.h, ui_track_muter.h, ../Player/mus_player.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\track_muter.h`
+
+- **行数**: 43
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: QDialog, QVector
+
+**类/结构体:**
+
+- `[ ]` `class TrackMuter : QDialog` (L16, 0 个方法, 1 个成员)
+
+**自由函数:**
+
+- `[ ]` `class TrackMuter : public QDialog()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Player\mus_player.cpp`
+
+- **行数**: 630
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 类型转换, void* 类型擦除
+- **项目内依赖**: mus_player.h, QMessageBox, QSettings, ../MainWindow/musplayer_qt.h, ../Effects/spc_echo.h, ../Effects/reverb.h, ../wave_writer.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Player\mus_player.h`
+
+- **行数**: 176
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(2个)
+- **项目内依赖**: SDL.h, QString, QDebug
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\SingleApplication\localserver.cpp`
+
+- **行数**: 177
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针, 类型转换
+- **项目内依赖**: QFile, QStringList, QtDebug, localserver.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\SingleApplication\localserver.h`
+
+- **行数**: 136
+- **难度**: 🟢 低
+- **注意**: 宏(1个)
+- **项目内依赖**: QThread, QVector, QTcpServer, QUdpSocket, QTcpSocket, QLocalSocket
+
+**类/结构体:**
+
+- `[ ]` `class IntProcServer : QUdpSocket` (L16, 0 个方法, 0 个成员)
+- `[ ]` `class LocalServer : QThread` (L36, 0 个方法, 0 个成员)
+
+**自由函数:**
+
+- `[ ]` `class IntProcServer  : public QUdpSocket()`
+- `[ ]` `class LocalServer : public QThread()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\SingleApplication\pge_application.cpp`
+
+- **行数**: 76
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换
+- **项目内依赖**: QFileOpenEvent, QDebug, pge_application.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\SingleApplication\pge_application.h`
+
+- **行数**: 83
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(2个)
+- **项目内依赖**: QApplication, QQueue, QStringList
+
+**类/结构体:**
+
+- `[ ]` `class PGE_OSXApplication : QApplication` (L18, 0 个方法, 2 个成员)
+
+**自由函数:**
+
+- `[ ]` `class PGE_OSXApplication : public QApplication()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\SingleApplication\singleapplication.cpp`
+
+- **行数**: 189
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 类型转换
+- **项目内依赖**: QtDebug, singleapplication.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\SingleApplication\singleapplication.h`
+
+- **行数**: 53
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: QObject, QUdpSocket, QStringList, QSystemSemaphore, QSharedMemory, localserver.h
+
+**类/结构体:**
+
+- `[ ]` `class SingleApplication : QObject` (L14, 0 个方法, 6 个成员)
+
+**自由函数:**
+
+- `[ ]` `class SingleApplication : public QObject()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\main.cpp`
+
+- **行数**: 110
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针, 同步原语, extern 声明
+- **项目内依赖**: SDL.h, QApplication, QtDebug, QMessageBox, QDir, QFileInfo, SingleApplication/singleapplication.h, SingleApplication/pge_application.h, MainWindow/musplayer_qt.h, Player/mus_player.h, version.h
+- **标准库依赖**: locale.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\version.h`
+
+- **行数**: 93
+- **难度**: 🟢 低
+- **注意**: 宏(16个)
+- **项目内依赖**: ../pge_version.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\wave_writer.c`
+
+- **行数**: 213
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: wave_writer.h, windows.h
+- **标准库依赖**: assert.h, stdlib.h, stdio.h
+
+**类/结构体:**
+
+- `[ ]` `struct Context` (L8, 0 个方法, 8 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\wave_writer.h`
+
+- **行数**: 30
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(3个)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\pge_version.h`
+
+- **行数**: 99
+- **难度**: 🟢 低
+- **注意**: 宏(38个)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\include\SDL_mixer.h`
+
+- **行数**: 3946
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, extern 声明, 宏(26个), void* 类型擦除
+- **项目内依赖**: SDL_stdinc.h, SDL_rwops.h, SDL_audio.h, SDL_endian.h, SDL_version.h, begin_code.h
+- **标准库依赖**: close_code.h
+
+**类/结构体:**
+
+- `[ ]` `struct Mix_Chunk` (L124, 0 个方法, 3 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\include\SDL_mixer_ext\SDL_mixer_ext.h`
+
+- **行数**: 1
+- **难度**: 🟢 低
+- **项目内依赖**: ../SDL_mixer.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\OPNMIDI\gm_opn_bank.h`
+
+- **行数**: 15528
+- **难度**: 🟢 低
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\dr_libs\dr_flac.h`
+
+- **行数**: 12532
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, extern 声明, 宏(213个), void* 类型擦除
+- **项目内依赖**: dr_flac.h, endian.h, smmintrin.h, emmintrin.h, arm_neon.h, intrin.h, intrinsics.h, intrin.h, wchar.h
+- **标准库依赖**: stddef.h, stdlib.h, string.h, assert.h, stdio.h, errno.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\dr_libs\dr_mp3.h`
+
+- **行数**: 4823
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, extern 声明, 宏(192个), void* 类型擦除
+- **项目内依赖**: dr_mp3.h, intrin.h, emmintrin.h, arm_neon.h, wchar.h
+- **标准库依赖**: stddef.h, stdlib.h, string.h, limits.h, assert.h, stdio.h, errno.h
+
+**自由函数:**
+
+- `[ ]` ` struct()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\load_aiff.c`
+
+- **行数**: 308
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 宏(19个)
+- **项目内依赖**: SDL_endian.h, SDL_mixer.h, load_aiff.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\load_aiff.h`
+
+- **行数**: 33
+- **难度**: 🟢 低
+- **注意**: 裸指针
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\load_voc.c`
+
+- **行数**: 460
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 宏(27个)
+- **项目内依赖**: SDL_mixer.h, load_voc.h
+
+**类/结构体:**
+
+- `[ ]` `struct vocstuff` (L7, 0 个方法, 9 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\load_voc.h`
+
+- **行数**: 36
+- **难度**: 🟢 低
+- **注意**: 裸指针
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\cvt_mus2mid.hpp`
+
+- **行数**: 461
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(18个)
+- **标准库依赖**: stddef.h, stdlib.h, string.h, stdint.h
+
+**类/结构体:**
+
+- `[ ]` `struct MUSHeader` (L64, 0 个方法, 6 个成员)
+- `[ ]` `struct MidiHeaderChunk` (L74, 0 个方法, 5 个成员)
+- `[ ]` `struct MidiTrackChunk` (L83, 0 个方法, 2 个成员)
+- `[ ]` `struct mus_ctx` (L89, 0 个方法, 2 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\cvt_xmi2mid.hpp`
+
+- **行数**: 1330
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换, 宏(15个), 可变参数
+- **项目内依赖**: vector
+- **标准库依赖**: stddef.h, stdint.h, string.h, stdlib.h, stdint.h, assert.h, stdio.h, stdarg.h
+
+**类/结构体:**
+
+- `[ ]` `struct _xmi2mid_midi_event` (L59, 0 个方法, 4 个成员)
+- `[ ]` `struct xmi2mid_xmi_ctx` (L73, 0 个方法, 5 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\file_reader.hpp`
+
+- **行数**: 301
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换, 宏(2个)
+- **项目内依赖**: windows.h
+- **标准库依赖**: string, cstdio, stdint.h, stddef.h, cstring
+
+**类/结构体:**
+
+- `[ ]` `class FileAndMemReader` (L18, 0 个方法, 10 个成员)
+
+**枚举:**
+
+- `[ ]` `enum relTo` → { SET, CUR, END }
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\fraction.hpp`
+
+- **行数**: 220
+- **难度**: 🟡 中
+- **注意**: 裸指针, 模板, 运算符重载(op1, -, ==, op, *=, -=, =, op2, /=, op(const, op(inttype, !=, +=), 宏(5个)
+- **标准库依赖**: cmath, limits
+
+**类/结构体:**
+
+- `[ ]` `class fraction` (L10, 0 个方法, 3 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\midi_sequencer.h`
+
+- **行数**: 178
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(1个), 可变参数
+- **标准库依赖**: stddef.h, stdint.h
+
+**类/结构体:**
+
+- `[ ]` `struct BW_MidiRtInterface` (L55, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\midi_sequencer.hpp`
+
+- **行数**: 860
+- **难度**: 🟡 中
+- **注意**: 裸指针, 类型转换, 宏(2个)
+- **项目内依赖**: list, vector, fraction.hpp, file_reader.hpp, midi_sequencer.h
+
+**类/结构体:**
+
+- `[ ]` `class BW_MidiSequencer` (L17, 0 个方法, 10 个成员)
+- `[ ]` `class MidiEvent` (L20, 0 个方法, 10 个成员)
+- `[ ]` `class MidiTrackRow` (L129, 0 个方法, 5 个成员)
+- `[ ]` `struct TempoChangePoint` (L150, 0 个方法, 2 个成员)
+- `[ ]` `struct Position` (L160, 0 个方法, 10 个成员)
+- `[ ]` `struct TrackInfo` (L171, 0 个方法, 4 个成员)
+- `[ ]` `struct MIDI_MarkerEntry` (L224, 0 个方法, 3 个成员)
+- `[ ]` `struct CmfInstrument` (L235, 0 个方法, 1 个成员)
+- `[ ]` `struct LoopStackEntry` (L330, 0 个方法, 5 个成员)
+- `[ ]` `struct LoopState` (L351, 0 个方法, 10 个成员)
+- `[ ]` `struct SequencerTime` (L464, 0 个方法, 10 个成员)
+
+**枚举:**
+
+- `[ ]` `enum Types` → { T_UNKNOWN, T_NOTEOFF, T_NOTEON, T_NOTETOUCH, T_CTRLCHANGE, ... (13 个值) }
+- `[ ]` `enum SubTypes` → { ST_SEQNUMBER, ST_TEXT, ST_COPYRIGHT, ST_SQTRKTITLE, ST_INSTRTITLE, ... (24 个值) }
+- `[ ]` `enum FileFormat` → { Format_MIDI, Format_CMF, Format_IMF, Format_RSXX, Format_XMIDI }
+- `[ ]` `enum LoopFormat` → { Loop_Default, Loop_RPGMaker, Loop_EMIDI, Loop_HMI }
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\midi_sequencer_impl.hpp`
+
+- **行数**: 3017
+- **难度**: 🔴 高
+- **注意**: 智能指针, 裸指针, 模板, 同步原语, 类型转换, 宏(5个), 可变参数
+- **项目内依赖**: midi_sequencer.hpp, memory, iterator, algorithm, set, psp2kern/kernel/sysclib.h
+- **标准库依赖**: stdio.h, cstring, cerrno, assert.h, cvt_mus2mid.hpp, cvt_xmi2mid.hpp
+
+**类/结构体:**
+
+- `[ ]` `struct NoteState` (L1018, 0 个方法, 4 个成员)
+- `[ ]` `class BufferGuard` (L2150, 0 个方法, 1 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\mix_midi_seq.cpp`
+
+- **行数**: 219
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 类型转换, 宏(3个)
+- **项目内依赖**: SDL_assert.h, midi_sequencer_impl.hpp, mix_midi_seq.h
+- **标准库依赖**: cassert
+
+**类/结构体:**
+
+- `[ ]` `class MixerSeqInternal` (L20, 0 个方法, 2 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\mix_midi_seq.h`
+
+- **行数**: 71
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(1个)
+- **项目内依赖**: midi_sequencer.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\mp3utils.c`
+
+- **行数**: 1202
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(44个)
+- **项目内依赖**: SDL_stdinc.h, SDL_error.h, SDL_rwops.h, mp3utils.h, SDL_log.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\mp3utils.h`
+
+- **行数**: 57
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(3个)
+- **项目内依赖**: music.h
+
+**类/结构体:**
+
+- `[ ]` `struct mp3file_t` (L14, 0 个方法, 0 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_cmd.c`
+
+- **行数**: 321
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: SDL_config.h, unistd.h, music_cmd.h
+- **标准库依赖**: sys/types.h, sys/wait.h, stdio.h, stdlib.h, string.h, signal.h, ctype.h, limits.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_cmd.h`
+
+- **行数**: 28
+- **难度**: 🟢 低
+- **注意**: extern 声明
+- **项目内依赖**: music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_drflac.c`
+
+- **行数**: 437
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, extern 声明, 宏(12个)
+- **项目内依赖**: music_drflac.h, mp3utils.h, ../utils.h, SDL.h, dr_libs/dr_flac.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_drflac.h`
+
+- **行数**: 28
+- **难度**: 🟢 低
+- **注意**: extern 声明
+- **项目内依赖**: music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_drmp3.c`
+
+- **行数**: 310
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(12个)
+- **项目内依赖**: music_drmp3.h, mp3utils.h, SDL.h, dr_libs/dr_mp3.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_drmp3.h`
+
+- **行数**: 28
+- **难度**: 🟢 低
+- **注意**: extern 声明
+- **项目内依赖**: music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_ffmpeg.c`
+
+- **行数**: 1013
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(11个)
+- **项目内依赖**: music_ffmpeg.h, SDL_log.h, SDL_loadso.h, SDL_assert.h, libavutil/frame.h, libavutil/mem.h, libavcodec/avcodec.h, libavformat/avformat.h, libavutil/avutil.h, libavutil/error.h, libavutil/samplefmt.h, libavutil/opt.h, libavutil/dict.h, libswresample/swresample.h
+
+**类/结构体:**
+
+- `[ ]` `struct ffmpeg_loader` (L42, 0 个方法, 1 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_ffmpeg.h`
+
+- **行数**: 26
+- **难度**: 🟢 低
+- **注意**: extern 声明
+- **项目内依赖**: music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_flac.c`
+
+- **行数**: 820
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 宏(2个)
+- **项目内依赖**: SDL_loadso.h, SDL_assert.h, music_flac.h, utils.h, FLAC/stream_decoder.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_flac.h`
+
+- **行数**: 26
+- **难度**: 🟢 低
+- **注意**: extern 声明
+- **项目内依赖**: music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_fluidlite.c`
+
+- **行数**: 951
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(3个), void* 类型擦除
+- **项目内依赖**: SDL_loadso.h, SDL_rwops.h, utils.h, music_fluidsynth.h, midi_seq/mix_midi_seq.h, fluidlite.h
+
+**自由函数:**
+
+- `[ ]` ` FLUIDSYNTH_Unload(};
+
+
+Mix_MusicInterface Mix_MusicInterface_FLUIDXMI =)`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_fluidsynth.c`
+
+- **行数**: 442
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(2个), void* 类型擦除
+- **项目内依赖**: SDL_loadso.h, SDL_rwops.h, music_fluidsynth.h, fluidsynth.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_fluidsynth.h`
+
+- **行数**: 34
+- **难度**: 🟢 低
+- **注意**: extern 声明
+- **项目内依赖**: music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_gme.c`
+
+- **行数**: 651
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(3个)
+- **项目内依赖**: SDL_loadso.h, music_gme.h, gme.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_gme.h`
+
+- **行数**: 33
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明
+- **项目内依赖**: music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_midi_adl.c`
+
+- **行数**: 989
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(6个)
+- **项目内依赖**: music_midi_adl.h, SDL_loadso.h, utils.h, adlmidi.h
+
+**自由函数:**
+
+- `[ ]` ` ADLMIDI_Unload(};
+
+
+Mix_MusicInterface Mix_MusicInterface_ADLIMF =)`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_midi_adl.h`
+
+- **行数**: 74
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明
+- **项目内依赖**: music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_midi_edmidi.c`
+
+- **行数**: 698
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(4个)
+- **项目内依赖**: music_midi_edmidi.h, SDL_loadso.h, utils.h, emu_de_midi.h
+
+**自由函数:**
+
+- `[ ]` ` EDMIDI_Unload(};
+
+Mix_MusicInterface Mix_MusicInterface_EDXMI =)`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_midi_edmidi.h`
+
+- **行数**: 28
+- **难度**: 🟢 低
+- **注意**: extern 声明
+- **项目内依赖**: music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_midi_opn.c`
+
+- **行数**: 874
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(6个), void* 类型擦除
+- **项目内依赖**: music_midi_opn.h, SDL_loadso.h, utils.h, opnmidi.h, OPNMIDI/gm_opn_bank.h
+
+**自由函数:**
+
+- `[ ]` ` OPNMIDI_Unload(};
+
+
+Mix_MusicInterface Mix_MusicInterface_OPNXMI =)`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_midi_opn.h`
+
+- **行数**: 57
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明
+- **项目内依赖**: music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_modplug.c`
+
+- **行数**: 391
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(2个), void* 类型擦除
+- **项目内依赖**: SDL_loadso.h, music_modplug.h, libmodplug/modplug.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_modplug.h`
+
+- **行数**: 28
+- **难度**: 🟢 低
+- **注意**: extern 声明
+- **项目内依赖**: music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_mpg123.c`
+
+- **行数**: 562
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(4个), void* 类型擦除
+- **项目内依赖**: SDL_loadso.h, SDL_assert.h, music_mpg123.h, mp3utils.h, mpg123.h
+- **标准库依赖**: stdio.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_mpg123.h`
+
+- **行数**: 28
+- **难度**: 🟢 低
+- **注意**: extern 声明
+- **项目内依赖**: music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_nativemidi.c`
+
+- **行数**: 136
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: music_nativemidi.h, native_midi/native_midi.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_nativemidi.h`
+
+- **行数**: 31
+- **难度**: 🟢 低
+- **注意**: extern 声明
+- **项目内依赖**: music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_nativemidi_alt_win32.c`
+
+- **行数**: 816
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语
+- **项目内依赖**: SDL_timer.h, SDL_atomic.h, SDL_mutex.h, utils.h, music_nativemidi.h, midi_seq/mix_midi_seq.h, windows.h
+
+**类/结构体:**
+
+- `[ ]` `struct _NativeMidiSong` (L21, 0 个方法, 10 个成员)
+
+**自由函数:**
+
+- `[ ]` ` NULL(};
+
+
+Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_ogg.c`
+
+- **行数**: 576
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(4个)
+- **项目内依赖**: SDL_loadso.h, music_ogg.h, utils.h, tremor/ivorbisfile.h, vorbis/vorbisfile.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_ogg.h`
+
+- **行数**: 28
+- **难度**: 🟢 低
+- **注意**: extern 声明
+- **项目内依赖**: music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_ogg_stb.c`
+
+- **行数**: 798
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(56个)
+- **项目内依赖**: music_ogg.h, utils.h, SDL_assert.h, SDL_version.h, stb_vorbis/stb_vorbis.h
+- **标准库依赖**: math.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_openmpt.c`
+
+- **行数**: 496
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(2个)
+- **项目内依赖**: SDL_loadso.h, music_openmpt.h, libopenmpt/libopenmpt.h, libopenmpt/libopenmpt_ext.h
+
+**类/结构体:**
+
+- `[ ]` `struct OpenMpt_Settings` (L41, 0 个方法, 3 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_openmpt.h`
+
+- **行数**: 28
+- **难度**: 🟢 低
+- **注意**: extern 声明
+- **项目内依赖**: music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_opus.c`
+
+- **行数**: 543
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(3个), void* 类型擦除
+- **项目内依赖**: SDL_loadso.h, music_opus.h, utils.h, opus/opusfile.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_opus.h`
+
+- **行数**: 28
+- **难度**: 🟢 低
+- **注意**: extern 声明
+- **项目内依赖**: music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_pxtone.cpp`
+
+- **行数**: 527
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 宏(1个), void* 类型擦除
+- **项目内依赖**: music_pxtone.h, ./pxtone/pxtnService.h, ./pxtone/pxtnError.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_pxtone.h`
+
+- **行数**: 34
+- **难度**: 🟢 低
+- **注意**: extern 声明
+- **项目内依赖**: music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_timidity.c`
+
+- **行数**: 332
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: music_timidity.h, timidity.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_timidity.h`
+
+- **行数**: 28
+- **难度**: 🟢 低
+- **注意**: extern 声明
+- **项目内依赖**: music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_wav.c`
+
+- **行数**: 2071
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 宏(48个)
+- **项目内依赖**: music_wav.h, mp3utils.h
+
+**类/结构体:**
+
+- `[ ]` `struct ADPCM_DecoderState` (L10, 0 个方法, 9 个成员)
+- `[ ]` `struct MS_ADPCM_CoeffData` (L38, 0 个方法, 2 个成员)
+- `[ ]` `struct MS_ADPCM_ChannelState` (L45, 0 个方法, 3 个成员)
+
+**自由函数:**
+
+- `[ ]` ` union()`
+- `[ ]` ` union()`
+- `[ ]` ` union()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_wav.h`
+
+- **行数**: 28
+- **难度**: 🟢 低
+- **注意**: extern 声明
+- **项目内依赖**: music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_wavpack.c`
+
+- **行数**: 775
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(11个), void* 类型擦除
+- **项目内依赖**: SDL_loadso.h, SDL_log.h, music_wavpack.h, wavpack.h, wavpack/wavpack.h
+- **标准库依赖**: stdio.h
+
+**类/结构体:**
+
+- `[ ]` `struct chan_state` (L632, 0 个方法, 1 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_wavpack.h`
+
+- **行数**: 28
+- **难度**: 🟢 低
+- **注意**: extern 声明
+- **项目内依赖**: music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_xmp.c`
+
+- **行数**: 520
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(6个), void* 类型擦除
+- **项目内依赖**: SDL_loadso.h, music_xmp.h, xmp.h
+
+**类/结构体:**
+
+- `[ ]` `struct xmp_callbacks` (L18, 0 个方法, 0 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_xmp.h`
+
+- **行数**: 28
+- **难度**: 🟢 低
+- **注意**: extern 声明
+- **项目内依赖**: music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\native_midi\native_midi.h`
+
+- **行数**: 40
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: SDL_rwops.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\native_midi\native_midi_common.c`
+
+- **行数**: 417
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(6个)
+- **项目内依赖**: native_midi_common.h, SDL_mixer.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\native_midi\native_midi_common.h`
+
+- **行数**: 63
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(9个)
+- **项目内依赖**: SDL.h
+
+**类/结构体:**
+
+- `[ ]` `struct MIDIEvent` (L19, 0 个方法, 4 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\native_midi\native_midi_haiku.cpp`
+
+- **行数**: 295
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 同步原语, extern 声明
+- **项目内依赖**: SDL_config.h, MidiStore.h, MidiDefs.h, MidiSynthFile.h, algorithm, native_midi.h, native_midi_common.h
+- **标准库依赖**: stdio.h, stdlib.h, string.h, assert.h
+
+**类/结构体:**
+
+- `[ ]` `class MidiEventsStore : BMidi` (L23, 0 个方法, 10 个成员)
+- `[ ]` `struct _NativeMidiSong` (L184, 0 个方法, 0 个成员)
+
+**自由函数:**
+
+- `[ ]` `class MidiEventsStore : public BMidi()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\native_midi\native_midi_macosx.c`
+
+- **行数**: 369
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: SDL_config.h, SDL_stdinc.h, AudioUnit/AudioUnit.h, AudioToolbox/AudioToolbox.h, AvailabilityMacros.h, SDL_endian.h, SDL_mixer.h, ../../mixer.h, native_midi.h
+
+**类/结构体:**
+
+- `[ ]` `struct _NativeMidiSong` (L21, 0 个方法, 5 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\native_midi\native_midi_win32.c`
+
+- **行数**: 340
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 宏(1个)
+- **项目内依赖**: SDL_config.h, windows.h, mmsystem.h, native_midi.h, native_midi_common.h
+
+**类/结构体:**
+
+- `[ ]` `struct _NativeMidiSong` (L15, 0 个方法, 8 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtn.h`
+
+- **行数**: 55
+- **难度**: 🟢 低
+- **注意**: 宏(6个)
+- **项目内依赖**: SDL_endian.h, ./pxtnError.h
+- **标准库依赖**: stdint.h, stdlib.h, string.h, stdio.h, math.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnData.cpp`
+
+- **行数**: 269
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换, void* 类型擦除
+- **项目内依赖**: ./pxtnData.h
+
+**自由函数:**
+
+- `[ ]` ` union()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnData.h`
+
+- **行数**: 115
+- **难度**: 🟢 低
+- **注意**: 裸指针, 类型转换, 运算符重载(=), 宏(1个), void* 类型擦除
+- **项目内依赖**: pxtn.h
+
+**类/结构体:**
+
+- `[ ]` `class pxtnData` (L24, 0 个方法, 10 个成员)
+
+**自由函数:**
+
+- `[ ]` ` union()`
+- `[ ]` ` union()`
+- `[ ]` ` union()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnDelay.cpp`
+
+- **行数**: 168
+- **难度**: 🟢 低
+- **注意**: 裸指针, void* 类型擦除
+- **项目内依赖**: ./pxtn.h, ./pxtnMax.h, ./pxtnMem.h, ./pxtnDelay.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnDelay.h`
+
+- **行数**: 67
+- **难度**: 🟢 低
+- **注意**: 裸指针, 运算符重载(=), 宏(1个), void* 类型擦除
+- **项目内依赖**: ./pxtnData.h, ./pxtnMax.h
+
+**类/结构体:**
+
+- `[ ]` `class pxtnDelay : pxtnData` (L18, 0 个方法, 10 个成员)
+
+**枚举:**
+
+- `[ ]` `enum DELAYUNIT` → { DELAYUNIT_Beat, DELAYUNIT_Meas, DELAYUNIT_Second, DELAYUNIT_num }
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnError.cpp`
+
+- **行数**: 49
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语
+- **项目内依赖**: ./pxtnError.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnError.h`
+
+- **行数**: 58
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 宏(1个)
+
+**枚举:**
+
+- `[ ]` `enum pxtnERR` → { pxtnOK, pxtnERR_VOID, pxtnERR_INIT, pxtnERR_FATAL, pxtnERR_anti_opreation, ... (29 个值) }
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnEvelist.cpp`
+
+- **行数**: 904
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, void* 类型擦除
+- **项目内依赖**: ./pxtnEvelist.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnEvelist.h`
+
+- **行数**: 135
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 运算符重载(=), 宏(14个), void* 类型擦除
+- **项目内依赖**: ./pxtnData.h
+
+**类/结构体:**
+
+- `[ ]` `struct EVERECORD` (L44, 0 个方法, 8 个成员)
+- `[ ]` `class pxtnEvelist : pxtnData` (L59, 0 个方法, 6 个成员)
+
+**自由函数:**
+
+- `[ ]` ` EVENTKIND_NUM(};
+
+#define EVENTDEFAULT_VOLUME       104
+#define EVENTDEFAULT_VELOCITY     104
+#define EVENTDEFAULT_PAN_VOLUME    64
+#define EVENTDEFAULT_PAN_TIME      64
+#define EVENTDEFAULT_PORTAMENT      0
+#define EVENTDEFAULT_VOICENO        0
+#define EVENTDEFAULT_GROUPNO        0
+#define EVENTDEFAULT_KEY       0x6000
+#define EVENTDEFAULT_BASICKEY  0x4500 
+#define EVENTDEFAULT_TUNING      1.0f
+
+#define EVENTDEFAULT_BEATNUM        4
+#define EVENTDEFAULT_BEATTEMPO    120
+#define EVENTDEFAULT_BEATCLOCK    480
+
+typedef struct EVERECORD
+{
+	uint8_t    kind    ;
+	uint8_t    unit_no ;
+	uint8_t    reserve1;
+	uint8_t    reserve2;
+	int32_t    value   ;
+	int32_t    clock   ;
+	EVERECORD* prev    ;
+	EVERECORD* next    ;
+}
+EVERECORD;
+
+
+
+class pxtnEvelist: public pxtnData)`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnMaster.cpp`
+
+- **行数**: 259
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, void* 类型擦除
+- **项目内依赖**: ./pxtnData.h, ./pxtnMaster.h, ./pxtnEvelist.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnMaster.h`
+
+- **行数**: 57
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 运算符重载(=), 宏(1个), void* 类型擦除
+- **项目内依赖**: ./pxtnData.h
+
+**类/结构体:**
+
+- `[ ]` `class pxtnMaster : pxtnData` (L8, 0 个方法, 8 个成员)
+
+**自由函数:**
+
+- `[ ]` `class pxtnMaster: public pxtnData()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnMax.h`
+
+- **行数**: 16
+- **难度**: 🟢 低
+- **注意**: 同步原语, 宏(11个)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnMem.cpp`
+
+- **行数**: 24
+- **难度**: 🟢 低
+- **注意**: 裸指针, void* 类型擦除
+- **项目内依赖**: ./pxtnMem.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnMem.h`
+
+- **行数**: 12
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个), void* 类型擦除
+- **项目内依赖**: ./pxtn.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnOverDrive.cpp`
+
+- **行数**: 106
+- **难度**: 🟢 低
+- **注意**: 裸指针, void* 类型擦除
+- **项目内依赖**: ./pxtnOverDrive.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnOverDrive.h`
+
+- **行数**: 51
+- **难度**: 🟢 低
+- **注意**: 裸指针, 运算符重载(=), 宏(7个), void* 类型擦除
+- **项目内依赖**: ./pxtnData.h
+
+**类/结构体:**
+
+- `[ ]` `class pxtnOverDrive : pxtnData` (L15, 0 个方法, 6 个成员)
+
+**自由函数:**
+
+- `[ ]` `class pxtnOverDrive: public pxtnData()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Frequency.cpp`
+
+- **行数**: 132
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(5个)
+- **项目内依赖**: ./pxtn.h, ./pxtnPulse_Frequency.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Frequency.h`
+
+- **行数**: 27
+- **难度**: 🟢 低
+- **注意**: 裸指针, 运算符重载(=), 宏(1个)
+- **项目内依赖**: ./pxtnData.h
+
+**类/结构体:**
+
+- `[ ]` `class pxtnPulse_Frequency : pxtnData` (L6, 0 个方法, 2 个成员)
+
+**自由函数:**
+
+- `[ ]` `class pxtnPulse_Frequency: public pxtnData()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Noise.cpp`
+
+- **行数**: 380
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(17个), void* 类型擦除
+- **项目内依赖**: ./pxtn.h, ./pxtnMem.h, ./pxtnPulse_Noise.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Noise.h`
+
+- **行数**: 92
+- **难度**: 🟢 低
+- **注意**: 裸指针, 运算符重载(=), 宏(1个), void* 类型擦除
+- **项目内依赖**: ./pxtnData.h, ./pxtnPulse_Frequency.h, ./pxtnPulse_Oscillator.h, ./pxtnPulse_PCM.h
+
+**类/结构体:**
+
+- `[ ]` `class pxtnPulse_Noise : pxtnData` (L57, 0 个方法, 4 个成员)
+
+**枚举:**
+
+- `[ ]` `enum pxWAVETYPE` → { pxWAVETYPE_None, pxWAVETYPE_Sine, pxWAVETYPE_Saw, pxWAVETYPE_Rect, pxWAVETYPE_Random, ... (18 个值) }
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_NoiseBuilder.cpp`
+
+- **行数**: 524
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 宏(6个), void* 类型擦除
+- **项目内依赖**: ./pxtn.h, ./pxtnMem.h, ./pxtnPulse_NoiseBuilder.h
+
+**枚举:**
+
+- `[ ]` `enum _RANDOMTYPE` → { _RANDOM_None, _RANDOM_Saw, _RANDOM_Rect }
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_NoiseBuilder.h`
+
+- **行数**: 33
+- **难度**: 🟢 低
+- **注意**: 裸指针, 运算符重载(=), 宏(1个)
+- **项目内依赖**: ./pxtnData.h, ./pxtnPulse_Noise.h
+
+**类/结构体:**
+
+- `[ ]` `class pxtnPulse_NoiseBuilder : pxtnData` (L8, 0 个方法, 5 个成员)
+
+**自由函数:**
+
+- `[ ]` `class pxtnPulse_NoiseBuilder: public pxtnData()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Oggv.cpp`
+
+- **行数**: 504
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(34个), void* 类型擦除
+- **项目内依赖**: ./pxtn.h, ../stb_vorbis/stb_vorbis.h, tremor/ivorbisfile.h, vorbis/codec.h, vorbis/vorbisfile.h, ./pxtnPulse_Oggv.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Oggv.h`
+
+- **行数**: 42
+- **难度**: 🟢 低
+- **注意**: 裸指针, 运算符重载(=), 宏(1个), void* 类型擦除
+- **项目内依赖**: ./pxtnData.h, ./pxtnPulse_PCM.h
+
+**类/结构体:**
+
+- `[ ]` `class pxtnPulse_Oggv : pxtnData` (L10, 0 个方法, 6 个成员)
+
+**自由函数:**
+
+- `[ ]` `class pxtnPulse_Oggv: public pxtnData()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Oscillator.cpp`
+
+- **行数**: 89
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: ./pxtn.h, ./pxtnPulse_Oscillator.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Oscillator.h`
+
+- **行数**: 27
+- **难度**: 🟢 低
+- **注意**: 裸指针, 运算符重载(=), 宏(1个)
+- **项目内依赖**: ./pxtnData.h
+
+**类/结构体:**
+
+- `[ ]` `class pxtnPulse_Oscillator : pxtnData` (L6, 0 个方法, 5 个成员)
+
+**自由函数:**
+
+- `[ ]` `class pxtnPulse_Oscillator: public pxtnData()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_PCM.cpp`
+
+- **行数**: 602
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, void* 类型擦除
+- **项目内依赖**: ./pxtn.h, ./pxtnMem.h, ./pxtnPulse_PCM.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_PCM.h`
+
+- **行数**: 64
+- **难度**: 🟢 低
+- **注意**: 裸指针, 运算符重载(=), 宏(1个), void* 类型擦除
+- **项目内依赖**: ./pxtnData.h
+
+**类/结构体:**
+
+- `[ ]` `class pxtnPulse_PCM : pxtnData` (L6, 0 个方法, 7 个成员)
+
+**自由函数:**
+
+- `[ ]` `class pxtnPulse_PCM: public pxtnData()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnService.cpp`
+
+- **行数**: 1352
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 同步原语, 宏(4个), void* 类型擦除
+- **项目内依赖**: ./pxtn.h, ./pxtnService.h
+
+**枚举:**
+
+- `[ ]` `enum _enum_Tag` → { _TAG_Unknown, _TAG_antiOPER, _TAG_x1x_PROJ, _TAG_x1x_UNIT, _TAG_x1x_PCM, ... (24 个值) }
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnService.h`
+
+- **行数**: 252
+- **难度**: 🟡 中
+- **注意**: 裸指针, 同步原语, 运算符重载(=), 宏(4个), void* 类型擦除
+- **项目内依赖**: ./pxtnData.h, ./pxtnPulse_NoiseBuilder.h, ./pxtnMax.h, ./pxtnText.h, ./pxtnDelay.h, ./pxtnOverDrive.h, ./pxtnMaster.h, ./pxtnWoice.h, ./pxtnUnit.h, ./pxtnEvelist.h
+
+**类/结构体:**
+
+- `[ ]` `class pxtnService : pxtnData` (L42, 0 个方法, 10 个成员)
+
+**枚举:**
+
+- `[ ]` `enum _enum_FMTVER` → { _enum_FMTVER_unknown, _enum_FMTVER_x1x, _enum_FMTVER_x2x, _enum_FMTVER_x3x, _enum_FMTVER_x4x, ... (6 个值) }
+
+**自由函数:**
+
+- `[ ]` `class pxtnService: public pxtnData()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnService_moo.cpp`
+
+- **行数**: 516
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, 同步原语, void* 类型擦除
+- **项目内依赖**: ./pxtn.h, ./pxtnMem.h, ./pxtnService.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnText.cpp`
+
+- **行数**: 115
+- **难度**: 🟢 低
+- **注意**: 裸指针, void* 类型擦除
+- **项目内依赖**: ./pxtn.h, ./pxtnText.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnText.h`
+
+- **行数**: 41
+- **难度**: 🟢 低
+- **注意**: 裸指针, 运算符重载(=), 宏(1个), void* 类型擦除
+- **项目内依赖**: ./pxtnData.h
+
+**类/结构体:**
+
+- `[ ]` `class pxtnText : pxtnData` (L8, 0 个方法, 5 个成员)
+
+**自由函数:**
+
+- `[ ]` `class pxtnText: public pxtnData()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnUnit.cpp`
+
+- **行数**: 373
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, void* 类型擦除
+- **项目内依赖**: ./pxtn.h, ./pxtnUnit.h, ./pxtnEvelist.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnUnit.h`
+
+- **行数**: 85
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 运算符重载(=), 宏(1个), void* 类型擦除
+- **项目内依赖**: ./pxtnData.h, ./pxtnMax.h, ./pxtnWoice.h
+
+**类/结构体:**
+
+- `[ ]` `class pxtnUnit : pxtnData` (L11, 0 个方法, 10 个成员)
+
+**自由函数:**
+
+- `[ ]` `class pxtnUnit: public pxtnData()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnWoice.cpp`
+
+- **行数**: 517
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针, void* 类型擦除
+- **项目内依赖**: ./pxtn.h, ./pxtnWoice.h, ./pxtnEvelist.h, ./pxtnMem.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnWoice.h`
+
+- **行数**: 193
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 运算符重载(=), 宏(12个), void* 类型擦除
+- **项目内依赖**: ./pxtnData.h, ./pxtnPulse_Noise.h, ./pxtnPulse_NoiseBuilder.h, ./pxtnPulse_PCM.h, ./pxtnPulse_Oggv.h
+
+**类/结构体:**
+
+- `[ ]` `class pxtnWoice : pxtnData` (L119, 0 个方法, 9 个成员)
+
+**枚举:**
+
+- `[ ]` `enum pxtnWOICETYPE` → { pxtnWOICE_None, pxtnWOICE_PCM, pxtnWOICE_PTV, pxtnWOICE_PTN, pxtnWOICE_OGGV }
+- `[ ]` `enum pxtnVOICETYPE` → { pxtnVOICE_Coodinate, pxtnVOICE_Overtone, pxtnVOICE_Noise, pxtnVOICE_Sampling, pxtnVOICE_OggVorbis }
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnWoicePTV.cpp`
+
+- **行数**: 294
+- **难度**: 🟢 低
+- **注意**: 裸指针, void* 类型擦除
+- **项目内依赖**: ./pxtn.h, ./pxtnMem.h, ./pxtnWoice.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnWoice_io.cpp`
+
+- **行数**: 390
+- **难度**: 🟢 低
+- **注意**: 裸指针, void* 类型擦除
+- **项目内依赖**: ./pxtn.h, ./pxtnWoice.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtoneNoise.cpp`
+
+- **行数**: 86
+- **难度**: 🟢 低
+- **注意**: 裸 new/delete, 裸指针, void* 类型擦除
+- **项目内依赖**: ./pxtn.h, ./pxtnService.h, ./pxtoneNoise.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtoneNoise.h`
+
+- **行数**: 31
+- **难度**: 🟢 低
+- **注意**: 裸指针, 运算符重载(=), 宏(1个), void* 类型擦除
+- **项目内依赖**: ./pxtnData.h
+
+**类/结构体:**
+
+- `[ ]` `class pxtoneNoise : pxtnData` (L8, 0 个方法, 4 个成员)
+
+**自由函数:**
+
+- `[ ]` `class pxtoneNoise: public pxtnData()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\stb_vorbis\stb_vorbis.h`
+
+- **行数**: 5809
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, extern 声明, 宏(94个), void* 类型擦除
+- **项目内依赖**: malloc.h
+- **标准库依赖**: stdio.h, stdio.h, stdlib.h, string.h, assert.h, math.h, limits.h, crtdbg.h
+
+**类/结构体:**
+
+- `[ ]` `struct stb_vorbis` (L817, 0 个方法, 10 个成员)
+
+**枚举:**
+
+- `[ ]` `enum STBVorbisError` → { VORBIS__no_error, VORBIS_need_more_data, VORBIS_invalid_api_mixing, VORBIS_outofmem, VORBIS_feature_not_supported, ... (21 个值) }
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\common.c`
+
+- **行数**: 112
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(6个)
+- **项目内依赖**: SDL.h, options.h
+- **标准库依赖**: common.h
+
+**类/结构体:**
+
+- `[ ]` `struct _PathList` (L19, 0 个方法, 0 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\common.h`
+
+- **行数**: 31
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(4个)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\instrum.c`
+
+- **行数**: 606
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(3个)
+- **项目内依赖**: SDL.h, timidity.h, options.h, instrum.h, resample.h, tables.h
+- **标准库依赖**: common.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\instrum.h`
+
+- **行数**: 37
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(13个)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\mix.c`
+
+- **行数**: 549
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: SDL.h, timidity.h, options.h, instrum.h, playmidi.h, output.h, tables.h, resample.h, mix.h
+- **标准库依赖**: common.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\mix.h`
+
+- **行数**: 22
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(4个)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\options.h`
+
+- **行数**: 107
+- **难度**: 🟢 低
+- **注意**: 宏(33个)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\output.c`
+
+- **行数**: 124
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: SDL.h, options.h, output.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\output.h`
+
+- **行数**: 60
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(17个)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\playmidi.c`
+
+- **行数**: 802
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: SDL.h, timidity.h, options.h, instrum.h, playmidi.h, output.h, mix.h, tables.h
+- **标准库依赖**: common.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\playmidi.h`
+
+- **行数**: 56
+- **难度**: 🟢 低
+- **注意**: 宏(30个)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\readmidi.c`
+
+- **行数**: 633
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(2个)
+- **项目内依赖**: SDL.h, options.h, timidity.h, instrum.h, playmidi.h, readmidi.h
+- **标准库依赖**: common.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\readmidi.h`
+
+- **行数**: 18
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(2个)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\resample.c`
+
+- **行数**: 600
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: SDL.h, timidity.h, options.h, instrum.h, playmidi.h, tables.h, resample.h
+- **标准库依赖**: common.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\resample.h`
+
+- **行数**: 20
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(3个)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\tables.c`
+
+- **行数**: 198
+- **难度**: 🟢 低
+- **项目内依赖**: SDL.h, tables.h
+- **标准库依赖**: common.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\tables.h`
+
+- **行数**: 28
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(7个)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\timidity.c`
+
+- **行数**: 681
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(2个)
+- **项目内依赖**: SDL.h, ../../utils.h, timidity.h, options.h, instrum.h, playmidi.h, readmidi.h, output.h, tables.h
+- **标准库依赖**: common.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\timidity.h`
+
+- **行数**: 167
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(7个)
+
+**类/结构体:**
+
+- `[ ]` `struct _MidiEventList` (L95, 0 个方法, 1 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\effect_position.c`
+
+- **行数**: 2599
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, extern 声明, 宏(2个), void* 类型擦除
+- **项目内依赖**: SDL_endian.h, SDL_mixer.h, mixer.h, effects_internal.h, unistd.h
+- **标准库依赖**: sys/time.h
+
+**类/结构体:**
+
+- `[ ]` `struct _Eff_positionargs` (L16, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\effect_stereoreverse.c`
+
+- **行数**: 185
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(2个)
+- **项目内依赖**: SDL_mixer.h, effects_internal.h, unistd.h
+- **标准库依赖**: sys/time.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\effects_internal.c`
+
+- **行数**: 119
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: SDL_mixer.h, effects_internal.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\effects_internal.h`
+
+- **行数**: 52
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, extern 声明, 宏(1个)
+- **项目内依赖**: SDL_mixer.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\mixer.c`
+
+- **行数**: 1863
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 宏(5个)
+- **项目内依赖**: SDL.h, SDL_mixer.h, mixer.h, music.h, load_aiff.h, load_voc.h, effects_internal.h
+
+**类/结构体:**
+
+- `[ ]` `struct _Mix_effectinfo` (L47, 0 个方法, 2 个成员)
+- `[ ]` `struct _Mix_Channel` (L55, 0 个方法, 10 个成员)
+- `[ ]` `struct _MusicFragment` (L617, 0 个方法, 1 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\mixer.h`
+
+- **行数**: 32
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, extern 声明, 宏(1个)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\mixer_x_deprecated.c`
+
+- **行数**: 80
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: SDL_mixer.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\music.c`
+
+- **行数**: 3985
+- **难度**: 🟢 低
+- **注意**: 裸指针, 同步原语, 宏(4个), void* 类型擦除
+- **项目内依赖**: SDL_hints.h, SDL_log.h, SDL_timer.h, SDL_mixer.h, mixer.h, music.h, music_cmd.h, music_wav.h, music_openmpt.h, music_modplug.h, music_xmp.h, music_nativemidi.h, music_fluidsynth.h, music_timidity.h, music_ogg.h, music_opus.h, music_drmp3.h, music_mpg123.h, music_drflac.h, music_flac.h, music_wavpack.h, music_gme.h, native_midi/native_midi.h, music_midi_adl.h, music_midi_opn.h, music_midi_edmidi.h, music_ffmpeg.h, music_pxtone.h, utils.h, mp3utils.h
+
+**类/结构体:**
+
+- `[ ]` `struct _Mix_effectinfo` (L58, 0 个方法, 2 个成员)
+- `[ ]` `struct _Mix_Music` (L225, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\music.h`
+
+- **行数**: 238
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(1个)
+- **项目内依赖**: SDL_mixer.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\utils.c`
+
+- **行数**: 176
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: utils.h
+- **标准库依赖**: stddef.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\utils.h`
+
+- **行数**: 50
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(3个)
+- **项目内依赖**: SDL_stdinc.h, SDL_version.h, music.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\test\mp3tags\mp3utils_test.c`
+
+- **行数**: 528
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: SDL_test.h, mp3utils.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDLMusicInterface.cpp`
+
+- **行数**: 322
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: SDLMusicInterface.h, paklib/PakInterface.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDLMusicInterface.h`
+
+- **行数**: 94
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: MusicInterface.h, SDL.h, SDL_mixer_ext/SDL_mixer_ext.h
+
+**类/结构体:**
+
+- `[ ]` `class SDLMusicInfo` (L16, 0 个方法, 5 个成员)
+- `[ ]` `class SDLMusicInterface : MusicInterface` (L33, 0 个方法, 3 个成员)
+
+**自由函数:**
+
+- `[ ]` `class SDLMusicInterface : public MusicInterface()`
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDLSoundInstance.cpp`
+
+- **行数**: 258
+- **难度**: 🟢 低
+- **注意**: 裸指针, void* 类型擦除
+- **项目内依赖**: SDLSoundInstance.h, SDLSoundManager.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDLSoundInstance.h`
+
+- **行数**: 108
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个), void* 类型擦除
+- **项目内依赖**: SoundInstance.h, SDL.h, SDL_mixer.h
+
+**类/结构体:**
+
+- `[ ]` `struct SDLSoundPitchHandler` (L18, 0 个方法, 9 个成员)
+- `[ ]` `class SDLSoundInstance : SoundInstance` (L33, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDLSoundManager.cpp`
+
+- **行数**: 486
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针
+- **项目内依赖**: SDLSoundManager.h, SDLSoundInstance.h, paklib/PakInterface.h, vector
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SDLSoundManager.h`
+
+- **行数**: 89
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: SoundManager.h, SDL.h, SDL_mixer_ext/SDL_mixer_ext.h
+
+**类/结构体:**
+
+- `[ ]` `class SDLSoundManager : SoundManager` (L15, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SoundInstance.h`
+
+- **行数**: 57
+- **难度**: 🟢 低
+- **注意**: 宏(1个)
+- **项目内依赖**: Common.h
+
+**类/结构体:**
+
+- `[ ]` `class SoundInstance` (L11, 0 个方法, 0 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\sound\SoundManager.h`
+
+- **行数**: 71
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(3个)
+- **项目内依赖**: Common.h
+
+**类/结构体:**
+
+- `[ ]` `class SoundManager` (L16, 0 个方法, 0 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\ButtonListener.h`
+
+- **行数**: 44
+- **难度**: 🟢 低
+- **注意**: 宏(1个)
+
+**类/结构体:**
+
+- `[ ]` `class ButtonListener` (L9, 0 个方法, 0 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\ButtonWidget.cpp`
+
+- **行数**: 313
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针
+- **项目内依赖**: ButtonWidget.h, graphics/Image.h, graphics/SysFont.h, graphics/ImageFont.h, WidgetManager.h, ButtonListener.h, ../../Resources.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\ButtonWidget.h`
+
+- **行数**: 102
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: Widget.h
+
+**类/结构体:**
+
+- `[ ]` `class ButtonWidget : Widget` (L14, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\Checkbox.cpp`
+
+- **行数**: 100
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: Checkbox.h, CheckboxListener.h, graphics/Graphics.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\Checkbox.h`
+
+- **行数**: 70
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: Widget.h
+
+**类/结构体:**
+
+- `[ ]` `class Checkbox : Widget` (L14, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\CheckboxListener.h`
+
+- **行数**: 39
+- **难度**: 🟢 低
+- **注意**: 宏(1个)
+
+**类/结构体:**
+
+- `[ ]` `class CheckboxListener` (L9, 0 个方法, 0 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\Dialog.cpp`
+
+- **行数**: 445
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针
+- **项目内依赖**: Common.h, Dialog.h, DialogButton.h, SexyAppBase.h, WidgetManager.h, emscripten.h, graphics/SysFont.h, graphics/ImageFont.h, ../../Resources.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\Dialog.h`
+
+- **行数**: 148
+- **难度**: 🟢 低
+- **注意**: 裸指针, extern 声明, 宏(1个)
+- **项目内依赖**: Widget.h, ButtonListener.h
+
+**类/结构体:**
+
+- `[ ]` `class Dialog : Widget, ButtonListener` (L22, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\DialogButton.cpp`
+
+- **行数**: 119
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: DialogButton.h, graphics/SysFont.h, graphics/ImageFont.h, WidgetManager.h, ../../Resources.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\DialogButton.h`
+
+- **行数**: 48
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: ButtonWidget.h
+
+**类/结构体:**
+
+- `[ ]` `class DialogButton : ButtonWidget` (L11, 0 个方法, 1 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\DialogListener.h`
+
+- **行数**: 40
+- **难度**: 🟢 低
+- **注意**: 宏(1个)
+
+**类/结构体:**
+
+- `[ ]` `class DialogListener` (L9, 0 个方法, 0 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\EditListener.h`
+
+- **行数**: 46
+- **难度**: 🟢 低
+- **注意**: 宏(1个)
+- **项目内依赖**: Common.h, misc/KeyCodes.h
+
+**类/结构体:**
+
+- `[ ]` `class EditListener` (L12, 0 个方法, 0 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\EditWidget.cpp`
+
+- **行数**: 708
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针
+- **项目内依赖**: EditWidget.h, graphics/SysFont.h, graphics/ImageFont.h, WidgetManager.h, SexyAppBase.h, EditListener.h, ../../Resources.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\EditWidget.h`
+
+- **行数**: 126
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: Widget.h
+
+**类/结构体:**
+
+- `[ ]` `class EditWidget : Widget` (L14, 0 个方法, 10 个成员)
+- `[ ]` `struct WidthCheck` (L32, 0 个方法, 1 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\HyperlinkWidget.cpp`
+
+- **行数**: 77
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: HyperlinkWidget.h, graphics/Graphics.h, graphics/ImageFont.h, graphics/SysFont.h, WidgetManager.h, ../../Resources.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\HyperlinkWidget.h`
+
+- **行数**: 51
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: ButtonWidget.h
+
+**类/结构体:**
+
+- `[ ]` `class HyperlinkWidget : ButtonWidget` (L11, 0 个方法, 4 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\Insets.cpp`
+
+- **行数**: 44
+- **难度**: 🟢 低
+- **项目内依赖**: Insets.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\Insets.h`
+
+- **行数**: 47
+- **难度**: 🟢 低
+- **注意**: 宏(1个)
+
+**类/结构体:**
+
+- `[ ]` `class Insets` (L9, 0 个方法, 4 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\ListListener.h`
+
+- **行数**: 41
+- **难度**: 🟢 低
+- **注意**: 宏(1个)
+
+**类/结构体:**
+
+- `[ ]` `class ListListener` (L9, 0 个方法, 0 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\ListWidget.cpp`
+
+- **行数**: 531
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: ListWidget.h, graphics/Font.h, WidgetManager.h, ScrollbarWidget.h, ListListener.h, SexyAppBase.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\ListWidget.h`
+
+- **行数**: 117
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: ScrollListener.h, Widget.h
+
+**类/结构体:**
+
+- `[ ]` `class ListWidget : Widget, ScrollListener` (L16, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\ScrollListener.h`
+
+- **行数**: 39
+- **难度**: 🟢 低
+- **注意**: 宏(1个)
+
+**类/结构体:**
+
+- `[ ]` `class ScrollListener` (L9, 0 个方法, 0 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\ScrollbarWidget.cpp`
+
+- **行数**: 384
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针
+- **项目内依赖**: ScrollbarWidget.h, WidgetManager.h, ScrollListener.h, ScrollbuttonWidget.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\ScrollbarWidget.h`
+
+- **行数**: 114
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: Widget.h, ButtonListener.h
+
+**类/结构体:**
+
+- `[ ]` `class ScrollbarWidget : Widget, ButtonListener` (L19, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\ScrollbuttonWidget.cpp`
+
+- **行数**: 92
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: ScrollbuttonWidget.h, ButtonListener.h, graphics/Graphics.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\ScrollbuttonWidget.h`
+
+- **行数**: 53
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: widget/ButtonWidget.h
+
+**类/结构体:**
+
+- `[ ]` `class ScrollbuttonWidget : ButtonWidget` (L13, 0 个方法, 2 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\Slider.cpp`
+
+- **行数**: 200
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: Slider.h, graphics/Graphics.h, graphics/Image.h, SliderListener.h, WidgetManager.h, SexyAppBase.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\Slider.h`
+
+- **行数**: 67
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: Widget.h
+
+**类/结构体:**
+
+- `[ ]` `class Slider : Widget` (L13, 0 个方法, 9 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\SliderListener.h`
+
+- **行数**: 39
+- **难度**: 🟢 低
+- **注意**: 宏(1个)
+
+**类/结构体:**
+
+- `[ ]` `class SliderListener` (L9, 0 个方法, 0 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\TextWidget.cpp`
+
+- **行数**: 442
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: TextWidget.h, graphics/Graphics.h, ScrollbarWidget.h, WidgetManager.h, graphics/Font.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\TextWidget.h`
+
+- **行数**: 83
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: Widget.h, ScrollListener.h
+
+**类/结构体:**
+
+- `[ ]` `class TextWidget : Widget, ScrollListener` (L15, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\Widget.cpp`
+
+- **行数**: 489
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针
+- **项目内依赖**: Widget.h, WidgetManager.h, graphics/Graphics.h, graphics/Font.h, graphics/Image.h, SexyAppBase.h, misc/Debug.h, misc/ResourceManager.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\Widget.h`
+
+- **行数**: 170
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: Common.h, graphics/Color.h, Insets.h, graphics/Graphics.h, misc/KeyCodes.h, WidgetContainer.h
+
+**类/结构体:**
+
+- `[ ]` `class Widget : WidgetContainer` (L18, 0 个方法, 10 个成员)
+
+**枚举:**
+
+- `[ ]` `enum LayoutFlags` → { LAY_SameWidth, LAY_SameHeight, LAY_SetLeft, LAY_SetTop, LAY_SetWidth, ... (25 个值) }
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\WidgetContainer.cpp`
+
+- **行数**: 632
+- **难度**: 🟡 中
+- **注意**: 裸 new/delete, 裸指针
+- **项目内依赖**: WidgetContainer.h, Common.h, WidgetManager.h, Widget.h, misc/Debug.h, algorithm
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\WidgetContainer.h`
+
+- **行数**: 111
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: Common.h, misc/Rect.h, misc/Flags.h
+
+**类/结构体:**
+
+- `[ ]` `class WidgetContainer` (L20, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\WidgetManager.cpp`
+
+- **行数**: 810
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **项目内依赖**: WidgetManager.h, Widget.h, graphics/Graphics.h, graphics/Image.h, misc/KeyCodes.h, graphics/GLImage.h, SexyAppBase.h, misc/PerfTimer.h, misc/Debug.h
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `src\SexyAppFramework\widget\WidgetManager.h`
+
+- **行数**: 156
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **项目内依赖**: Common.h, misc/KeyCodes.h, WidgetContainer.h
+
+**类/结构体:**
+
+- `[ ]` `class PreModalInfo` (L29, 0 个方法, 4 个成员)
+- `[ ]` `class WidgetManager : WidgetContainer` (L42, 0 个方法, 10 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
 
 ---
 
-## 六、总结与优先级
+## 模块: `tools`
 
-### 按翻译量级排序（C++ 源文件大小 ≈ 翻译工作量）
+> 文件数: 2 | 行数: 158 | 类: 1 | 函数: 0
 
-| 优先级 | 模块名称 | C++ 代码量 | Rust 状态 |
-|--------|---------|-----------|----------|
-| ★★★★★ | `Zombie`（僵尸） | 346KB + 22KB | 字段定义 ✓ 方法体 ✗ |
-| ★★★★★ | `Board`（游戏面板） | 289KB + 21KB | 字段定义 ✓ 方法体 ✗ |
-| ★★★★★ | `Plant`（植物） | 192KB + 12KB | 字段定义 ✓ 方法体 ✗ |
-| ★★★★★ | `Challenge`（挑战模式） | 174KB + 15KB | 骨架 ✗ |
-| ★★★★☆ | `Resources`（资源定义） | 153KB + 73KB | 未创建 |
-| ★★★★☆ | `SexyAppBase`（应用基类） | 99KB + 19KB | 骨架 ✓ |
-| ★★★★☆ | `ZenGarden`（禅境花园） | 87KB + 7KB | 骨架 ✗ |
-| ★★★★☆ | `LawnApp`（应用主类） | 86KB + 13KB | 骨架 ✓ |
-| ★★★★☆ | `CutScene`（过场动画） | 81KB + 5KB | 骨架 ✗ |
-| ★★★★☆ | `Reanimator`（动画系统） | 74KB + 14KB | 骨架 ✓ |
-| ★★★★☆ | `TodParticle`（粒子系统） | 68KB + 19KB | 骨架 ✓ |
-| ★★★☆☆ | `TodCommon`（通用函数） | 45KB + 9KB | 骨架 ✓ |
-| ★★★☆☆ | `GLInterface`（OpenGL接口） | 45KB + 8KB | 较完整 ✓ |
-| ★★★☆☆ | `Graphics`（绘制上下文） | 43KB + 8KB | 骨架 ✓ |
-| ★★★☆☆ | `ImageLib`（图像加载） | 35KB + 1KB | 骨架 ✗ |
-| ★★★☆☆ | `Projectile`（弹射物） | 33KB + 3KB | 字段定义 ✓ |
-| ★★★☆☆ | `SeedPacket`（种子包） | 32KB + 3KB | 字段定义 ✓ |
-| ★★★☆☆ | `ResourceManager`（资源管理） | 31KB + 6KB | 骨架 ✗ |
-| ★★★☆☆ | `SWTri`（软件渲染） | 31KB + 31KB | 未翻译 |
-| ★★★☆☆ | `Attachment`（附件系统） | 28KB + 5KB | 骨架 ✓ |
-| ★★★☆☆ | `TodFoley`（音效） | 25KB + 7KB | 骨架 ✓ |
-| ★★★☆☆ | `GridItem`（网格物品） | 23KB + 2KB | 字段定义 ✓ |
-| ★★☆☆☆ | 其余文件（各 < 20KB） | — | — |
+### `[ ]` `tools\decrypt.c`
 
-### 关键里程碑建议
+- **行数**: 44
+- **难度**: 🟢 低
+- **注意**: 裸指针
+- **标准库依赖**: stdio.h, stdlib.h
 
-1. **第一阶段（基础设施）**：`DataArray`, `TodList`, `TodCommon`, `MTRand`, `SexyMatrix` → 使容器和数学库可用
-2. **第二阶段（渲染管线）**：`Graphics`, `Image`, `MemoryImage`, `SexyAppBase::DoMainLoop` → 窗口能跑起来
-3. **第三阶段（特效引擎）**：`Reanimator`, `TodParticle`, `EffectSystem`, `Attachment` → 动画和粒子系统工作
-4. **第四阶段（游戏实体）**：`Plant`, `Zombie`, `Projectile`, `Coin`, `LawnMower`, `GridItem` → 实体逻辑完整
-5. **第五阶段（游戏调度）**：`Board`, `Challenge`, `CutScene`, `ZenGarden` → 关卡可玩
-6. **第六阶段（UI 与收尾）**：所有 Widget、对话框、商店、图鉴等 → 完整游戏
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+### `[ ]` `tools\metadata.c`
+
+- **行数**: 114
+- **难度**: 🟢 低
+- **注意**: 裸指针, 宏(1个)
+- **标准库依赖**: stdio.h, stdlib.h, stdint.h, string.h
+
+**类/结构体:**
+
+- `[ ]` `struct PakDef` (L10, 0 个方法, 5 个成员)
+
+**翻译备注:**
+
+```
+(在此记录翻译时的决策、Rust 对应方案等)
+```
+
+---
+
+## 附录：include 依赖热点
+
+| 头文件 | 被引用次数 |
+|---|---|
+| `SWTri_DrawTriangle.cpp` | 128 |
+| `TodDrawTriangle.cpp` | 92 |
+| `Common.h` | 35 |
+| `SDL.h` | 30 |
+| `SexyAppBase.h` | 27 |
+| `widget/WidgetManager.h` | 25 |
+| `music.h` | 25 |
+| `../../Resources.h` | 23 |
+| `graphics/Graphics.h` | 22 |
+| `../../LawnApp.h` | 21 |
+| `string.h` | 21 |
+| `string` | 19 |
+| `../LawnApp.h` | 18 |
+| `misc/Debug.h` | 17 |
+| `graphics/GLImage.h` | 17 |
+| `graphics/GLInterface.h` | 17 |
+| `./pxtnData.h` | 17 |
+| `./pxtn.h` | 16 |
+| `../Resources.h` | 15 |
+| `../GameConstants.h` | 15 |
+
+---
+
+*由 scan_cpp_project.py 自动生成*
