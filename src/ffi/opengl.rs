@@ -595,19 +595,27 @@ macro_rules! gl_wrapper {
     ($name:ident, ($($arg:ident: $t:ty),*) -> $ret:ty) => {
         #[inline]
         pub unsafe fn $name($($arg: $t),*) -> $ret {
-            (GL.get().unwrap().$name)($($arg),*)
+            if let Some(ref gl) = GL.get() {
+                (gl.$name)($($arg),*)
+            } else {
+                Default::default()
+            }
         }
     };
     ($name:ident, ($($arg:ident: $t:ty),*)) => {
         #[inline]
         pub unsafe fn $name($($arg: $t),*) {
-            (GL.get().unwrap().$name)($($arg),*)
+            if let Some(ref gl) = GL.get() {
+                (gl.$name)($($arg),*)
+            }
         }
     };
     ($name:ident) => {
         #[inline]
         pub unsafe fn $name() {
-            (GL.get().unwrap().$name)()
+            if let Some(ref gl) = GL.get() {
+                (gl.$name)()
+            }
         }
     };
 }
