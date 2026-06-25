@@ -6,6 +6,7 @@
 #![allow(dead_code)]
 
 use crate::framework::graphics::graphics::Graphics;
+use crate::framework::graphics::font::Font;
 use crate::framework::widget::widget::{Widget, WidgetImpl};
 use crate::framework::widget::widget_manager::WidgetManager;
 use crate::framework::key_codes::{
@@ -63,6 +64,10 @@ pub struct TitleScreenImpl {
     pub need_show_register_box: bool,
     pub display_partner_logo: bool,
 
+    // ---- 启动按钮文本 ----
+    pub start_button_label: String,
+    pub start_button_font: Option<Box<Font>>,
+
     // ---- 快速加载键 ----
     pub quick_load_key: KeyCode,
 
@@ -102,6 +107,8 @@ impl TitleScreenImpl {
             start_button_disabled: true,
             start_button_x: 0,
             start_button_y: 0,
+            start_button_label: String::new(),
+            start_button_font: None,
         }
     }
 
@@ -366,6 +373,28 @@ impl WidgetImpl for TitleScreenImpl {
                         }
                     }
                 }
+
+                // 绘制启动按钮文本（对应 C++ mStartButton，HyperlinkWidget）
+                if !self.start_button_label.is_empty() && self.start_button_visible {
+                    // 懒初始化默认字体
+                    if self.start_button_font.is_none() {
+                        let mut f = Font::new("Briannetod", 16);
+                        f.ascent = 13;
+                        f.font_height = 16;
+                        self.start_button_font = Some(Box::new(f));
+                    }
+
+                    if let Some(ref font) = self.start_button_font {
+                        let text_width = font.string_width(&self.start_button_label);
+                        let text_x = self.start_button_x + (314 - text_width) / 2;
+                        let text_y = self.start_button_y + (50 + font.get_ascent()) / 2 - 1;
+
+                        g.set_color(&Color::new(218, 184, 33, 255));
+                        let fptr = &**font as *const Font as *mut Font;
+                        g.set_font(fptr);
+                        g.draw_string(&self.start_button_label, text_x, text_y);
+                    }
+                }
             }
         }
     }
@@ -465,6 +494,10 @@ impl WidgetImpl for TitleScreenImpl {
                     // C++: 初始化启动按钮位置
                     self.start_button_x = (widget.width - 314) / 2;
                     self.start_button_y = 650;
+
+                    // C++: 设置启动按钮文字（对应 mStartButton->mLabel = "[LOADING]"）
+                    self.start_button_label = "LOADING".to_string();
+                    self.start_button_visible = true;
 
                     // C++: 计算加载进度估计
                     let current_progress = app.get_loading_thread_progress();
@@ -594,6 +627,7 @@ impl WidgetImpl for TitleScreenImpl {
                         app.fast_load(GameMode::Adventure);
                     } else {
                         self.start_button_visible = true;
+                        self.start_button_label = "CLICK TO START".to_string();
                     }
 
                     eprintln!("[TitleScreen] 加载线程完成");

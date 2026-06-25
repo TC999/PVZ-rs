@@ -6,10 +6,11 @@
 #![allow(dead_code)]
 
 use crate::framework::graphics::graphics::Graphics;
+use crate::framework::graphics::font::Font;
+use crate::framework::color::Color;
 use crate::framework::widget::widget::{Widget, WidgetImpl};
 use crate::framework::widget::widget_manager::WidgetManager;
 use crate::framework::key_codes::KeyCode;
-use crate::framework::color::Color;
 use crate::lawn::lawn_app::LawnApp;
 
 pub struct GameSelectorImpl {
@@ -19,6 +20,14 @@ pub struct GameSelectorImpl {
 impl GameSelectorImpl {
     pub fn new(app: *mut LawnApp) -> Self {
         GameSelectorImpl { app }
+    }
+
+    /// 获取或创建绘图用的字体
+    fn ensure_font(&self) -> Font {
+        let mut f = Font::new("Default", 24);
+        f.font_height = 24;
+        f.ascent = 20;
+        f
     }
 }
 
@@ -54,6 +63,12 @@ impl WidgetImpl for GameSelectorImpl {
         }
 
         // 绘制提示文字（简化版）
+        let mut tmp_font = Font::new("Default", 24);
+        tmp_font.font_height = 24;
+        tmp_font.ascent = 20;
+        let fptr = &mut tmp_font as *mut Font;
+
+        g.set_font(fptr);
         g.set_color(&Color::new(218, 184, 33, 255));
         g.draw_string("Plants vs. Zombies", 250, 350);
         g.set_color(&Color::new(255, 255, 255, 200));

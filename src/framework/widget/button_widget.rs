@@ -170,6 +170,10 @@ impl ButtonWidget {
                 _ => 0,
             };
             font_y = (self.height + font.get_ascent() - font.get_ascent() / 6 - 1) / 2;
+
+            // 设置字体到 Graphics（对应 C++ g->SetFont(mFont)）
+            let fptr = &**font as *const Font as *mut Font;
+            g.set_font(fptr);
         }
 
         if self.button_image.is_null() && self.down_image.is_null() {
