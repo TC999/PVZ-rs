@@ -2978,8 +2978,8 @@ public:
 
 **类/结构体:**
 
-- `[ ]` `class StoreScreen : Dialog` (L20, 0 个方法, 10 个成员)
-- `[ ]` `class StoreScreenOverlay : Widget` (L93, 0 个方法, 1 个成员)
+- `[x]` `class StoreScreen : Dialog` (L20, 0 个方法, 10 个成员) — 类型定义完成，方法存根
+- `[x]` `class StoreScreenOverlay : Widget` (L93, 0 个方法, 1 个成员) — 类型定义完成
 
 **自由函数:**
 
@@ -3016,7 +3016,7 @@ private:
 
 **枚举:**
 
-- `[ ]` `enum TitleState` → { TITLESTATE_WAITING_FOR_FIRST_DRAW, TITLESTATE_POPCAP_LOGO, TITLESTATE_PARTNER_LOGO, TITLESTATE_SCREEN }
+- `[x]` `enum TitleState` → { TITLESTATE_WAITING_FOR_FIRST_DRAW, TITLESTATE_POPCAP_LOGO, TITLESTATE_PARTNER_LOGO, TITLESTATE_SCREEN }
 
 **翻译备注:**
 
