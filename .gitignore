@@ -26,6 +26,7 @@ rustc-ice-*.txt
 # Original Game Resources
 *.pak
 *.dll
+properties
 
 # SDL2
 SDL2*
