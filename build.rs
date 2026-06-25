@@ -46,18 +46,16 @@ fn setup_sdl2_mixer_windows() {
         // 复制 DLL
         let dll_src = dest.join("SDL2_mixer.dll");
         if dll_src.exists() {
-            // 从 CARGO_MANIFEST_DIR 向上找 target/debug/ 或 target/release/
-            let target_root = proj.parent().map(|p| p.join("target"));
-            if let Some(ref target_dir) = target_root {
-                for sub in &["debug", "release"] {
-                    let dll_dst = target_dir.join(sub).join("SDL2_mixer.dll");
-                    if let Some(parent) = dll_dst.parent() {
-                        let _ = fs::create_dir_all(parent);
-                    }
-                    if fs::copy(&dll_src, &dll_dst).is_ok() {
-                        println!("cargo:warning=SDL2_mixer.dll -> {}", dll_dst.display());
-                    };
+            // target 目录就在项目目录下
+            let target_root = proj.join("target");
+            for sub in &["debug", "release"] {
+                let dll_dst = target_root.join(sub).join("SDL2_mixer.dll");
+                if let Some(parent) = dll_dst.parent() {
+                    let _ = fs::create_dir_all(parent);
                 }
+                if fs::copy(&dll_src, &dll_dst).is_ok() {
+                    println!("cargo:warning=SDL2_mixer.dll -> {}", dll_dst.display());
+                };
             }
         }
     } else {
