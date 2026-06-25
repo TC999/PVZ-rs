@@ -114,7 +114,7 @@ static mut G_MAX_TEXTURE_WIDTH: i32 = 1024;
 static mut G_MAX_TEXTURE_HEIGHT: i32 = 1024;
 static mut G_SUPPORTED_PIXEL_FORMATS: i32 = 0;
 static mut G_MAX_TEXTURE_SIZE: i32 = 1024;
-static mut G_DESKTOP_GL_FALLBACK: bool = false;
+pub(crate) static mut G_DESKTOP_GL_FALLBACK: bool = false;
 
 // 默认 UV 边界
 static DEFAULT_UV_BOUNDS: [f32; 4] = [0.0, 0.0, 1.0, 1.0];

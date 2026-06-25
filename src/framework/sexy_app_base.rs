@@ -277,7 +277,13 @@ impl SexyAppBase {
 
                         match win2 {
                             Ok(w) => match w.gl_create_context() {
-                                Ok(ctx) => (w, ctx),
+                                Ok(ctx) => {
+                                    // 标记使用桌面 GL，着色器用 #version 120
+                                    unsafe {
+                                        crate::framework::graphics::gl_interface::G_DESKTOP_GL_FALLBACK = true;
+                                    }
+                                    (w, ctx)
+                                }
                                 Err(e2) => {
                                     eprintln!("回退 GL 上下文创建失败: {e2}");
                                     self.m_shutdown_flag = true;
@@ -385,10 +391,10 @@ impl SexyAppBase {
         // ===== 软件渲染：WidgetManager 绘制到 screen_image =====
         if let Some(wm) = self.widget_manager {
             unsafe {
-                let mut g = crate::framework::graphics::graphics::Graphics::new();
-                if let Some(screen) = self.screen_image {
-                    g.dest_image = screen as *mut crate::framework::graphics::image::Image;
-                }
+                let screen_ptr = self.screen_image
+                    .map(|p| p as *mut crate::framework::graphics::image::Image)
+                    .unwrap_or(std::ptr::null_mut());
+                let mut g = crate::framework::graphics::graphics::Graphics::new_with_image(screen_ptr);
                 (*wm).draw(&mut g);
             }
         }
