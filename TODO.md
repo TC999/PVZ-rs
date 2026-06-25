@@ -1396,7 +1396,7 @@ enum ZombieType : int32_t)`
 ```
 翻译至 rust/src/lawn/board.rs
 
-当前进度：约 67% 完成（~2249 行 Rust / 9857 行 C++）
+当前进度：约 75% 完成（~2500 行 Rust / 9857 行 C++）
 
 已翻译的方法（约 176 个）：
 - 结构体字段：基本完整（新增 m_mustache_mode, m_future_mode, m_pinata_mode, m_dance_mode, m_daisy_mode, m_sukhbir_mode, m_super_mower_mode, m_row_picking_array 等字段）
@@ -1422,7 +1422,7 @@ enum ZombieType : int32_t)`
 - 坐标转换补充：pixel_to_grid_x_keep_on_board(), pixel_to_grid_y_keep_on_board(), grid_to_pixel_y(), get_pos_y_based_on_row(), get_ice_z_pos()
 - 植物查询：get_pumpkin_at(), get_pumpkin_at_mut(), get_flower_pot_at(), find_umbrella_plant(), get_top_plant_at()
 - UI/状态：clear_cursor(), update_mouse_position(), update_layers(), progress_meter_has_flags(), is_final_scary_potter_stage() [完整版], is_final_survival_stage() [完整版], get_survival_flags_completed(), survival_save_score(), puzzle_save_streak(), is_scary_potter_dave_talking() [完整版], zombies_won(), process_delete_queue(), stop_all_zombie_sounds(), has_conveyor_belt_seed_bank(), update_progress_meter(), do_typing_check()
-- 僵尸生成：add_zombie_in_row(), add_zombie(), pick_row_for_new_zombie() [完整版], total_zombies_health_in_wave()
+- 僵尸生成：add_zombie_in_row(), add_zombie(), pick_row_for_new_zombie() [完整版], total_zombies_health_in_wave(), pick_zombie_waves() [完整版], pick_zombie_type() [完整版], put_zombie_in_wave(), put_in_missing_zombies()
 - 实体更新：update_game_objects()
 - 辅助：get_shovel_button_rect(), pick_special_grave_stone(), count_empty_pots_or_lilies(), is_valid_cob_cannon_spot(), has_valid_cob_cannon_spot()
 - 自由函数：get_rect_overlap(), get_circle_rect_overlap(), board_init_for_player(), zombie_type_can_go_in_pool(), zombie_type_can_go_on_high_ground()
@@ -1453,8 +1453,17 @@ enum ZombieType : int32_t)`
 - can_zombie_spawn_on_level()：改为 &self 实例方法，实现 Yeti 特殊逻辑 + 起始关卡/权重检查
 - 注意：gZombieAllowedLevels 关卡允许表暂未翻译，can_zombie_spawn_on_level 对非 Yeti 僵尸暂缺该检查
 
+本轮新增翻译（当前轮次）：
+- pick_zombie_waves()：完整实现（对应 C++ L605-L825），含波数设定、点数计算、旗帜波调整、多倍出怪、固定刷怪、随机补怪
+- pick_zombie_type()：完整实现（对应 C++ L2471-L2562），含出怪限制、最早波数、生存模式权重调整、加权随机选择
+- put_zombie_in_wave() / put_in_missing_zombies()：完整实现，支持波次列表操作和缺失类型补充
+- ZombiePicker 结构体及 init() / init_for_wave() / new() 方法
+- Board 新增 m_zombies_in_wave（[[ZombieType; 50]; 100]）和 m_zombie_allowed（[bool; 34]）字段
+- 新增 G_ZOMBIE_WAVES 常量数组（[i32; 50]）
+- 注意：因 Rust GameMode 枚举暂缺 GAMEMODE_CHALLENGE_GRAVE_DANGER / GAMEMODE_CHALLENGE_HIGH_GRAVITY / GAMEMODE_CHALLENGE_AIR_RAID / GAMEMODE_CHALLENGE_WAR_AND_PEAS_2 等变体，对应检查已跳过
+
 待翻译的主要模块（按优先级排序）：
-1. PickZombieWaves / InitZombieWaves（僵尸波次生成逻辑）
+1. InitZombieWaves / InitZombieWavesForLevel（波次初始化逻辑，含 mZombieAllowed 设置）
 2. DrawBackdrop / DrawLevel（完整绘制逻辑）
 3. MouseDown / MouseUp（完整版交互逻辑）
 4. Update 完整版（CutScene、Fwoosh、Tutorial 等）

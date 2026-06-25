@@ -7,7 +7,7 @@
 use crate::lawn::game_enums::*;
 use crate::lawn::lawn_app::LawnApp;
 use crate::lawn::plant::Plant;
-use crate::lawn::zombie::Zombie;
+use crate::lawn::zombie::{Zombie, get_zombie_definition};
 use crate::lawn::projectile::Projectile;
 use crate::lawn::coin::Coin;
 use crate::lawn::lawn_mower::LawnMower;
@@ -20,7 +20,7 @@ use crate::framework::color::Color;
 use crate::framework::common;
 use crate::todlib::tod_particle::ParticleSystem;
 use crate::todlib::reanimator::Reanimation;
-use crate::todlib::tod_common::TodSmoothArray;
+use crate::todlib::tod_common::{TodSmoothArray, TodWeightedArray, tod_pick_from_weighted_array, tod_animate_curve};
 
 pub const MAX_GRID_SIZE_X: usize = 9;
 pub const MAX_GRID_SIZE_Y: usize = 6;
@@ -33,6 +33,16 @@ pub const MAX_GRID_ITEMS: usize = 50;
 pub const LAST_STAND_FLAGS: i32 = 5;
 pub const MAX_ZOMBIES_IN_WAVE: usize = 50;
 pub const MAX_ZOMBIE_WAVES: usize = 100;
+pub const NUM_LEVELS: i32 = 50;
+
+/// 各关卡的僵尸波次数（对应 C++ gZombieWaves）
+pub const G_ZOMBIE_WAVES: [i32; NUM_LEVELS as usize] = [
+    4,  6,  8,  10, 8,  10, 20, 10, 20, 20,
+    10, 20, 10, 20, 10, 10, 20, 10, 20, 20,
+    10, 20, 20, 30, 20, 20, 30, 20, 30, 30,
+    10, 20, 10, 20, 20, 10, 20, 10, 20, 20,
+    10, 20, 20, 30, 20, 20, 30, 20, 30, 30,
+];
 pub const MAX_RENDER_ITEMS: usize = 2048;
 pub const PROGRESS_METER_COUNTER: i32 = 150;
 
@@ -55,8 +65,8 @@ pub struct RenderItem {
 pub struct ZombiePicker {
     pub zombie_count: i32,
     pub zombie_points: i32,
-    pub zombie_type_count: [i32; 37],  // NUM_ZOMBIE_TYPES
-    pub all_waves_zombie_type_count: [i32; 37],
+    pub zombie_type_count: [i32; NUM_ZOMBIE_TYPES as usize],
+    pub all_waves_zombie_type_count: [i32; NUM_ZOMBIE_TYPES as usize],
 }
 
 impl ZombiePicker {
@@ -64,20 +74,22 @@ impl ZombiePicker {
         ZombiePicker {
             zombie_count: 0,
             zombie_points: 0,
-            zombie_type_count: [0; 37],
-            all_waves_zombie_type_count: [0; 37],
+            zombie_type_count: [0; NUM_ZOMBIE_TYPES as usize],
+            all_waves_zombie_type_count: [0; NUM_ZOMBIE_TYPES as usize],
         }
     }
 
+    /// 初始化选择器（对应 C++ ZombiePickerInitForWave）
     pub fn init_for_wave(&mut self) {
         self.zombie_count = 0;
         self.zombie_points = 0;
-        self.zombie_type_count = [0; 37];
+        self.zombie_type_count = [0; NUM_ZOMBIE_TYPES as usize];
     }
 
+    /// 全局初始化（对应 C++ ZombiePickerInit）
     pub fn init(&mut self) {
         self.init_for_wave();
-        self.all_waves_zombie_type_count = [0; 37];
+        self.all_waves_zombie_type_count = [0; NUM_ZOMBIE_TYPES as usize];
     }
 }
 
@@ -238,6 +250,8 @@ pub struct Board {
     pub m_current_wave: i32,
     pub m_total_waves: i32,
     pub m_num_waves: i32,
+    pub m_zombies_in_wave: Box<[[ZombieType; MAX_ZOMBIES_IN_WAVE]; MAX_ZOMBIE_WAVES]>,
+    pub m_zombie_allowed: [bool; NUM_ZOMBIE_TYPES as usize],
     pub m_total_spawned_waves: i32,
     pub m_out_of_money_counter: i32,
     pub m_wave_countdown: i32,
@@ -354,6 +368,8 @@ impl Board {
             m_current_wave: 0,
             m_total_waves: 0,
             m_num_waves: 0,
+            m_zombies_in_wave: Box::new([[ZombieType::Invalid; MAX_ZOMBIES_IN_WAVE]; MAX_ZOMBIE_WAVES]),
+            m_zombie_allowed: [false; NUM_ZOMBIE_TYPES as usize],
             m_total_spawned_waves: 0,
             m_out_of_money_counter: 0,
             m_wave_countdown: 0,
@@ -2253,6 +2269,349 @@ impl Board {
             }
         }
         false
+    }
+
+    /// 将指定僵尸类型放入指定波次（对应 C++ PutZombieInWave）
+    pub fn put_zombie_in_wave(&mut self, zombie_type: ZombieType, wave_number: i32, picker: &mut ZombiePicker) {
+        picker.zombie_count += 1;
+        let count = picker.zombie_count - 1;
+        self.m_zombies_in_wave[wave_number as usize][count as usize] = zombie_type;
+        if picker.zombie_count < MAX_ZOMBIES_IN_WAVE as i32 {
+            self.m_zombies_in_wave[wave_number as usize][picker.zombie_count as usize] = ZombieType::Invalid;
+        }
+        let def = get_zombie_definition(zombie_type);
+        picker.zombie_points -= def.zombie_value;
+        picker.zombie_type_count[zombie_type as usize] += 1;
+        picker.all_waves_zombie_type_count[zombie_type as usize] += 1;
+    }
+
+    /// 补充缺失的僵尸类型到最后一波（对应 C++ PutInMissingZombies）
+    pub fn put_in_missing_zombies(&mut self, wave_number: i32, picker: &mut ZombiePicker) {
+        for ztype_idx in 0..(NUM_ZOMBIE_TYPES as i32) {
+            let a_zombie_type: ZombieType = unsafe { std::mem::transmute(ztype_idx) };
+            if picker.zombie_type_count[ztype_idx as usize] <= 0
+                && a_zombie_type != ZombieType::Yeti
+                && self.can_zombie_spawn_on_level(a_zombie_type, self.level)
+            {
+                self.put_zombie_in_wave(a_zombie_type, wave_number, picker);
+            }
+        }
+    }
+
+    /// 随机选择一种僵尸类型（对应 C++ PickZombieType）
+    pub fn pick_zombie_type(&self, zombie_points: i32, wave_index: i32, picker: &ZombiePicker) -> ZombieType {
+        let mut pick_count = 0;
+        let mut zombie_weight_array: [TodWeightedArray; NUM_ZOMBIE_TYPES as usize] = [TodWeightedArray { item: 0, weight: 0 }; NUM_ZOMBIE_TYPES as usize];
+        
+        for ztype_idx in 0..(NUM_ZOMBIE_TYPES as i32) {
+            if !self.m_zombie_allowed[ztype_idx as usize] {
+                continue;
+            }
+
+            let a_zombie_type: ZombieType = unsafe { std::mem::transmute(ztype_idx) };
+            let a_zombie_def = get_zombie_definition(a_zombie_type);
+
+            // 获取游戏模式
+            let game_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+
+            // 蹦极僵尸在无尽模式中仅在旗帜波出现
+            if a_zombie_type == ZombieType::Bungee {
+                if let Some(app) = self.app {
+                    if unsafe { (*app).is_survival_endless(game_mode) } {
+                        if !self.is_flag_wave(wave_index) {
+                            continue;
+                        }
+                    }
+                }
+            }
+            // 僵尸最早出现的波数的限制（出怪限制）
+            // 注意：C++ 中排除 GAMEMODE_CHALLENGE_POGO_PARTY、GAMEMODE_CHALLENGE_BOBSLED_BONANZA、
+            // GAMEMODE_CHALLENGE_AIR_RAID，但 Rust 枚举暂缺这些变体，跳过对应排除
+            else
+            {
+                let mut first_allowed_wave = a_zombie_def.first_allowed_wave;
+                // 无尽模式中，僵尸最早可出现的波数逐渐前移
+                if let Some(app) = self.app {
+                    if unsafe { (*app).is_survival_endless(game_mode) } {
+                        let flags = self.get_survival_flags_completed();
+                        let allowed_wave = first_allowed_wave
+                            - tod_animate_curve(18, 50, flags, 0, 15, TodCurves::Linear);
+                        first_allowed_wave = std::cmp::max(allowed_wave, 1);
+                    }
+                }
+                if wave_index + 1 < first_allowed_wave || zombie_points < a_zombie_def.zombie_value {
+                    continue;
+                }
+            }
+
+            // 生存模式中，根据当前旗帜数等重新计算僵尸的权重
+            let mut pick_weight = a_zombie_def.pick_weight;
+            if let Some(app) = self.app {
+                if unsafe { (*app).is_survival_mode() } {
+                    let flags = self.get_survival_flags_completed();
+                    // 伽刚特尔和雪橇车僵尸的每波出怪上限
+                    if a_zombie_type == ZombieType::Gargantuar || a_zombie_type == ZombieType::Zamboni {
+                        if picker.zombie_type_count[ztype_idx as usize]
+                            >= tod_animate_curve(10, 50, flags, 2, 50, TodCurves::Linear)
+                        {
+                            continue;
+                        }
+                    }
+                    // 红眼的旗帜波出怪上限和非旗帜波出怪总和上限
+                    else if a_zombie_type == ZombieType::RedeEyeGargantuar {
+                        if self.is_flag_wave(wave_index) {
+                            if picker.zombie_type_count[ztype_idx as usize]
+                                >= tod_animate_curve(14, 100, flags, 1, 50, TodCurves::Linear)
+                            {
+                                continue;
+                            }
+                        } else {
+                            if picker.all_waves_zombie_type_count[ztype_idx as usize]
+                                >= tod_animate_curve(10, 110, flags, 1, 50, TodCurves::Linear)
+                            {
+                                continue;
+                            }
+                            pick_weight = 1000;
+                        }
+                    }
+                    // 普通僵尸和路障僵尸的权重衰减
+                    else if a_zombie_type == ZombieType::Normal {
+                        pick_weight = tod_animate_curve(
+                            10, 50, flags, pick_weight, pick_weight / 10, TodCurves::Linear,
+                        );
+                    } else if a_zombie_type == ZombieType::TrafficCone {
+                        pick_weight = tod_animate_curve(
+                            10, 50, flags, pick_weight, pick_weight / 4, TodCurves::Linear,
+                        );
+                    }
+                }
+            }
+            zombie_weight_array[pick_count].item = ztype_idx as usize;
+            zombie_weight_array[pick_count].weight = pick_weight;
+            pick_count += 1;
+        }
+
+        // 加权随机地取得一种可能的僵尸类型并返回
+        let picked_idx = tod_pick_from_weighted_array(&zombie_weight_array[..pick_count]);
+        unsafe { std::mem::transmute::<i32, ZombieType>(zombie_weight_array[picked_idx as usize].item as i32) }
+    }
+
+    /// 生成所有波次的僵尸列表（对应 C++ PickZombieWaves）
+    pub fn pick_zombie_waves(&mut self) {
+        // ====================================================================================================
+        // ▲ 设定关卡总波数
+        // ====================================================================================================
+        let is_adventure = self.app.map_or(false, |app| unsafe { (*app).is_adventure_mode() });
+        if is_adventure {
+            let is_whack = self.app.map_or(false, |app| unsafe { (*app).is_whack_a_zombie_level() });
+            if is_whack {
+                self.m_num_waves = 8;
+            } else {
+                let level_index = std::cmp::max(self.level - 1, 0);
+                let level_index_clamped = std::cmp::min(level_index, 49) as usize;
+                self.m_num_waves = G_ZOMBIE_WAVES[level_index_clamped];
+                let is_first_time = self.is_first_time_adventure();
+                let is_mini_boss = self.app.map_or(false, |app| unsafe { (*app).is_mini_boss_level() });
+                if !is_first_time && !is_mini_boss {
+                    self.m_num_waves = if self.m_num_waves < 10 { 20 } else { self.m_num_waves + 10 };
+                }
+            }
+        } else {
+            let game_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+            let is_survival = self.app.map_or(false, |app| unsafe { (*app).is_survival_mode() });
+            if is_survival || game_mode == GameMode::ChallengeLastStand {
+                self.m_num_waves = self.get_num_waves_per_survival_stage();
+            } else if game_mode == GameMode::ChallengeZenGarden
+                || game_mode == GameMode::ChallengeTreeOfWisdom
+                || self.app.map_or(false, |app| unsafe { (*app).is_squirrel_level() })
+            {
+                self.m_num_waves = 0;
+            } else if game_mode == GameMode::ChallengeWhackAZombie {
+                self.m_num_waves = 12;
+            } else if game_mode == GameMode::ChallengeWallnutBowling
+                || game_mode == GameMode::ChallengeColumns
+                || game_mode == GameMode::ChallengeInvisighoul
+                || game_mode == GameMode::ChallengePortalCombat
+                || game_mode == GameMode::ChallengeWarAndPeas
+            {
+                self.m_num_waves = 20;
+            // 注意：C++ 中还有 GAMEMODE_CHALLENGE_GRAVE_DANGER、GAMEMODE_CHALLENGE_HIGH_GRAVITY、
+            // GAMEMODE_CHALLENGE_AIR_RAID 等变体，但 Rust 枚举暂缺这些变体，跳过对应检查
+            } else {
+                let is_stormy = self.app.map_or(false, |app| unsafe { (*app).is_stormy_night_level() });
+                let is_little = game_mode == GameMode::ChallengeLittleTrouble;
+                let is_bungee = self.app.map_or(false, |app| unsafe { (*app).is_bungee_blitz_level() });
+                let is_shovel = self.app.map_or(false, |app| unsafe { (*app).is_shovel_level() });
+                if is_stormy || is_little || is_bungee
+                    || game_mode == GameMode::ChallengeColumns
+                    || is_shovel
+                    || game_mode == GameMode::ChallengeWallnutBowling2
+                    || game_mode == GameMode::ChallengePogoParty
+                {
+                    self.m_num_waves = 30;
+                } else {
+                    self.m_num_waves = 40;
+                }
+            }
+        }
+
+        // ====================================================================================================
+        // ▲ 一些准备工作
+        // ====================================================================================================
+        let mut a_zombie_picker = ZombiePicker {
+            zombie_count: 0,
+            zombie_points: 0,
+            zombie_type_count: [0; NUM_ZOMBIE_TYPES as usize],
+            all_waves_zombie_type_count: [0; NUM_ZOMBIE_TYPES as usize],
+        };
+        a_zombie_picker.init();
+        let a_intro_zombie_type = self.get_introduced_zombie_type();
+
+        // ====================================================================================================
+        // ▲ 遍历每一波并填充每波的出怪列表
+        // ====================================================================================================
+        for a_wave in 0..self.m_num_waves {
+            a_zombie_picker.init_for_wave();
+            self.m_zombies_in_wave[a_wave as usize][0] = ZombieType::Invalid;
+
+            let a_is_flag_wave = self.is_flag_wave(a_wave);
+            let a_is_final_wave = a_wave == self.m_num_waves - 1;
+
+            // 蹦极闪电战关卡的每大波固定刷出 5 只蹦极僵尸
+            let is_bungee_blitz = self.app.map_or(false, |app| unsafe { (*app).is_bungee_blitz_level() });
+            if is_bungee_blitz && a_is_flag_wave {
+                for _ in 0..5 {
+                    self.put_zombie_in_wave(ZombieType::Bungee, a_wave, &mut a_zombie_picker);
+                }
+                if !a_is_final_wave {
+                    continue;
+                }
+            }
+
+            // ------------------------------------------------------------------------------------------------
+            // △ 计算该波的僵尸总点数
+            // ------------------------------------------------------------------------------------------------
+            let game_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+            if game_mode == GameMode::ChallengeLastStand {
+                let survival_stage = self.challenge.as_ref().map_or(0, |c| c.survival_stage);
+                a_zombie_picker.zombie_points =
+                    (survival_stage * self.get_num_waves_per_survival_stage() + a_wave + 10) * 2 / 5 + 1;
+            } else if self.app.map_or(false, |app| unsafe { (*app).is_survival_mode() })
+                && self.challenge.as_ref().map_or(false, |c| c.survival_stage > 0)
+            {
+                let survival_stage = self.challenge.as_ref().map_or(0, |c| c.survival_stage);
+                a_zombie_picker.zombie_points =
+                    (survival_stage * self.get_num_waves_per_survival_stage() + a_wave) * 2 / 5 + 1;
+            } else if is_adventure
+                && self.app.map_or(false, |app| unsafe { (*app).has_finished_adventure() })
+                && self.level != 5
+            {
+                a_zombie_picker.zombie_points = a_wave * 2 / 5 + 1;
+            } else {
+                a_zombie_picker.zombie_points = a_wave / 3 + 1;
+            }
+
+            // 旗帜波的特殊调整
+            if a_is_flag_wave {
+                let plain_zombies_num = std::cmp::min(a_zombie_picker.zombie_points, 8);
+                a_zombie_picker.zombie_points = (a_zombie_picker.zombie_points as f32 * 2.5) as i32;
+
+                // 注意：C++ 中还有 GAMEMODE_CHALLENGE_WAR_AND_PEAS_2 检查，
+                // 但 Rust 枚举暂缺该变体，跳过对应检查
+                if game_mode != GameMode::ChallengeWarAndPeas {
+                    for _ in 0..plain_zombies_num {
+                        self.put_zombie_in_wave(ZombieType::Normal, a_wave, &mut a_zombie_picker);
+                    }
+                    self.put_zombie_in_wave(ZombieType::Flag, a_wave, &mut a_zombie_picker);
+                }
+            }
+
+            // 部分关卡的多倍出怪
+            if game_mode == GameMode::ChallengeColumns {
+                a_zombie_picker.zombie_points *= 6;
+            } else if game_mode == GameMode::ChallengeLittleTrouble
+                || self.app.map_or(false, |app| unsafe { (*app).is_wallnut_bowling_level() })
+            {
+                a_zombie_picker.zombie_points *= 4;
+            } else if self.app.map_or(false, |app| unsafe { (*app).is_mini_boss_level() }) {
+                a_zombie_picker.zombie_points *= 3;
+            } else if self.app.map_or(false, |app| unsafe { (*app).is_stormy_night_level() }) && is_adventure {
+                a_zombie_picker.zombie_points *= 3;
+            } else if self.app.map_or(false, |app| unsafe { (*app).is_shovel_level() })
+                || is_bungee_blitz
+                || game_mode == GameMode::ChallengePortalCombat
+                || game_mode == GameMode::ChallengeInvisighoul
+            {
+                a_zombie_picker.zombie_points *= 2;
+            }
+
+            // ------------------------------------------------------------------------------------------------
+            // △ 向出怪列表中加入固定刷出的僵尸
+            // ------------------------------------------------------------------------------------------------
+            // 部分新出现的僵尸会在特定波固定刷出
+            if a_intro_zombie_type != ZombieType::Invalid && a_intro_zombie_type != ZombieType::DuckyTube {
+                let mut spawn_intro = false;
+                if a_intro_zombie_type == ZombieType::Digger || a_intro_zombie_type == ZombieType::Balloon {
+                    if a_wave + 1 == 7 || a_is_final_wave {
+                        spawn_intro = true;
+                    }
+                } else if a_intro_zombie_type == ZombieType::Yeti {
+                    let saw_yeti = self.app.map_or(true, |app| unsafe { (*app).m_saw_yeti });
+                    if a_wave == self.m_num_waves / 2 && !saw_yeti {
+                        spawn_intro = true;
+                    }
+                } else if a_wave == self.m_num_waves / 2 || a_is_final_wave {
+                    spawn_intro = true;
+                }
+
+                if spawn_intro {
+                    self.put_zombie_in_wave(a_intro_zombie_type, a_wave, &mut a_zombie_picker);
+                }
+            }
+
+            // 5-10 关卡的最后一波加入一只伽刚特尔
+            if self.level == 50 && a_is_final_wave {
+                self.put_zombie_in_wave(ZombieType::Gargantuar, a_wave, &mut a_zombie_picker);
+            }
+            // 冒险模式关卡的最后一波会出现本关卡可能出现的所有僵尸
+            if is_adventure && a_is_final_wave {
+                self.put_in_missing_zombies(a_wave, &mut a_zombie_picker);
+            }
+            // 柱子关卡的特殊出怪
+            if game_mode == GameMode::ChallengeColumns {
+                // 每大波的第 5 小波，固定出现 10 只扶梯僵尸
+                if a_wave % 10 == 5 {
+                    for _ in 0..10 {
+                        self.put_zombie_in_wave(ZombieType::Ladder, a_wave, &mut a_zombie_picker);
+                    }
+                }
+                // 每大波的第 8 小波，固定出现 10 只玩偶匣僵尸
+                if a_wave % 10 == 8 {
+                    for _ in 0..10 {
+                        self.put_zombie_in_wave(ZombieType::JackInTheBox, a_wave, &mut a_zombie_picker);
+                    }
+                }
+                // 第 19/29 小波，固定出现 3/5 只伽刚特尔
+                if a_wave == 19 {
+                    for _ in 0..3 {
+                        self.put_zombie_in_wave(ZombieType::Gargantuar, a_wave, &mut a_zombie_picker);
+                    }
+                }
+                if a_wave == 29 {
+                    for _ in 0..5 {
+                        self.put_zombie_in_wave(ZombieType::Gargantuar, a_wave, &mut a_zombie_picker);
+                    }
+                }
+            }
+
+            // ------------------------------------------------------------------------------------------------
+            // △ 剩余的僵尸点数用于向列表中补充随机僵尸
+            // ------------------------------------------------------------------------------------------------
+            while a_zombie_picker.zombie_points > 0 && a_zombie_picker.zombie_count < MAX_ZOMBIES_IN_WAVE as i32 {
+                let a_zombie_type = self.pick_zombie_type(a_zombie_picker.zombie_points, a_wave, &a_zombie_picker);
+                self.put_zombie_in_wave(a_zombie_type, a_wave, &mut a_zombie_picker);
+            }
+        }
     }
 }
 
