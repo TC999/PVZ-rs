@@ -448,12 +448,12 @@ impl SexyAppBase {
                 // 使用现有 GL 着色器程序
                 glUseProgram(crate::framework::graphics::gl_interface::G_PROGRAM);
 
-                // 设置正交投影矩阵
+                // 设置正交投影矩阵（对应 C++ MakeOrthoMatrix，Y 轴与 OpenGL 屏幕坐标对齐）
                 let ortho: [f32; 16] = [
                     2.0 / w as f32, 0.0, 0.0, 0.0,
-                    0.0, 2.0 / h as f32, 0.0, 0.0,
+                    0.0, -2.0 / h as f32, 0.0, 0.0,
                     0.0, 0.0, -2.0 / 20.0, 0.0,
-                    -1.0, -1.0, -10.0 / 20.0, 1.0,
+                    -1.0, 1.0, -10.0 / 20.0, 1.0,
                 ];
                 glUniformMatrix4fv(
                     crate::framework::graphics::gl_interface::G_UF_VIEW_PROJ_MTX,
