@@ -2580,8 +2580,8 @@ private:
 
 **类/结构体:**
 
-- `[ ]` `class ChallengeScreen : Widget, ButtonListener` (L15, 0 个方法, 10 个成员)
-- `[ ]` `class ChallengeDefinition` (L69, 0 个方法, 6 个成员)
+- `[x]` `class ChallengeScreen : Widget, ButtonListener` (L15, 0 个方法, 10 个成员) — 类型定义完成
+- `[x]` `class ChallengeDefinition` (L69, 0 个方法, 6 个成员) — 类型定义完成
 
 **自由函数:**
 
@@ -2590,7 +2590,14 @@ private:
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/widget/challenge_screen.rs
+设计决策:
+- ChallengeScreen 类 → Rust struct（所有字段映射，NewLawnButton* → DialogButton* 替代）
+- ChallengeDefinition → Rust struct（challenge_name: Option<&'static str>）
+- 常量 NUM_CHALLENGE_MODES = 73
+- vec![None; 73] 初始化挑战按钮数组
+- 所有方法签名存根已创建（待从 ChallengeScreen.cpp 翻译）
+- 内联方法 is_scary_potter_level / is_i_zombie_level 实现为关联函数
 ```
 
 ### `[x]` `src\Lawn\Widget\CheatDialog.cpp`
