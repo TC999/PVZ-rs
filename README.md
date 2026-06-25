@@ -1,6 +1,16 @@
 # PVZ-rs
 
-一个使用 Rust 实现的植物大战僵尸年度版（ GOTY 版），基于[PvZ-Portable](https://github.com/wszqkzqk/PvZ-Portable)翻译
+一个使用 Rust 实现的植物大战僵尸年度版（ GOTY 版），基于[PvZ-Portable](https://github.com/wszqkzqk/PvZ-Portable)
+
+## 为什么要重写？
+
+原版《植物大战僵尸》虽然经典，但毕竟是十几年前的游戏。原版使用了 DirectX 7 等过时技术，且只提供了 32 位可执行文件，在现代操作系统上运行可能会遇到兼容性问题，而且它从未官方支持过 Linux，也没有适配过 RISC-V, 龙芯的 LoongArch 等新兴指令集架构。
+
+在开源社区，已经有前人基于逆向工程得到的文档和社区研究，重写出了最初的游戏引擎。PvZ-Portable 在此基础上进一步开发，提供了跨平台移植方案，但 C++ 项目配置繁琐且浪费时间。
+
+本项目则是以此为基础将使用 Rust 重写。目前实现了：
+- Windows，Linux 支持
+- 标题界面加载
 
 ## 使用方法：
 1. 从[GitHub Actions](https://github.com/TC999/PVZ-rs/actions)下载 CI 产物
@@ -23,6 +33,16 @@
   cd PVZ-rs
   cargo build --release
 ```
+
+## 致谢
+
+这个项目站在了巨人的肩膀上。
+
+- 特别感谢[wszqkzqk](https://github.com/wszqkzqk)对原始代码进行跨平台适配！
+- 感谢 SDL 开发团队提供的强大跨平台库！
+- 感谢所有为游戏研究做出贡献的社区成员！
+- 感谢宝开创造了这个经典游戏，并使用宽松的 [PopCap Games Framework License](https://github.com/wszqkzqk/PvZ-Portable/blob/main/src/SexyAppFramework/LICENSE) 开放 `SexyAppFramework`，让开源社区能够更方便地研究这个游戏引擎！
+- 感谢 DeepSeek 提供的廉价大模型！
 
 ## ⚠️ 开发者叠甲时间(关于本项目含硅量的声明)
 > **太长不看版**: 没错,这是一个纯正的 Vibe-coded(**凭感觉编程**) 项目!
