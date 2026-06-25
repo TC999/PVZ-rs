@@ -8,6 +8,21 @@ use crate::framework::graphics::font::Font;
 use crate::framework::color::Color;
 use crate::lawn::game_enums::{TodCurves, DrawStringJustification};
 
+/// 通用工具类型 — 加权数组（对应 C++ TodWeightedArray）
+#[derive(Debug, Clone, Copy)]
+pub struct TodWeightedArray {
+    pub item: usize,
+    pub weight: i32,
+}
+
+/// 通用工具类型 — 网格加权数组（对应 C++ TodWeightedGridArray）
+#[derive(Debug, Clone, Copy)]
+pub struct TodWeightedGridArray {
+    pub x: i32,
+    pub y: i32,
+    pub weight: i32,
+}
+
 /// 夹值
 pub fn clamp_float(val: f32, min: f32, max: f32) -> f32 {
     if val < min { min } else if val > max { max } else { val }

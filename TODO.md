@@ -1499,17 +1499,17 @@ enum ZombieType : int32_t)`
 
 **类/结构体:**
 
-- `[ ]` `struct BeghouledBoardState` (L45, 0 个方法, 1 个成员)
-- `[ ]` `class Challenge` (L50, 0 个方法, 10 个成员)
-- `[ ]` `class ZombieAllowedLevels` (L245, 0 个方法, 2 个成员)
+- `[x]` `struct BeghouledBoardState` (L45, 0 个方法, 1 个成员)
+- `[x]` `class Challenge` (L50, 0 个方法, 10 个成员)  — 类型定义完成，方法存根（待翻译 Challenge.cpp 实现）
+- `[x]` `class ZombieAllowedLevels` (L245, 0 个方法, 2 个成员)
 
 **枚举:**
 
-- `[ ]` `enum BeghouledUpgrade` → { BEGHOULED_UPGRADE_REPEATER, BEGHOULED_UPGRADE_FUMESHROOM, BEGHOULED_UPGRADE_TALLNUT, NUM_BEGHOULED_UPGRADES }
+- `[x]` `enum BeghouledUpgrade` → { BEGHOULED_UPGRADE_REPEATER, BEGHOULED_UPGRADE_FUMESHROOM, BEGHOULED_UPGRADE_TALLNUT, NUM_BEGHOULED_UPGRADES }
 
 **自由函数:**
 
-- `[ ]` `enum BeghouledUpgrade : int32_t({
+- `[x]` `enum BeghouledUpgrade : int32_t({
     BEGHOULED_UPGRADE_REPEATER,
     BEGHOULED_UPGRADE_FUMESHROOM,
     BEGHOULED_UPGRADE_TALLNUT,
@@ -1526,7 +1526,16 @@ class Challenge)`
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/challenge.rs
+设计决策:
+- BeghouledUpgrade 枚举 → Rust enum 带派生属性
+- BeghouledBoardState 结构体 → Rust struct（二维数组 SeedType[9][6] → [[SeedType; 6]; 9]）
+- Challenge 类 → Rust struct（所有字段映射完成，方法签名存根）
+- ZombieAllowedLevels 类 → Rust struct（固定长度数组 [i32; 50]）
+- 裸指针字段使用 Option<*mut LawnApp> / Option<*mut Board> 模式
+- extern 全局变量（gArtChallengeWallnut 等）暂未翻译
+- 方法实现待从 Challenge.cpp (约5000行) 翻译
+- 依赖：FilterEffectType (crate::todlib::filter_effect), TodWeightedGridArray (crate::todlib::tod_common)
 ```
 
 ### `[x]` `src\Lawn\Coin.cpp`
