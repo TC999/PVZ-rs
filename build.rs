@@ -1,5 +1,4 @@
 // PvZ Portable Rust — build.rs
-//
 // 为 SDL2_mixer 提供链接支持
 // Windows: 自动下载 SDL2_mixer 开发包，根据目标架构提取对应 .lib 并复制 .dll
 // Linux: sdl2-sys 的 mixer 特性会自动输出 -lSDL2_mixer，系统安装 libsdl2-mixer-dev 即可
@@ -91,15 +90,15 @@ fn download_and_extract(version: &str, arch_dir: &std::path::Path, done_file: &s
         println!("cargo:warning=正在下载 SDL2_mixer 开发包 ({})...", arch_label);
     let dl_ok = Command::new("powershell")
         .args(["-NoProfile", "-Command", &format!(
-            "[System.Net.WebClient]::new().DownloadFile('{}', '{}')",
+            "Invoke-WebRequest -Uri '{}' -OutFile '{}' -ErrorAction Stop",
             url, zip_path.to_string_lossy()
         )])
         .status().map(|s| s.success()).unwrap_or(false);
 
     if !dl_ok {
-        println!("cargo:warning=PowerShell 下载失败，尝试 curl...");
+        println!("cargo:warning=下载失败 (1/2)，尝试 curl...");
         let curl_ok = Command::new("curl")
-            .args(["-fL", "-o", &zip_path.to_string_lossy(), &url])
+            .args(["-L", "-o", &zip_path.to_string_lossy(), &url])
             .status().map(|s| s.success()).unwrap_or(false);
         if !curl_ok {
             println!("cargo:warning=下载失败，请手动下载到: {}", zip_path.display());
@@ -186,9 +185,8 @@ fn download_and_extract(version: &str, arch_dir: &std::path::Path, done_file: &s
         }
     }
 
-    // 清理
+    // 清理临时目录
     let _ = std::fs::remove_dir_all(&extract_dir);
-    let _ = std::fs::remove_file(&zip_path);
     let _ = std::fs::write(done_file, b"ok");
 
     if !copied {
