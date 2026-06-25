@@ -2694,16 +2694,16 @@ public:
 
 **类/结构体:**
 
-- `[ ]` `class CreditsTiming` (L47, 0 个方法, 4 个成员)
-- `[ ]` `class CreditScreen : Widget, ButtonListener` (L62, 0 个方法, 10 个成员)
-- `[ ]` `class CreditsOverlay : Widget` (L128, 0 个方法, 1 个成员)
+- `[x]` `class CreditsTiming` (L47, 0 个方法, 4 个成员)
+- `[x]` `class CreditScreen : Widget, ButtonListener` (L62, 0 个方法, 10 个成员) — 类型定义完成
+- `[x]` `class CreditsOverlay : Widget` (L128, 0 个方法, 1 个成员) — 类型定义完成
 
 **枚举:**
 
-- `[ ]` `enum CreditsPhase` → { CREDITS_MAIN1, CREDITS_MAIN2, CREDITS_MAIN3, CREDITS_END }
-- `[ ]` `enum CreditLayer` → { CREDIT_LAYER_BACKGROUND, CREDIT_LAYER_ZOMBIE, CREDIT_LAYER_TOP }
-- `[ ]` `enum CreditWordType` → { WORD_AA, WORD_EE, WORD_AW, WORD_OH, WORD_OFF }
-- `[ ]` `enum CreditBrainType` → { BRAIN_FLY_ON, BRAIN_FAST_ON, BRAIN_NEXT_WORD, BRAIN_FAST_OFF, BRAIN_FLY_OFF, ... (6 个值) }
+- `[x]` `enum CreditsPhase` → { CREDITS_MAIN1, CREDITS_MAIN2, CREDITS_MAIN3, CREDITS_END }
+- `[x]` `enum CreditLayer` → { CREDIT_LAYER_BACKGROUND, CREDIT_LAYER_ZOMBIE, CREDIT_LAYER_TOP }
+- `[x]` `enum CreditWordType` → { WORD_AA, WORD_EE, WORD_AW, WORD_OH, WORD_OFF }
+- `[x]` `enum CreditBrainType` → { BRAIN_FLY_ON, BRAIN_FAST_ON, BRAIN_NEXT_WORD, BRAIN_FAST_OFF, BRAIN_FLY_OFF, ... (6 个值) }
 
 **自由函数:**
 
