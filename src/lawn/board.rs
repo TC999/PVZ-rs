@@ -1385,6 +1385,64 @@ impl Board {
         true
     }
 
+    /// 获取本关新出现的僵尸类型（对应 C++ GetIntroducedZombieType）
+    pub fn get_introduced_zombie_type(&self) -> ZombieType {
+        let is_adventure = self.app.map_or(false, |app| unsafe { (*app).is_adventure_mode() });
+        if !is_adventure || self.level == 1 {
+            return ZombieType::Invalid;
+        }
+
+        // 遍历所有非 Invalid 的僵尸类型（Normal=0 到 RedeEyeGargantuar=33）
+        for ztype_int in 0..NUM_ZOMBIE_TYPES {
+            let zombie_type: ZombieType = unsafe { std::mem::transmute(ztype_int) };
+            let zombie_def = crate::lawn::zombie::get_zombie_definition(zombie_type);
+            let can_spawn = zombie_type != ZombieType::Yeti
+                || self.app.map_or(false, |app| unsafe { (*app).can_spawn_yetis() });
+            if can_spawn && zombie_def.starting_level == self.level {
+                return zombie_type;
+            }
+        }
+        ZombieType::Invalid
+    }
+
+    /// 选择从墓碑中升起的僵尸类型（对应 C++ PickGraveRisingZombieType）
+    pub fn pick_grave_rising_zombie_type(&self) -> ZombieType {
+        use crate::todlib::tod_common::{TodWeightedArray, tod_pick_from_weighted_array};
+
+        // 最多使用 3 个条目（普通、路障、铁桶）
+        let mut arr = [
+            TodWeightedArray { item: ZombieType::Normal as usize, weight: 0 },
+            TodWeightedArray { item: ZombieType::TrafficCone as usize, weight: 0 },
+            TodWeightedArray { item: ZombieType::Pail as usize, weight: 0 },
+        ];
+        let mut count = 2;
+
+        arr[0].weight = crate::lawn::zombie::get_zombie_definition(ZombieType::Normal).pick_weight;
+        arr[1].weight = crate::lawn::zombie::get_zombie_definition(ZombieType::TrafficCone).pick_weight;
+        if !self.stage_has_grave_stones() {
+            arr[2].weight = crate::lawn::zombie::get_zombie_definition(ZombieType::Pail).pick_weight;
+            count = 3;
+        }
+
+        for i in 0..count {
+            let ztype_int = arr[i].item;
+            let zombie_type: ZombieType = unsafe { std::mem::transmute(ztype_int as i32) };
+            let def = crate::lawn::zombie::get_zombie_definition(zombie_type);
+            let is_first_time = self.app.map_or(false, |app| unsafe { (*app).is_first_time_adventure_mode() });
+            if is_first_time && self.level < def.starting_level {
+                arr[i].weight = 0;
+            }
+            // C++ 中还有 !mZombieAllowed[aZombieType] 检查，但 Rust 端暂缺该字段
+        }
+
+        let idx = tod_pick_from_weighted_array(&arr[..count]);
+        if idx >= 0 {
+            unsafe { std::mem::transmute::<i32, ZombieType>(idx as i32) }
+        } else {
+            ZombieType::Normal
+        }
+    }
+
     /// 获取当前波次应生成的僵尸点数
     pub fn get_zombie_points_for_wave(&self, wave: i32) -> i32 {
         if self.is_first_time_adventure() { wave / 3 + 1 } else { wave * 2 / 5 + 1 }

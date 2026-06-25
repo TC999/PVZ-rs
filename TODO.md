@@ -1410,6 +1410,7 @@ enum ZombieType : int32_t)`
 - 统计/计数：count_plant_by_type(), count_zombie_by_type(), count_coin_by_type(), get_grave_stone_count(), count_sunflowers(), count_sun_being_collected(), count_coins_being_collected(), count_lawn_mowers_remaining()
 - 行/种子：row_can_have_zombies(), row_can_have_zombie_type() [完整版], get_num_seeds_in_bank(), choose_seeds_on_current_level(), get_seed_packet_position_x(), is_plant_in_cursor(), get_seed_bank_extra_width()
 - 静态方法：is_zombie_type_pool_only(), is_zombie_type_spawned_only(), can_zombie_spawn_on_level()
+- 僵尸类型选择：get_introduced_zombie_type(), pick_grave_rising_zombie_type()
 - 实体创建：add_ladder(), add_crater(), add_grave_stone(), add_plant(), add_coin(), add_projectile()
 - 实体管理：remove_all_zombies(), remove_cutscene_zombies(), remove_zombies_for_repick()
 - 效果：shake_board(), is_ice_at(), can_add_bob_sled()
@@ -1437,6 +1438,7 @@ enum ZombieType : int32_t)`
 - GridItemState 枚举新增 RakeAttracting/RakeWaiting/RakeTriggered/BrainSquished
 - GridItemType 枚举新增 Rake 变体
 - tod_common.rs 新增 tod_calc_smooth_weight()/tod_pick_from_smooth_array()/tod_update_smooth_array_pick()
+- tod_common.rs 新增 tod_pick_from_weighted_array()/tod_pick_array_item_from_weighted_array()
 - 注意：C++ 中的 GAMEMODE_CHALLENGE_RESODDED 在 Rust 枚举中暂缺，对应检查被跳过
 
 待翻译的主要模块（按优先级排序）：

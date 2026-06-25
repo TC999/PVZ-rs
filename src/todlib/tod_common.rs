@@ -251,6 +251,34 @@ pub fn tod_pick_from_smooth_array(arr: &mut [TodSmoothArray]) -> i32 {
     arr[pick_idx].item
 }
 
+/// 从加权数组中随机选择一个项目并返回其索引（对应 C++ TodPickFromWeightedArray）
+pub fn tod_pick_from_weighted_array(arr: &[TodWeightedArray]) -> isize {
+    tod_pick_array_item_from_weighted_array(arr).map_or(-1, |item| item.item as isize)
+}
+
+/// 从加权数组中随机选择一个项目并返回其引用（对应 C++ TodPickArrayItemFromWeightedArray）
+pub fn tod_pick_array_item_from_weighted_array(arr: &[TodWeightedArray]) -> Option<&TodWeightedArray> {
+    let count = arr.len();
+    if count == 0 {
+        return None;
+    }
+
+    let total_weight: i32 = arr.iter().map(|a| a.weight).sum();
+    debug_assert!(total_weight > 0);
+
+    let mut rand_weight = crate::framework::common::rand_range(total_weight);
+
+    for item in arr.iter() {
+        rand_weight -= item.weight;
+        if rand_weight < 0 {
+            return Some(item);
+        }
+    }
+
+    debug_assert!(false, "TodPickArrayItemFromWeightedArray: should not reach here");
+    None
+}
+
 /// 更新平滑数组的选中记录（对应 C++ TodUpdateSmoothArrayPick）
 pub fn tod_update_smooth_array_pick(arr: &mut [TodSmoothArray], pick_idx: usize) {
     for a in arr.iter_mut() {
