@@ -1396,7 +1396,7 @@ enum ZombieType : int32_t)`
 ```
 翻译至 rust/src/lawn/board.rs
 
-当前进度：约 75% 完成（~2500 行 Rust / 9857 行 C++）
+当前进度：约 80% 完成（~2650 行 Rust / 9857 行 C++）
 
 已翻译的方法（约 176 个）：
 - 结构体字段：基本完整（新增 m_mustache_mode, m_future_mode, m_pinata_mode, m_dance_mode, m_daisy_mode, m_sukhbir_mode, m_super_mower_mode, m_row_picking_array 等字段）
@@ -1422,7 +1422,7 @@ enum ZombieType : int32_t)`
 - 坐标转换补充：pixel_to_grid_x_keep_on_board(), pixel_to_grid_y_keep_on_board(), grid_to_pixel_y(), get_pos_y_based_on_row(), get_ice_z_pos()
 - 植物查询：get_pumpkin_at(), get_pumpkin_at_mut(), get_flower_pot_at(), find_umbrella_plant(), get_top_plant_at()
 - UI/状态：clear_cursor(), update_mouse_position(), update_layers(), progress_meter_has_flags(), is_final_scary_potter_stage() [完整版], is_final_survival_stage() [完整版], get_survival_flags_completed(), survival_save_score(), puzzle_save_streak(), is_scary_potter_dave_talking() [完整版], zombies_won(), process_delete_queue(), stop_all_zombie_sounds(), has_conveyor_belt_seed_bank(), update_progress_meter(), do_typing_check()
-- 僵尸生成：add_zombie_in_row(), add_zombie(), pick_row_for_new_zombie() [完整版], total_zombies_health_in_wave(), pick_zombie_waves() [完整版], pick_zombie_type() [完整版], put_zombie_in_wave(), put_in_missing_zombies()
+- 僵尸生成：add_zombie_in_row(), add_zombie(), pick_row_for_new_zombie() [完整版], total_zombies_health_in_wave(), pick_zombie_waves() [完整版], pick_zombie_type() [完整版], put_zombie_in_wave(), put_in_missing_zombies(), init_zombie_waves() [完整版], is_zombie_wave_distribution_ok()
 - 实体更新：update_game_objects()
 - 辅助：get_shovel_button_rect(), pick_special_grave_stone(), count_empty_pots_or_lilies(), is_valid_cob_cannon_spot(), has_valid_cob_cannon_spot()
 - 自由函数：get_rect_overlap(), get_circle_rect_overlap(), board_init_for_player(), zombie_type_can_go_in_pool(), zombie_type_can_go_on_high_ground()
@@ -1462,12 +1462,16 @@ enum ZombieType : int32_t)`
 - 新增 G_ZOMBIE_WAVES 常量数组（[i32; 50]）
 - 注意：因 Rust GameMode 枚举暂缺 GAMEMODE_CHALLENGE_GRAVE_DANGER / GAMEMODE_CHALLENGE_HIGH_GRAVITY / GAMEMODE_CHALLENGE_AIR_RAID / GAMEMODE_CHALLENGE_WAR_AND_PEAS_2 等变体，对应检查已跳过
 
+本轮新增翻译（当前轮次 - 续）：
+- init_zombie_waves()：完整实现，重置 m_zombie_allowed、调用 pick_zombie_waves()、验证分布、重置波次状态
+- is_zombie_wave_distribution_ok()：完整实现，遍历波次列表检查所有必需僵尸类型是否出现
+- 注意：C++ 中 mZombieHealthWaveStart / mLastBungeeWave / mHugeWaveCountDown 字段未在 Rust Board 中定义，对应初始化跳过
+
 待翻译的主要模块（按优先级排序）：
-1. InitZombieWaves / InitZombieWavesForLevel（波次初始化逻辑，含 mZombieAllowed 设置）
-2. DrawBackdrop / DrawLevel（完整绘制逻辑）
-3. MouseDown / MouseUp（完整版交互逻辑）
-4. Update 完整版（CutScene、Fwoosh、Tutorial 等）
-5. SpawnZombieWave / SpawnZombiesFromPool / SpawnZombiesFromGraves（僵尸生成）
+1. DrawBackdrop / DrawLevel（完整绘制逻辑）
+2. MouseDown / MouseUp（完整版交互逻辑）
+3. Update 完整版（CutScene、Fwoosh、Tutorial 等）
+4. SpawnZombieWave / SpawnZombiesFromPool / SpawnZombiesFromGraves（僵尸生成）
 ```
 
 ### `[x]` `src\Lawn\Board.h`

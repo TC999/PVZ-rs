@@ -2613,6 +2613,84 @@ impl Board {
             }
         }
     }
+
+    /// 检查僵尸波次分布是否合理（对应 C++ IsZombieWaveDistributionOk）
+    pub fn is_zombie_wave_distribution_ok(&self) -> bool {
+        if !self.app.map_or(false, |app| unsafe { (*app).is_adventure_mode() }) {
+            return true;
+        }
+
+        let mut zombie_type_count = [0i32; NUM_ZOMBIE_TYPES as usize];
+        for a_wave in 0..self.m_num_waves {
+            for a_idx in 0..MAX_ZOMBIES_IN_WAVE {
+                let a_zombie_type = self.m_zombies_in_wave[a_wave as usize][a_idx];
+                if a_zombie_type == ZombieType::Invalid {
+                    break;
+                }
+                zombie_type_count[a_zombie_type as usize] += 1;
+            }
+        }
+
+        for ztype_idx in 0..(NUM_ZOMBIE_TYPES as i32) {
+            let a_zombie_type: ZombieType = unsafe { std::mem::transmute(ztype_idx) };
+            if a_zombie_type != ZombieType::Yeti
+                && self.can_zombie_spawn_on_level(a_zombie_type, self.level)
+                && zombie_type_count[ztype_idx as usize] == 0
+            {
+                let def = get_zombie_definition(a_zombie_type);
+                println!("Didn't spawn required zombie {}, level {}", def.zombie_name, self.level);
+                return false;
+            }
+        }
+        true
+    }
+
+    /// 初始化波次数据（对应 C++ InitZombieWaves）
+    pub fn init_zombie_waves(&mut self) {
+        // 重置所有僵尸类型为不允许
+        self.m_zombie_allowed = [false; NUM_ZOMBIE_TYPES as usize];
+
+        let is_adventure = self.app.map_or(false, |app| unsafe { (*app).is_adventure_mode() });
+        if is_adventure {
+            // InitZombieWavesForLevel：遍历所有僵尸类型设置允许列表
+            for ztype_idx in 0..(NUM_ZOMBIE_TYPES as i32) {
+                let a_zombie_type: ZombieType = unsafe { std::mem::transmute(ztype_idx) };
+                self.m_zombie_allowed[ztype_idx as usize] =
+                    self.can_zombie_spawn_on_level(a_zombie_type, self.level);
+            }
+        } else {
+            // 非冒险模式：由 Challenge 的 InitZombieWaves 处理
+            if let Some(ref challenge) = self.challenge {
+                // challenge.init_zombie_waves() 暂未实现，后续补充
+            }
+        }
+
+        // 生成波次数据
+        self.pick_zombie_waves();
+
+        // 验证波次分布
+        debug_assert!(self.is_zombie_wave_distribution_ok());
+
+        // 重置波次相关状态
+        self.m_current_wave = 0;
+        self.m_total_spawned_waves = 0;
+        if let Some(app) = self.app {
+            unsafe { (*app).m_saw_yeti = false; }
+        }
+
+        if self.is_first_time_adventure() && self.level == 2 {
+            self.m_zombie_countdown = ZOMBIE_COUNTDOWN * 2;
+        } else if self.app.map_or(false, |app| unsafe { (*app).is_survival_mode() })
+            && self.challenge.as_ref().map_or(false, |c| c.survival_stage > 0)
+        {
+            self.m_zombie_countdown = ZOMBIE_COUNTDOWN_RANGE;
+        } else {
+            self.m_zombie_countdown = ZOMBIE_COUNTDOWN_FIRST_WAVE;
+        }
+
+        // 注意：C++ 中还有 mZombieHealthWaveStart = 0, mLastBungeeWave = 0,
+        // mHugeWaveCountDown = 0 等字段初始化，这些字段在 Rust Board 中暂缺
+    }
 }
 
 impl Default for Board {
