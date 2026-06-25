@@ -1,7 +1,7 @@
 // PvZ Portable Rust — build.rs
 //
 // 为 SDL2_mixer 提供链接支持
-// Windows: 自动下载 SDL2_mixer 开发包（64-bit），提供 .lib 并复制 .dll
+// Windows: 自动下载 SDL2_mixer 开发包，根据目标架构提取对应 .lib 并复制 .dll
 // Linux: sdl2-sys 的 mixer 特性会自动输出 -lSDL2_mixer，系统安装 libsdl2-mixer-dev 即可
 
 fn main() {
@@ -17,21 +17,34 @@ fn setup_sdl2_mixer_windows() {
     use std::{env, fs};
 
     let out = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let target = env::var("TARGET").unwrap_or_default();
     let version = "2.6.3";
 
-    // 目标目录: OUT_DIR/SDL2_mixer_x64/
-    let dest = out.join(format!("SDL2_mixer-{}", version)).join("lib").join("x64");
-    let done_file = dest.parent().unwrap().parent().unwrap().join(".done_x64");
+    // 根据目标架构选择 x64 或 x86
+    let arch_dir = if target.starts_with("x86_64") {
+        "x64"
+    } else if target.starts_with("i686") {
+        "x86"
+    } else {
+        println!("cargo:warning=不支持的架构: {}，跳过 SDL2_mixer 链接", target);
+        return;
+    };
+
+    let dest = out
+        .join(format!("SDL2_mixer-{}", version))
+        .join("lib")
+        .join(arch_dir);
+    let done_file = dest.parent().unwrap().parent().unwrap().join(format!(".done_{}", arch_dir));
 
     if !done_file.exists() || !dest.join("SDL2_mixer.lib").exists() {
         // 下载并提取
-        println!("cargo:warning=正在下载 SDL2_mixer 开发包 (x64)...");
-        download_and_extract(&out, version, &dest, &done_file);
+        println!("cargo:warning=正在下载 SDL2_mixer 开发包 ({})...", arch_dir);
+        download_and_extract(&out, version, &dest, &done_file, arch_dir);
     }
 
     if dest.join("SDL2_mixer.lib").exists() {
         println!("cargo:rustc-link-search={}", dest.display());
-        println!("cargo:warning=SDL2_mixer .lib: {}\\SDL2_mixer.lib", dest.display());
+        println!("cargo:warning=SDL2_mixer .lib: {}\\SDL2_mixer.lib ({})", dest.display(), arch_dir);
 
         // 复制 DLL
         let dll_src = dest.join("SDL2_mixer.dll");
@@ -57,7 +70,7 @@ fn setup_sdl2_mixer_windows() {
 }
 
 #[cfg(target_os = "windows")]
-fn download_and_extract(out: &std::path::Path, version: &str, x64_dir: &std::path::Path, done_file: &std::path::Path) {
+fn download_and_extract(out: &std::path::Path, version: &str, arch_dir: &std::path::Path, done_file: &std::path::Path, arch_label: &str) {
     use std::process::Command;
 
     let zip_path = out.join("SDL2_mixer.zip");
@@ -105,27 +118,25 @@ fn download_and_extract(out: &std::path::Path, version: &str, x64_dir: &std::pat
     }
 
     // 找到 SDK 目录并拷贝到目标
-    // extract_dir 里面应该有个子目录 SDL2_mixer-2.6.3/ 或类似
     let mut copied = false;
     if let Ok(entries) = std::fs::read_dir(&extract_dir) {
         for entry in entries {
             if let Ok(entry) = entry {
                 let path = entry.path();
                 if path.is_dir() {
-                    // SDL2_mixer-2.6.3/ 子目录
-                    let lib_x64 = path.join("lib").join("x64");
-                    if lib_x64.join("SDL2_mixer.lib").exists() {
-                        // 拷贝 lib/x64/ 下的内容
-                        let _ = std::fs::create_dir_all(x64_dir);
-                        if let Ok(lib_entries) = std::fs::read_dir(&lib_x64) {
+                    let lib_dir = path.join("lib").join(arch_label);
+                    if lib_dir.join("SDL2_mixer.lib").exists() {
+                        // 拷贝对应架构目录下的内容
+                        let _ = std::fs::create_dir_all(arch_dir);
+                        if let Ok(lib_entries) = std::fs::read_dir(&lib_dir) {
                             for le in lib_entries {
                                 if let Ok(le) = le {
-                                    let _ = std::fs::copy(&le.path(), &x64_dir.join(le.file_name()));
+                                    let _ = std::fs::copy(&le.path(), &arch_dir.join(le.file_name()));
                                 }
                             }
                         }
                         copied = true;
-                        println!("cargo:warning=已提取 SDL2_mixer x64 开发包");
+                        println!("cargo:warning=已提取 SDL2_mixer {} 开发包", arch_label);
                         break;
                     }
                 }
@@ -134,24 +145,23 @@ fn download_and_extract(out: &std::path::Path, version: &str, x64_dir: &std::pat
     }
 
     if !copied {
-        // fallback: 直接全量拷贝
+        // fallback: 遍历查找
         if let Ok(entries) = std::fs::read_dir(&extract_dir) {
             for entry in entries {
                 if let Ok(entry) = entry {
                     let path = entry.path();
                     if path.is_dir() {
-                        // find SDL2_mixer.lib anywhere
                         if let Ok(files) = find_files(&path, "SDL2_mixer.lib") {
                             for f in files {
                                 if let Some(parent) = f.parent() {
-                                    // 检查是 x64 还是 x86
-                                    let is_x64 = parent.to_string_lossy().to_lowercase().contains("x64");
-                                    if is_x64 || !copied {
-                                        let _ = std::fs::create_dir_all(x64_dir);
+                                    let parent_str = parent.to_string_lossy().to_lowercase();
+                                    let matches = parent_str.contains(&arch_label.to_lowercase());
+                                    if matches || !copied {
+                                        let _ = std::fs::create_dir_all(arch_dir);
                                         if let Ok(dentries) = std::fs::read_dir(parent) {
                                             for de in dentries {
                                                 if let Ok(de) = de {
-                                                    let _ = std::fs::copy(&de.path(), &x64_dir.join(de.file_name()));
+                                                    let _ = std::fs::copy(&de.path(), &arch_dir.join(de.file_name()));
                                                 }
                                             }
                                         }
