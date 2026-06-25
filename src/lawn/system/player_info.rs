@@ -2,6 +2,8 @@
 
 pub struct PlayerInfo {
     pub name: String,
+    pub m_id: u32,
+    pub m_use_seq: u32,
     pub m_level: i32,
     pub m_finished_adventure: i32,
     pub m_has_unlocked_minigames: bool,
@@ -19,6 +21,8 @@ impl PlayerInfo {
     pub fn new() -> Self {
         PlayerInfo {
             name: String::new(),
+            m_id: 0,
+            m_use_seq: 0,
             m_level: 1,
             m_finished_adventure: 0,
             m_has_unlocked_minigames: false,

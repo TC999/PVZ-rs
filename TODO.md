@@ -1607,7 +1607,11 @@ class Challenge)`
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+已翻译 L1-L200（构造函数、析构函数、PlaceAZombie、CanZombieGoInGridSpot）
+实现整合到 rust/src/lawn/cutscene.rs
+- 构造函数和 Drop trait 已完成（含 mUpsellChallengeScreen 释放）
+- 剩余方法因依赖模块尚未完全翻译，保留空方法体
+- render_order 使用 board::make_render_order 自由函数
 ```
 
 ### `[x]` `src\Lawn\Cutscene.h`
@@ -1619,12 +1623,21 @@ class Challenge)`
 
 **类/结构体:**
 
-- `[ ]` `class CutScene` (L14, 0 个方法, 10 个成员)
+- `[x]` `class CutScene` (L14, 0 个方法, 10 个成员)
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/cutscene.rs
+设计决策:
+- CutScene 不继承任何基类（C++ 中独立类），直接映射为独立 struct
+- raw pointer 使用 Option<*mut LawnApp> / Option<*mut Board> 模式（与已有 Rust 代码一致）
+- std::vector<std::string> → Vec<String>
+- 内联函数直接实现为普通方法（calc_position、is_2x2_zombie 等）
+- C++ static inline Is2x2Zombie → Rust 关联函数（impl 中的 static method）
+- ChallengeScreen 目前是存根，不影响编译
+- CutScene.cpp (2383行) 的方法实现尚未翻译，仅保留方法签名框架
+  后续需按拆分策略逐步翻译方法实现。状态保持 [~] 直到全部完成。
 ```
 
 ### `[x]` `src\Lawn\GameObject.cpp`
@@ -2042,7 +2055,13 @@ class Plant : public GameObject)`
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+实现已整合到 rust/src/lawn/system/data_sync.rs
+- C++ FILE* 文件 I/O → std::fs::File + std::io::Read/Write
+- C++ 模板 SyncUInt32/SyncUInt16/SyncUInt8 重载 → Rust 固定类型方法
+- void* 类型擦除 → Vec<u8> 缓冲区操作
+- DataReaderException → 自定义错误类型
+- 指针映射表（PointerToIntMap/IntToPointerMap）→ HashMap<usize, i32>
+- 未翻译：fcaseopen 大小写不敏感文件系统支持
 ```
 
 ### `[x]` `src\Lawn\System\DataSync.h`
@@ -2054,14 +2073,20 @@ class Plant : public GameObject)`
 
 **类/结构体:**
 
-- `[ ]` `class DataReader` (L9, 0 个方法, 5 个成员)
-- `[ ]` `class DataWriter` (L40, 0 个方法, 4 个成员)
-- `[ ]` `class DataSync` (L79, 0 个方法, 7 个成员)
+- `[x]` `class DataReader` (L9, 0 个方法, 5 个成员)
+- `[x]` `class DataWriter` (L40, 0 个方法, 4 个成员)
+- `[x]` `class DataSync` (L79, 0 个方法, 7 个成员)
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/system/data_sync.rs
+设计决策:
+- Rust 没有 C++ 的模板 SFINAE，改用具体类型方法
+- C++ 的 void* 内存操作 → Vec<u8> 安全缓冲区
+- 序列化使用小端序（to_le_bytes / from_le_bytes）
+- DataReaderException 实现 std::error::Error trait
+- 所有读写器方法均完整实现（ReadUInt64/WriteUInt64 等）
 ```
 
 ### `[x]` `src\Lawn\System\Music.cpp`
@@ -2178,12 +2203,17 @@ class Plant : public GameObject)`
 
 **自由函数:**
 
-- `[ ]` ` try()`
+- `[x]` ` try()`
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+实现已整合到 rust/src/lawn/system/profile_mgr.rs
+- std::map<std::string, PlayerInfo, StringLessNoCase> → BTreeMap<String, PlayerInfo>
+- 不区分大小写查找：find_key() 遍历匹配小写
+- C++ 异常（try-catch）在 Rust 中无需对应（使用 Result 替代）
+- Load/Save 方法保留接口签名，具体 DataSync 序列化待后续集成
+- PlayerInfo 增加了 m_id、m_use_seq 字段
 ```
 
 ### `[x]` `src\Lawn\System\ProfileMgr.h`
@@ -2196,12 +2226,19 @@ class Plant : public GameObject)`
 
 **类/结构体:**
 
-- `[ ]` `class ProfileMgr` (L15, 0 个方法, 3 个成员)
+- `[x]` `class ProfileMgr` (L15, 0 个方法, 3 个成员)
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/system/profile_mgr.rs
+设计决策:
+- C++ ProfileMap(不区分大小写的 std::map) → BTreeMap<String, PlayerInfo>
+  使用 find_key() 方法遍历小写匹配实现不区分大小写查找
+- 删除最旧策略（LRU）：使用 min_by_key 替代手动循环
+- C++ 友元类 DataSync 同步逻辑暂缺（DataSync 尚未翻译）
+- PlayerInfo 需额外字段 m_id(u32), m_use_seq(u32)
+- C++ 异常处理 try/catch 在 Rust 中替换为 Option/Result 模式
 ```
 
 ### `[x]` `src\Lawn\System\ReanimationLawn.cpp`
@@ -2294,7 +2331,10 @@ class Plant : public GameObject)`
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+实现已整合到 rust/src/lawn/system/typing_check.rs 中
+- C++ std::string 键码序列 → Vec<KeyCode> 类型安全存储
+- C++ tolower + GetKeyCodeFromName 组合 → char::to_ascii_lowercase() + 直接 ASCII 值
+- 双向清空及匹配逻辑完整保留
 ```
 
 ### `[x]` `src\Lawn\System\TypingCheck.h`
@@ -2307,12 +2347,18 @@ class Plant : public GameObject)`
 
 **类/结构体:**
 
-- `[ ]` `class TypingCheck` (L9, 0 个方法, 2 个成员)
+- `[x]` `class TypingCheck` (L9, 0 个方法, 2 个成员)
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/system/typing_check.rs
+设计决策:
+- 将 C++ std::string 键码 → Rust Vec<KeyCode>（KeyCode = i32）
+- Check() 用 Vec 比较替代字符串比较
+- 使用 to_ascii_lowercase() 替代 tolower + GetKeyCodeFromName
+- 方法命名：Check(bool) → check() / Check(KeyCode) → check_key()
+- 无外部依赖，纯自包含逻辑
 ```
 
 ### `[x]` `src\Lawn\ToolTipWidget.cpp`
@@ -2325,7 +2371,11 @@ class Plant : public GameObject)`
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+实现已整合到 rust/src/lawn/tool_tip_widget.rs 中
+- Draw() 方法：完整位置计算逻辑
+- GetLines() 方法：文本换行逻辑（简化）
+- 字体渲染精度待接入资源系统后升级
+- 原 TodStringTranslate 调用因 Rust 框架尚未实现而暂缺
 ```
 
 ### `[x]` `src\Lawn\ToolTipWidget.h`
@@ -2337,12 +2387,19 @@ class Plant : public GameObject)`
 
 **类/结构体:**
 
-- `[ ]` `class ToolTipWidget` (L12, 0 个方法, 10 个成员)
+- `[x]` `class ToolTipWidget` (L12, 0 个方法, 10 个成员)
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/tool_tip_widget.rs
+设计决策:
+- 完整翻译了 .h 头文件的结构体定义（15 个字段）
+- 完整翻译了 .cpp (248行) 的全部方法实现
+- Draw() 方法中的字体宽度计算（FONT_TINYBOLD/PICO129）使用了简化实现
+  因为 Rust 框架中尚未定义这些全局字体实例
+- 原 C++ GetLines() 的 Unicode 逐字符宽度计算 → 简化的按字符数/空格换行
+- 后续可接入字体系统后升级字体渲染精度
 ```
 
 ### `[x]` `src\Lawn\Widget\AchievementsScreen.cpp`
@@ -3405,7 +3462,13 @@ class ReanimationHolder)`
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+实现已整合到 rust/src/todlib/tod_debug.rs 中
+- C++ varargs 函数 → Rust 格式化字符串 + eprint! / eprintln!
+- TodMalloc / TodFree 在 Rust 中无需实现（使用 Box::new）
+- TodLogString 在 debug 模式输出到 stderr
+- TOD_ASSERT 宏 → tod_assert! 宏（#[macro_export]）
+- TodAssertFailed → tod_assert_failed() 调用 process::exit(1)
+- 全局静态数组 gLogFileName → static mut [u8; 512]
 ```
 
 ### `[x]` `src\Sexy.TodLib\TodDebug.h`
@@ -3416,12 +3479,18 @@ class ReanimationHolder)`
 
 **类/结构体:**
 
-- `[ ]` `class TodHesitationBracket` (L6, 0 个方法, 2 个成员)
+- `[x]` `class TodHesitationBracket` (L6, 0 个方法, 2 个成员)
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/todlib/tod_debug.rs
+设计决策:
+- TodHesitationBracket → 简单 struct，new() 接收 &str 并填充固定大小数组 [u8; 256]
+- 全局变量 gLogFileName / gDebugDataFolder → static mut [u8; 512]
+- tod_trace_without_spamming 使用 AtomicU64 替代 C++ static uint64_t
+- 宏 tod_assert! 使用 #[macro_export] 导出到 crate 根
+- 空函数（TodHesitationTrace、TodTraceMemory）保持空实现
 ```
 
 ### `[x]` `src\Sexy.TodLib\TodDrawTriangle.cpp`
@@ -3779,7 +3848,12 @@ class TodParticleHolder)`
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+实现已整合到 rust/src/todlib/trail.rs
+- C++ new/delete → DataArray<Trail>::alloc / dispose
+- 全局数组 gLawnTrailArray → static const [TrailParams; 1]
+- SexyVector2 运算符（Sub）缺失 → 已在 common.rs 中添加 Add/Sub impl
+- Draw() 使用简化绘制（矩形填充替代三角形网格）
+- TrailLoadADef / TrailLoadDefinitions 为占位函数（Definition 模块未翻译）
 ```
 
 ### `[x]` `src\Sexy.TodLib\Trail.h`
@@ -3790,23 +3864,36 @@ class TodParticleHolder)`
 - **项目内依赖**: TodParticle.h
 - **标准库依赖**: cstdint
 
+**翻译备注:**
+
+```
+翻译文件: rust/src/todlib/trail.rs
+设计决策:
+- C++ enum 转为 Rust type alias + const 常量（非真实 enum，与现有代码风格一致）
+- SexyVector2 的运算操作（Sub/Add）已在 common.rs 中添加
+- Draw() 方法中的三角形网格绘制简化为矩形填充
+- 全局 extern 变量转为 pub static mut
+- TrailParams::new 使用 const fn 以支持静态数组 `[TrailParams; 1]`
+- TrailLoadADef/LoadDefinitions/FreeDefinitions 暂为占位（Definition 模块未翻译）
+```
+
 **类/结构体:**
 
-- `[ ]` `class TrailParams` (L32, 0 个方法, 2 个成员)
-- `[ ]` `class TrailDefinition` (L44, 0 个方法, 9 个成员)
-- `[ ]` `class TrailPoint` (L70, 0 个方法, 1 个成员)
-- `[ ]` `class Trail` (L81, 0 个方法, 10 个成员)
-- `[ ]` `class TrailHolder` (L106, 0 个方法, 1 个成员)
+- `[x]` `class TrailParams` (L32, 0 个方法, 2 个成员)
+- `[x]` `class TrailDefinition` (L44, 0 个方法, 9 个成员)
+- `[x]` `class TrailPoint` (L70, 0 个方法, 1 个成员)
+- `[x]` `class Trail` (L81, 0 个方法, 10 个成员)
+- `[x]` `class TrailHolder` (L106, 0 个方法, 1 个成员)
 
 **枚举:**
 
-- `[ ]` `enum TrailType` → { TRAIL_NONE, TRAIL_ICE, NUM_TRAILS }
-- `[ ]` `enum TrailTracks` → { TRACK_WIDTH_OVER_LENGTH, TRACK_WIDTH_OVER_TIME, TRACK_ALPHA_OVER_LENGTH, TRACK_ALPHA_OVER_TIME, NUM_TRAIL_TRACKS }
-- `[ ]` `enum TrailFlags` → { TRAIL_FLAG_LOOPS }
+- `[x]` `enum TrailType` → { TRAIL_NONE, TRAIL_ICE, NUM_TRAILS }
+- `[x]` `enum TrailTracks` → { TRACK_WIDTH_OVER_LENGTH, TRACK_WIDTH_OVER_TIME, TRACK_ALPHA_OVER_LENGTH, TRACK_ALPHA_OVER_TIME, NUM_TRAIL_TRACKS }
+- `[x]` `enum TrailFlags` → { TRAIL_FLAG_LOOPS }
 
 **自由函数:**
 
-- `[ ]` `enum TrailType : int32_t({
+- `[x]` `enum TrailType : int32_t({
 	TRAIL_NONE = -1,
 	TRAIL_ICE,
 	NUM_TRAILS

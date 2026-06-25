@@ -230,6 +230,20 @@ impl SexyVector2 {
     }
 }
 
+impl std::ops::Add for SexyVector2 {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self {
+        SexyVector2 { x: self.x + rhs.x, y: self.y + rhs.y }
+    }
+}
+
+impl std::ops::Sub for SexyVector2 {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self {
+        SexyVector2 { x: self.x - rhs.x, y: self.y - rhs.y }
+    }
+}
+
 // ============================================================
 // UTF8 编解码（对应 C++ Common.h UTF8DecodeNext）
 // ============================================================
