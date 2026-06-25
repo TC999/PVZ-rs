@@ -219,7 +219,7 @@ impl LawnApp {
             eprintln!("[LawnApp] Music 创建完成");
         }
         if self.sound_system.is_none() {
-            self.sound_system = Some(Box::new(crate::todlib::tod_foley::FoleyManager::new(app_ptr)));
+            self.sound_system = Some(Box::new(crate::todlib::tod_foley::FoleyManager::new()));
             eprintln!("[LawnApp] FoleyManager 创建完成");
         }
 

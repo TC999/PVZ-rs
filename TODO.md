@@ -3623,20 +3623,33 @@ class ReanimationHolder)`
 
 **类/结构体:**
 
-- `[ ]` `class FoleyParams` (L136, 0 个方法, 4 个成员)
-- `[ ]` `class TodDSoundInstance : SDLSoundInstance` (L158, 0 个方法, 1 个成员)
-- `[ ]` `class FoleyInstance` (L169, 0 个方法, 5 个成员)
-- `[ ]` `class FoleyTypeData` (L182, 0 个方法, 2 个成员)
-- `[ ]` `class TodFoley` (L192, 0 个方法, 1 个成员)
+- `[x]` `class FoleyParams` (L136, 0 个方法, 4 个成员)
+- `[x]` `class TodDSoundInstance : SDLSoundInstance` (L158, 0 个方法, 1 个成员)
+- `[x]` `class FoleyInstance` (L169, 0 个方法, 5 个成员)
+- `[x]` `class FoleyTypeData` (L182, 0 个方法, 2 个成员)
+- `[x]` `class TodFoley` (L192, 0 个方法, 1 个成员) — 类型定义完成，方法存根
 
 **枚举:**
 
-- `[ ]` `enum FoleyFlags` → { FOLEYFLAGS_LOOP, FOLEYFLAGS_ONE_AT_A_TIME, FOLEYFLAGS_MUTE_ON_PAUSE, FOLEYFLAGS_USES_MUSIC_VOLUME, FOLEYFLAGS_DONT_REPEAT }
-- `[ ]` `enum FoleyType` → { FOLEY_SUN, FOLEY_SPLAT, FOLEY_LAWNMOWER, FOLEY_THROW, FOLEY_SPAWN_SUN, ... (105 个值) }
+- `[x]` `enum FoleyFlags` → { FOLEYFLAGS_LOOP, FOLEYFLAGS_ONE_AT_A_TIME, FOLEYFLAGS_MUTE_ON_PAUSE, FOLEYFLAGS_USES_MUSIC_VOLUME, FOLEYFLAGS_DONT_REPEAT }
+- `[x]` `enum FoleyType` → { FOLEY_SUN, FOLEY_SPLAT, FOLEY_LAWNMOWER, FOLEY_THROW, FOLEY_SPAWN_SUN, ... (105 个值) }
 
-**自由函数:**
+**翻译备注:**
 
-- `[ ]` `enum FoleyFlags : int32_t({
+```
+翻译文件: rust/src/todlib/tod_foley.rs
+设计决策:
+- FoleyFlags 枚举 → Rust enum（5个值）
+- FoleyType 枚举 → Rust #[repr(i32)] enum（105个值 + NumFoley）
+- FoleyParams 结构体 → Rust struct（sfx_id: [Option<*mut usize>; 10]）
+- TodDSoundInstance → Rust struct（简化，不含 SDLSoundInstance 继承）
+- FoleyInstance → Rust struct（instance: Option<*mut dyn SoundInstance>）
+- FoleyTypeData → Rust struct（foley_instances 数组 + last_variation_played）
+- TodFoley → Rust struct（foley_type_data: Vec<FoleyTypeData>）
+- 别名 FoleyManager = TodFoley 保持向后兼容
+- 宏常量 MAX_FOLEY_TYPES=110, MAX_FOLEY_INSTANCES=8
+- 全局变量 gFoleyParamArray 等暂未翻译
+```
     FOLEYFLAGS_LOOP,                
     FOLEYFLAGS_ONE_AT_A_TIME,       
     FOLEYFLAGS_MUTE_ON_PAUSE,       
