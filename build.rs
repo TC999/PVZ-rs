@@ -83,6 +83,9 @@ fn download_and_extract(version: &str, arch_dir: &std::path::Path, done_file: &s
     // 清理旧临时目录
     let _ = std::fs::remove_dir_all(&extract_dir);
 
+    // 确保 zip 父目录存在
+    let _ = std::fs::create_dir_all(sdk_dir);
+
     // 如果 zip 已存在不必重新下载
     if zip_path.exists() {
         println!("cargo:warning=使用已有开发包: {}", zip_path.display());
