@@ -1277,7 +1277,7 @@ enum ZombieType : int32_t)`
 编译状态: cargo check 通过
 ```
 
-### `[ ]` `src\GameConstants.h`
+### `[x]` `src\GameConstants.h`
 
 - **行数**: 83
 - **难度**: 🟢 低
@@ -1287,10 +1287,16 @@ enum ZombieType : int32_t)`
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: lawn/game_enums.rs（常量区域）
+设计决策:
+- 所有 constexpr int → pub const i32
+- 常量按功能分组布局/关卡/商店三组插入到现有常量之后
+- FINAL_LEVEL = 50 直接赋值而非引用 NUM_LEVELS
+- 无类/结构体/枚举，纯常量头文件
+编译状态: cargo check 通过
 ```
 
-### `[ ]` `src\LawnApp.cpp`
+### `[x]` `src\LawnApp.cpp`
 
 - **行数**: 3414
 - **难度**: 🟡 中
@@ -1304,7 +1310,7 @@ enum ZombieType : int32_t)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\LawnApp.h`
+### `[x]` `src\LawnApp.h`
 
 - **行数**: 352
 - **难度**: 🟡 中
@@ -1326,7 +1332,7 @@ enum ZombieType : int32_t)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Resources.cpp`
+### `[x]` `src\Resources.cpp`
 
 - **行数**: 3274
 - **难度**: 🟡 中
@@ -1340,7 +1346,7 @@ enum ZombieType : int32_t)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Resources.h`
+### `[x]` `src\Resources.h`
 
 - **行数**: 1915
 - **难度**: 🟢 低
@@ -1357,7 +1363,7 @@ enum ZombieType : int32_t)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\main.cpp`
+### `[x]` `src\main.cpp`
 
 - **行数**: 159
 - **难度**: 🟢 低
@@ -1377,7 +1383,7 @@ enum ZombieType : int32_t)`
 
 > 文件数: 83 | 行数: 63881 | 类: 77 | 函数: 26
 
-### `[ ]` `src\Lawn\Board.cpp`
+### `[x]` `src\Lawn\Board.cpp`
 
 - **行数**: 9857
 - **难度**: 🟡 中
@@ -1391,7 +1397,7 @@ enum ZombieType : int32_t)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Board.h`
+### `[x]` `src\Lawn\Board.h`
 
 - **行数**: 519
 - **难度**: 🟡 中
@@ -1414,7 +1420,7 @@ enum ZombieType : int32_t)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\BoardInclude.h`
+### `[x]` `src\Lawn\BoardInclude.h`
 
 - **行数**: 40
 - **难度**: 🟢 低
@@ -1426,7 +1432,7 @@ enum ZombieType : int32_t)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Challenge.cpp`
+### `[x]` `src\Lawn\Challenge.cpp`
 
 - **行数**: 5583
 - **难度**: 🟢 低
@@ -1439,7 +1445,7 @@ enum ZombieType : int32_t)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Challenge.h`
+### `[x]` `src\Lawn\Challenge.h`
 
 - **行数**: 273
 - **难度**: 🟢 低
@@ -1479,7 +1485,7 @@ class Challenge)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Coin.cpp`
+### `[x]` `src\Lawn\Coin.cpp`
 
 - **行数**: 1533
 - **难度**: 🟢 低
@@ -1492,7 +1498,7 @@ class Challenge)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Coin.h`
+### `[x]` `src\Lawn\Coin.h`
 
 - **行数**: 101
 - **难度**: 🟢 低
@@ -1510,7 +1516,7 @@ class Challenge)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\CursorObject.cpp`
+### `[x]` `src\Lawn\CursorObject.cpp`
 
 - **行数**: 341
 - **难度**: 🟢 低
@@ -1523,7 +1529,7 @@ class Challenge)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\CursorObject.h`
+### `[x]` `src\Lawn\CursorObject.h`
 
 - **行数**: 63
 - **难度**: 🟢 低
@@ -1547,7 +1553,7 @@ class Challenge)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\CutScene.cpp`
+### `[x]` `src\Lawn\CutScene.cpp`
 
 - **行数**: 2383
 - **难度**: 🟡 中
@@ -1560,7 +1566,7 @@ class Challenge)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Cutscene.h`
+### `[x]` `src\Lawn\Cutscene.h`
 
 - **行数**: 115
 - **难度**: 🟢 低
@@ -1577,7 +1583,7 @@ class Challenge)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\GameObject.cpp`
+### `[x]` `src\Lawn\GameObject.cpp`
 
 - **行数**: 55
 - **难度**: 🟢 低
@@ -1590,7 +1596,7 @@ class Challenge)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\GameObject.h`
+### `[x]` `src\Lawn\GameObject.h`
 
 - **行数**: 52
 - **难度**: 🟢 低
@@ -1608,7 +1614,7 @@ class Challenge)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\GridItem.cpp`
+### `[x]` `src\Lawn\GridItem.cpp`
 
 - **行数**: 673
 - **难度**: 🟢 低
@@ -1621,7 +1627,7 @@ class Challenge)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\GridItem.h`
+### `[x]` `src\Lawn\GridItem.h`
 
 - **行数**: 98
 - **难度**: 🟢 低
@@ -1640,7 +1646,7 @@ class Challenge)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\LawnCommon.cpp`
+### `[x]` `src\Lawn\LawnCommon.cpp`
 
 - **行数**: 152
 - **难度**: 🟢 低
@@ -1654,7 +1660,7 @@ class Challenge)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\LawnCommon.h`
+### `[x]` `src\Lawn\LawnCommon.h`
 
 - **行数**: 83
 - **难度**: 🟢 低
@@ -1671,7 +1677,7 @@ class Challenge)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\LawnMower.cpp`
+### `[x]` `src\Lawn\LawnMower.cpp`
 
 - **行数**: 428
 - **难度**: 🟢 低
@@ -1684,7 +1690,7 @@ class Challenge)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\LawnMower.h`
+### `[x]` `src\Lawn\LawnMower.h`
 
 - **行数**: 73
 - **难度**: 🟢 低
@@ -1702,7 +1708,7 @@ class Challenge)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\MessageWidget.cpp`
+### `[x]` `src\Lawn\MessageWidget.cpp`
 
 - **行数**: 483
 - **难度**: 🟢 低
@@ -1715,7 +1721,7 @@ class Challenge)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\MessageWidget.h`
+### `[x]` `src\Lawn\MessageWidget.h`
 
 - **行数**: 69
 - **难度**: 🟢 低
@@ -1733,7 +1739,7 @@ class Challenge)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Plant.cpp`
+### `[x]` `src\Lawn\Plant.cpp`
 
 - **行数**: 5232
 - **难度**: 🟢 低
@@ -1746,7 +1752,7 @@ class Challenge)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Plant.h`
+### `[x]` `src\Lawn\Plant.h`
 
 - **行数**: 339
 - **难度**: 🟡 中
@@ -1913,7 +1919,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Projectile.cpp`
+### `[x]` `src\Lawn\Projectile.cpp`
 
 - **行数**: 1234
 - **难度**: 🟢 低
@@ -1926,7 +1932,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Projectile.h`
+### `[x]` `src\Lawn\Projectile.h`
 
 - **行数**: 108
 - **难度**: 🟢 低
@@ -1945,7 +1951,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\SeedPacket.cpp`
+### `[x]` `src\Lawn\SeedPacket.cpp`
 
 - **行数**: 1191
 - **难度**: 🟢 低
@@ -1958,7 +1964,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\SeedPacket.h`
+### `[x]` `src\Lawn\SeedPacket.h`
 
 - **行数**: 95
 - **难度**: 🟢 低
@@ -1982,7 +1988,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\System\DataSync.cpp`
+### `[x]` `src\Lawn\System\DataSync.cpp`
 
 - **行数**: 550
 - **难度**: 🔴 高
@@ -1995,7 +2001,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\System\DataSync.h`
+### `[x]` `src\Lawn\System\DataSync.h`
 
 - **行数**: 162
 - **难度**: 🟡 中
@@ -2014,7 +2020,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\System\Music.cpp`
+### `[x]` `src\Lawn\System\Music.cpp`
 
 - **行数**: 706
 - **难度**: 🟢 低
@@ -2027,7 +2033,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\System\Music.h`
+### `[x]` `src\Lawn\System\Music.h`
 
 - **行数**: 139
 - **难度**: 🟢 低
@@ -2053,7 +2059,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\System\PlayerInfo.cpp`
+### `[x]` `src\Lawn\System\PlayerInfo.cpp`
 
 - **行数**: 285
 - **难度**: 🟢 低
@@ -2066,7 +2072,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\System\PlayerInfo.h`
+### `[x]` `src\Lawn\System\PlayerInfo.h`
 
 - **行数**: 123
 - **难度**: 🟢 低
@@ -2089,7 +2095,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\System\PoolEffect.cpp`
+### `[x]` `src\Lawn\System\PoolEffect.cpp`
 
 - **行数**: 260
 - **难度**: 🟡 中
@@ -2102,7 +2108,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\System\PoolEffect.h`
+### `[x]` `src\Lawn\System\PoolEffect.h`
 
 - **行数**: 56
 - **难度**: 🟢 低
@@ -2119,7 +2125,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\System\ProfileMgr.cpp`
+### `[x]` `src\Lawn\System\ProfileMgr.cpp`
 
 - **行数**: 210
 - **难度**: 🟡 中
@@ -2136,7 +2142,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\System\ProfileMgr.h`
+### `[x]` `src\Lawn\System\ProfileMgr.h`
 
 - **行数**: 67
 - **难度**: 🟢 低
@@ -2154,7 +2160,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\System\ReanimationLawn.cpp`
+### `[x]` `src\Lawn\System\ReanimationLawn.cpp`
 
 - **行数**: 438
 - **难度**: 🟡 中
@@ -2167,7 +2173,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\System\ReanimationLawn.h`
+### `[x]` `src\Lawn\System\ReanimationLawn.h`
 
 - **行数**: 71
 - **难度**: 🟢 低
@@ -2185,7 +2191,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\System\SaveGame.cpp`
+### `[x]` `src\Lawn\System\SaveGame.cpp`
 
 - **行数**: 3115
 - **难度**: 🔴 高
@@ -2221,7 +2227,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\System\SaveGame.h`
+### `[x]` `src\Lawn\System\SaveGame.h`
 
 - **行数**: 32
 - **难度**: 🟢 低
@@ -2234,7 +2240,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\System\TypingCheck.cpp`
+### `[x]` `src\Lawn\System\TypingCheck.cpp`
 
 - **行数**: 69
 - **难度**: 🟢 低
@@ -2247,7 +2253,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\System\TypingCheck.h`
+### `[x]` `src\Lawn\System\TypingCheck.h`
 
 - **行数**: 45
 - **难度**: 🟢 低
@@ -2265,7 +2271,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\ToolTipWidget.cpp`
+### `[x]` `src\Lawn\ToolTipWidget.cpp`
 
 - **行数**: 248
 - **难度**: 🟢 低
@@ -2278,7 +2284,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\ToolTipWidget.h`
+### `[x]` `src\Lawn\ToolTipWidget.h`
 
 - **行数**: 63
 - **难度**: 🟢 低
@@ -2295,7 +2301,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\AchievementsScreen.cpp`
+### `[x]` `src\Lawn\Widget\AchievementsScreen.cpp`
 
 - **行数**: 288
 - **难度**: 🟢 低
@@ -2308,7 +2314,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\AchievementsScreen.h`
+### `[x]` `src\Lawn\Widget\AchievementsScreen.h`
 
 - **行数**: 93
 - **难度**: 🟢 低
@@ -2331,7 +2337,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\AlmanacDialog.cpp`
+### `[x]` `src\Lawn\Widget\AlmanacDialog.cpp`
 
 - **行数**: 704
 - **难度**: 🟡 中
@@ -2344,7 +2350,7 @@ class Plant : public GameObject)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\AlmanacDialog.h`
+### `[x]` `src\Lawn\Widget\AlmanacDialog.h`
 
 - **行数**: 103
 - **难度**: 🟢 低
@@ -2367,7 +2373,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\AwardScreen.cpp`
+### `[x]` `src\Lawn\Widget\AwardScreen.cpp`
 
 - **行数**: 664
 - **难度**: 🟡 中
@@ -2380,7 +2386,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\AwardScreen.h`
+### `[x]` `src\Lawn\Widget\AwardScreen.h`
 
 - **行数**: 86
 - **难度**: 🟢 低
@@ -2404,7 +2410,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\ChallengeScreen.cpp`
+### `[x]` `src\Lawn\Widget\ChallengeScreen.cpp`
 
 - **行数**: 742
 - **难度**: 🟡 中
@@ -2417,7 +2423,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\ChallengeScreen.h`
+### `[x]` `src\Lawn\Widget\ChallengeScreen.h`
 
 - **行数**: 102
 - **难度**: 🟢 低
@@ -2439,7 +2445,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\CheatDialog.cpp`
+### `[x]` `src\Lawn\Widget\CheatDialog.cpp`
 
 - **行数**: 154
 - **难度**: 🟢 低
@@ -2452,7 +2458,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\CheatDialog.h`
+### `[x]` `src\Lawn\Widget\CheatDialog.h`
 
 - **行数**: 48
 - **难度**: 🟢 低
@@ -2469,7 +2475,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\ContinueDialog.cpp`
+### `[x]` `src\Lawn\Widget\ContinueDialog.cpp`
 
 - **行数**: 186
 - **难度**: 🟢 低
@@ -2482,7 +2488,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\ContinueDialog.h`
+### `[x]` `src\Lawn\Widget\ContinueDialog.h`
 
 - **行数**: 52
 - **难度**: 🟢 低
@@ -2505,7 +2511,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\CreditScreen.cpp`
+### `[x]` `src\Lawn\Widget\CreditScreen.cpp`
 
 - **行数**: 1783
 - **难度**: 🟡 中
@@ -2518,7 +2524,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\CreditScreen.h`
+### `[x]` `src\Lawn\Widget\CreditScreen.h`
 
 - **行数**: 158
 - **难度**: 🟢 低
@@ -2548,7 +2554,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\GameButton.cpp`
+### `[x]` `src\Lawn\Widget\GameButton.cpp`
 
 - **行数**: 427
 - **难度**: 🟡 中
@@ -2561,7 +2567,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\GameButton.h`
+### `[x]` `src\Lawn\Widget\GameButton.h`
 
 - **行数**: 139
 - **难度**: 🟢 低
@@ -2585,7 +2591,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\GameSelector.cpp`
+### `[x]` `src\Lawn\Widget\GameSelector.cpp`
 
 - **行数**: 1503
 - **难度**: 🟡 中
@@ -2598,7 +2604,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\GameSelector.h`
+### `[x]` `src\Lawn\Widget\GameSelector.h`
 
 - **行数**: 159
 - **难度**: 🟢 低
@@ -2624,7 +2630,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\ImitaterDialog.cpp`
+### `[x]` `src\Lawn\Widget\ImitaterDialog.cpp`
 
 - **行数**: 186
 - **难度**: 🟢 低
@@ -2637,7 +2643,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\ImitaterDialog.h`
+### `[x]` `src\Lawn\Widget\ImitaterDialog.h`
 
 - **行数**: 49
 - **难度**: 🟢 低
@@ -2658,7 +2664,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\LawnDialog.cpp`
+### `[x]` `src\Lawn\Widget\LawnDialog.cpp`
 
 - **行数**: 536
 - **难度**: 🟡 中
@@ -2671,7 +2677,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\LawnDialog.h`
+### `[x]` `src\Lawn\Widget\LawnDialog.h`
 
 - **行数**: 111
 - **难度**: 🟢 低
@@ -2694,7 +2700,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\NewOptionsDialog.cpp`
+### `[x]` `src\Lawn\Widget\NewOptionsDialog.cpp`
 
 - **行数**: 399
 - **难度**: 🟡 中
@@ -2707,7 +2713,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\NewOptionsDialog.h`
+### `[x]` `src\Lawn\Widget\NewOptionsDialog.h`
 
 - **行数**: 81
 - **难度**: 🟢 低
@@ -2720,7 +2726,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\NewUserDialog.cpp`
+### `[x]` `src\Lawn\Widget\NewUserDialog.cpp`
 
 - **行数**: 125
 - **难度**: 🟢 低
@@ -2733,7 +2739,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\NewUserDialog.h`
+### `[x]` `src\Lawn\Widget\NewUserDialog.h`
 
 - **行数**: 49
 - **难度**: 🟢 低
@@ -2750,7 +2756,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\SeedChooserScreen.cpp`
+### `[x]` `src\Lawn\Widget\SeedChooserScreen.cpp`
 
 - **行数**: 1149
 - **难度**: 🟡 中
@@ -2763,7 +2769,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\SeedChooserScreen.h`
+### `[x]` `src\Lawn\Widget\SeedChooserScreen.h`
 
 - **行数**: 137
 - **难度**: 🟢 低
@@ -2781,7 +2787,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\StoreScreen.cpp`
+### `[x]` `src\Lawn\Widget\StoreScreen.cpp`
 
 - **行数**: 1173
 - **难度**: 🟡 中
@@ -2795,7 +2801,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\StoreScreen.h`
+### `[x]` `src\Lawn\Widget\StoreScreen.h`
 
 - **行数**: 123
 - **难度**: 🟢 低
@@ -2820,7 +2826,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\TitleScreen.cpp`
+### `[x]` `src\Lawn\Widget\TitleScreen.cpp`
 
 - **行数**: 562
 - **难度**: 🟡 中
@@ -2833,7 +2839,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\TitleScreen.h`
+### `[x]` `src\Lawn\Widget\TitleScreen.h`
 
 - **行数**: 97
 - **难度**: 🟢 低
@@ -2850,7 +2856,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\UserDialog.cpp`
+### `[x]` `src\Lawn\Widget\UserDialog.cpp`
 
 - **行数**: 207
 - **难度**: 🟡 中
@@ -2863,7 +2869,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Widget\UserDialog.h`
+### `[x]` `src\Lawn\Widget\UserDialog.h`
 
 - **行数**: 69
 - **难度**: 🟢 低
@@ -2880,7 +2886,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\ZenGarden.cpp`
+### `[x]` `src\Lawn\ZenGarden.cpp`
 
 - **行数**: 2452
 - **难度**: 🟢 低
@@ -2894,7 +2900,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\ZenGarden.h`
+### `[x]` `src\Lawn\ZenGarden.h`
 
 - **行数**: 154
 - **难度**: 🟢 低
@@ -2913,7 +2919,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Zombie.cpp`
+### `[x]` `src\Lawn\Zombie.cpp`
 
 - **行数**: 10584
 - **难度**: 🟢 低
@@ -2927,7 +2933,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Lawn\Zombie.h`
+### `[x]` `src\Lawn\Zombie.h`
 
 - **行数**: 435
 - **难度**: 🟡 中
@@ -3004,7 +3010,7 @@ public:
 
 > 文件数: 29 | 行数: 12467 | 类: 58 | 函数: 7
 
-### `[ ]` `src\Sexy.TodLib\Attachment.cpp`
+### `[x]` `src\Sexy.TodLib\Attachment.cpp`
 
 - **行数**: 1015
 - **难度**: 🟢 低
@@ -3017,7 +3023,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\Attachment.h`
+### `[x]` `src\Sexy.TodLib\Attachment.h`
 
 - **行数**: 120
 - **难度**: 🟢 低
@@ -3038,7 +3044,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\DataArray.h`
+### `[x]` `src\Sexy.TodLib\DataArray.h`
 
 - **行数**: 186
 - **难度**: 🟡 中
@@ -3057,7 +3063,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\Definition.cpp`
+### `[x]` `src\Sexy.TodLib\Definition.cpp`
 
 - **行数**: 1448
 - **难度**: 🟡 中
@@ -3071,7 +3077,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\Definition.h`
+### `[x]` `src\Sexy.TodLib\Definition.h`
 
 - **行数**: 229
 - **难度**: 🟢 低
@@ -3157,7 +3163,7 @@ class DefMap)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\EffectSystem.cpp`
+### `[x]` `src\Sexy.TodLib\EffectSystem.cpp`
 
 - **行数**: 541
 - **难度**: 🟢 低
@@ -3170,7 +3176,7 @@ class DefMap)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\EffectSystem.h`
+### `[x]` `src\Sexy.TodLib\EffectSystem.h`
 
 - **行数**: 178
 - **难度**: 🟢 低
@@ -3189,7 +3195,7 @@ class DefMap)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\FilterEffect.cpp`
+### `[x]` `src\Sexy.TodLib\FilterEffect.cpp`
 
 - **行数**: 195
 - **难度**: 🟢 低
@@ -3202,7 +3208,7 @@ class DefMap)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\FilterEffect.h`
+### `[x]` `src\Sexy.TodLib\FilterEffect.h`
 
 - **行数**: 56
 - **难度**: 🟢 低
@@ -3220,7 +3226,7 @@ class DefMap)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\ReanimAtlas.cpp`
+### `[x]` `src\Sexy.TodLib\ReanimAtlas.cpp`
 
 - **行数**: 266
 - **难度**: 🟡 中
@@ -3233,7 +3239,7 @@ class DefMap)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\ReanimAtlas.h`
+### `[x]` `src\Sexy.TodLib\ReanimAtlas.h`
 
 - **行数**: 75
 - **难度**: 🟢 低
@@ -3251,7 +3257,7 @@ class DefMap)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\Reanimator.cpp`
+### `[x]` `src\Sexy.TodLib\Reanimator.cpp`
 
 - **行数**: 1501
 - **难度**: 🟡 中
@@ -3264,7 +3270,7 @@ class DefMap)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\Reanimator.h`
+### `[x]` `src\Sexy.TodLib\Reanimator.h`
 
 - **行数**: 286
 - **难度**: 🟢 低
@@ -3306,7 +3312,7 @@ class ReanimationHolder)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\TodCommon.cpp`
+### `[x]` `src\Sexy.TodLib\TodCommon.cpp`
 
 - **行数**: 1324
 - **难度**: 🔴 高
@@ -3319,7 +3325,7 @@ class ReanimationHolder)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\TodCommon.h`
+### `[x]` `src\Sexy.TodLib\TodCommon.h`
 
 - **行数**: 179
 - **难度**: 🔴 高
@@ -3344,7 +3350,7 @@ class ReanimationHolder)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\TodDebug.cpp`
+### `[x]` `src\Sexy.TodLib\TodDebug.cpp`
 
 - **行数**: 248
 - **难度**: 🟡 中
@@ -3358,7 +3364,7 @@ class ReanimationHolder)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\TodDebug.h`
+### `[x]` `src\Sexy.TodLib\TodDebug.h`
 
 - **行数**: 62
 - **难度**: 🟢 低
@@ -3374,7 +3380,7 @@ class ReanimationHolder)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\TodDrawTriangle.cpp`
+### `[x]` `src\Sexy.TodLib\TodDrawTriangle.cpp`
 
 - **行数**: 315
 - **难度**: 🟢 低
@@ -3387,7 +3393,7 @@ class ReanimationHolder)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\TodDrawTriangleInc.cpp`
+### `[x]` `src\Sexy.TodLib\TodDrawTriangleInc.cpp`
 
 - **行数**: 517
 - **难度**: 🟢 低
@@ -3400,7 +3406,7 @@ class ReanimationHolder)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\TodFoley.cpp`
+### `[x]` `src\Sexy.TodLib\TodFoley.cpp`
 
 - **行数**: 430
 - **难度**: 🟢 低
@@ -3413,7 +3419,7 @@ class ReanimationHolder)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\TodFoley.h`
+### `[x]` `src\Sexy.TodLib\TodFoley.h`
 
 - **行数**: 232
 - **难度**: 🟡 中
@@ -3562,7 +3568,7 @@ class FoleyParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\TodList.cpp`
+### `[x]` `src\Sexy.TodLib\TodList.cpp`
 
 - **行数**: 127
 - **难度**: 🟢 低
@@ -3575,7 +3581,7 @@ class FoleyParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\TodList.h`
+### `[x]` `src\Sexy.TodLib\TodList.h`
 
 - **行数**: 193
 - **难度**: 🟡 中
@@ -3594,7 +3600,7 @@ class FoleyParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\TodParticle.cpp`
+### `[x]` `src\Sexy.TodLib\TodParticle.cpp`
 
 - **行数**: 1290
 - **难度**: 🟡 中
@@ -3607,7 +3613,7 @@ class FoleyParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\TodParticle.h`
+### `[x]` `src\Sexy.TodLib\TodParticle.h`
 
 - **行数**: 413
 - **难度**: 🟢 低
@@ -3685,7 +3691,7 @@ class TodParticleHolder)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\TodStringFile.cpp`
+### `[x]` `src\Sexy.TodLib\TodStringFile.cpp`
 
 - **行数**: 510
 - **难度**: 🟢 低
@@ -3698,7 +3704,7 @@ class TodParticleHolder)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\TodStringFile.h`
+### `[x]` `src\Sexy.TodLib\TodStringFile.h`
 
 - **行数**: 73
 - **难度**: 🟢 低
@@ -3719,7 +3725,7 @@ class TodParticleHolder)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\Trail.cpp`
+### `[x]` `src\Sexy.TodLib\Trail.cpp`
 
 - **行数**: 318
 - **难度**: 🟡 中
@@ -3732,7 +3738,7 @@ class TodParticleHolder)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\Sexy.TodLib\Trail.h`
+### `[x]` `src\Sexy.TodLib\Trail.h`
 
 - **行数**: 140
 - **难度**: 🟢 低
@@ -3790,7 +3796,7 @@ class TrailParams)`
 
 > 文件数: 374 | 行数: 151073 | 类: 234 | 函数: 56
 
-### `[ ]` `src\SexyAppFramework\Common.cpp`
+### `[x]` `src\SexyAppFramework\Common.cpp`
 
 - **行数**: 607
 - **难度**: 🟢 低
@@ -3804,7 +3810,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\Common.h`
+### `[x]` `src\SexyAppFramework\Common.h`
 
 - **行数**: 395
 - **难度**: 🟡 中
@@ -3822,7 +3828,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\SexyApp.cpp`
+### `[x]` `src\SexyAppFramework\SexyApp.cpp`
 
 - **行数**: 148
 - **难度**: 🟢 低
@@ -3836,7 +3842,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\SexyApp.h`
+### `[x]` `src\SexyAppFramework\SexyApp.h`
 
 - **行数**: 64
 - **难度**: 🟢 低
@@ -3853,7 +3859,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\SexyAppBase.cpp`
+### `[x]` `src\SexyAppFramework\SexyAppBase.cpp`
 
 - **行数**: 4213
 - **难度**: 🟡 中
@@ -3867,7 +3873,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\SexyAppBase.h`
+### `[x]` `src\SexyAppFramework\SexyAppBase.h`
 
 - **行数**: 600
 - **难度**: 🟡 中
@@ -3885,7 +3891,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\fcaseopen\fcaseopen.c`
+### `[x]` `src\SexyAppFramework\fcaseopen\fcaseopen.c`
 
 - **行数**: 340
 - **难度**: 🟢 低
@@ -3899,7 +3905,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\fcaseopen\fcaseopen.h`
+### `[x]` `src\SexyAppFramework\fcaseopen\fcaseopen.h`
 
 - **行数**: 39
 - **难度**: 🟢 低
@@ -3912,7 +3918,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\glad\gles2.h`
+### `[x]` `src\SexyAppFramework\glad\gles2.h`
 
 - **行数**: 1784
 - **难度**: 🟢 低
@@ -3926,7 +3932,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\Color.cpp`
+### `[x]` `src\SexyAppFramework\graphics\Color.cpp`
 
 - **行数**: 164
 - **难度**: 🟢 低
@@ -3939,7 +3945,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\Color.h`
+### `[x]` `src\SexyAppFramework\graphics\Color.h`
 
 - **行数**: 67
 - **难度**: 🟢 低
@@ -3956,7 +3962,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\Font.cpp`
+### `[x]` `src\SexyAppFramework\graphics\Font.cpp`
 
 - **行数**: 77
 - **难度**: 🟢 低
@@ -3968,7 +3974,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\Font.h`
+### `[x]` `src\SexyAppFramework\graphics\Font.h`
 
 - **行数**: 67
 - **难度**: 🟢 低
@@ -3986,7 +3992,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\GLImage.cpp`
+### `[x]` `src\SexyAppFramework\graphics\GLImage.cpp`
 
 - **行数**: 220
 - **难度**: 🟡 中
@@ -3999,7 +4005,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\GLImage.h`
+### `[x]` `src\SexyAppFramework\graphics\GLImage.h`
 
 - **行数**: 76
 - **难度**: 🟢 低
@@ -4016,7 +4022,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\GLInterface.cpp`
+### `[x]` `src\SexyAppFramework\graphics\GLInterface.cpp`
 
 - **行数**: 1595
 - **难度**: 🔴 高
@@ -4034,7 +4040,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\GLInterface.h`
+### `[x]` `src\SexyAppFramework\graphics\GLInterface.h`
 
 - **行数**: 252
 - **难度**: 🔴 高
@@ -4064,7 +4070,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\GLPlatform.h`
+### `[x]` `src\SexyAppFramework\graphics\GLPlatform.h`
 
 - **行数**: 69
 - **难度**: 🟢 低
@@ -4077,7 +4083,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\Graphics.cpp`
+### `[x]` `src\SexyAppFramework\graphics\Graphics.cpp`
 
 - **行数**: 1407
 - **难度**: 🟡 中
@@ -4091,7 +4097,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\Graphics.h`
+### `[x]` `src\SexyAppFramework\graphics\Graphics.h`
 
 - **行数**: 224
 - **难度**: 🟡 中
@@ -4111,7 +4117,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\Image.cpp`
+### `[x]` `src\SexyAppFramework\graphics\Image.cpp`
 
 - **行数**: 279
 - **难度**: 🟡 中
@@ -4124,7 +4130,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\Image.h`
+### `[x]` `src\SexyAppFramework\graphics\Image.h`
 
 - **行数**: 129
 - **难度**: 🟢 低
@@ -4147,7 +4153,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\ImageFont.cpp`
+### `[x]` `src\SexyAppFramework\graphics\ImageFont.cpp`
 
 - **行数**: 1748
 - **难度**: 🟡 中
@@ -4160,7 +4166,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\ImageFont.h`
+### `[x]` `src\SexyAppFramework\graphics\ImageFont.h`
 
 - **行数**: 213
 - **难度**: 🟡 中
@@ -4186,7 +4192,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\MemoryImage.cpp`
+### `[x]` `src\SexyAppFramework\graphics\MemoryImage.cpp`
 
 - **行数**: 1848
 - **难度**: 🟡 中
@@ -4200,7 +4206,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\MemoryImage.h`
+### `[x]` `src\SexyAppFramework\graphics\MemoryImage.h`
 
 - **行数**: 137
 - **难度**: 🟢 低
@@ -4217,7 +4223,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\NativeDisplay.cpp`
+### `[x]` `src\SexyAppFramework\graphics\NativeDisplay.cpp`
 
 - **行数**: 52
 - **难度**: 🟢 低
@@ -4229,7 +4235,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\NativeDisplay.h`
+### `[x]` `src\SexyAppFramework\graphics\NativeDisplay.h`
 
 - **行数**: 56
 - **难度**: 🟢 低
@@ -4246,7 +4252,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\Quantize.cpp`
+### `[x]` `src\SexyAppFramework\graphics\Quantize.cpp`
 
 - **行数**: 101
 - **难度**: 🟢 低
@@ -4260,7 +4266,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\Quantize.h`
+### `[x]` `src\SexyAppFramework\graphics\Quantize.h`
 
 - **行数**: 37
 - **难度**: 🟢 低
@@ -4273,7 +4279,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\SWTri.cpp`
+### `[x]` `src\SexyAppFramework\graphics\SWTri.cpp`
 
 - **行数**: 679
 - **难度**: 🟢 低
@@ -4286,7 +4292,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\SWTri.h`
+### `[x]` `src\SexyAppFramework\graphics\SWTri.h`
 
 - **行数**: 207
 - **难度**: 🟢 低
@@ -4307,7 +4313,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\SWTri\SWTri_DrawTriangle.cpp`
+### `[x]` `src\SexyAppFramework\graphics\SWTri\SWTri_DrawTriangle.cpp`
 
 - **行数**: 303
 - **难度**: 🟢 低
@@ -4320,7 +4326,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\SWTri\SWTri_DrawTriangleInc1.cpp`
+### `[x]` `src\SexyAppFramework\graphics\SWTri\SWTri_DrawTriangleInc1.cpp`
 
 - **行数**: 786
 - **难度**: 🟢 低
@@ -4333,7 +4339,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\SWTri\SWTri_DrawTriangleInc2.cpp`
+### `[x]` `src\SexyAppFramework\graphics\SWTri\SWTri_DrawTriangleInc2.cpp`
 
 - **行数**: 166
 - **难度**: 🟢 低
@@ -4344,7 +4350,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\SWTri\SWTri_GetTexel.cpp`
+### `[x]` `src\SexyAppFramework\graphics\SWTri\SWTri_GetTexel.cpp`
 
 - **行数**: 67
 - **难度**: 🟢 低
@@ -4355,7 +4361,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\SWTri\SWTri_Loop.cpp`
+### `[x]` `src\SexyAppFramework\graphics\SWTri\SWTri_Loop.cpp`
 
 - **行数**: 83
 - **难度**: 🟢 低
@@ -4367,7 +4373,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\SWTri\SWTri_Pixel555.cpp`
+### `[x]` `src\SexyAppFramework\graphics\SWTri\SWTri_Pixel555.cpp`
 
 - **行数**: 92
 - **难度**: 🟢 低
@@ -4379,7 +4385,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\SWTri\SWTri_Pixel565.cpp`
+### `[x]` `src\SexyAppFramework\graphics\SWTri\SWTri_Pixel565.cpp`
 
 - **行数**: 92
 - **难度**: 🟢 低
@@ -4391,7 +4397,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\SWTri\SWTri_Pixel888.cpp`
+### `[x]` `src\SexyAppFramework\graphics\SWTri\SWTri_Pixel888.cpp`
 
 - **行数**: 88
 - **难度**: 🟢 低
@@ -4403,7 +4409,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\SWTri\SWTri_Pixel8888.cpp`
+### `[x]` `src\SexyAppFramework\graphics\SWTri\SWTri_Pixel8888.cpp`
 
 - **行数**: 109
 - **难度**: 🟢 低
@@ -4415,7 +4421,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\SWTri\SWTri_TexelARGB.cpp`
+### `[x]` `src\SexyAppFramework\graphics\SWTri\SWTri_TexelARGB.cpp`
 
 - **行数**: 63
 - **难度**: 🟢 低
@@ -4427,7 +4433,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\SharedImage.cpp`
+### `[x]` `src\SexyAppFramework\graphics\SharedImage.cpp`
 
 - **行数**: 130
 - **难度**: 🟢 低
@@ -4440,7 +4446,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\SharedImage.h`
+### `[x]` `src\SexyAppFramework\graphics\SharedImage.h`
 
 - **行数**: 75
 - **难度**: 🟢 低
@@ -4458,7 +4464,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\graphics\TriVertex.h`
+### `[x]` `src\SexyAppFramework\graphics\TriVertex.h`
 
 - **行数**: 51
 - **难度**: 🟢 低
@@ -4475,7 +4481,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\imagelib\ImageLib.cpp`
+### `[x]` `src\SexyAppFramework\imagelib\ImageLib.cpp`
 
 - **行数**: 1481
 - **难度**: 🟡 中
@@ -4495,7 +4501,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\imagelib\ImageLib.h`
+### `[x]` `src\SexyAppFramework\imagelib\ImageLib.h`
 
 - **行数**: 65
 - **难度**: 🟢 低
@@ -4512,7 +4518,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\Buffer.cpp`
+### `[x]` `src\SexyAppFramework\misc\Buffer.cpp`
 
 - **行数**: 526
 - **难度**: 🟢 低
@@ -4525,7 +4531,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\Buffer.h`
+### `[x]` `src\SexyAppFramework\misc\Buffer.h`
 
 - **行数**: 88
 - **难度**: 🟢 低
@@ -4543,7 +4549,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\Debug.cpp`
+### `[x]` `src\SexyAppFramework\misc\Debug.cpp`
 
 - **行数**: 269
 - **难度**: 🟢 低
@@ -4561,7 +4567,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\Debug.h`
+### `[x]` `src\SexyAppFramework\misc\Debug.h`
 
 - **行数**: 55
 - **难度**: 🟢 低
@@ -4575,7 +4581,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\DescParser.cpp`
+### `[x]` `src\SexyAppFramework\misc\DescParser.cpp`
 
 - **行数**: 580
 - **难度**: 🟡 中
@@ -4588,7 +4594,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\DescParser.h`
+### `[x]` `src\SexyAppFramework\misc\DescParser.h`
 
 - **行数**: 123
 - **难度**: 🟡 中
@@ -4608,7 +4614,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\Flags.cpp`
+### `[x]` `src\SexyAppFramework\misc\Flags.cpp`
 
 - **行数**: 25
 - **难度**: 🟢 低
@@ -4620,7 +4626,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\Flags.h`
+### `[x]` `src\SexyAppFramework\misc\Flags.h`
 
 - **行数**: 100
 - **难度**: 🟢 低
@@ -4638,7 +4644,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\KeyCodes.cpp`
+### `[x]` `src\SexyAppFramework\misc\KeyCodes.cpp`
 
 - **行数**: 184
 - **难度**: 🟢 低
@@ -4652,7 +4658,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\KeyCodes.h`
+### `[x]` `src\SexyAppFramework\misc\KeyCodes.h`
 
 - **行数**: 134
 - **难度**: 🟢 低
@@ -4669,7 +4675,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\MTRand.cpp`
+### `[x]` `src\SexyAppFramework\misc\MTRand.cpp`
 
 - **行数**: 196
 - **难度**: 🟢 低
@@ -4683,7 +4689,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\MTRand.h`
+### `[x]` `src\SexyAppFramework\misc\MTRand.h`
 
 - **行数**: 43
 - **难度**: 🟢 低
@@ -4701,7 +4707,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\ModVal.cpp`
+### `[x]` `src\SexyAppFramework\misc\ModVal.cpp`
 
 - **行数**: 407
 - **难度**: 🟡 中
@@ -4720,7 +4726,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\ModVal.h`
+### `[x]` `src\SexyAppFramework\misc\ModVal.h`
 
 - **行数**: 96
 - **难度**: 🟢 低
@@ -4733,7 +4739,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\PerfTimer.cpp`
+### `[x]` `src\SexyAppFramework\misc\PerfTimer.cpp`
 
 - **行数**: 322
 - **难度**: 🟢 低
@@ -4751,7 +4757,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\PerfTimer.h`
+### `[x]` `src\SexyAppFramework\misc\PerfTimer.h`
 
 - **行数**: 142
 - **难度**: 🟢 低
@@ -4770,7 +4776,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\Point.h`
+### `[x]` `src\SexyAppFramework\misc\Point.h`
 
 - **行数**: 79
 - **难度**: 🟡 中
@@ -4787,7 +4793,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\PropertiesParser.cpp`
+### `[x]` `src\SexyAppFramework\misc\PropertiesParser.cpp`
 
 - **行数**: 296
 - **难度**: 🟡 中
@@ -4801,7 +4807,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\PropertiesParser.h`
+### `[x]` `src\SexyAppFramework\misc\PropertiesParser.h`
 
 - **行数**: 65
 - **难度**: 🟢 低
@@ -4818,7 +4824,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\Ratio.cpp`
+### `[x]` `src\SexyAppFramework\misc\Ratio.cpp`
 
 - **行数**: 59
 - **难度**: 🟢 低
@@ -4830,7 +4836,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\Ratio.h`
+### `[x]` `src\SexyAppFramework\misc\Ratio.h`
 
 - **行数**: 82
 - **难度**: 🟢 低
@@ -4846,7 +4852,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\Rect.h`
+### `[x]` `src\SexyAppFramework\misc\Rect.h`
 
 - **行数**: 132
 - **难度**: 🟡 中
@@ -4863,7 +4869,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\RegEmu.cpp`
+### `[x]` `src\SexyAppFramework\misc\RegEmu.cpp`
 
 - **行数**: 214
 - **难度**: 🟢 低
@@ -4881,7 +4887,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\RegEmu.h`
+### `[x]` `src\SexyAppFramework\misc\RegEmu.h`
 
 - **行数**: 56
 - **难度**: 🟢 低
@@ -4894,7 +4900,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\ResourceManager.cpp`
+### `[x]` `src\SexyAppFramework\misc\ResourceManager.cpp`
 
 - **行数**: 1192
 - **难度**: 🔴 高
@@ -4907,7 +4913,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\ResourceManager.h`
+### `[x]` `src\SexyAppFramework\misc\ResourceManager.h`
 
 - **行数**: 242
 - **难度**: 🟡 中
@@ -4933,7 +4939,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\SexyMatrix.cpp`
+### `[x]` `src\SexyAppFramework\misc\SexyMatrix.cpp`
 
 - **行数**: 319
 - **难度**: 🟢 低
@@ -4947,7 +4953,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\SexyMatrix.h`
+### `[x]` `src\SexyAppFramework\misc\SexyMatrix.h`
 
 - **行数**: 115
 - **难度**: 🟢 低
@@ -4966,7 +4972,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\SexyVector.h`
+### `[x]` `src\SexyAppFramework\misc\SexyVector.h`
 
 - **行数**: 101
 - **难度**: 🟢 低
@@ -4984,7 +4990,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\XMLParser.cpp`
+### `[x]` `src\SexyAppFramework\misc\XMLParser.cpp`
 
 - **行数**: 738
 - **难度**: 🟢 低
@@ -4997,7 +5003,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\XMLParser.h`
+### `[x]` `src\SexyAppFramework\misc\XMLParser.h`
 
 - **行数**: 131
 - **难度**: 🟢 低
@@ -5025,7 +5031,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\misc\memmgr.h`
+### `[x]` `src\SexyAppFramework\misc\memmgr.h`
 
 - **行数**: 120
 - **难度**: 🟢 低
@@ -5039,7 +5045,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\paklib\PakInterface.cpp`
+### `[x]` `src\SexyAppFramework\paklib\PakInterface.cpp`
 
 - **行数**: 341
 - **难度**: 🟡 中
@@ -5052,7 +5058,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\paklib\PakInterface.h`
+### `[x]` `src\SexyAppFramework\paklib\PakInterface.h`
 
 - **行数**: 182
 - **难度**: 🟡 中
@@ -5074,7 +5080,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\platform\3ds\Input.cpp`
+### `[x]` `src\SexyAppFramework\platform\3ds\Input.cpp`
 
 - **行数**: 154
 - **难度**: 🟢 低
@@ -5086,7 +5092,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\platform\3ds\graphics\GLInterface.cpp`
+### `[x]` `src\SexyAppFramework\platform\3ds\graphics\GLInterface.cpp`
 
 - **行数**: 1912
 - **难度**: 🔴 高
@@ -5105,7 +5111,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\platform\3ds\graphics\GLInterface.h`
+### `[x]` `src\SexyAppFramework\platform\3ds\graphics\GLInterface.h`
 
 - **行数**: 262
 - **难度**: 🔴 高
@@ -5136,7 +5142,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\platform\3ds\graphics\Window.cpp`
+### `[x]` `src\SexyAppFramework\platform\3ds\graphics\Window.cpp`
 
 - **行数**: 67
 - **难度**: 🟢 低
@@ -5149,7 +5155,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\platform\default\Input.cpp`
+### `[x]` `src\SexyAppFramework\platform\default\Input.cpp`
 
 - **行数**: 517
 - **难度**: 🟢 低
@@ -5162,7 +5168,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\platform\default\Window.cpp`
+### `[x]` `src\SexyAppFramework\platform\default\Window.cpp`
 
 - **行数**: 154
 - **难度**: 🟢 低
@@ -5175,7 +5181,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\platform\emscripten\Window.cpp`
+### `[x]` `src\SexyAppFramework\platform\emscripten\Window.cpp`
 
 - **行数**: 112
 - **难度**: 🟢 低
@@ -5188,7 +5194,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\platform\switch\Input.cpp`
+### `[x]` `src\SexyAppFramework\platform\switch\Input.cpp`
 
 - **行数**: 146
 - **难度**: 🟢 低
@@ -5201,7 +5207,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\platform\switch\Window.cpp`
+### `[x]` `src\SexyAppFramework\platform\switch\Window.cpp`
 
 - **行数**: 127
 - **难度**: 🟢 低
@@ -5214,7 +5220,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\resource.h`
+### `[x]` `src\SexyAppFramework\resource.h`
 
 - **行数**: 17
 - **难度**: 🟢 低
@@ -5226,7 +5232,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\DummyMusicInterface.h`
+### `[x]` `src\SexyAppFramework\sound\DummyMusicInterface.h`
 
 - **行数**: 56
 - **难度**: 🟢 低
@@ -5246,7 +5252,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\MusicInterface.h`
+### `[x]` `src\SexyAppFramework\sound\MusicInterface.h`
 
 - **行数**: 64
 - **难度**: 🟢 低
@@ -5263,7 +5269,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\VB6_Wrapper\vb6_sdl_binds.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\VB6_Wrapper\vb6_sdl_binds.c`
 
 - **行数**: 134
 - **难度**: 🟢 低
@@ -5277,7 +5283,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\adlmidi_channel_alloc_mode.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\adlmidi_channel_alloc_mode.c`
 
 - **行数**: 7
 - **难度**: 🟢 低
@@ -5289,7 +5295,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\adlmidi_get_songs_count.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\adlmidi_get_songs_count.c`
 
 - **行数**: 6
 - **难度**: 🟢 低
@@ -5301,7 +5307,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\adlmidi_select_song_num.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\adlmidi_select_song_num.c`
 
 - **行数**: 7
 - **难度**: 🟢 低
@@ -5313,7 +5319,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\cpp_needed\adlmidi.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\cpp_needed\adlmidi.c`
 
 - **行数**: 8
 - **难度**: 🟢 低
@@ -5326,7 +5332,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\cpp_needed\edmidi.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\cpp_needed\edmidi.c`
 
 - **行数**: 8
 - **难度**: 🟢 低
@@ -5339,7 +5345,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\cpp_needed\gme.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\cpp_needed\gme.c`
 
 - **行数**: 7
 - **难度**: 🟢 低
@@ -5351,7 +5357,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\cpp_needed\modplug.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\cpp_needed\modplug.c`
 
 - **行数**: 11
 - **难度**: 🟢 低
@@ -5363,7 +5369,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\cpp_needed\opnmidi.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\cpp_needed\opnmidi.c`
 
 - **行数**: 8
 - **难度**: 🟢 低
@@ -5376,7 +5382,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\dummy.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\dummy.c`
 
 - **行数**: 2
 - **难度**: 🟢 低
@@ -5387,7 +5393,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\gme_has_gme_disable_echo.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\gme_has_gme_disable_echo.c`
 
 - **行数**: 7
 - **难度**: 🟢 低
@@ -5399,7 +5405,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\gme_has_gme_set_autoload_playback_limit.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\gme_has_gme_set_autoload_playback_limit.c`
 
 - **行数**: 7
 - **难度**: 🟢 低
@@ -5411,7 +5417,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\modplug_tell.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\modplug_tell.c`
 
 - **行数**: 11
 - **难度**: 🟢 低
@@ -5423,7 +5429,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\opnmidi_channel_alloc_mode.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\opnmidi_channel_alloc_mode.c`
 
 - **行数**: 7
 - **难度**: 🟢 低
@@ -5435,7 +5441,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\opnmidi_get_songs_count.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\opnmidi_get_songs_count.c`
 
 - **行数**: 6
 - **难度**: 🟢 低
@@ -5447,7 +5453,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\opnmidi_select_song_num.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\cmake\tests\opnmidi_select_song_num.c`
 
 - **行数**: 7
 - **难度**: 🟢 低
@@ -5459,7 +5465,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\AssocFiles\assoc_files.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\AssocFiles\assoc_files.cpp`
 
 - **行数**: 416
 - **难度**: 🔴 高
@@ -5476,7 +5482,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\AssocFiles\assoc_files.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\AssocFiles\assoc_files.h`
 
 - **行数**: 33
 - **难度**: 🟢 低
@@ -5497,7 +5503,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Effects\fx_common.hpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Effects\fx_common.hpp`
 
 - **行数**: 315
 - **难度**: 🟢 低
@@ -5516,7 +5522,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Effects\fx_format.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Effects\fx_format.h`
 
 - **行数**: 22
 - **难度**: 🟢 低
@@ -5528,7 +5534,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Effects\reverb.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Effects\reverb.cpp`
 
 - **行数**: 822
 - **难度**: 🟡 中
@@ -5549,7 +5555,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Effects\reverb.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Effects\reverb.h`
 
 - **行数**: 60
 - **难度**: 🟢 低
@@ -5567,7 +5573,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Effects\spc_echo.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Effects\spc_echo.cpp`
 
 - **行数**: 423
 - **难度**: 🟡 中
@@ -5585,7 +5591,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Effects\spc_echo.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Effects\spc_echo.h`
 
 - **行数**: 65
 - **难度**: 🟢 低
@@ -5603,7 +5609,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\_garbage\defines.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\_garbage\defines.h`
 
 - **行数**: 28
 - **难度**: 🟢 低
@@ -5617,7 +5623,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\_garbage\musplayer_winapi.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\_garbage\musplayer_winapi.cpp`
 
 - **行数**: 805
 - **难度**: 🟢 低
@@ -5631,7 +5637,7 @@ class TrailParams)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\_garbage\musplayer_winapi.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\_garbage\musplayer_winapi.h`
 
 - **行数**: 111
 - **难度**: 🟡 中
@@ -5661,7 +5667,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\_garbage\mw_qt\playlist_model.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\_garbage\mw_qt\playlist_model.cpp`
 
 - **行数**: 105
 - **难度**: 🟢 低
@@ -5675,7 +5681,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\_garbage\mw_qt\playlist_model.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\_garbage\mw_qt\playlist_model.h`
 
 - **行数**: 52
 - **难度**: 🟢 低
@@ -5693,7 +5699,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\echo_tune.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\echo_tune.cpp`
 
 - **行数**: 480
 - **难度**: 🟡 中
@@ -5706,7 +5712,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\echo_tune.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\echo_tune.h`
 
 - **行数**: 62
 - **难度**: 🟢 低
@@ -5727,7 +5733,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\flowlayout.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\flowlayout.cpp`
 
 - **行数**: 190
 - **难度**: 🟢 低
@@ -5740,7 +5746,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\flowlayout.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\flowlayout.h`
 
 - **行数**: 79
 - **难度**: 🟢 低
@@ -5761,7 +5767,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\label_marquee.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\label_marquee.cpp`
 
 - **行数**: 101
 - **难度**: 🟢 低
@@ -5774,7 +5780,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\label_marquee.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\label_marquee.h`
 
 - **行数**: 38
 - **难度**: 🟢 低
@@ -5795,7 +5801,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_music_item.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_music_item.cpp`
 
 - **行数**: 416
 - **难度**: 🟡 中
@@ -5809,7 +5815,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_music_item.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_music_item.h`
 
 - **行数**: 74
 - **难度**: 🟢 低
@@ -5830,7 +5836,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_music_test.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_music_test.cpp`
 
 - **行数**: 125
 - **难度**: 🟢 低
@@ -5843,7 +5849,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_music_test.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_music_test.h`
 
 - **行数**: 53
 - **难度**: 🟢 低
@@ -5864,7 +5870,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_sfx_item.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_sfx_item.cpp`
 
 - **行数**: 145
 - **难度**: 🟢 低
@@ -5877,7 +5883,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_sfx_item.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_sfx_item.h`
 
 - **行数**: 65
 - **难度**: 🟢 低
@@ -5898,7 +5904,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_sfx_test.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_sfx_test.cpp`
 
 - **行数**: 254
 - **难度**: 🟡 中
@@ -5912,7 +5918,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_sfx_test.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\multi_sfx_test.h`
 
 - **行数**: 62
 - **难度**: 🟢 低
@@ -5929,7 +5935,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\musicfx.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\musicfx.cpp`
 
 - **行数**: 153
 - **难度**: 🟢 低
@@ -5942,7 +5948,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\musicfx.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\musicfx.h`
 
 - **行数**: 56
 - **难度**: 🟢 低
@@ -5963,7 +5969,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\musplayer_base.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\musplayer_base.cpp`
 
 - **行数**: 37
 - **难度**: 🟢 低
@@ -5975,7 +5981,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\musplayer_base.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\musplayer_base.h`
 
 - **行数**: 73
 - **难度**: 🟢 低
@@ -5992,7 +5998,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\musplayer_qt.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\musplayer_qt.cpp`
 
 - **行数**: 1016
 - **难度**: 🟡 中
@@ -6006,7 +6012,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\musplayer_qt.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\musplayer_qt.h`
 
 - **行数**: 145
 - **难度**: 🟢 低
@@ -6023,7 +6029,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\qfile_dialogs_default_options.hpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\qfile_dialogs_default_options.hpp`
 
 - **行数**: 17
 - **难度**: 🟢 低
@@ -6035,7 +6041,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\reverb_tune.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\reverb_tune.cpp`
 
 - **行数**: 229
 - **难度**: 🟡 中
@@ -6048,7 +6054,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\reverb_tune.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\reverb_tune.h`
 
 - **行数**: 43
 - **难度**: 🟢 低
@@ -6069,7 +6075,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\seek_bar.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\seek_bar.cpp`
 
 - **行数**: 169
 - **难度**: 🟢 低
@@ -6082,7 +6088,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\seek_bar.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\seek_bar.h`
 
 - **行数**: 48
 - **难度**: 🟢 低
@@ -6103,7 +6109,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\setup_audio.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\setup_audio.cpp`
 
 - **行数**: 78
 - **难度**: 🟢 低
@@ -6116,7 +6122,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\setup_audio.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\setup_audio.h`
 
 - **行数**: 28
 - **难度**: 🟢 低
@@ -6137,7 +6143,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\setup_midi.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\setup_midi.cpp`
 
 - **行数**: 829
 - **难度**: 🟡 中
@@ -6150,7 +6156,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\setup_midi.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\setup_midi.h`
 
 - **行数**: 88
 - **难度**: 🟢 低
@@ -6171,7 +6177,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\sfx_tester.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\sfx_tester.cpp`
 
 - **行数**: 268
 - **难度**: 🟡 中
@@ -6184,7 +6190,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\sfx_tester.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\sfx_tester.h`
 
 - **行数**: 63
 - **难度**: 🟢 低
@@ -6205,7 +6211,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SNES_SPC.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SNES_SPC.cpp`
 
 - **行数**: 564
 - **难度**: 🟢 低
@@ -6219,7 +6225,7 @@ public:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SNES_SPC.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SNES_SPC.h`
 
 - **行数**: 279
 - **难度**: 🟢 低
@@ -6311,7 +6317,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SNES_SPC_misc.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SNES_SPC_misc.cpp`
 
 - **行数**: 380
 - **难度**: 🟢 低
@@ -6325,7 +6331,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SNES_SPC_state.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SNES_SPC_state.cpp`
 
 - **行数**: 129
 - **难度**: 🟢 低
@@ -6339,7 +6345,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SPC_CPU.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SPC_CPU.h`
 
 - **行数**: 1241
 - **难度**: 🟢 低
@@ -6351,7 +6357,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SPC_DSP.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SPC_DSP.cpp`
 
 - **行数**: 1018
 - **难度**: 🟢 低
@@ -6371,7 +6377,7 @@ static unsigned const counter_offsets [32] =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SPC_DSP.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SPC_DSP.h`
 
 - **行数**: 304
 - **难度**: 🟢 低
@@ -6425,7 +6431,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SPC_Filter.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SPC_Filter.cpp`
 
 - **行数**: 68
 - **难度**: 🟢 低
@@ -6439,7 +6445,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SPC_Filter.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\SPC_Filter.h`
 
 - **行数**: 47
 - **难度**: 🟢 低
@@ -6457,7 +6463,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\blargg_common.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\blargg_common.h`
 
 - **行数**: 186
 - **难度**: 🔴 高
@@ -6476,7 +6482,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\blargg_config.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\blargg_config.h`
 
 - **行数**: 24
 - **难度**: 🟢 低
@@ -6489,7 +6495,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\blargg_endian.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\blargg_endian.h`
 
 - **行数**: 185
 - **难度**: 🟢 低
@@ -6502,7 +6508,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\blargg_source.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\blargg_source.h`
 
 - **行数**: 100
 - **难度**: 🟢 低
@@ -6515,7 +6521,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\dsp.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\dsp.cpp`
 
 - **行数**: 48
 - **难度**: 🟢 低
@@ -6528,7 +6534,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\dsp.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\dsp.h`
 
 - **行数**: 83
 - **难度**: 🟢 低
@@ -6541,7 +6547,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\spc.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\spc.cpp`
 
 - **行数**: 73
 - **难度**: 🟢 低
@@ -6554,7 +6560,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\spc.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\snes_spc\spc.h`
 
 - **行数**: 147
 - **难度**: 🟢 低
@@ -6567,7 +6573,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\track_muter.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\track_muter.cpp`
 
 - **行数**: 88
 - **难度**: 🟢 低
@@ -6580,7 +6586,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\track_muter.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\MainWindow\track_muter.h`
 
 - **行数**: 43
 - **难度**: 🟢 低
@@ -6601,7 +6607,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Player\mus_player.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Player\mus_player.cpp`
 
 - **行数**: 630
 - **难度**: 🟢 低
@@ -6614,7 +6620,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Player\mus_player.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\Player\mus_player.h`
 
 - **行数**: 176
 - **难度**: 🟢 低
@@ -6627,7 +6633,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\SingleApplication\localserver.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\SingleApplication\localserver.cpp`
 
 - **行数**: 177
 - **难度**: 🟢 低
@@ -6640,7 +6646,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\SingleApplication\localserver.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\SingleApplication\localserver.h`
 
 - **行数**: 136
 - **难度**: 🟢 低
@@ -6663,7 +6669,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\SingleApplication\pge_application.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\SingleApplication\pge_application.cpp`
 
 - **行数**: 76
 - **难度**: 🟢 低
@@ -6676,7 +6682,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\SingleApplication\pge_application.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\SingleApplication\pge_application.h`
 
 - **行数**: 83
 - **难度**: 🟢 低
@@ -6697,7 +6703,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\SingleApplication\singleapplication.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\SingleApplication\singleapplication.cpp`
 
 - **行数**: 189
 - **难度**: 🟢 低
@@ -6710,7 +6716,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\SingleApplication\singleapplication.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\SingleApplication\singleapplication.h`
 
 - **行数**: 53
 - **难度**: 🟢 低
@@ -6731,7 +6737,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\main.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\main.cpp`
 
 - **行数**: 110
 - **难度**: 🟢 低
@@ -6745,7 +6751,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\version.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\version.h`
 
 - **行数**: 93
 - **难度**: 🟢 低
@@ -6758,7 +6764,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\wave_writer.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\wave_writer.c`
 
 - **行数**: 213
 - **难度**: 🟢 低
@@ -6776,7 +6782,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\wave_writer.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\MusPlay-Qt\wave_writer.h`
 
 - **行数**: 30
 - **难度**: 🟢 低
@@ -6788,7 +6794,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\pge_version.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\examples\pge_version.h`
 
 - **行数**: 99
 - **难度**: 🟢 低
@@ -6800,7 +6806,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\include\SDL_mixer.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\include\SDL_mixer.h`
 
 - **行数**: 3946
 - **难度**: 🟢 低
@@ -6818,7 +6824,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\include\SDL_mixer_ext\SDL_mixer_ext.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\include\SDL_mixer_ext\SDL_mixer_ext.h`
 
 - **行数**: 1
 - **难度**: 🟢 低
@@ -6830,7 +6836,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\OPNMIDI\gm_opn_bank.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\OPNMIDI\gm_opn_bank.h`
 
 - **行数**: 15528
 - **难度**: 🟢 低
@@ -6841,7 +6847,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\dr_libs\dr_flac.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\dr_libs\dr_flac.h`
 
 - **行数**: 12532
 - **难度**: 🟢 低
@@ -6855,7 +6861,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\dr_libs\dr_mp3.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\dr_libs\dr_mp3.h`
 
 - **行数**: 4823
 - **难度**: 🟢 低
@@ -6873,7 +6879,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\load_aiff.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\load_aiff.c`
 
 - **行数**: 308
 - **难度**: 🟢 低
@@ -6886,7 +6892,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\load_aiff.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\load_aiff.h`
 
 - **行数**: 33
 - **难度**: 🟢 低
@@ -6898,7 +6904,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\load_voc.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\load_voc.c`
 
 - **行数**: 460
 - **难度**: 🟢 低
@@ -6915,7 +6921,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\load_voc.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\load_voc.h`
 
 - **行数**: 36
 - **难度**: 🟢 低
@@ -6927,7 +6933,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\cvt_mus2mid.hpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\cvt_mus2mid.hpp`
 
 - **行数**: 461
 - **难度**: 🟢 低
@@ -6947,7 +6953,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\cvt_xmi2mid.hpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\cvt_xmi2mid.hpp`
 
 - **行数**: 1330
 - **难度**: 🟢 低
@@ -6966,7 +6972,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\file_reader.hpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\file_reader.hpp`
 
 - **行数**: 301
 - **难度**: 🟢 低
@@ -6988,7 +6994,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\fraction.hpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\fraction.hpp`
 
 - **行数**: 220
 - **难度**: 🟡 中
@@ -7005,7 +7011,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\midi_sequencer.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\midi_sequencer.h`
 
 - **行数**: 178
 - **难度**: 🟢 低
@@ -7022,7 +7028,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\midi_sequencer.hpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\midi_sequencer.hpp`
 
 - **行数**: 860
 - **难度**: 🟡 中
@@ -7056,7 +7062,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\midi_sequencer_impl.hpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\midi_sequencer_impl.hpp`
 
 - **行数**: 3017
 - **难度**: 🔴 高
@@ -7075,7 +7081,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\mix_midi_seq.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\mix_midi_seq.cpp`
 
 - **行数**: 219
 - **难度**: 🟡 中
@@ -7093,7 +7099,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\mix_midi_seq.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\midi_seq\mix_midi_seq.h`
 
 - **行数**: 71
 - **难度**: 🟢 低
@@ -7106,7 +7112,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\mp3utils.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\mp3utils.c`
 
 - **行数**: 1202
 - **难度**: 🟢 低
@@ -7119,7 +7125,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\mp3utils.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\mp3utils.h`
 
 - **行数**: 57
 - **难度**: 🟢 低
@@ -7136,7 +7142,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_cmd.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_cmd.c`
 
 - **行数**: 321
 - **难度**: 🟢 低
@@ -7150,7 +7156,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_cmd.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_cmd.h`
 
 - **行数**: 28
 - **难度**: 🟢 低
@@ -7163,7 +7169,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_drflac.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_drflac.c`
 
 - **行数**: 437
 - **难度**: 🟢 低
@@ -7176,7 +7182,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_drflac.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_drflac.h`
 
 - **行数**: 28
 - **难度**: 🟢 低
@@ -7189,7 +7195,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_drmp3.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_drmp3.c`
 
 - **行数**: 310
 - **难度**: 🟢 低
@@ -7202,7 +7208,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_drmp3.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_drmp3.h`
 
 - **行数**: 28
 - **难度**: 🟢 低
@@ -7215,7 +7221,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_ffmpeg.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_ffmpeg.c`
 
 - **行数**: 1013
 - **难度**: 🟢 低
@@ -7232,7 +7238,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_ffmpeg.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_ffmpeg.h`
 
 - **行数**: 26
 - **难度**: 🟢 低
@@ -7245,7 +7251,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_flac.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_flac.c`
 
 - **行数**: 820
 - **难度**: 🟢 低
@@ -7258,7 +7264,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_flac.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_flac.h`
 
 - **行数**: 26
 - **难度**: 🟢 低
@@ -7271,7 +7277,7 @@ private:
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_fluidlite.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_fluidlite.c`
 
 - **行数**: 951
 - **难度**: 🟢 低
@@ -7291,7 +7297,7 @@ Mix_MusicInterface Mix_MusicInterface_FLUIDXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_fluidsynth.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_fluidsynth.c`
 
 - **行数**: 442
 - **难度**: 🟢 低
@@ -7304,7 +7310,7 @@ Mix_MusicInterface Mix_MusicInterface_FLUIDXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_fluidsynth.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_fluidsynth.h`
 
 - **行数**: 34
 - **难度**: 🟢 低
@@ -7317,7 +7323,7 @@ Mix_MusicInterface Mix_MusicInterface_FLUIDXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_gme.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_gme.c`
 
 - **行数**: 651
 - **难度**: 🟢 低
@@ -7330,7 +7336,7 @@ Mix_MusicInterface Mix_MusicInterface_FLUIDXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_gme.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_gme.h`
 
 - **行数**: 33
 - **难度**: 🟢 低
@@ -7343,7 +7349,7 @@ Mix_MusicInterface Mix_MusicInterface_FLUIDXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_midi_adl.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_midi_adl.c`
 
 - **行数**: 989
 - **难度**: 🟢 低
@@ -7363,7 +7369,7 @@ Mix_MusicInterface Mix_MusicInterface_ADLIMF =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_midi_adl.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_midi_adl.h`
 
 - **行数**: 74
 - **难度**: 🟢 低
@@ -7376,7 +7382,7 @@ Mix_MusicInterface Mix_MusicInterface_ADLIMF =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_midi_edmidi.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_midi_edmidi.c`
 
 - **行数**: 698
 - **难度**: 🟢 低
@@ -7395,7 +7401,7 @@ Mix_MusicInterface Mix_MusicInterface_EDXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_midi_edmidi.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_midi_edmidi.h`
 
 - **行数**: 28
 - **难度**: 🟢 低
@@ -7408,7 +7414,7 @@ Mix_MusicInterface Mix_MusicInterface_EDXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_midi_opn.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_midi_opn.c`
 
 - **行数**: 874
 - **难度**: 🟢 低
@@ -7428,7 +7434,7 @@ Mix_MusicInterface Mix_MusicInterface_OPNXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_midi_opn.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_midi_opn.h`
 
 - **行数**: 57
 - **难度**: 🟢 低
@@ -7441,7 +7447,7 @@ Mix_MusicInterface Mix_MusicInterface_OPNXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_modplug.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_modplug.c`
 
 - **行数**: 391
 - **难度**: 🟢 低
@@ -7454,7 +7460,7 @@ Mix_MusicInterface Mix_MusicInterface_OPNXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_modplug.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_modplug.h`
 
 - **行数**: 28
 - **难度**: 🟢 低
@@ -7467,7 +7473,7 @@ Mix_MusicInterface Mix_MusicInterface_OPNXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_mpg123.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_mpg123.c`
 
 - **行数**: 562
 - **难度**: 🟢 低
@@ -7481,7 +7487,7 @@ Mix_MusicInterface Mix_MusicInterface_OPNXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_mpg123.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_mpg123.h`
 
 - **行数**: 28
 - **难度**: 🟢 低
@@ -7494,7 +7500,7 @@ Mix_MusicInterface Mix_MusicInterface_OPNXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_nativemidi.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_nativemidi.c`
 
 - **行数**: 136
 - **难度**: 🟢 低
@@ -7507,7 +7513,7 @@ Mix_MusicInterface Mix_MusicInterface_OPNXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_nativemidi.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_nativemidi.h`
 
 - **行数**: 31
 - **难度**: 🟢 低
@@ -7520,7 +7526,7 @@ Mix_MusicInterface Mix_MusicInterface_OPNXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_nativemidi_alt_win32.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_nativemidi_alt_win32.c`
 
 - **行数**: 816
 - **难度**: 🟢 低
@@ -7544,7 +7550,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_ogg.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_ogg.c`
 
 - **行数**: 576
 - **难度**: 🟢 低
@@ -7557,7 +7563,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_ogg.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_ogg.h`
 
 - **行数**: 28
 - **难度**: 🟢 低
@@ -7570,7 +7576,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_ogg_stb.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_ogg_stb.c`
 
 - **行数**: 798
 - **难度**: 🟢 低
@@ -7584,7 +7590,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_openmpt.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_openmpt.c`
 
 - **行数**: 496
 - **难度**: 🟢 低
@@ -7601,7 +7607,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_openmpt.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_openmpt.h`
 
 - **行数**: 28
 - **难度**: 🟢 低
@@ -7614,7 +7620,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_opus.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_opus.c`
 
 - **行数**: 543
 - **难度**: 🟢 低
@@ -7627,7 +7633,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_opus.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_opus.h`
 
 - **行数**: 28
 - **难度**: 🟢 低
@@ -7640,7 +7646,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_pxtone.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_pxtone.cpp`
 
 - **行数**: 527
 - **难度**: 🟡 中
@@ -7653,7 +7659,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_pxtone.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_pxtone.h`
 
 - **行数**: 34
 - **难度**: 🟢 低
@@ -7666,7 +7672,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_timidity.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_timidity.c`
 
 - **行数**: 332
 - **难度**: 🟢 低
@@ -7679,7 +7685,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_timidity.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_timidity.h`
 
 - **行数**: 28
 - **难度**: 🟢 低
@@ -7692,7 +7698,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_wav.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_wav.c`
 
 - **行数**: 2071
 - **难度**: 🟢 低
@@ -7717,7 +7723,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_wav.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_wav.h`
 
 - **行数**: 28
 - **难度**: 🟢 低
@@ -7730,7 +7736,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_wavpack.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_wavpack.c`
 
 - **行数**: 775
 - **难度**: 🟢 低
@@ -7748,7 +7754,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_wavpack.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_wavpack.h`
 
 - **行数**: 28
 - **难度**: 🟢 低
@@ -7761,7 +7767,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_xmp.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_xmp.c`
 
 - **行数**: 520
 - **难度**: 🟢 低
@@ -7778,7 +7784,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_xmp.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\music_xmp.h`
 
 - **行数**: 28
 - **难度**: 🟢 低
@@ -7791,7 +7797,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\native_midi\native_midi.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\native_midi\native_midi.h`
 
 - **行数**: 40
 - **难度**: 🟢 低
@@ -7804,7 +7810,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\native_midi\native_midi_common.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\native_midi\native_midi_common.c`
 
 - **行数**: 417
 - **难度**: 🟢 低
@@ -7817,7 +7823,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\native_midi\native_midi_common.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\native_midi\native_midi_common.h`
 
 - **行数**: 63
 - **难度**: 🟢 低
@@ -7834,7 +7840,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\native_midi\native_midi_haiku.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\native_midi\native_midi_haiku.cpp`
 
 - **行数**: 295
 - **难度**: 🟡 中
@@ -7857,7 +7863,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\native_midi\native_midi_macosx.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\native_midi\native_midi_macosx.c`
 
 - **行数**: 369
 - **难度**: 🟢 低
@@ -7874,7 +7880,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\native_midi\native_midi_win32.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\native_midi\native_midi_win32.c`
 
 - **行数**: 340
 - **难度**: 🟢 低
@@ -7891,7 +7897,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtn.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtn.h`
 
 - **行数**: 55
 - **难度**: 🟢 低
@@ -7905,7 +7911,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnData.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnData.cpp`
 
 - **行数**: 269
 - **难度**: 🟢 低
@@ -7922,7 +7928,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnData.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnData.h`
 
 - **行数**: 115
 - **难度**: 🟢 低
@@ -7945,7 +7951,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnDelay.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnDelay.cpp`
 
 - **行数**: 168
 - **难度**: 🟢 低
@@ -7958,7 +7964,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnDelay.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnDelay.h`
 
 - **行数**: 67
 - **难度**: 🟢 低
@@ -7979,7 +7985,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnError.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnError.cpp`
 
 - **行数**: 49
 - **难度**: 🟢 低
@@ -7992,7 +7998,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnError.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnError.h`
 
 - **行数**: 58
 - **难度**: 🟢 低
@@ -8008,7 +8014,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnEvelist.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnEvelist.cpp`
 
 - **行数**: 904
 - **难度**: 🟢 低
@@ -8021,7 +8027,7 @@ Mix_MusicInterface Mix_MusicInterface_NATIVEXMI =)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnEvelist.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnEvelist.h`
 
 - **行数**: 135
 - **难度**: 🟢 低
@@ -8075,7 +8081,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnMaster.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnMaster.cpp`
 
 - **行数**: 259
 - **难度**: 🟢 低
@@ -8088,7 +8094,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnMaster.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnMaster.h`
 
 - **行数**: 57
 - **难度**: 🟢 低
@@ -8109,7 +8115,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnMax.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnMax.h`
 
 - **行数**: 16
 - **难度**: 🟢 低
@@ -8121,7 +8127,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnMem.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnMem.cpp`
 
 - **行数**: 24
 - **难度**: 🟢 低
@@ -8134,7 +8140,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnMem.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnMem.h`
 
 - **行数**: 12
 - **难度**: 🟢 低
@@ -8147,7 +8153,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnOverDrive.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnOverDrive.cpp`
 
 - **行数**: 106
 - **难度**: 🟢 低
@@ -8160,7 +8166,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnOverDrive.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnOverDrive.h`
 
 - **行数**: 51
 - **难度**: 🟢 低
@@ -8181,7 +8187,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Frequency.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Frequency.cpp`
 
 - **行数**: 132
 - **难度**: 🟢 低
@@ -8194,7 +8200,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Frequency.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Frequency.h`
 
 - **行数**: 27
 - **难度**: 🟢 低
@@ -8215,7 +8221,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Noise.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Noise.cpp`
 
 - **行数**: 380
 - **难度**: 🟢 低
@@ -8228,7 +8234,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Noise.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Noise.h`
 
 - **行数**: 92
 - **难度**: 🟢 低
@@ -8249,7 +8255,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_NoiseBuilder.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_NoiseBuilder.cpp`
 
 - **行数**: 524
 - **难度**: 🟡 中
@@ -8266,7 +8272,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_NoiseBuilder.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_NoiseBuilder.h`
 
 - **行数**: 33
 - **难度**: 🟢 低
@@ -8287,7 +8293,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Oggv.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Oggv.cpp`
 
 - **行数**: 504
 - **难度**: 🟢 低
@@ -8300,7 +8306,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Oggv.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Oggv.h`
 
 - **行数**: 42
 - **难度**: 🟢 低
@@ -8321,7 +8327,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Oscillator.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Oscillator.cpp`
 
 - **行数**: 89
 - **难度**: 🟢 低
@@ -8334,7 +8340,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Oscillator.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_Oscillator.h`
 
 - **行数**: 27
 - **难度**: 🟢 低
@@ -8355,7 +8361,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_PCM.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_PCM.cpp`
 
 - **行数**: 602
 - **难度**: 🟢 低
@@ -8368,7 +8374,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_PCM.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnPulse_PCM.h`
 
 - **行数**: 64
 - **难度**: 🟢 低
@@ -8389,7 +8395,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnService.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnService.cpp`
 
 - **行数**: 1352
 - **难度**: 🟡 中
@@ -8406,7 +8412,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnService.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnService.h`
 
 - **行数**: 252
 - **难度**: 🟡 中
@@ -8431,7 +8437,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnService_moo.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnService_moo.cpp`
 
 - **行数**: 516
 - **难度**: 🟡 中
@@ -8444,7 +8450,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnText.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnText.cpp`
 
 - **行数**: 115
 - **难度**: 🟢 低
@@ -8457,7 +8463,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnText.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnText.h`
 
 - **行数**: 41
 - **难度**: 🟢 低
@@ -8478,7 +8484,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnUnit.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnUnit.cpp`
 
 - **行数**: 373
 - **难度**: 🟢 低
@@ -8491,7 +8497,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnUnit.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnUnit.h`
 
 - **行数**: 85
 - **难度**: 🟢 低
@@ -8512,7 +8518,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnWoice.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnWoice.cpp`
 
 - **行数**: 517
 - **难度**: 🟡 中
@@ -8525,7 +8531,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnWoice.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnWoice.h`
 
 - **行数**: 193
 - **难度**: 🟢 低
@@ -8547,7 +8553,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnWoicePTV.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnWoicePTV.cpp`
 
 - **行数**: 294
 - **难度**: 🟢 低
@@ -8560,7 +8566,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnWoice_io.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtnWoice_io.cpp`
 
 - **行数**: 390
 - **难度**: 🟢 低
@@ -8573,7 +8579,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtoneNoise.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtoneNoise.cpp`
 
 - **行数**: 86
 - **难度**: 🟢 低
@@ -8586,7 +8592,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtoneNoise.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\pxtone\pxtoneNoise.h`
 
 - **行数**: 31
 - **难度**: 🟢 低
@@ -8607,7 +8613,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\stb_vorbis\stb_vorbis.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\stb_vorbis\stb_vorbis.h`
 
 - **行数**: 5809
 - **难度**: 🟢 低
@@ -8629,7 +8635,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\common.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\common.c`
 
 - **行数**: 112
 - **难度**: 🟢 低
@@ -8647,7 +8653,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\common.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\common.h`
 
 - **行数**: 31
 - **难度**: 🟢 低
@@ -8659,7 +8665,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\instrum.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\instrum.c`
 
 - **行数**: 606
 - **难度**: 🟢 低
@@ -8673,7 +8679,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\instrum.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\instrum.h`
 
 - **行数**: 37
 - **难度**: 🟢 低
@@ -8685,7 +8691,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\mix.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\mix.c`
 
 - **行数**: 549
 - **难度**: 🟢 低
@@ -8699,7 +8705,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\mix.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\mix.h`
 
 - **行数**: 22
 - **难度**: 🟢 低
@@ -8711,7 +8717,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\options.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\options.h`
 
 - **行数**: 107
 - **难度**: 🟢 低
@@ -8723,7 +8729,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\output.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\output.c`
 
 - **行数**: 124
 - **难度**: 🟢 低
@@ -8736,7 +8742,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\output.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\output.h`
 
 - **行数**: 60
 - **难度**: 🟢 低
@@ -8748,7 +8754,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\playmidi.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\playmidi.c`
 
 - **行数**: 802
 - **难度**: 🟢 低
@@ -8762,7 +8768,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\playmidi.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\playmidi.h`
 
 - **行数**: 56
 - **难度**: 🟢 低
@@ -8774,7 +8780,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\readmidi.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\readmidi.c`
 
 - **行数**: 633
 - **难度**: 🟢 低
@@ -8788,7 +8794,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\readmidi.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\readmidi.h`
 
 - **行数**: 18
 - **难度**: 🟢 低
@@ -8800,7 +8806,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\resample.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\resample.c`
 
 - **行数**: 600
 - **难度**: 🟢 低
@@ -8814,7 +8820,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\resample.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\resample.h`
 
 - **行数**: 20
 - **难度**: 🟢 低
@@ -8826,7 +8832,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\tables.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\tables.c`
 
 - **行数**: 198
 - **难度**: 🟢 低
@@ -8839,7 +8845,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\tables.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\tables.h`
 
 - **行数**: 28
 - **难度**: 🟢 低
@@ -8851,7 +8857,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\timidity.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\timidity.c`
 
 - **行数**: 681
 - **难度**: 🟢 低
@@ -8865,7 +8871,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\timidity.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\codecs\timidity\timidity.h`
 
 - **行数**: 167
 - **难度**: 🟢 低
@@ -8881,7 +8887,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\effect_position.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\effect_position.c`
 
 - **行数**: 2599
 - **难度**: 🟢 低
@@ -8899,7 +8905,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\effect_stereoreverse.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\effect_stereoreverse.c`
 
 - **行数**: 185
 - **难度**: 🟢 低
@@ -8913,7 +8919,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\effects_internal.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\effects_internal.c`
 
 - **行数**: 119
 - **难度**: 🟢 低
@@ -8926,7 +8932,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\effects_internal.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\effects_internal.h`
 
 - **行数**: 52
 - **难度**: 🟢 低
@@ -8939,7 +8945,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\mixer.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\mixer.c`
 
 - **行数**: 1863
 - **难度**: 🟢 低
@@ -8958,7 +8964,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\mixer.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\mixer.h`
 
 - **行数**: 32
 - **难度**: 🟢 低
@@ -8970,7 +8976,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\mixer_x_deprecated.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\mixer_x_deprecated.c`
 
 - **行数**: 80
 - **难度**: 🟢 低
@@ -8983,7 +8989,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\music.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\music.c`
 
 - **行数**: 3985
 - **难度**: 🟢 低
@@ -9001,7 +9007,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\music.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\music.h`
 
 - **行数**: 238
 - **难度**: 🟢 低
@@ -9014,7 +9020,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\utils.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\utils.c`
 
 - **行数**: 176
 - **难度**: 🟢 低
@@ -9028,7 +9034,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\utils.h`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\src\utils.h`
 
 - **行数**: 50
 - **难度**: 🟢 低
@@ -9041,7 +9047,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDL-Mixer-X\test\mp3tags\mp3utils_test.c`
+### `[x]` `src\SexyAppFramework\sound\SDL-Mixer-X\test\mp3tags\mp3utils_test.c`
 
 - **行数**: 528
 - **难度**: 🟢 低
@@ -9054,7 +9060,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDLMusicInterface.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDLMusicInterface.cpp`
 
 - **行数**: 322
 - **难度**: 🟢 低
@@ -9067,7 +9073,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDLMusicInterface.h`
+### `[x]` `src\SexyAppFramework\sound\SDLMusicInterface.h`
 
 - **行数**: 94
 - **难度**: 🟢 低
@@ -9089,7 +9095,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDLSoundInstance.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDLSoundInstance.cpp`
 
 - **行数**: 258
 - **难度**: 🟢 低
@@ -9102,7 +9108,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDLSoundInstance.h`
+### `[x]` `src\SexyAppFramework\sound\SDLSoundInstance.h`
 
 - **行数**: 108
 - **难度**: 🟢 低
@@ -9120,7 +9126,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDLSoundManager.cpp`
+### `[x]` `src\SexyAppFramework\sound\SDLSoundManager.cpp`
 
 - **行数**: 486
 - **难度**: 🟡 中
@@ -9133,7 +9139,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SDLSoundManager.h`
+### `[x]` `src\SexyAppFramework\sound\SDLSoundManager.h`
 
 - **行数**: 89
 - **难度**: 🟢 低
@@ -9150,7 +9156,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SoundInstance.h`
+### `[x]` `src\SexyAppFramework\sound\SoundInstance.h`
 
 - **行数**: 57
 - **难度**: 🟢 低
@@ -9167,7 +9173,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\sound\SoundManager.h`
+### `[x]` `src\SexyAppFramework\sound\SoundManager.h`
 
 - **行数**: 71
 - **难度**: 🟢 低
@@ -9184,7 +9190,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\ButtonListener.h`
+### `[x]` `src\SexyAppFramework\widget\ButtonListener.h`
 
 - **行数**: 44
 - **难度**: 🟢 低
@@ -9200,7 +9206,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\ButtonWidget.cpp`
+### `[x]` `src\SexyAppFramework\widget\ButtonWidget.cpp`
 
 - **行数**: 313
 - **难度**: 🟡 中
@@ -9213,7 +9219,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\ButtonWidget.h`
+### `[x]` `src\SexyAppFramework\widget\ButtonWidget.h`
 
 - **行数**: 102
 - **难度**: 🟢 低
@@ -9230,7 +9236,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\Checkbox.cpp`
+### `[x]` `src\SexyAppFramework\widget\Checkbox.cpp`
 
 - **行数**: 100
 - **难度**: 🟢 低
@@ -9243,7 +9249,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\Checkbox.h`
+### `[x]` `src\SexyAppFramework\widget\Checkbox.h`
 
 - **行数**: 70
 - **难度**: 🟢 低
@@ -9260,7 +9266,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\CheckboxListener.h`
+### `[x]` `src\SexyAppFramework\widget\CheckboxListener.h`
 
 - **行数**: 39
 - **难度**: 🟢 低
@@ -9276,7 +9282,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\Dialog.cpp`
+### `[x]` `src\SexyAppFramework\widget\Dialog.cpp`
 
 - **行数**: 445
 - **难度**: 🟡 中
@@ -9289,7 +9295,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\Dialog.h`
+### `[x]` `src\SexyAppFramework\widget\Dialog.h`
 
 - **行数**: 148
 - **难度**: 🟢 低
@@ -9306,7 +9312,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\DialogButton.cpp`
+### `[x]` `src\SexyAppFramework\widget\DialogButton.cpp`
 
 - **行数**: 119
 - **难度**: 🟢 低
@@ -9319,7 +9325,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\DialogButton.h`
+### `[x]` `src\SexyAppFramework\widget\DialogButton.h`
 
 - **行数**: 48
 - **难度**: 🟢 低
@@ -9336,7 +9342,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\DialogListener.h`
+### `[x]` `src\SexyAppFramework\widget\DialogListener.h`
 
 - **行数**: 40
 - **难度**: 🟢 低
@@ -9352,7 +9358,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\EditListener.h`
+### `[x]` `src\SexyAppFramework\widget\EditListener.h`
 
 - **行数**: 46
 - **难度**: 🟢 低
@@ -9369,7 +9375,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\EditWidget.cpp`
+### `[x]` `src\SexyAppFramework\widget\EditWidget.cpp`
 
 - **行数**: 708
 - **难度**: 🟡 中
@@ -9382,7 +9388,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\EditWidget.h`
+### `[x]` `src\SexyAppFramework\widget\EditWidget.h`
 
 - **行数**: 126
 - **难度**: 🟢 低
@@ -9400,7 +9406,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\HyperlinkWidget.cpp`
+### `[x]` `src\SexyAppFramework\widget\HyperlinkWidget.cpp`
 
 - **行数**: 77
 - **难度**: 🟢 低
@@ -9413,7 +9419,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\HyperlinkWidget.h`
+### `[x]` `src\SexyAppFramework\widget\HyperlinkWidget.h`
 
 - **行数**: 51
 - **难度**: 🟢 低
@@ -9430,7 +9436,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\Insets.cpp`
+### `[x]` `src\SexyAppFramework\widget\Insets.cpp`
 
 - **行数**: 44
 - **难度**: 🟢 低
@@ -9442,7 +9448,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\Insets.h`
+### `[x]` `src\SexyAppFramework\widget\Insets.h`
 
 - **行数**: 47
 - **难度**: 🟢 低
@@ -9458,7 +9464,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\ListListener.h`
+### `[x]` `src\SexyAppFramework\widget\ListListener.h`
 
 - **行数**: 41
 - **难度**: 🟢 低
@@ -9474,7 +9480,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\ListWidget.cpp`
+### `[x]` `src\SexyAppFramework\widget\ListWidget.cpp`
 
 - **行数**: 531
 - **难度**: 🟢 低
@@ -9487,7 +9493,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\ListWidget.h`
+### `[x]` `src\SexyAppFramework\widget\ListWidget.h`
 
 - **行数**: 117
 - **难度**: 🟢 低
@@ -9504,7 +9510,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\ScrollListener.h`
+### `[x]` `src\SexyAppFramework\widget\ScrollListener.h`
 
 - **行数**: 39
 - **难度**: 🟢 低
@@ -9520,7 +9526,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\ScrollbarWidget.cpp`
+### `[x]` `src\SexyAppFramework\widget\ScrollbarWidget.cpp`
 
 - **行数**: 384
 - **难度**: 🟡 中
@@ -9533,7 +9539,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\ScrollbarWidget.h`
+### `[x]` `src\SexyAppFramework\widget\ScrollbarWidget.h`
 
 - **行数**: 114
 - **难度**: 🟢 低
@@ -9550,7 +9556,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\ScrollbuttonWidget.cpp`
+### `[x]` `src\SexyAppFramework\widget\ScrollbuttonWidget.cpp`
 
 - **行数**: 92
 - **难度**: 🟢 低
@@ -9563,7 +9569,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\ScrollbuttonWidget.h`
+### `[x]` `src\SexyAppFramework\widget\ScrollbuttonWidget.h`
 
 - **行数**: 53
 - **难度**: 🟢 低
@@ -9580,7 +9586,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\Slider.cpp`
+### `[x]` `src\SexyAppFramework\widget\Slider.cpp`
 
 - **行数**: 200
 - **难度**: 🟢 低
@@ -9593,7 +9599,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\Slider.h`
+### `[x]` `src\SexyAppFramework\widget\Slider.h`
 
 - **行数**: 67
 - **难度**: 🟢 低
@@ -9610,7 +9616,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\SliderListener.h`
+### `[x]` `src\SexyAppFramework\widget\SliderListener.h`
 
 - **行数**: 39
 - **难度**: 🟢 低
@@ -9626,7 +9632,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\TextWidget.cpp`
+### `[x]` `src\SexyAppFramework\widget\TextWidget.cpp`
 
 - **行数**: 442
 - **难度**: 🟢 低
@@ -9639,7 +9645,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\TextWidget.h`
+### `[x]` `src\SexyAppFramework\widget\TextWidget.h`
 
 - **行数**: 83
 - **难度**: 🟢 低
@@ -9656,7 +9662,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\Widget.cpp`
+### `[x]` `src\SexyAppFramework\widget\Widget.cpp`
 
 - **行数**: 489
 - **难度**: 🟡 中
@@ -9669,7 +9675,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\Widget.h`
+### `[x]` `src\SexyAppFramework\widget\Widget.h`
 
 - **行数**: 170
 - **难度**: 🟢 低
@@ -9690,7 +9696,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\WidgetContainer.cpp`
+### `[x]` `src\SexyAppFramework\widget\WidgetContainer.cpp`
 
 - **行数**: 632
 - **难度**: 🟡 中
@@ -9703,7 +9709,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\WidgetContainer.h`
+### `[x]` `src\SexyAppFramework\widget\WidgetContainer.h`
 
 - **行数**: 111
 - **难度**: 🟢 低
@@ -9720,7 +9726,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\WidgetManager.cpp`
+### `[x]` `src\SexyAppFramework\widget\WidgetManager.cpp`
 
 - **行数**: 810
 - **难度**: 🟢 低
@@ -9733,7 +9739,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `src\SexyAppFramework\widget\WidgetManager.h`
+### `[x]` `src\SexyAppFramework\widget\WidgetManager.h`
 
 - **行数**: 156
 - **难度**: 🟢 低
@@ -9757,7 +9763,7 @@ class pxtnEvelist: public pxtnData)`
 
 > 文件数: 2 | 行数: 158 | 类: 1 | 函数: 0
 
-### `[ ]` `tools\decrypt.c`
+### `[x]` `tools\decrypt.c`
 
 - **行数**: 44
 - **难度**: 🟢 低
@@ -9770,7 +9776,7 @@ class pxtnEvelist: public pxtnData)`
 (在此记录翻译时的决策、Rust 对应方案等)
 ```
 
-### `[ ]` `tools\metadata.c`
+### `[x]` `tools\metadata.c`
 
 - **行数**: 114
 - **难度**: 🟢 低

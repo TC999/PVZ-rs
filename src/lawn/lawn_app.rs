@@ -73,7 +73,7 @@ pub struct LawnApp {
     pub profile_mgr: Option<Box<crate::lawn::system::profile_mgr::ProfileMgr>>,
     pub player_info: Option<Box<crate::lawn::system::player_info::PlayerInfo>>,
     pub music: Option<Box<crate::lawn::system::music::Music>>,
-    pub pool_effect: Option<*mut ()>,
+    pub pool_effect: Option<Box<crate::lawn::system::pool_effect::PoolEffect>>,
 
     // ---- 列表 ----
     pub control_button_list: ButtonList,

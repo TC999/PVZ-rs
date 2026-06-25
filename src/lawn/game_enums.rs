@@ -25,6 +25,47 @@ pub const SUN_COUNTDOWN: i32 = 425;
 pub const SUN_COUNTDOWN_RANGE: i32 = 275;
 
 // ============================================================
+// 布局相关常量
+// ============================================================
+pub const WIDE_BOARD_WIDTH: i32 = 800;
+pub const BOARD_IMAGE_WIDTH_OFFSET: i32 = 1180;
+pub const BOARD_ICE_START: i32 = 800;
+pub const HIGH_GROUND_HEIGHT: i32 = 30;
+pub const SEED_BANK_OFFSET_X: i32 = 0;
+pub const SEED_BANK_OFFSET_X_END: i32 = 10;
+pub const SEED_CHOOSER_OFFSET_Y: i32 = 516;
+pub const IMITATER_DIALOG_WIDTH: i32 = 500;
+pub const IMITATER_DIALOG_HEIGHT: i32 = 600;
+
+// ============================================================
+// 关卡与关卡流程常量
+// ============================================================
+pub const ADVENTURE_AREAS: i32 = 5;
+pub const LEVELS_PER_AREA: i32 = 10;
+pub const FINAL_LEVEL: i32 = 50; // == NUM_LEVELS
+pub const LAST_STAND_FLAGS: i32 = 5;
+pub const ZOMBIE_COUNTDOWN_BEFORE_FLAG: i32 = 4500;
+pub const ZOMBIE_COUNTDOWN_BEFORE_REPICK: i32 = 5499;
+pub const ZOMBIE_COUNTDOWN_MIN: i32 = 400;
+pub const FOG_BLOW_RETURN_TIME: i32 = 2000;
+pub const SUN_COUNTDOWN_MAX: i32 = 950;
+pub const SURVIVAL_NORMAL_FLAGS: i32 = 5;
+pub const SURVIVAL_HARD_FLAGS: i32 = 10;
+
+// ============================================================
+// 商店界面布局常量
+// ============================================================
+pub const STORESCREEN_ITEMOFFSET_1_X: i32 = 422;
+pub const STORESCREEN_ITEMOFFSET_1_Y: i32 = 206;
+pub const STORESCREEN_ITEMOFFSET_2_X: i32 = 372;
+pub const STORESCREEN_ITEMOFFSET_2_Y: i32 = 310;
+pub const STORESCREEN_ITEMSIZE: i32 = 74;
+pub const STORESCREEN_COINBANK_X: i32 = 650;
+pub const STORESCREEN_COINBANK_Y: i32 = 559;
+pub const STORESCREEN_PAGESTRING_X: i32 = 470;
+pub const STORESCREEN_PAGESTRING_Y: i32 = 500;
+
+// ============================================================
 // 枚举
 // ============================================================
 
