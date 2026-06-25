@@ -2167,12 +2167,12 @@ class Plant : public GameObject)`
 
 **类/结构体:**
 
-- `[ ]` `class PottedPlant` (L15, 0 个方法, 10 个成员)
-- `[ ]` `class PlayerInfo` (L48, 0 个方法, 10 个成员)
+- `[x]` `class PottedPlant` (L15, 0 个方法, 10 个成员)
+- `[x]` `class PlayerInfo` (L48, 0 个方法, 10 个成员)
 
 **枚举:**
 
-- `[ ]` `enum FacingDirection` → { FACING_RIGHT, FACING_LEFT }
+- `[x]` `enum FacingDirection` → { FACING_RIGHT, FACING_LEFT }
 
 **翻译备注:**
 
@@ -2202,7 +2202,7 @@ class Plant : public GameObject)`
 
 **类/结构体:**
 
-- `[ ]` `class PoolEffect` (L20, 0 个方法, 4 个成员)
+- `[x]` `class PoolEffect` (L20, 0 个方法, 4 个成员) — 已完整翻译
 
 **翻译备注:**
 
