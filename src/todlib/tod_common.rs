@@ -83,3 +83,47 @@ pub fn float_nearly_equal(a: f32, b: f32, epsilon: f32) -> bool {
 pub fn deg_to_rad(deg: f32) -> f32 {
     deg * std::f32::consts::PI / 180.0
 }
+
+/// 动画曲线（时间范围为整数，值范围为浮点数，对应 C++ TodAnimateCurveFloat）
+pub fn tod_animate_curve_float(
+    time_start: i32, time_end: i32, time_age: i32,
+    pos_start: f32, pos_end: f32, curve: TodCurves,
+) -> f32 {
+    if time_start == time_end {
+        return pos_start;
+    }
+    let t = if time_age < time_start {
+        0.0
+    } else if time_age > time_end {
+        1.0
+    } else {
+        (time_age - time_start) as f32 / (time_end - time_start) as f32
+    };
+    evaluate_curve(curve, pos_start, pos_end, t)
+}
+
+/// 动画曲线（全整数版本，对应 C++ TodAnimateCurve）
+pub fn tod_animate_curve(
+    time_start: i32, time_end: i32, time_age: i32,
+    pos_start: i32, pos_end: i32, curve: TodCurves,
+) -> i32 {
+    tod_animate_curve_float(time_start, time_end, time_age, pos_start as f32, pos_end as f32, curve) as i32
+}
+
+/// 动画曲线（全浮点时间版本，对应 C++ TodAnimateCurveFloatTime）
+pub fn tod_animate_curve_float_time(
+    time_start: f32, time_end: f32, time_age: f32,
+    pos_start: f32, pos_end: f32, curve: TodCurves,
+) -> f32 {
+    if (time_end - time_start).abs() < 0.0001 {
+        return pos_start;
+    }
+    let t = if time_age < time_start {
+        0.0
+    } else if time_age > time_end {
+        1.0
+    } else {
+        (time_age - time_start) / (time_end - time_start)
+    };
+    evaluate_curve(curve, pos_start, pos_end, t)
+}

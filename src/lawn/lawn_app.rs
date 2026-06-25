@@ -16,6 +16,7 @@ use crate::framework::widget::button_widget::ButtonWidget;
 use crate::framework::widget::widget::{Widget, WidgetImpl};
 use crate::framework::widget::widget_manager::WidgetManager;
 use crate::lawn::widget::title_screen::{TitleScreenImpl, TitleState};
+use crate::lawn::widget::game_selector::GameSelectorImpl;
 use crate::todlib::reanimator::Reanimation;
 use crate::todlib::tod_particle::TodParticleSystem;
 use crate::todlib::tod_foley::FoleyManager;
@@ -140,6 +141,12 @@ pub struct LawnApp {
     pub m_first_time_game_selector: bool,
     pub m_register_resources_loaded: bool,
     pub m_last_level_stats: Option<Box<LevelStats>>,
+
+    // ---- 加载线程状态 ----
+    pub m_loading_thread_started: bool,
+    pub m_loading_thread_completed: bool,
+    pub m_loading_thread_tasks_completed: i32,
+    pub m_loading_thread_tasks_total: i32,
 }
 
 /// 全局游戏实例
@@ -184,6 +191,10 @@ impl LawnApp {
             m_first_time_game_selector: false,
             m_register_resources_loaded: false,
             m_last_level_stats: None,
+            m_loading_thread_started: false,
+            m_loading_thread_completed: false,
+            m_loading_thread_tasks_completed: 0,
+            m_loading_thread_tasks_total: 0,
         }
     }
 
@@ -330,8 +341,48 @@ impl LawnApp {
     // ==================== 屏幕管理 ====================
 
     /// 显示游戏选择器（对应 C++ ShowGameSelector）
-    pub fn show_game_selector(&mut self) {}
-    pub fn kill_game_selector(&mut self) {}
+    pub fn show_game_selector(&mut self) {
+        self.kill_board();
+
+        // 清理旧的 game_selector
+        if let Some(gs) = self.game_selector.take() {
+            if let Some(wm) = self.base.widget_manager {
+                unsafe {
+                    (*wm).remove_widget(gs as *mut Widget);
+                }
+            }
+        }
+
+        self.game_scene = GameScenes::MainMenu;
+
+        // 创建 GameSelector Widget
+        let mut gs_widget = Box::new(Widget::new());
+        gs_widget.impl_ = Some(Box::new(GameSelectorImpl::new(self as *mut LawnApp)));
+        gs_widget.resize(0, 0, self.base.width, self.base.height);
+        let gs_ptr = Box::into_raw(gs_widget);
+        self.game_selector = Some(gs_ptr as *mut ());
+
+        if let Some(wm) = self.base.widget_manager {
+            unsafe {
+                (*wm).add_widget(gs_ptr);
+                (*wm).set_focus(Some(gs_ptr));
+            }
+        }
+        eprintln!("[LawnApp] 已显示 GameSelector");
+    }
+    pub fn kill_game_selector(&mut self) {
+        if let Some(gs) = self.game_selector.take() {
+            if let Some(wm) = self.base.widget_manager {
+                unsafe {
+                    (*wm).remove_widget(gs as *mut Widget);
+                }
+            }
+            unsafe {
+                let gs_ptr = gs as *mut Widget;
+                let _ = Box::from_raw(gs_ptr);
+            }
+        }
+    }
 
     /// 显示奖励屏幕（对应 C++ ShowAwardScreen）
     pub fn show_award_screen(&mut self, _award: i32, _show_achievements: bool) {}
@@ -346,11 +397,16 @@ impl LawnApp {
     pub fn kill_store_screen() {}
 
     /// 显示挑战选择
-    pub fn show_challenge_screen(&mut self, _page: i32) {}
+    pub fn show_challenge_screen(&mut self, _page: i32) {
+        // 简化版本：仅记录日志
+        eprintln!("[LawnApp] 显示挑战选择页 {}", _page);
+    }
     pub fn kill_challenge_screen(&mut self) {}
 
     /// 显示制作人员
-    pub fn show_credit_screen(&mut self) {}
+    pub fn show_credit_screen(&mut self) {
+        eprintln!("[LawnApp] 显示制作人员");
+    }
     pub fn kill_credit_screen(&mut self) {}
 
     /// 显示图鉴（对应 C++ DoAlmanacDialog）
@@ -451,11 +507,122 @@ impl LawnApp {
     pub fn toggle_fast_mo(&mut self) {}
     pub fn need_pause_game(&self) -> bool { false }
     pub fn need_register(&self) -> bool { false }
-    pub fn loading_completed(&mut self) {}
+
+    /// 获取布尔属性（对应 C++ GetBoolean）
+    pub fn get_boolean(&self, id: &str, default: bool) -> bool {
+        // C++ 中从 mBoolProperties 读取，Rust 简化版始终返回默认值
+        let _ = id;
+        default
+    }
+
+    /// 获取整数属性（对应 C++ GetInteger）
+    pub fn get_integer(&self, id: &str, default: i32) -> i32 {
+        let _ = id;
+        default
+    }
+
+    /// 获取加载线程进度（对应 C++ GetLoadingThreadProgress）
+    pub fn get_loading_thread_progress(&self) -> f32 {
+        if !self.m_loading_thread_started {
+            return 0.0;
+        }
+        if self.m_loading_thread_completed {
+            return 1.0;
+        }
+        if self.m_loading_thread_tasks_total == 0 {
+            return 0.0;
+        }
+        (self.m_loading_thread_tasks_completed as f32 / self.m_loading_thread_tasks_total as f32).min(1.0)
+    }
+
+    /// 加载完成回调（对应 C++ LoadingCompleted）
+    pub fn loading_completed(&mut self) {
+        eprintln!("[LawnApp] LoadingCompleted — 移除 TitleScreen，显示 GameSelector");
+
+        // 移除并销毁 TitleScreen widget
+        if let Some(ts) = self.title_screen.take() {
+            if let Some(wm) = self.base.widget_manager {
+                unsafe {
+                    (*wm).remove_widget(ts);
+                    // 释放 TitleScreenImpl 和 Widget
+                    let _ = Box::from_raw(ts);
+                }
+            }
+        }
+
+        // C++: mResourceManager->DeleteImage("IMAGE_TITLESCREEN");
+        if let Some(rm) = self.base.resource_manager {
+            unsafe {
+                (*rm).delete_image("titlescreen");
+            }
+        }
+
+        // 显示游戏选择器
+        self.show_game_selector();
+    }
 
     /// 启动加载线程（对应 C++ StartLoadingThread）
+    /// 在 Rust 中同步加载资源，然后标记完成
     pub fn start_loading_thread(&mut self) {
-        // 暂为 stub，后续 Phase 实现异步资源加载
+        if self.m_loading_thread_started {
+            return;
+        }
+        self.m_loading_thread_started = true;
+        eprintln!("[LawnApp] 开始加载资源（同步模式）");
+
+        // 加载 LoaderBar 资源组
+        if let Some(rm) = self.base.resource_manager {
+            unsafe {
+                let loaderbar_images = ["loadbar_dirt", "loadbar_grass", "sodrollcap",
+                    "titlescreen", "pvz_logo", "popcap_logo", "partner_logo"];
+                for img_id in &loaderbar_images {
+                    let shared = (*rm).get_image(img_id);
+                    if shared.unshared_image.is_null() && shared.shared_image.is_null() {
+                        let key = string_to_lower(img_id);
+                        if let Some(&ptr) = (*rm).image_map.get(&key) {
+                            let res = &mut *(ptr as *mut crate::framework::resource_manager::ImageRes);
+                            if !res.base.path.is_empty() {
+                                (*rm).load_single_image(res);
+                                self.m_loading_thread_tasks_completed += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 标记 LoaderBar 已加载（让 TitleScreen 能绘制加载条）
+        self.m_loading_thread_tasks_total = 100;
+        eprintln!("[LawnApp] LoaderBar 资源加载完成，继续加载更多资源");
+
+        // 加载 LoadingFonts 资源组
+        if let Some(rm) = self.base.resource_manager {
+            unsafe {
+                (*rm).load_resources("LoadingFonts");
+            }
+        }
+        self.m_loading_thread_tasks_completed += 20;
+
+        // 加载 LoadingImages 资源组
+        if let Some(rm) = self.base.resource_manager {
+            unsafe {
+                (*rm).load_resources("LoadingImages");
+            }
+        }
+        self.m_loading_thread_tasks_completed += 60;
+
+        // TODO: MusicInit, PoolEffect, ZenGarden, ReanimatorCache, Foley, Trails, Particles
+        // 这些系统需要后续 Phase 实现
+
+        self.m_loading_thread_tasks_completed = self.m_loading_thread_tasks_total;
+        self.m_loading_thread_completed = true;
+        eprintln!("[LawnApp] 资源加载完成");
+    }
+
+    /// 快速加载（对应 C++ FastLoad）
+    pub fn fast_load(&mut self, _mode: GameMode) {
+        // 简化版本：直接调用 loading_completed
+        self.loading_completed();
     }
 
     pub fn confirm_quit(&mut self) {}
