@@ -193,3 +193,72 @@ pub fn tod_animate_curve_float_time(
     };
     evaluate_curve(curve, pos_start, pos_end, t)
 }
+
+/// 平滑权重计算（对应 C++ TodCalcSmoothWeight）
+/// 根据权重和上次/上上次被选中时间计算调整后的权重值
+fn tod_calc_smooth_weight(weight: f32, last_picked: f32, second_last_picked: f32) -> f32 {
+    if weight < 1e-6 {
+        return 0.0;
+    }
+
+    let expected_length1 = 1.0 / weight;                          // last_picked 的期望值
+    let expected_length2 = expected_length1 * 2.0;                 // second_last_picked 的期望值
+    let advanced_length1 = last_picked + 1.0 - expected_length1;   // 相较于期望值的提前轮数
+    let advanced_length2 = second_last_picked + 1.0 - expected_length2;
+    let factor1 = 1.0 + advanced_length1 / expected_length1 * 2.0;
+    let factor2 = 1.0 + advanced_length2 / expected_length2 * 2.0;
+    let factor_final = clamp_float(factor1 * 0.75 + factor2 * 0.25, 0.01, 100.0);
+    weight * factor_final
+}
+
+/// 从平滑数组中按权重选择一个项目（对应 C++ TodPickFromSmoothArray）
+/// 返回被选中项目的索引
+pub fn tod_pick_from_smooth_array(arr: &mut [TodSmoothArray]) -> i32 {
+    let count = arr.len();
+    if count == 0 {
+        return -1;
+    }
+
+    // 计算总权重
+    let total_weight: f32 = arr.iter().map(|a| a.weight).sum();
+    debug_assert!(total_weight > 0.0);
+
+    let normalize_factor = 1.0 / total_weight;
+
+    // 计算调整后的总权重
+    let total_adjusted_weight: f32 = arr.iter().map(|a| {
+        tod_calc_smooth_weight(a.weight * normalize_factor, a.last_picked, a.second_last_picked)
+    }).sum();
+    debug_assert!(total_adjusted_weight > 0.0);
+
+    // 随机选择
+    let rand_weight = crate::framework::common::rand_float(total_adjusted_weight);
+    let mut accumulated_weight = 0.0;
+    let mut pick_idx = count - 1;
+    for (i, a) in arr.iter().enumerate() {
+        if i == count - 1 {
+            break;
+        }
+        accumulated_weight += tod_calc_smooth_weight(a.weight * normalize_factor, a.last_picked, a.second_last_picked);
+        if rand_weight <= accumulated_weight {
+            pick_idx = i;
+            break;
+        }
+    }
+
+    // 更新选中记录
+    tod_update_smooth_array_pick(arr, pick_idx);
+    arr[pick_idx].item
+}
+
+/// 更新平滑数组的选中记录（对应 C++ TodUpdateSmoothArrayPick）
+pub fn tod_update_smooth_array_pick(arr: &mut [TodSmoothArray], pick_idx: usize) {
+    for a in arr.iter_mut() {
+        if a.weight > 0.0 {
+            a.last_picked += 1.0;
+            a.second_last_picked += 1.0;
+        }
+    }
+    arr[pick_idx].second_last_picked = arr[pick_idx].last_picked;
+    arr[pick_idx].last_picked = 0.0;
+}

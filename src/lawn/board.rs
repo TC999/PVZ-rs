@@ -20,6 +20,7 @@ use crate::framework::color::Color;
 use crate::framework::common;
 use crate::todlib::tod_particle::ParticleSystem;
 use crate::todlib::reanimator::Reanimation;
+use crate::todlib::tod_common::TodSmoothArray;
 
 pub const MAX_GRID_SIZE_X: usize = 9;
 pub const MAX_GRID_SIZE_Y: usize = 6;
@@ -115,6 +116,21 @@ pub fn make_render_order(layer: i32, row: i32, layer_offset: i32) -> i32 {
 /// RenderItem 排序比较函数（对应 C++ RenderItemSortFunc）
 pub fn render_item_sort_func(a: &RenderItem, b: &RenderItem) -> std::cmp::Ordering {
     a.z_pos.cmp(&b.z_pos)
+}
+
+/// 检查僵尸类型是否能进入水池（对应 C++ Zombie::ZombieTypeCanGoInPool）
+pub fn zombie_type_can_go_in_pool(zombie_type: ZombieType) -> bool {
+    matches!(zombie_type,
+        ZombieType::Normal | ZombieType::TrafficCone | ZombieType::Pail
+        | ZombieType::Flag | ZombieType::Snorkel | ZombieType::DolphinRider
+        | ZombieType::PeaHead | ZombieType::WallnutHead | ZombieType::JalapenoHead
+        | ZombieType::GatlingHead | ZombieType::TallnutHead
+    )
+}
+
+/// 检查僵尸类型是否能上高地（对应 C++ Zombie::ZombieTypeCanGoOnHighGround）
+pub fn zombie_type_can_go_on_high_ground(zombie_type: ZombieType) -> bool {
+    zombie_type != ZombieType::Zamboni && zombie_type != ZombieType::Bobsled
 }
 
 /// 计算矩形重叠宽度（对应 C++ GetRectOverlap）
@@ -240,6 +256,7 @@ pub struct Board {
     // 行状态
     pub m_plant_row: [PlantRowType; MAX_GRID_SIZE_Y],
     pub m_wave_row_got_lawn_mowered: [i32; MAX_GRID_SIZE_Y],
+    pub m_row_picking_array: [TodSmoothArray; MAX_GRID_SIZE_Y],
 
     // 草地
     pub m_background_type: BackgroundType,
@@ -353,6 +370,7 @@ impl Board {
             m_sod_position: 0,
             m_plant_row: [PlantRowType::Normal; MAX_GRID_SIZE_Y],
             m_wave_row_got_lawn_mowered: [-100; MAX_GRID_SIZE_Y],
+            m_row_picking_array: [TodSmoothArray { item: 0, weight: 0.0, last_picked: 0.0, second_last_picked: 0.0 }; MAX_GRID_SIZE_Y],
             m_background_type: BackgroundType::Day,
             m_pool_occupied: [false; MAX_GRID_SIZE_Y],
             m_roof: false,
@@ -800,7 +818,12 @@ impl Board {
 
     /// 获取耙子（对应 C++ GetRake）
     pub fn get_rake(&self) -> Option<&GridItem> {
-        self.grid_items.iter().find(|item| item.grid_item_type == GridItemType::Stone)
+        self.grid_items.iter().find(|item| item.grid_item_type == GridItemType::Rake)
+    }
+
+    /// 获取耙子（可变引用）
+    pub fn get_rake_mut(&mut self) -> Option<&mut GridItem> {
+        self.grid_items.iter_mut().find(|item| item.grid_item_type == GridItemType::Rake)
     }
 
     /// 检查能否在该位置添加墓碑（对应 C++ CanAddGraveStoneAt）
@@ -875,10 +898,71 @@ impl Board {
     }
 
     /// 检查某行特定僵尸类型是否可以生成（对应 C++ RowCanHaveZombieType）
-    pub fn row_can_have_zombie_type(&self, row: i32, _zombie_type: ZombieType) -> bool {
-        if !self.row_can_have_zombies(row) { return false; }
-        // 完整版需检查水池/高地僵尸限制
-        true
+    pub fn row_can_have_zombie_type(&self, row: i32, zombie_type: ZombieType) -> bool {
+        // 1. 行必须有僵尸
+        if !self.row_can_have_zombies(row) {
+            return false;
+        }
+
+        // 2. 无草皮之地关卡，无草皮行在前 5 波不刷出僵尸
+        // 注意：C++ 中有 GAMEMODE_CHALLENGE_RESODDED，Rust 枚举中暂无对应变体
+        // 暂时跳过此检查，后续可添加
+
+        // 获取 app 的游戏模式
+        let app_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+
+        // 3. 水路不允许不能进水的僵尸（气球僵尸除外）
+        if self.m_plant_row[row as usize] == PlantRowType::Pool
+            && !zombie_type_can_go_in_pool(zombie_type)
+            && zombie_type != ZombieType::Balloon
+        {
+            return false;
+        }
+
+        // 4. 高地不允许不能上高地的僵尸
+        if self.m_plant_row[row as usize] == PlantRowType::HighGround
+            && !zombie_type_can_go_on_high_ground(zombie_type)
+        {
+            return false;
+        }
+
+        // 5. 计算当前波次（含生存模式调整）
+        let mut current_wave = self.m_current_wave;
+        if app_mode == GameMode::ChallengeLastStand {
+            if let Some(ref challenge) = self.challenge {
+                current_wave += challenge.survival_stage * self.get_num_waves_per_survival_stage();
+            }
+        }
+
+        // 6. 水路限制：前 5 波只出潜水/海豚僵尸
+        if self.m_plant_row[row as usize] == PlantRowType::Pool {
+            if current_wave < 5 && !Self::is_zombie_type_pool_only(zombie_type) {
+                return false;
+            }
+        } else if Self::is_zombie_type_pool_only(zombie_type) {
+            return false;
+        }
+
+        // 7. 雪橇僵尸需要冰道
+        if zombie_type == ZombieType::Bobsled && self.m_ice_timer[row as usize] == 0 {
+            return false;
+        }
+
+        // 8. 第一路不出巨人（生存模式除外）
+        let is_survival = self.app.map_or(false, |app| unsafe { (*app).is_survival_mode() });
+        if row == 0 && !is_survival {
+            if zombie_type == ZombieType::Gargantuar || zombie_type == ZombieType::RedeEyeGargantuar {
+                return false;
+            }
+        }
+
+        // 9. 非舞王僵尸或当前为泳池关卡，则可以刷出该僵尸
+        if zombie_type != ZombieType::Dancer || self.stage_has_pool() {
+            return true;
+        }
+
+        // 10. 舞王僵尸在非泳池关卡中，为保证能召唤伴舞僵尸，仅在中间三行刷出
+        self.row_can_have_zombies(row - 1) && self.row_can_have_zombies(row + 1)
     }
 
     /// 检查游戏状态（胜利/失败）
@@ -1740,10 +1824,81 @@ impl Board {
         self.add_zombie_in_row(zombie_type, row, from_wave);
     }
 
-    /// 为新僵尸选择行（对应 C++ PickRowForNewZombie 简化版）
-    pub fn pick_row_for_new_zombie(&self, _zombie_type: ZombieType) -> i32 {
-        // 简化版：随机选择一行
-        0
+    /// 为新僵尸选择行（对应 C++ PickRowForNewZombie）
+    pub fn pick_row_for_new_zombie(&mut self, zombie_type: ZombieType) -> i32 {
+        // 获取 app 的 game_mode
+        let app_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+
+        // ====================================================================================================
+        // ▲ 当存在正在寻找目标僵尸的钉耙，且僵尸可以出现在钉耙所在行时，优先出现在钉耙所在行
+        // ====================================================================================================
+        let rake_result = {
+            let has_rake = self.get_rake().map_or(false, |rake| {
+                rake.grid_item_state == GridItemState::RakeAttracting
+                    && self.row_can_have_zombie_type(rake.grid_y, zombie_type)
+            });
+            if has_rake {
+                let row = self.get_rake().unwrap().grid_y;
+                let rake = self.get_rake_mut().unwrap();
+                rake.grid_item_state = GridItemState::RakeWaiting;
+                crate::todlib::tod_common::tod_update_smooth_array_pick(
+                    &mut self.m_row_picking_array, row as usize
+                );
+                Some(row)
+            } else {
+                None
+            }
+        };
+        if let Some(row) = rake_result {
+            return row;
+        }
+
+        // ====================================================================================================
+        // ▲ 遍历每一行，将所有能允许该僵尸出现的行及其对应权重写入挑选数组中
+        // ====================================================================================================
+        for a_row in 0..MAX_GRID_SIZE_Y as i32 {
+            // 如果本行不能出现目标僵尸，则将本行权重置零，并继续下一行
+            if !self.row_can_have_zombie_type(a_row, zombie_type) {
+                self.m_row_picking_array[a_row as usize].weight = 0.0;
+            }
+            // 传送门关卡中，每行的出怪概率受传送门位置影响
+            else if app_mode == GameMode::ChallengePortalCombat {
+                if let Some(ref challenge) = self.challenge {
+                    self.m_row_picking_array[a_row as usize].weight =
+                        challenge.portal_combat_row_spawn_weight(a_row);
+                }
+            }
+            // 隐形食脑者关卡中，前 3 波第六路不出怪
+            else if app_mode == GameMode::ChallengeInvisighoul
+                && self.m_current_wave <= 3
+                && a_row == 5
+            {
+                self.m_row_picking_array[a_row as usize].weight = 0.0;
+            }
+            // 丢车保护
+            else {
+                let waves_mowered = self.m_current_wave - self.m_wave_row_got_lawn_mowered[a_row as usize];
+                let waves_mowered = if app_mode == GameMode::ChallengeBobsledBonanza
+                    // Resodded 挑战也类似，但 Rust 枚举中暂无 ChallengeResodded
+                    && self.m_current_wave == self.m_num_waves - 1
+                {
+                    100
+                } else {
+                    waves_mowered
+                };
+
+                self.m_row_picking_array[a_row as usize].weight = if waves_mowered <= 1 {
+                    0.01
+                } else if waves_mowered <= 2 {
+                    0.5
+                } else {
+                    1.0
+                };
+            }
+        }
+
+        // 从平滑数组中按权重选择一行
+        crate::todlib::tod_common::tod_pick_from_smooth_array(&mut self.m_row_picking_array)
     }
 
     /// 统计波中僵尸总血量（对应 C++ TotalZombiesHealthInWave 简化版）

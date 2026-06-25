@@ -1339,6 +1339,14 @@ pub enum GridItemState {
     ZenGardenPlantPhonograph,
     ZenGardenPlantHappy,
     ZenGardenPlantDead,
+    /// 耙子正在吸引僵尸（对应 C++ GRIDITEM_STATE_RAKE_ATTRACTING）
+    RakeAttracting,
+    /// 耙子等待触发（对应 C++ GRIDITEM_STATE_RAKE_WAITING）
+    RakeWaiting,
+    /// 耙子已触发（对应 C++ GRIDITEM_STATE_RAKE_TRIGGERED）
+    RakeTriggered,
+    /// 脑子被碾碎（对应 C++ GRIDITEM_STATE_BRAIN_SQUISHED）
+    BrainSquished,
 }
 
 /// MessageStyle — 消息样式

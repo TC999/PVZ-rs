@@ -22,6 +22,7 @@ pub enum GridItemType {
     TreeOfWisdom,
     ZenTool,
     Cart,
+    Rake,
 }
 
 /// 格子物品（地形元素等）
@@ -29,6 +30,7 @@ pub struct GridItem {
     pub base: GameObject,
 
     pub grid_item_type: GridItemType,
+    pub grid_item_state: GridItemState,
     pub grid_x: i32,
     pub grid_y: i32,
     pub pos_x: f32,
@@ -43,6 +45,7 @@ impl GridItem {
         GridItem {
             base: GameObject::new(),
             grid_item_type: GridItemType::None,
+            grid_item_state: GridItemState::Normal,
             grid_x: 0,
             grid_y: 0,
             pos_x: 0.0,
