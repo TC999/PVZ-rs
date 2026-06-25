@@ -14,7 +14,6 @@ pub struct SDLSoundManager {
     base_volumes: [f64; MAX_SOURCE_SOUNDS],
     base_pans: [i32; MAX_SOURCE_SOUNDS],
     master_volume: f64,
-    initialized: bool,
 }
 
 impl SDLSoundManager {
@@ -25,7 +24,6 @@ impl SDLSoundManager {
             base_volumes: [1.0; MAX_SOURCE_SOUNDS],
             base_pans: [0; MAX_SOURCE_SOUNDS],
             master_volume: 1.0,
-            initialized: true,
         }
     }
 }
@@ -61,7 +59,7 @@ impl SDLSoundManager {
         self.release_sound_at(idx);
         self.source_file_names[idx] = filename.to_string();
 
-        if !self.initialized { return true; }
+        // SDL2_mixer 编译时链接，不需要 initialized 检查
 
         // C++: const char* formats[] = {".wav", ".mp3", ".ogg"};
         const EXTS: [&str; 3] = [".wav", ".mp3", ".ogg"];
@@ -87,7 +85,7 @@ impl SDLSoundManager {
 }
 
 impl SoundManager for SDLSoundManager {
-    fn initialized(&self) -> bool { self.initialized }
+    fn initialized(&self) -> bool { true }
 
     /// C++: bool LoadSound(intptr_t theSfxID, const std::string& theFilename)
     fn load_sound_by_id(&mut self, sfx_id: i32, filename: &str) -> bool {

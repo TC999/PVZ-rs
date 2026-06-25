@@ -695,24 +695,26 @@ impl SexyAppBase {
     }
 
     /// 初始化音频系统（对应 C++ 中创建 SDLSoundManager + CreateMusicInterface）
+    ///
+    /// SDL2_mixer 通过 sdl2-sys 编译时链接（Windows 由 build.rs 提供 .lib，Linux 通过系统库），
+    /// libopenmpt 仍然通过运行时 DLL 加载（外置依赖）。
     pub fn init_sound_system(&mut self) {
         use crate::ffi::sdl_mixer;
         use crate::ffi::libopenmpt;
 
-        // 加载 libopenmpt.dll（运行时，编译时不需要）
+        // 加载 libopenmpt.dll（运行时，编译时不需要，Windows 用户自备 DLL）
         if libopenmpt::load_library() {
             eprintln!("[libopenmpt] libopenmpt.dll 已加载（支持 MO3/IT/XM 格式）");
+        } else {
+            eprintln!("[libopenmpt] libopenmpt.dll 未找到，MO3/IT/XM 格式将用 SDL2_mixer 自身解码");
         }
 
-        if sdl_mixer::load_library() {
-            if sdl_mixer::open_audio(44100, 0x8010u16, 2, 2048) == 0 {
-                let n = sdl_mixer::allocate_channels(32);
-                eprintln!("[音频] Mix_OpenAudio 成功，声道: {}/32", n);
-            } else {
-                eprintln!("[音频] Mix_OpenAudio 失败，无声运行");
-            }
+        // SDL2_mixer 编译时静态链接，不再需要运行时加载 DLL
+        if sdl_mixer::open_audio(44100, 0x8010u16, 2, 2048) == 0 {
+            let n = sdl_mixer::allocate_channels(32);
+            eprintln!("[音频] Mix_OpenAudio 成功，声道: {}/32", n);
         } else {
-            eprintln!("[音频] SDL2_mixer.dll 未找到，无声运行");
+            eprintln!("[音频] Mix_OpenAudio 失败，无声运行");
         }
 
         if self.sound_manager.is_none() {
