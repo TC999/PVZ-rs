@@ -16,7 +16,7 @@ fn setup_sdl2_mixer_windows() {
     use std::path::PathBuf;
     use std::{env, fs};
 
-    let out = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let proj = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let target = env::var("TARGET").unwrap_or_default();
     let version = "2.6.3";
 
@@ -30,16 +30,14 @@ fn setup_sdl2_mixer_windows() {
         return;
     };
 
-    let dest = out
-        .join(format!("SDL2_mixer-{}", version))
-        .join("lib")
-        .join(arch_dir);
-    let done_file = dest.parent().unwrap().parent().unwrap().join(format!(".done_{}", arch_dir));
+    let sdk_dir = proj.join(format!("SDL2_mixer-{}", version));
+    let dest = sdk_dir.join("lib").join(arch_dir);
+    let done_file = sdk_dir.join(format!(".done_{}", arch_dir));
 
     if !done_file.exists() || !dest.join("SDL2_mixer.lib").exists() {
         // 下载并提取
         println!("cargo:warning=正在下载 SDL2_mixer 开发包 ({})...", arch_dir);
-        download_and_extract(&out, version, &dest, &done_file, arch_dir);
+        download_and_extract(version, &dest, &done_file, arch_dir);
     }
 
     if dest.join("SDL2_mixer.lib").exists() {
@@ -49,16 +47,17 @@ fn setup_sdl2_mixer_windows() {
         // 复制 DLL
         let dll_src = dest.join("SDL2_mixer.dll");
         if dll_src.exists() {
-            // 目标: target/debug/ 或 target/release/
-            for ancestor in out.ancestors() {
-                if let Some(name) = ancestor.file_name().and_then(|n| n.to_str()) {
-                    if name == "debug" || name == "release" {
-                        let dll_dst = ancestor.join("SDL2_mixer.dll");
-                        if fs::copy(&dll_src, &dll_dst).is_ok() {
-                            println!("cargo:warning=SDL2_mixer.dll -> {}", dll_dst.display());
-                        }
-                        break;
+            // 从 CARGO_MANIFEST_DIR 向上找 target/debug/ 或 target/release/
+            let target_root = proj.parent().map(|p| p.join("target"));
+            if let Some(ref target_dir) = target_root {
+                for sub in &["debug", "release"] {
+                    let dll_dst = target_dir.join(sub).join("SDL2_mixer.dll");
+                    if let Some(parent) = dll_dst.parent() {
+                        let _ = fs::create_dir_all(parent);
                     }
+                    if fs::copy(&dll_src, &dll_dst).is_ok() {
+                        println!("cargo:warning=SDL2_mixer.dll -> {}", dll_dst.display());
+                    };
                 }
             }
         }
@@ -70,37 +69,43 @@ fn setup_sdl2_mixer_windows() {
 }
 
 #[cfg(target_os = "windows")]
-fn download_and_extract(out: &std::path::Path, version: &str, arch_dir: &std::path::Path, done_file: &std::path::Path, arch_label: &str) {
+fn download_and_extract(version: &str, arch_dir: &std::path::Path, done_file: &std::path::Path, arch_label: &str) {
     use std::process::Command;
 
-    let zip_path = out.join("SDL2_mixer.zip");
-    let extract_dir = out.join("_mixer_extract");
+    // 下载到项目 SDL2_mixer-{version}/ 目录
+    let sdk_dir = arch_dir.parent().unwrap().parent().unwrap(); // lib 的父父目录
+    let zip_path = sdk_dir.join("SDL2_mixer.zip");
+    let extract_dir = sdk_dir.join("_extract");
     let url = format!(
         "https://github.com/libsdl-org/SDL_mixer/releases/download/release-{v}/SDL2_mixer-devel-{v}-VC.zip",
         v = version
     );
 
-    // 清理
+    // 清理旧临时目录
     let _ = std::fs::remove_dir_all(&extract_dir);
-    let _ = std::fs::remove_file(&zip_path);
 
-    // 下载
+    // 如果 zip 已存在不必重新下载
+    if zip_path.exists() {
+        println!("cargo:warning=使用已有开发包: {}", zip_path.display());
+    } else {
+        println!("cargo:warning=正在下载 SDL2_mixer 开发包 ({})...", arch_label);
     let dl_ok = Command::new("powershell")
         .args(["-NoProfile", "-Command", &format!(
-            "Invoke-WebRequest -Uri '{}' -OutFile '{}' -ErrorAction Stop",
+            "[System.Net.WebClient]::new().DownloadFile('{}', '{}')",
             url, zip_path.to_string_lossy()
         )])
         .status().map(|s| s.success()).unwrap_or(false);
 
     if !dl_ok {
-        println!("cargo:warning=下载失败 (1/2)，尝试 curl...");
+        println!("cargo:warning=PowerShell 下载失败，尝试 curl...");
         let curl_ok = Command::new("curl")
-            .args(["-L", "-o", &zip_path.to_string_lossy(), &url])
+            .args(["-fL", "-o", &zip_path.to_string_lossy(), &url])
             .status().map(|s| s.success()).unwrap_or(false);
         if !curl_ok {
-            println!("cargo:warning=下载失败，请手动下载");
+            println!("cargo:warning=下载失败，请手动下载到: {}", zip_path.display());
             return;
         }
+    }
     }
 
     // 解压
