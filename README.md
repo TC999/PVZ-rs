@@ -14,7 +14,12 @@
 ```bash
   git clone https://github.com/TC999/PVZ-rs.git
 ```
-3. 编译
+3. 安装依赖（仅限 Linux）
+Debian/Ubuntu
+```bash
+  sudo apt-get install -y libsdl2-dev libsdl2-mixer-dev
+```
+4. 编译
 ```bash
   cd PVZ-rs
   cargo build --release
