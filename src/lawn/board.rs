@@ -1661,6 +1661,19 @@ impl Board {
 
     /// 获取每生存关卡的波次数（对应 C++ GetNumWavesPerSurvivalStage）
     pub fn get_num_waves_per_survival_stage(&self) -> i32 {
+        let game_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+        if game_mode == GameMode::ChallengeLastStand
+            || self.app.map_or(false, |app| unsafe { (*app).is_survival_normal(game_mode) })
+        {
+            return 10;
+        }
+        if self.app.map_or(false, |app| unsafe { (*app).is_survival_hard(game_mode) })
+            || self.app.map_or(false, |app| unsafe { (*app).is_survival_endless(game_mode) })
+        {
+            return 20;
+        }
+
+        debug_assert!(false, "GetNumWavesPerSurvivalStage: unexpected game mode");
         10
     }
 
