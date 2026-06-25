@@ -3471,10 +3471,10 @@ class ReanimationHolder)`
 
 **类/结构体:**
 
-- `[ ]` `struct TodWeightedArray` (L29, 0 个方法, 2 个成员)
-- `[ ]` `struct TodWeightedGridArray` (L35, 0 个方法, 3 个成员)
-- `[ ]` `class TodSmoothArray` (L42, 0 个方法, 4 个成员)
-- `[ ]` `class TodResourceManager : ResourceManager` (L67, 0 个方法, 0 个成员)
+- `[x]` `struct TodWeightedArray` (L29, 0 个方法, 2 个成员)
+- `[x]` `struct TodWeightedGridArray` (L35, 0 个方法, 3 个成员)
+- `[x]` `class TodSmoothArray` (L42, 0 个方法, 4 个成员)
+- `[ ]` `class TodResourceManager : ResourceManager` (L67, 0 个方法, 0 个成员) — 依赖 ResourceManager 翻译
 
 **自由函数:**
 
@@ -3483,7 +3483,13 @@ class ReanimationHolder)`
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/todlib/tod_common.rs
+设计决策:
+- TodWeightedArray → Rust struct (pub item: usize, pub weight: i32)
+- TodWeightedGridArray → Rust struct (pub x/i32, y/i32, weight/i32)
+- TodSmoothArray → Rust struct (pub item/i32, weight/f32, last_picked/f32, second_last_picked/f32)
+- TodResourceManager 待 ResourceManager 翻译完成后添加
+- 工具函数（TodPickFromWeightedArray 等）待方法实现阶段翻译
 ```
 
 ### `[x]` `src\Sexy.TodLib\TodDebug.cpp`

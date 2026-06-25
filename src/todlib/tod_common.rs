@@ -23,6 +23,15 @@ pub struct TodWeightedGridArray {
     pub weight: i32,
 }
 
+/// 通用工具类型 — 平滑数组（对应 C++ TodSmoothArray）
+#[derive(Debug, Clone, Copy)]
+pub struct TodSmoothArray {
+    pub item: i32,
+    pub weight: f32,
+    pub last_picked: f32,
+    pub second_last_picked: f32,
+}
+
 /// 夹值
 pub fn clamp_float(val: f32, min: f32, max: f32) -> f32 {
     if val < min { min } else if val > max { max } else { val }
