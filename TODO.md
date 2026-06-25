@@ -2946,13 +2946,19 @@ public:
 
 **类/结构体:**
 
-- `[ ]` `class ChosenSeed` (L20, 0 个方法, 10 个成员)
-- `[ ]` `class SeedChooserScreen : Widget` (L40, 0 个方法, 10 个成员)
+- `[x]` `class ChosenSeed` (L20, 0 个方法, 10 个成员) — 类型定义完成
+- `[x]` `class SeedChooserScreen : Widget` (L40, 0 个方法, 10 个成员) — 类型定义完成，方法存根
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/widget/seed_chooser_screen.rs
+设计决策:
+- ChosenSeed 结构体 → Rust struct（15个字段）
+- SeedChooserScreen 类 → Rust struct（ChosenSeed 数组用 Vec<ChosenSeed> 替代固定数组）
+- GameButton* → Option<*mut GameButton>
+- 所有方法签名存根已创建（待从 SeedChooserScreen.cpp 翻译）
+- ChosenSeedState 枚举变体名匹配已有 Rust 定义
 ```
 
 ### `[x]` `src\Lawn\Widget\StoreScreen.cpp`
