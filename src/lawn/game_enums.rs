@@ -574,9 +574,16 @@ pub enum TutorialState {
 #[repr(i32)]
 pub enum ZombieHeight {
     Normal = 0,
-    InToPool = 1,
-    OutOfPool = 2,
-    DraggedUnder = 3,
+    InToPool,
+    OutOfPool,
+    DraggedUnder,
+    UpToHighGround,
+    DownOffHighGround,
+    UpLadder,
+    Falling,
+    InToChimney,
+    GettingBungeeDropped,
+    Zombiquarium,
 }
 
 // ============================================================
@@ -646,6 +653,26 @@ pub enum RenderObjectType {
     LawnMower = 4,
     Particle = 5,
     GridItem = 6,
+    /// 以下为 C++ ConstEnums.h 中额外定义的值
+    ZombieShadow = 7,
+    ZombieBungeeTarget = 8,
+    PlantOverlay = 9,
+    PlantMagnetItems = 10,
+    CursorPreview = 11,
+    Reanimation = 12,
+    Ice = 13,
+    TopUi = 14,
+    Fog = 15,
+    Storm = 16,
+    BottomUi = 17,
+    Backdrop = 18,
+    DoorMask = 19,
+    CoinBank = 20,
+    ProjectileShadow = 21,
+    Mower = 22,
+    ScreenFade = 23,
+    BossPart = 24,
+    GridItemOverlay = 25,
 }
 
 // ============================================================
@@ -866,3 +893,763 @@ pub enum DrawStringJustification {
     DS_ALIGN_RIGHT_VERTICAL_MIDDLE = 4,
     DS_ALIGN_CENTER_VERTICAL_MIDDLE = 5,
 }
+
+// ============================================================
+// 以下枚举对应 C++ ConstEnums.h
+// 命名风格：PascalCase，与现有译名保持一致
+// ============================================================
+
+/// AlmanacPage — 图鉴页面
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum AlmanacPage {
+    Index = 0,
+    Plants,
+    Zombies,
+}
+
+/// AwardType — 奖励类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum AwardType {
+    ForLevel = 0,
+    CreditsZombieNote,
+    HelpZombieNote,
+    AchievementOnly,
+    PreCreditsZombieNote,
+}
+
+/// BossPart — 僵尸王部位
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum BossPart {
+    BackLeg = 0,
+    FrontLeg,
+    Main,
+    BackArm,
+    Fireball,
+}
+
+/// ChallengePage — 挑战页面
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum ChallengePage {
+    Survival = 0,
+    Challenge,
+    Limbo,
+    Puzzle,
+    MaxPages,
+}
+
+/// DebugTextMode — 调试文字模式
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum DebugTextMode {
+    None = 0,
+    ZombieSpawn,
+    Music,
+    Memory,
+    Collision,
+}
+
+/// EffectType — 效果类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum EffectType {
+    Particle = 0,
+    Trail,
+    Reanim,
+    Attachment,
+    Other,
+}
+
+/// EmitterType — 粒子发射器类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum EmitterType {
+    Circle = 0,
+    Box,
+    BoxPath,
+    CirclePath,
+    CircleEvenSpacing,
+}
+
+/// GameScenes — 游戏场景
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum GameScenes {
+    Loading = 0,
+    Menu,
+    LevelIntro,
+    Playing,
+    ZombiesWon,
+    ZombiesLost,
+    Averages,
+    PostGame,
+}
+
+/// GardenType — 花园类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum GardenType {
+    Main = 0,
+    Mushroom,
+    Wheelbarrow,
+    Aquarium,
+}
+
+/// GridSquareType — 网格方块类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum GridSquareType {
+    None = 0,
+    Grass,
+    Dirt,
+    Pool,
+    HighGround,
+}
+
+/// LawnMowerState — 割草机状态
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum LawnMowerState {
+    RollingIn = 0,
+    Ready,
+    Triggered,
+    Squished,
+}
+
+/// LawnMowerType — 割草机类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum LawnMowerType {
+    Lawn = 0,
+    Pool,
+    Roof,
+    SuperMower,
+    NumTypes,
+}
+
+/// MowerHeight — 割草机高度
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum MowerHeight {
+    Land = 0,
+    DownToPool,
+    InPool,
+    UpToPool,
+}
+
+/// NotRecommend — 不推荐提示
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum NotRecommend {
+    Nocturnal = 0,
+    NeedsPool,
+    NeedsGraves,
+    NeedsFog,
+    NeedsRoof,
+    NeedsWater,
+    NeedsHighGround,
+    NeedsLowGround,
+}
+
+/// PlantPriority — 植物优先级
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum PlantPriority {
+    EatingOrder = 0,
+    DiggingOrder,
+    BungeeOrder,
+    CatapultOrder,
+    ZenToolOrder,
+    TopPlantOnly,
+    OnlyPumpkin,
+    OnlyUnderPlant,
+    OnlyAbovePlant,
+    OnlyVulnerable,
+}
+
+/// PlantingReason — 种植原因/结果
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum PlantingReason {
+    Ok = 0,
+    NotHere,
+    OnlyOnGraves,
+    OnlyInPool,
+    OnlyOnGround,
+    OnlyOnHighGround,
+    OnlyOnLawnMower,
+    NeedsPot,
+    NotOnGrave,
+    NotOnCrater,
+    NotOnWater,
+    OnlyOnLilypad,
+    OnlyOnFlowerpot,
+    NotPassedLine,
+}
+
+/// PlantRowType — 植物行类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum PlantRowType {
+    Dirt = 0,
+    Normal,
+    Pool,
+    HighGround,
+}
+
+/// PottedPlantAge — 盆栽植物年龄
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum PottedPlantAge {
+    Sprout = 0,
+    Small,
+    Medium,
+    Full,
+}
+
+/// PottedPlantNeed — 盆栽植物需求
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum PottedPlantNeed {
+    None = 0,
+    Water,
+    Fertilizer,
+    Bugspray,
+    Phonograph,
+}
+
+/// ProjectileMotion — 抛射物运动方式
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum ProjectileMotion {
+    Straight = 0,
+    Lobbed,
+    Threepeater,
+    Bee,
+    BeeBackwards,
+    Floating,
+    Following,
+    Homing,
+    Slow,
+    Boomerang,
+}
+
+/// ProjectileType — 抛射物类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum ProjectileType {
+    Pea = 0,
+    Snowpea,
+    Cabbage,
+    Melon,
+    Puff,
+    Wintermelon,
+    CobCannon,
+    Butter,
+    Kernel,
+    PeaIce,
+    PeaFire,
+    PeaAcid,
+    PeaElectric,
+    PeaDark,
+    PeaShadow,
+}
+
+/// ReanimLoopType — 动画循环类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum ReanimLoopType {
+    Loop = 0,
+    LoopFullLastFrame,
+    PlayOnce,
+    PlayOnceAndHold,
+    PlayOnceFullLastFrame,
+    PlayOnceAndHoldFullLastFrame,
+}
+
+/// ScaryPotType — 恐怖罐子类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum ScaryPotType {
+    None = 0,
+    Seed,
+    Zombie,
+    Sun,
+}
+
+/// SeedChooserState — 选卡界面状态
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum SeedChooserState {
+    Normal = 0,
+    ViewLawn,
+}
+
+/// StorePages — 商店页面
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum StorePages {
+    SlotUpgrades = 0,
+    PlantUpgrades,
+    Zen1,
+    Zen2,
+    NumPages,
+}
+
+/// TrialType — 试用类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum TrialType {
+    None = 0,
+    StageLocked,
+}
+
+/// UnlockingState — 解锁状态
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum UnlockingState {
+    Off = 0,
+    Shaking,
+    Fading,
+}
+
+/// GameObjectType — 游戏对象类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum GameObjectType {
+    None = 0,
+    Plant,
+    Projectile,
+    Coin,
+    SeedPacket,
+    Zombie,
+    LawnMower,
+    GridItem,
+    Particle,
+    Attachment,
+    Reanimation,
+    Effect,
+    Trail,
+    CursorPreview,
+    CoinBank,
+    ScreenFade,
+    TopUi,
+    ScrollWidget,
+    Dialog,
+    StoreScreen,
+    ChallengeScreen,
+    TitleScreen,
+    AlmanacScreen,
+}
+
+/// GridItemType — 网格物品类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum GridItemType {
+    None = 0,
+    Gravestone,
+    Crater,
+    Ladder,
+    PortalCircle,
+    PortalSquare,
+    ScaryPot,
+    Squirrel,
+    ZenGardenPlant,
+    GraveStone2,
+    GraveStone3,
+    GraveStone4,
+    GraveStone5,
+}
+
+/// GridItemState — 网格物品状态
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum GridItemState {
+    Normal = 0,
+    GravestoneSpecial,
+    PortalClosed,
+    ScaryPotQuestion,
+    ScaryPotLeaf,
+    ScaryPotShaking,
+    ScaryPotOpen,
+    CraterOld,
+    LadderDown,
+    LadderUp,
+    LadderCarried,
+    PortalOpen,
+    GravestoneAppearing,
+    GravestoneSinking,
+    GravestoneSunk,
+    GravestoneRising,
+    GravestoneDestroying,
+    SquirrelComing,
+    SquirrelEating,
+    SquirrelLeaving,
+    SquirrelTaken,
+    ZenGardenPlantSprout,
+    ZenGardenPlantGrowing,
+    ZenGardenPlantMature,
+    ZenGardenPlantFertilized,
+    ZenGardenPlantWatered,
+    ZenGardenPlantBugsprayed,
+    ZenGardenPlantPhonograph,
+    ZenGardenPlantHappy,
+    ZenGardenPlantDead,
+}
+
+/// MessageStyle — 消息样式
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum MessageStyle {
+    Off = 0,
+    TutorialLevel1,
+    TutorialLevel1Stay,
+    TutorialLevel2,
+    TutorialLater,
+    HintBig,
+    HintSmall,
+    HintLong,
+    HintStay,
+    HintFast,
+    HintMedium,
+    HintSlow,
+    ZombieMessage,
+    PlantMessage,
+    CoinMessage,
+    SunMessage,
+    Achievement,
+    ChallengeMessage,
+    LevelName,
+}
+
+/// Dialogs — 对话框类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum Dialogs {
+    NewGame = 0,
+    Options,
+    NewOptions,
+    Almanac,
+    Store,
+    PreGameNag,
+    LoadGame,
+    ConfirmUpdateCheck,
+    CheckingUpdates,
+    RegisterError,
+    ColordepthExp,
+    OpenUrlWait,
+    OpenUrlFail,
+    Quit,
+    HighScores,
+    Nag,
+    Info,
+    GameOver,
+    LevelComplete,
+    Paused,
+    NoMoreMoney,
+    Bonus,
+    ConfirmBackToMain,
+    ConfirmRestart,
+    ThanksForRegistering,
+    NotEnoughMoney,
+    Upgraded,
+    NoUpgrade,
+    ChooserWarning,
+    UserDialog,
+    CreateUser,
+    ConfirmDeleteUser,
+    RenameUser,
+    CreateUserError,
+    RenameUserError,
+    Cheat,
+    CheatError,
+    Continue,
+    GetReady,
+    RestartConfirm,
+    ConfirmPurchase,
+    ConfirmSell,
+    TimesUp,
+    VirtualHelp,
+    JumpAhead,
+    CrazyDave,
+    StorePurchase,
+    ZenSell,
+    Message,
+    Imitater,
+    PurchasePacketSlot,
+    NumDialogs,
+}
+
+/// ParticleEffect — 粒子效果
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum ParticleEffect {
+    None = -1,
+    Melonsplash,
+    Wintermelon,
+    Fumecloud,
+    Popcornsplash,
+    Powie,
+    Jackexplode,
+    ZombieHead,
+    ZombieArm,
+    ZombieTrafficCone,
+    ZombiePail,
+    ZombieHelmet,
+    ZombieFlag,
+    ZombieDoor,
+    ZombieNewspaper,
+    ZombieHeadlight,
+    Pow,
+    ZombiePogo,
+    ZombieNewspaperHead,
+    ZombieBalloonHead,
+    SodRoll,
+    GraveStoneRise,
+    Planting,
+    PlantingPool,
+    ZombieRise,
+    GraveBuster,
+    GraveBusterDie,
+    PoolSplash,
+    IceSparkle,
+    SeedPacket,
+    TallNutBlock,
+    Doom,
+    DiggerRise,
+    DiggerTunnel,
+    DancerRise,
+    PoolSparkly,
+    WallnutEatSmall,
+    WallnutEatLarge,
+    PeaSplat,
+    ButterSplat,
+    CabbageSplat,
+    PuffSplat,
+    StarSplat,
+    IceTrap,
+    SnowpeaSplat,
+    SnowpeaPuff,
+    SnowpeaTrail,
+    LanternShine,
+    SeedPacketPickup,
+    PotatoMine,
+    PotatoMineRise,
+    PuffshroomTrail,
+    PuffshroomMuzzle,
+    SeedPacketFlash,
+    WhackAZombieRise,
+    ZombieLadder,
+    UmbrellaReflect,
+    SeedPacketPick,
+    IceTrapZombie,
+    IceTrapRelease,
+    ZamboniSmoke,
+    Gloomcloud,
+    ZombiePogoHead,
+    ZamboniTire,
+    ZamboniExplosion,
+    ZamboniExplosion2,
+    CatapultExplosion,
+    MowerCloud,
+    BossIceBall,
+    Blastmark,
+    CoinPickupArrow,
+    PresentPickup,
+    ImitaterMorph,
+    MoweredZombieHead,
+    MoweredZombieArm,
+    ZombieHeadPool,
+    ZombieBossFireball,
+    FireballDeath,
+    IceballDeath,
+    IceballTrail,
+    FireballTrail,
+    BossExplosion,
+    ScreenFlash,
+    TrophySparkle,
+    PortalCircle,
+    PortalSquare,
+    PottedPlantGlow,
+    PottedWaterPlantGlow,
+    PottedZenGlow,
+    MindControl,
+    VaseShatter,
+    VaseShatterLeaf,
+    VaseShatterZombie,
+    AwardPickupArrow,
+    ZombieSeaweed,
+    ZombieMustache,
+    ZombieSunglass,
+    ZombiePinata,
+    DustSquash,
+    DustFoot,
+    ZombieDaisies,
+    CreditStrobe,
+    CreditsRayswipe,
+    CreditsZombieheadwipe,
+    Starburst,
+    CreditsFog,
+    PresentPickUpArrow,
+    NumParticles,
+}
+
+/// ReanimationType — 动画类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
+pub enum ReanimationType {
+    None = u32::MAX,
+    LoadbarSprout = 0,
+    LoadbarZombiehead,
+    Sodroll,
+    FinalWave,
+    Peashooter,
+    Wallnut,
+    Lilypad,
+    Sunflower,
+    Lawnmower,
+    Readysetplant,
+    Cherrybomb,
+    Squash,
+    Doomshroom,
+    Snowpea,
+    Repeater,
+    Sunshroom,
+    Tallnut,
+    Fumeshroom,
+    Puffshroom,
+    Hypnoshroom,
+    Chomper,
+    Zombie,
+    Sun,
+    Potatomine,
+    Spikeweed,
+    Spikerock,
+    Threepeater,
+    Marigold,
+    Iceshroom,
+    ZombieFootball,
+    ZombieNewspaper,
+    ZombieZamboni,
+    Splash,
+    Jalapeno,
+    JalapenoFire,
+    CoinSilver,
+    ZombieCharred,
+    ZombieCharredImp,
+    ZombieCharredDigger,
+    ZombieCharredZamboni,
+    ZombieCharredCatapult,
+    ZombieCharredGargantuar,
+    Scareyshroom,
+    Pumpkin,
+    Plantern,
+    Torchwood,
+    Splitpea,
+    Seashroom,
+    Blover,
+    FlowerPot,
+    Cactus,
+    Dancer,
+    Tanglekelp,
+    Starfruit,
+    Polevaulter,
+    Balloon,
+    Gargantuar,
+    Imp,
+    Digger,
+    DiggerDirt,
+    ZombieDolphinrider,
+    Pogo,
+    BackupDancer,
+    Bobsled,
+    Jackinthebox,
+    Snorkel,
+    Bungee,
+    Catapult,
+    Ladder,
+    Puff,
+    Sleeping,
+    GraveBuster,
+    ZombiesWon,
+    Magnetshroom,
+    Boss,
+    Cabbagepult,
+    Kernelpult,
+    Melonpult,
+    CoffeeBean,
+    Umbrellaleaf,
+    Gatlingpea,
+    Cattail,
+    Gloomshroom,
+    BossIceball,
+    BossFireball,
+    Cobcannon,
+    Garlic,
+    GoldMagnet,
+    WinterMelon,
+    TwinSunflower,
+    PoolCleaner,
+    RoofCleaner,
+    FirePea,
+    Imitater,
+    Yeti,
+    BossDriver,
+    LawnMoweredZombie,
+    CrazyDave,
+    TextFadeOn,
+    Hammer,
+    SlotMachineHandle,
+    CreditsFootball,
+    CreditsJackbox,
+    SelectorScreen,
+    PortalCircle,
+    PortalSquare,
+    ZengardenSprout,
+    ZengardenWateringcan,
+    ZengardenFertilizer,
+    ZengardenBugspray,
+    ZengardenPhonograph,
+    Diamond,
+    ZombieHand,
+    Stinky,
+    Rake,
+    RainCircle,
+    RainSplash,
+    ZombieSurprise,
+    CoinGold,
+    Treeofwisdom,
+    TreeofwisdomClouds,
+    TreeofwisdomTreefood,
+    CreditsMain,
+    CreditsMain2,
+    CreditsMain3,
+    ZombieCreditsDance,
+    CreditsStage,
+    CreditsBigbrain,
+    CreditsFlowerPetals,
+    CreditsInfantry,
+    CreditsThroat,
+    CreditsCrazydave,
+    CreditsBossdance,
+    ZombieCreditsScreenDoor,
+    ZombieCreditsConehead,
+    CreditsZombiearmy1,
+    CreditsZombiearmy2,
+    CreditsTombstones,
+    CreditsSolarpower,
+    CreditsAnyhour,
+    CreditsWearetheundead,
+    CreditsDiscolights,
+    Flag,
+    NumReanims,
+}
+
+/// 种子相关常量
+pub const NUM_SEEDS_IN_CHOOSER: i32 = 49; // 对应 C++ SEED_IMITATER + 1，可选种子数量
+
+/// 僵尸类型计数常量
+pub const NUM_ZOMBIE_TYPES: i32 = 34; // 对应 C++ ZombieType 从 ZOMBIE_NORMAL 到 ZOMBIE_REDEYE_GARGANTUAR 的数量
