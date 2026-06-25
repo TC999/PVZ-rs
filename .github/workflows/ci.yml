@@ -23,7 +23,7 @@ jobs:
       run: cargo build --release
 
     - name: Upload to GitHub Actions
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: pvz-rs-linux
         path: |
@@ -38,7 +38,7 @@ jobs:
     - name: Build
       run: cargo build --release
     - name: Upload to GitHub Actions
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: pvz-rs-windows
         path: |
