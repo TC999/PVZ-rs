@@ -449,12 +449,50 @@ impl LawnApp {
             GameMode::SurvivalEndlessStage5
         )
     }
+    pub fn is_survival_normal(&self, mode: GameMode) -> bool {
+        matches!(mode,
+            GameMode::SurvivalNormalStage1 | GameMode::SurvivalNormalStage2 |
+            GameMode::SurvivalNormalStage3 | GameMode::SurvivalNormalStage4 |
+            GameMode::SurvivalNormalStage5
+        )
+    }
+    pub fn is_survival_hard(&self, mode: GameMode) -> bool {
+        matches!(mode,
+            GameMode::SurvivalHardStage1 | GameMode::SurvivalHardStage2 |
+            GameMode::SurvivalHardStage3 | GameMode::SurvivalHardStage4 |
+            GameMode::SurvivalHardStage5
+        )
+    }
+    pub fn is_survival_endless(&self, mode: GameMode) -> bool {
+        matches!(mode,
+            GameMode::SurvivalEndlessStage1 | GameMode::SurvivalEndlessStage2 |
+            GameMode::SurvivalEndlessStage3 | GameMode::SurvivalEndlessStage4 |
+            GameMode::SurvivalEndlessStage5
+        )
+    }
+    pub fn is_continuous_challenge(&self) -> bool {
+        self.is_art_challenge()
+            || self.is_slot_machine_level()
+            || self.is_final_boss_level()
+            || self.game_mode == GameMode::ChallengeBeghouled
+            || self.game_mode == GameMode::ChallengeBeghouledTwist
+            // Note: C++ also has GAMEMODE_UPSELL and GAMEMODE_INTRO, but these
+            // don't exist in the Rust enum yet
+    }
     pub fn is_puzzle_mode(&self) -> bool { false }
     pub fn is_challenge_mode(&self) -> bool { false }
-    pub fn is_art_challenge(&self) -> bool { false }
+    pub fn is_art_challenge(&self) -> bool {
+        matches!(self.game_mode,
+            GameMode::ChallengeSeeingStars
+        )
+    }
     pub fn is_izombie_level(&self) -> bool { false }
-    pub fn is_scary_potter_level(&self) -> bool { false }
-    pub fn is_whack_a_zombie_level(&self) -> bool { false }
+    pub fn is_scary_potter_level(&self) -> bool {
+        self.game_mode == GameMode::ChallengeScaryPotter
+    }
+    pub fn is_whack_a_zombie_level(&self) -> bool {
+        self.game_mode == GameMode::ChallengeWhackAZombie
+    }
     pub fn is_squirrel_level(&self) -> bool { false }
     pub fn is_shovel_level(&self) -> bool { false }
     pub fn is_wallnut_bowling_level(&self) -> bool { false }

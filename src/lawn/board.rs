@@ -30,6 +30,7 @@ pub const MAX_PROJECTILES: usize = 200;
 pub const MAX_COINS: usize = 200;
 pub const MAX_LAWN_MOWERS: usize = 6;
 pub const MAX_GRID_ITEMS: usize = 50;
+pub const LAST_STAND_FLAGS: i32 = 5;
 pub const MAX_ZOMBIES_IN_WAVE: usize = 50;
 pub const MAX_ZOMBIE_WAVES: usize = 100;
 pub const MAX_RENDER_ITEMS: usize = 2048;
@@ -862,8 +863,8 @@ impl Board {
 
     /// 获取每面旗帜的波次数（对应 C++ GetNumWavesPerFlag）
     pub fn get_num_waves_per_flag(&self) -> i32 {
-        if self.is_first_time_adventure() && self.m_wave_count < 10 {
-            self.m_wave_count
+        if self.is_first_time_adventure() && self.m_num_waves < 10 {
+            self.m_num_waves
         } else {
             10
         }
@@ -1804,17 +1805,66 @@ impl Board {
 
     /// 是否为零末尾关（对应 C++ IsFinalScaryPotterStage）
     pub fn is_final_scary_potter_stage(&self) -> bool {
+        let is_scary_potter = self.app.map_or(false, |app| unsafe { (*app).is_scary_potter_level() });
+        if !is_scary_potter {
+            return false;
+        }
+
+        let is_adventure = self.app.map_or(false, |app| unsafe { (*app).is_adventure_mode() });
+        if is_adventure {
+            // 冒险模式中，第 3 关（0-based index 2）是最后一关
+            return self.challenge.as_ref().map_or(false, |c| c.survival_stage == 2);
+        }
+
+        // 非冒险模式：如果无尽可怕陶罐功能未实现，则总是最后一关
+        // C++ 中调用 mApp->IsEndlessScaryPotter(mApp->mGameMode)
+        true
+    }
+
+    /// 是否为最终生存关（对应 C++ IsFinalSurvivalStage）
+    pub fn is_final_survival_stage(&self) -> bool {
+        let is_survival = self.app.map_or(false, |app| unsafe { (*app).is_survival_mode() });
+        if !is_survival {
+            return false;
+        }
+
+        let stage = self.challenge.as_ref().map_or(0, |c| c.survival_stage);
+        let a_flags = self.get_num_waves_per_survival_stage() * (stage + 1) / self.get_num_waves_per_flag();
+
+        let game_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+        if self.app.map_or(false, |app| unsafe { (*app).is_survival_normal(game_mode) }) {
+            return a_flags >= 5;
+        }
+        if self.app.map_or(false, |app| unsafe { (*app).is_survival_hard(game_mode) }) {
+            return a_flags >= 10;
+        }
+
         false
     }
 
-    /// 是否为最终生存关（对应 C++ IsFinalSurvivalStage 简化版）
-    pub fn is_final_survival_stage(&self) -> bool {
-        false
+    /// 是否为最后的坚守战关卡（对应 C++ IsLastStandFinalStage）
+    pub fn is_last_stand_final_stage(&self) -> bool {
+        let game_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+        game_mode == GameMode::ChallengeLastStand
+            && self.challenge.as_ref().map_or(false, |c| c.survival_stage == LAST_STAND_FLAGS - 1)
+    }
+
+    /// 是否为可重新选卡的生存关卡（对应 C++ IsSurvivalStageWithRepick）
+    pub fn is_survival_stage_with_repick(&self) -> bool {
+        let is_survival = self.app.map_or(false, |app| unsafe { (*app).is_survival_mode() });
+        is_survival && !self.is_final_survival_stage()
+    }
+
+    /// 是否为可重新选卡的坚守战关卡（对应 C++ IsLastStandStageWithRepick）
+    pub fn is_last_stand_stage_with_repick(&self) -> bool {
+        let game_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+        game_mode == GameMode::ChallengeLastStand && !self.is_last_stand_final_stage()
     }
 
     /// 获取完成的旗帜数（对应 C++ GetSurvivalFlagsCompleted）
     pub fn get_survival_flags_completed(&self) -> i32 {
-        0
+        let stage = self.challenge.as_ref().map_or(0, |c| c.survival_stage);
+        stage * self.get_num_waves_per_survival_stage() / self.get_num_waves_per_flag()
     }
 
     /// 保存生存模式分数（对应 C++ SurvivalSaveScore）
@@ -1825,7 +1875,14 @@ impl Board {
 
     /// 是否在挥舞铁锹教程中与 Crazy Dave 对话（对应 C++ IsScaryPotterDaveTalking）
     pub fn is_scary_potter_dave_talking(&self) -> bool {
-        false
+        let is_scary_potter = self.app.map_or(false, |app| unsafe { (*app).is_scary_potter_level() });
+        if !is_scary_potter {
+            return false;
+        }
+        let dave_present = self.app.map_or(false, |app| unsafe {
+            (*app).m_crazy_dave_state != CrazyDaveState::NotHere
+        });
+        self.m_next_survival_stage_counter > 0 && dave_present
     }
 
     /// 僵尸获胜（对应 C++ ZombiesWon 简化版）

@@ -1417,10 +1417,10 @@ enum ZombieType : int32_t)`
 - 阳光/金钱：add_sun_money(), take_sun_money(), can_take_sun_money(), pause(), get_current_plant_cost(), plant_uses_accelerated_pricing()
 - 种植：can_plant_at(), planting_requirements_met(), planting_pixel_to_grid_x(), planting_pixel_to_grid_y(), offset_y_for_planting()
 - 模式设置：set_mustache_mode(), set_future_mode(), set_pinata_mode(), set_dance_mode(), set_daisy_mode(), set_sukhbir_mode(), set_super_mower_mode()
-- 辅助：left_fog_column(), get_seed_bank_extra_width(), find_lawn_mower_in_row(), find_lawn_mower_in_row_mut()
+- 辅助：left_fog_column(), get_seed_bank_extra_width(), find_lawn_mower_in_row(), find_lawn_mower_in_row_mut(), is_last_stand_final_stage(), is_survival_stage_with_repick(), is_last_stand_stage_with_repick()
 - 坐标转换补充：pixel_to_grid_x_keep_on_board(), pixel_to_grid_y_keep_on_board(), grid_to_pixel_y(), get_pos_y_based_on_row(), get_ice_z_pos()
 - 植物查询：get_pumpkin_at(), get_pumpkin_at_mut(), get_flower_pot_at(), find_umbrella_plant(), get_top_plant_at()
-- UI/状态：clear_cursor(), update_mouse_position(), update_layers(), progress_meter_has_flags(), is_final_scary_potter_stage(), is_final_survival_stage(), get_survival_flags_completed(), survival_save_score(), puzzle_save_streak(), is_scary_potter_dave_talking(), zombies_won(), process_delete_queue(), stop_all_zombie_sounds(), has_conveyor_belt_seed_bank(), update_progress_meter(), do_typing_check()
+- UI/状态：clear_cursor(), update_mouse_position(), update_layers(), progress_meter_has_flags(), is_final_scary_potter_stage() [完整版], is_final_survival_stage() [完整版], get_survival_flags_completed(), survival_save_score(), puzzle_save_streak(), is_scary_potter_dave_talking() [完整版], zombies_won(), process_delete_queue(), stop_all_zombie_sounds(), has_conveyor_belt_seed_bank(), update_progress_meter(), do_typing_check()
 - 僵尸生成：add_zombie_in_row(), add_zombie(), pick_row_for_new_zombie() [完整版], total_zombies_health_in_wave()
 - 实体更新：update_game_objects()
 - 辅助：get_shovel_button_rect(), pick_special_grave_stone(), count_empty_pots_or_lilies(), is_valid_cob_cannon_spot(), has_valid_cob_cannon_spot()
@@ -1440,6 +1440,8 @@ enum ZombieType : int32_t)`
 - tod_common.rs 新增 tod_calc_smooth_weight()/tod_pick_from_smooth_array()/tod_update_smooth_array_pick()
 - tod_common.rs 新增 tod_pick_from_weighted_array()/tod_pick_array_item_from_weighted_array()
 - 注意：C++ 中的 GAMEMODE_CHALLENGE_RESODDED 在 Rust 枚举中暂缺，对应检查被跳过
+- LawnApp 新增 is_survival_normal/is_survival_hard/is_survival_endless/is_continuous_challenge 辅助方法
+- 新增 LAST_STAND_FLAGS = 5 常量
 
 待翻译的主要模块（按优先级排序）：
 1. PickZombieWaves / InitZombieWaves（僵尸波次生成逻辑）
