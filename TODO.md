@@ -3020,13 +3020,21 @@ private:
 
 **类/结构体:**
 
-- `[ ]` `class SpecialGridPlacement` (L29, 0 个方法, 4 个成员)
-- `[ ]` `class ZenGarden` (L38, 0 个方法, 6 个成员)
+- `[x]` `class SpecialGridPlacement` (L29, 0 个方法, 4 个成员)
+- `[x]` `class ZenGarden` (L38, 0 个方法, 6 个成员) — 类型定义完成，方法存根（待翻译 ZenGarden.cpp 实现）
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/zen_garden.rs
+设计决策:
+- SpecialGridPlacement 结构体 → Rust struct（4 个字段映射）
+- ZenGarden 类 → Rust struct（字段映射：Vec<String>、i64 替代 time_t、元组替代 tm 结构体）
+- 所有方法签名存根已创建（待从 ZenGarden.cpp 翻译）
+- C++ std::vector<std::string> → Vec<String>
+- C++ time_t → i64，tm → 9字段元组
+- 依赖 PottedPlant 已添加到 system::player_info 模块中
+- #define 常量 ZEN_MAX_GRIDSIZE_X/Y 待后续添加
 ```
 
 ### `[x]` `src\Lawn\Zombie.cpp`
