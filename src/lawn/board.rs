@@ -544,7 +544,7 @@ impl Board {
         self.m_update_count += 1;
 
         // 更新阳光产生
-        self.update_sun();
+        self.update_sun_spawning();
 
         // 更新植物
         for plant in &mut self.plants {
@@ -584,15 +584,61 @@ impl Board {
         self.check_game_state();
     }
 
-    /// 更新阳光产生
-    fn update_sun(&mut self) {
-        self.m_sun_countdown -= 1;
-        if self.m_sun_countdown <= 0 {
-            // 自然产生阳光
-            let x = crate::todlib::tod_common::rand_range_int(40, 760);
-            self.add_coin(x as f32, -30.0, CoinType::Sun, CoinMotion::FromSky);
-            self.m_sun_countdown = SUN_COUNTDOWN + crate::todlib::tod_common::rand_range_int(0, SUN_COUNTDOWN_RANGE);
+    /// 更新阳光产生（对应 C++ UpdateSunSpawning）
+    fn update_sun_spawning(&mut self) {
+        let app_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+
+        // 夜间、奖励已掉落、以下模式不自然产生阳光
+        if self.stage_is_night()
+            || self.has_level_award_dropped()
+            || app_mode == GameMode::ChallengeRainingSeeds
+            || app_mode == GameMode::ChallengeIceLevel
+            // C++ 中还有 GAMEMODE_UPSELL 和 GAMEMODE_INTRO，Rust 枚举中暂缺
+            || app_mode == GameMode::ChallengeZombiquarium
+            || app_mode == GameMode::ChallengeZenGarden
+            || app_mode == GameMode::ChallengeTreeOfWisdom
+            || app_mode == GameMode::ChallengeLastStand
+            || self.app.map_or(false, |app| unsafe { (*app).is_izombie_level() })
+            || self.app.map_or(false, |app| unsafe { (*app).is_scary_potter_level() })
+            || self.app.map_or(false, |app| unsafe { (*app).is_squirrel_level() })
+            || self.has_conveyor_belt_seed_bank()
+            || self.m_tutorial_state == TutorialState::SlotMachine
+        {
+            return;
         }
+
+        // 教程第 1 关：如果还没种植物，不产生阳光
+        if (self.m_tutorial_state == TutorialState::Level1PickUpPeashooter
+            || self.m_tutorial_state == TutorialState::Level1PlantPeashooter)
+            && self.plants.is_empty()
+        {
+            return;
+        }
+
+        self.m_sun_countdown -= 1;
+        if self.m_sun_countdown != 0 {
+            return;
+        }
+
+        self.m_num_suns_fallen += 1;
+        // 阳光生成间隔逐渐缩短，但不超过最大间隔
+        self.m_sun_countdown = std::cmp::min(
+            SUN_COUNTDOWN_MAX,
+            SUN_COUNTDOWN + self.m_num_suns_fallen * 10
+        ) + crate::todlib::tod_common::rand_range_int(0, SUN_COUNTDOWN_RANGE);
+
+        // 晴天关卡产生大阳光，否则普通阳光
+        let sun_type = if app_mode == GameMode::ChallengeSunnyDay {
+            CoinType::LargeSun
+        } else {
+            CoinType::Sun
+        };
+        self.add_coin(
+            crate::todlib::tod_common::rand_range_int(100, 649) as f32,
+            60.0,
+            sun_type,
+            CoinMotion::FromSky,
+        );
     }
 
     /// 更新波次

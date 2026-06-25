@@ -1401,7 +1401,7 @@ enum ZombieType : int32_t)`
 已翻译的方法（约 170 个）：
 - 结构体字段：基本完整（新增 m_mustache_mode, m_future_mode, m_pinata_mode, m_dance_mode, m_daisy_mode, m_sukhbir_mode, m_super_mower_mode, m_row_picking_array 等字段）
 - 初始化：new(), board_init(), init_level() — 覆盖 C++ 构造函数和 InitLevel
-- 更新循环：update(), update_sun(), update_waves(), spawn_zombie_wave(), check_collisions()
+- 更新循环：update(), update_sun_spawning() [完整版], update_waves(), spawn_zombie_wave(), check_collisions()
 - 绘制：draw(), draw_background(), draw_ui() — 简化版
 - 输入：mouse_down(), key_down(), mouse_move(), mouse_drag()
 - 关卡检查：stage_is_night(), stage_has_pool(), stage_has_fog(), stage_has_roof(), stage_is_day_without_pool(), stage_has_grave_stones(), stage_has_6_rows(), stage_is_day_with_pool(), stage_has_zombie_walk_in_from_right()
