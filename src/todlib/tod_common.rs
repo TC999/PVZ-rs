@@ -3,7 +3,10 @@
 
 #![allow(dead_code)]
 
-use crate::lawn::game_enums::TodCurves;
+use crate::framework::graphics::graphics::Graphics;
+use crate::framework::graphics::font::Font;
+use crate::framework::color::Color;
+use crate::lawn::game_enums::{TodCurves, DrawStringJustification};
 
 /// 夹值
 pub fn clamp_float(val: f32, min: f32, max: f32) -> f32 {
@@ -108,6 +111,45 @@ pub fn tod_animate_curve(
     pos_start: i32, pos_end: i32, curve: TodCurves,
 ) -> i32 {
     tod_animate_curve_float(time_start, time_end, time_age, pos_start as f32, pos_end as f32, curve) as i32
+}
+
+/// 字符串翻译（简化版，对应 C++ TodStringTranslate）
+/// 根据语言字符串查找翻译。如果未找到返回原文。
+pub fn tod_string_translate(text: &str) -> String {
+    // 从全局字符串文件查找翻译
+    // 当前简化实现：直接返回原文
+    text.to_string()
+}
+
+/// 绘制字符串（对应 C++ TodDrawString）
+/// 使用指定字体和颜色在 (thePosX, thePosY) 处绘制文本，支持对齐方式
+pub fn tod_draw_string(
+    g: &mut Graphics,
+    text: &str,
+    the_pos_x: i32,
+    the_pos_y: i32,
+    the_font: &Font,
+    the_color: &Color,
+    the_justification: DrawStringJustification,
+) {
+    let final_text = tod_string_translate(text);
+
+    let mut a_pos_x = the_pos_x;
+    match the_justification {
+        DrawStringJustification::DS_ALIGN_RIGHT
+        | DrawStringJustification::DS_ALIGN_RIGHT_VERTICAL_MIDDLE => {
+            a_pos_x -= the_font.string_width(&final_text);
+        }
+        DrawStringJustification::DS_ALIGN_CENTER
+        | DrawStringJustification::DS_ALIGN_CENTER_VERTICAL_MIDDLE => {
+            a_pos_x -= the_font.string_width(&final_text) / 2;
+        }
+        _ => {}
+    }
+
+    // 直接调用 Font::draw_string（传递 Graphics 当前的裁剪矩形）
+    let clip_rect = g.clip_rect;
+    the_font.draw_string(g, a_pos_x, the_pos_y, &final_text, the_color, &clip_rect);
 }
 
 /// 动画曲线（全浮点时间版本，对应 C++ TodAnimateCurveFloatTime）

@@ -854,3 +854,15 @@ pub const PARTICLESYSTEMID_NULL: ParticleSystemID = 0;
 pub const PLANTID_NULL: PlantID = 0;
 pub const REANIMATIONID_NULL: ReanimationID = 0;
 pub const ZOMBIEID_NULL: ZombieID = 0;
+
+/// 绘制字符串对齐方式（对应 C++ DrawStringJustification）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum DrawStringJustification {
+    DS_ALIGN_LEFT = 0,
+    DS_ALIGN_RIGHT = 1,
+    DS_ALIGN_CENTER = 2,
+    DS_ALIGN_LEFT_VERTICAL_MIDDLE = 3,
+    DS_ALIGN_RIGHT_VERTICAL_MIDDLE = 4,
+    DS_ALIGN_CENTER_VERTICAL_MIDDLE = 5,
+}

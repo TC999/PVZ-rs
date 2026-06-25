@@ -99,6 +99,7 @@ impl Font {
 
     /// 绘制字符串（默认实现）
     /// 对于 SysFont 会使用系统字体渲染，ImageFont 使用精灵图渲染
+    /// 默认实现使用简单矩形块近似文字，确保即使没有加载字体也能看到文本位置
     pub fn draw_string(
         &self,
         g: &mut crate::framework::graphics::graphics::Graphics,
@@ -110,14 +111,22 @@ impl Font {
     ) {
         // 默认实现：使用 Graphics 填充像素模拟文字
         // 实际渲染由子类型（SysFont/ImageFont）覆盖
-        let cur_x = x;
         let orig_color = g.color;
         g.set_color(color);
 
-        // 绘制简单的占位矩形代表文本
-        let text_width = self.string_width(text);
-        if text_width > 0 {
-            g.fill_rect_xywh(cur_x, y - self.ascent, text_width, self.font_height);
+        let mut cur_x = x;
+        let ch_width = (self.size * 6 / 10).max(4);
+        let ch_height = self.font_height.max(8);
+        let spacing = 1;
+
+        for ch in text.chars() {
+            if ch == ' ' {
+                cur_x += ch_width;
+                continue;
+            }
+            // 为每个可见字符绘制一个小矩形块
+            g.fill_rect_xywh(cur_x, y - self.ascent, ch_width - spacing, ch_height);
+            cur_x += ch_width;
         }
 
         g.set_color(&orig_color);

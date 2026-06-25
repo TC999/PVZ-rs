@@ -501,9 +501,23 @@ impl DescParser for FontData {
                         let mut image_name = String::new();
                         if self.data_to_string(&list[2], &mut image_name) {
                             if let Some(layer) = self.font_layer_list.get_mut(idx) {
-                                // 设置图层图片——这里简化处理，
-                                // 实际应从 ResourceManager 获取 SharedImage
+                                // 尝试从 ResourceManager 获取图像
+                                // 由于 FontData::app 提供 SexyAppBase*，可以通过它访问 ResourceManager
+                                if !self.app.is_null() {
+                                    let app_ptr = self.app as *mut crate::framework::sexy_app_base::SexyAppBase;
+                                    unsafe {
+                                        if let Some(rm_ptr) = (*app_ptr).resource_manager {
+                                            let shared_ref = (*rm_ptr).get_image(&image_name);
+                                            if !shared_ref.unshared_image.is_null() || !shared_ref.shared_image.is_null() {
+                                                layer.image = shared_ref;
+                                                return true;
+                                            }
+                                        }
+                                    }
+                                }
+                                // 如果找不到图像，创建一个空的 SharedImageRef
                                 layer.image = SharedImageRef::new();
+                                eprintln!("[FontData] LAYERIMAG: 找不到图像 '{}'", image_name);
                                 return true;
                             }
                         }
@@ -938,7 +952,6 @@ impl ImageFont {
         }
 
         let fd = unsafe { &mut *self.font_data };
-        let a_point_size = self.point_size as f64 * self.scale;
         let mut first_layer = true;
 
         for layer_idx in 0..fd.font_layer_list.len() {
@@ -995,15 +1008,43 @@ impl ImageFont {
 
             let a_layer_point_size = point_size_val;
 
-            if a_layer_point_size == 0 {
+            // 获取图层图像指针（需要在可变借用之前）
+            let layer_image_ptr = {
+                let layer = &fd.font_layer_list[layer_idx];
+                layer.image.as_image_ptr()
+            };
+
+            // C++: 缩放参数
+            // 非缩放路径：aLayerPointSize=1, aPointSize=mScale(=1.0)
+            // 缩放路径：aLayerPointSize=layer.mPointSize(or default), aPointSize=mPointSize*mScale
+            let (use_original, effective_layer_ps, effective_ps) = 
+                if (self.scale - 1.0).abs() < f64::EPSILON && (a_layer_point_size == 0 || self.point_size == a_layer_point_size) {
+                    // 直接使用原始图像，不缩放
+                    (true, 1.0, self.scale)
+                } else {
+                    // 需要缩放
+                    let layer_ps = if a_layer_point_size != 0 { a_layer_point_size as f64 } else { fd.default_point_size as f64 };
+                    let ps = self.point_size as f64 * self.scale;
+                    // 在缩放路径中，如果 layer.pointSize==0 则 a_layer_point_size 无效，用 defaultPointSize 代替
+                    let use_orig = if a_layer_point_size == 0 && fd.default_point_size != 0 {
+                        // layer.pointSize==0 且需要缩放时，不直接引用原始图像
+                        false
+                    } else {
+                        false
+                    };
+                    (use_orig, layer_ps, ps)
+                };
+
+            if use_original {
                 // 无需缩放，直接引用原始图像
+                active_layer.scaled_image = layer_image_ptr;
+                active_layer.owns_image = false;
                 // 使用原始字符矩形
                 for (ch, cd) in &char_data_map {
                     active_layer
                         .scaled_char_image_rects
                         .insert(*ch, cd.image_rect);
                 }
-                active_layer.owns_image = false;
             } else {
                 // 需要缩放——创建一个新的 MemoryImage 并渲染缩放后的字符
                 let a_memory_image = Box::new(MemoryImage::new(0, 0));
@@ -1019,8 +1060,8 @@ impl ImageFont {
                     let scaled_rect = Rect::new(
                         cur_x,
                         0,
-                        (orig_rect.width as f64 * a_point_size / a_layer_point_size as f64) as i32,
-                        (orig_rect.height as f64 * a_point_size / a_layer_point_size as f64) as i32,
+                        (orig_rect.width as f64 * effective_ps / effective_layer_ps) as i32,
+                        (orig_rect.height as f64 * effective_ps / effective_layer_ps) as i32,
                     );
                     scaled_rects.insert(*ch, scaled_rect);
                     if scaled_rect.height > max_height {
@@ -1036,7 +1077,21 @@ impl ImageFont {
                 // 创建图像并绘制缩放字符
                 unsafe {
                     (*a_memory_image_ptr).create(cur_x, max_height);
-                    // 使用 Graphics 进行绘制（简化实现——实际需要在 Graphics 中实现 draw_image 的缩放版本）
+                    // 如果有原始图像，将缩放后的字符绘制到新图像上
+                    if !layer_image_ptr.is_null() {
+                        let mut g = Graphics::new_with_image(a_memory_image_ptr as *mut Image);
+                        for (ch, cd) in &char_data_map {
+                            if let Some(scaled_rect) = active_layer.scaled_char_image_rects.get(ch) {
+                                let orig_rect = &cd.image_rect;
+                                g.draw_image_src(
+                                    &*layer_image_ptr,
+                                    scaled_rect.x,
+                                    scaled_rect.y,
+                                    orig_rect,
+                                );
+                            }
+                        }
+                    }
                 }
             }
 
@@ -1049,33 +1104,33 @@ impl ImageFont {
 
             // 更新 ImageFont 的 ascent/height 等字段
             let a_layer_ascent_value =
-                (layer_ascent_val as f64 * a_point_size / a_layer_point_size as f64) as i32;
+                (layer_ascent_val as f64 * effective_ps / effective_layer_ps) as i32;
             if a_layer_ascent_value > self.ascent {
                 self.ascent = a_layer_ascent_value;
             }
 
             if layer_height_val != 0 {
                 let a_layer_height =
-                    (layer_height_val as f64 * a_point_size / a_layer_point_size as f64) as i32;
+                    (layer_height_val as f64 * effective_ps / effective_layer_ps) as i32;
                 if a_layer_height > self.height {
                     self.height = a_layer_height;
                 }
             } else {
                 let a_layer_height =
-                    (layer_default_height_val as f64 * a_point_size / a_layer_point_size as f64) as i32;
+                    (layer_default_height_val as f64 * effective_ps / effective_layer_ps) as i32;
                 if a_layer_height > self.height {
                     self.height = a_layer_height;
                 }
             }
 
             let an_ascent_padding =
-                (layer_ascent_padding_val as f64 * a_point_size / a_layer_point_size as f64) as i32;
+                (layer_ascent_padding_val as f64 * effective_ps / effective_layer_ps) as i32;
             if first_layer || an_ascent_padding < self.ascent_padding {
                 self.ascent_padding = an_ascent_padding;
             }
 
             let a_line_spacing_offset =
-                (layer_line_spacing_offset_val as f64 * a_point_size / a_layer_point_size as f64) as i32;
+                (layer_line_spacing_offset_val as f64 * effective_ps / effective_layer_ps) as i32;
             if first_layer || a_line_spacing_offset > self.line_spacing_offset {
                 self.line_spacing_offset = a_line_spacing_offset;
             }
