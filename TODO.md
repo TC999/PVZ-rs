@@ -2513,7 +2513,7 @@ class Plant : public GameObject)`
 
 **类/结构体:**
 
-- `[ ]` `class AlmanacDialog : LawnDialog` (L25, 0 个方法, 10 个成员)
+- `[x]` `class AlmanacDialog : LawnDialog` (L25, 0 个方法, 10 个成员) — 类型定义完成
 
 **自由函数:**
 
@@ -2524,7 +2524,12 @@ private:
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/widget/almanac_dialog.rs
+设计决策:
+- AlmanacDialog 类 → Rust struct（11个字段 + reanim[4] 数组）
+- 常量 NUM_ALMANAC_SEEDS=49, NUM_ALMANAC_ZOMBIES=26 等
+- 所有方法签名存根已创建（待从 AlmanacDialog.cpp 翻译）
+- 全局变量 gZombieDefeated 暂未翻译
 ```
 
 ### `[x]` `src\Lawn\Widget\AwardScreen.cpp`
