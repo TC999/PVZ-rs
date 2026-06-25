@@ -508,6 +508,15 @@ impl LawnApp {
     pub fn need_pause_game(&self) -> bool { false }
     pub fn need_register(&self) -> bool { false }
 
+    // ==================== 缺失的方法（GameSelector 需要） ====================
+
+    pub fn is_ice_demo(&self) -> bool { false }
+    pub fn is_trial_stage_locked(&self) -> bool { false }
+    pub fn save_file_exists(&self) -> bool { false }
+    pub fn is_first_time_adventure_mode(&self) -> bool { false }
+    pub fn earned_gold_trophy(&self) -> bool { false }
+    pub fn kill_dialog(&mut self, _dialog: Dialogs) {}
+
     /// 获取布尔属性（对应 C++ GetBoolean）
     pub fn get_boolean(&self, id: &str, default: bool) -> bool {
         // C++ 中从 mBoolProperties 读取，Rust 简化版始终返回默认值
