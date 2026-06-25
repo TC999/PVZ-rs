@@ -2549,8 +2549,8 @@ private:
 
 **类/结构体:**
 
-- `[ ]` `class AchievementScreenItem` (L13, 0 个方法, 6 个成员)
-- `[ ]` `class AwardScreen : Widget` (L23, 0 个方法, 10 个成员)
+- `[x]` `class AchievementScreenItem` (L13, 0 个方法, 6 个成员)
+- `[x]` `class AwardScreen : Widget` (L23, 0 个方法, 10 个成员)
 
 **自由函数:**
 
