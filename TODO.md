@@ -2340,7 +2340,12 @@ class Plant : public GameObject)`
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/system/save_game.rs
+设计决策:
+- C++ 自由函数 LawnLoadGame/LawnSaveGame → Rust 自由函数
+- Board* → Option<*mut Board>
+- std::string → &str
+- 具体 TLV 序列化实现待从 SaveGame.cpp (3115行) 翻译
 ```
 
 ### `[x]` `src\Lawn\System\TypingCheck.cpp`
