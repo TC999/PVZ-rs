@@ -405,11 +405,13 @@ impl ResourceManager {
             }
         });
 
-        let mut image_data = None;
+        let mut image_data: Option<Vec<u8>> = None;
+        let mut loaded_path = String::new();
         for p in &try_paths {
             let data = with_pak_interface(|pak| pak.load_file(p));
             if data.is_some() {
                 eprintln!("    load_image: 从 PAK 读取 '{}' 成功", p);
+                loaded_path = p.clone();
                 image_data = data;
                 break;
             }
@@ -423,6 +425,7 @@ impl ResourceManager {
                 let mut fs_result = None;
                 for p in &try_paths {
                     if let Ok(d) = std::fs::read(p) {
+                        loaded_path = p.clone();
                         fs_result = Some(d);
                         break;
                     }
@@ -454,7 +457,7 @@ impl ResourceManager {
         let raw = decoded.as_raw();
 
         // 将 RGBA 字节数据转换为 u32 像素 (ARGB 格式)
-        let pixels: Vec<u32> = raw.chunks(4).map(|chunk| {
+        let mut pixels: Vec<u32> = raw.chunks(4).map(|chunk| {
             let r = chunk[0] as u32;
             let g = chunk[1] as u32;
             let b = chunk[2] as u32;
@@ -462,9 +465,71 @@ impl ResourceManager {
             (a << 24) | (r << 16) | (g << 8) | b
         }).collect();
 
+        // ===== 查找并合成独立的 Alpha 遮罩（对应 C++ ImageLib::GetImage 逻辑）=====
+        // C++ GetImage 会查找 `_filename` 或 `filename_`（同级目录下）作为 alpha 遮罩
+        // 从实际加载路径中提取目录前缀，构建对应的 alpha 遮罩路径
+        let base = &res.base.path;
+        let base_lower = base.to_lowercase();
+        let dir_prefix = if let Some(pos) = loaded_path.rfind(['/', '\\']) {
+            &loaded_path[..=pos]
+        } else {
+            ""
+        };
+        let alpha_paths = [
+            format!("{}_{}", dir_prefix, base_lower),
+            format!("{}_{}.png", dir_prefix, base_lower),
+            format!("{}_{}.jpg", dir_prefix, base_lower),
+            format!("{}{}_", dir_prefix, base_lower),
+            format!("{}{}_.png", dir_prefix, base_lower),
+            format!("{}{}_.jpg", dir_prefix, base_lower),
+        ];
+        let mut alpha_data = None;
+        for ap in &alpha_paths {
+            let d = with_pak_interface(|pak| pak.load_file(ap));
+            if d.is_some() {
+                eprintln!("    load_image: 发现 alpha 遮罩 '{}'", ap);
+                alpha_data = d;
+                break;
+            }
+        }
+        // 也检查文件系统
+        if alpha_data.is_none() {
+            for ap in &alpha_paths {
+                if let Ok(d) = std::fs::read(ap) {
+                    eprintln!("    load_image: 文件系统发现 alpha 遮罩 '{}'", ap);
+                    alpha_data = Some(d);
+                    break;
+                }
+            }
+        }
+        if let Some(alpha_bytes) = alpha_data {
+            if let Ok(alpha_img) = image::load_from_memory(&alpha_bytes) {
+                let alpha_rgba = alpha_img.to_rgba8();
+                let aw = alpha_rgba.width() as i32;
+                let ah = alpha_rgba.height() as i32;
+                let a_raw = alpha_rgba.as_raw();
+                // ComposeAlpha（对应 C++）：将遮罩的蓝色通道(B)复制为主图的 alpha 通道
+                let min_w = width.min(aw);
+                let min_h = height.min(ah);
+                for y in 0..min_h {
+                    for x in 0..min_w {
+                        let src_idx = (y * aw + x) as usize;
+                        let dst_idx = (y * width + x) as usize;
+                        if dst_idx < pixels.len() && (src_idx * 4 + 2) < a_raw.len() {
+                            let mask_b = a_raw[src_idx * 4 + 2] as u32; // B channel
+                            pixels[dst_idx] = (pixels[dst_idx] & 0x00FFFFFF) | (mask_b << 24);
+                        }
+                    }
+                }
+            }
+        }
+
         // 创建 MemoryImage
         let mut mem_image = Box::new(MemoryImage::new(width, height));
         mem_image.set_bits(&pixels, width, height, false);
+
+        // === 去除透明像素的黑边（对应 C++ TodMarkImageForSanding / FixPixelsOnAlphaEdgeForBlending）===
+        mem_image.fix_pixels_on_alpha_edge_for_blending();
 
         // 通过 GLInterface 创建纹理
         if let Some(app_ptr) = self.app {

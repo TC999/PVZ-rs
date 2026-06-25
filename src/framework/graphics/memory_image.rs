@@ -57,6 +57,9 @@ pub struct MemoryImage {
     pub app: *mut crate::framework::sexy_app_base::SexyAppBase,
 }
 
+/// 渲染标记常量（对应 C++ RENDERIMAGEFLAG_SANDING 等）
+pub const RENDERFLAG_SANDING: u32 = 0x1000;
+
 impl MemoryImage {
     /// 创建 MemoryImage（对应 C++ MemoryImage(theApp)）
     pub fn new(width: i32, height: i32) -> Self {
@@ -369,6 +372,101 @@ impl MemoryImage {
             self.base.pixels[idx + 2] = color.b;
             self.base.pixels[idx + 3] = color.a;
         }
+    }
+
+    /// 检查图像是否有全天透明像素
+    fn has_transparent_pixels(&self) -> bool {
+        let pixels = &self.base.pixels;
+        for chunk in pixels.chunks(4) {
+            if chunk.len() == 4 && chunk[3] == 0 {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// 计算透明像素附近非透明像素的平均 RGB 颜色（对应 C++ AverageNearByPixels）
+    /// `pixels`：RGBA 字节数组，`stride`：每行字节数（width * 4）
+    /// 扫描上方一行和下方一行共6个相邻像素，忽略透明像素和自身
+    fn average_nearby_pixels(pixels: &[u8], stride: i32, x: i32, y: i32, width: i32, height: i32) -> (u8, u8, u8) {
+        let mut r_sum: u32 = 0;
+        let mut g_sum: u32 = 0;
+        let mut b_sum: u32 = 0;
+        let mut count: u32 = 0;
+
+        // C++ 逻辑：遍历上方行 (i=-1) 和下方行 (i=1)，跳过当前行 (i=0)
+        for &i in &[-1i32, 1i32] {
+            let ny = y + i;
+            if ny < 0 || ny >= height {
+                continue;
+            }
+            for j in -1i32..=1i32 {
+                let nx = x + j;
+                if nx < 0 || nx >= width {
+                    continue;
+                }
+                let idx = (ny * stride + nx) as usize * 4;
+                if idx + 3 < pixels.len() {
+                    // 检查是否非透明（alpha > 0）
+                    if pixels[idx + 3] != 0 {
+                        r_sum += pixels[idx] as u32;
+                        g_sum += pixels[idx + 1] as u32;
+                        b_sum += pixels[idx + 2] as u32;
+                        count += 1;
+                    }
+                }
+            }
+        }
+
+        if count == 0 {
+            return (0, 0, 0);
+        }
+
+        (
+            (r_sum / count).min(255) as u8,
+            (g_sum / count).min(255) as u8,
+            (b_sum / count).min(255) as u8,
+        )
+    }
+
+    /// 修复透明像素边缘的黑边（对应 C++ FixPixelsOnAlphaEdgeForBlending）
+    /// 将完全透明的像素（alpha=0）的颜色替换为附近非透明像素的平均色，
+    /// 防止在纹理采样或混合时出现黑色边缘。
+    pub fn fix_pixels_on_alpha_edge_for_blending(&mut self) {
+        if self.base.pixels.is_empty() || self.base.width <= 0 || self.base.height <= 0 {
+            return;
+        }
+
+        // 如果没有透明像素，无需处理
+        if !self.has_transparent_pixels() {
+            return;
+        }
+
+        let width = self.base.width;
+        let height = self.base.height;
+        let stride = width;
+
+        for y in 0..height {
+            for x in 0..width {
+                let idx = (y * stride + x) * 4;
+                let idx_u = idx as usize;
+                if idx_u + 3 >= self.base.pixels.len() {
+                    continue;
+                }
+                // 如果像素完全不透明（alpha == 0）
+                if self.base.pixels[idx_u + 3] == 0 {
+                    let (avg_r, avg_g, avg_b) = Self::average_nearby_pixels(
+                        &self.base.pixels, stride, x, y, width, height,
+                    );
+                    self.base.pixels[idx_u] = avg_r;
+                    self.base.pixels[idx_u + 1] = avg_g;
+                    self.base.pixels[idx_u + 2] = avg_b;
+                    // alpha 保持为 0
+                }
+            }
+        }
+
+        self.bits_changed_count += 1;
     }
 
     /// 设置图像模式（对应 C++ SetImageMode）
