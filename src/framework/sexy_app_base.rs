@@ -15,6 +15,7 @@ use sdl2::video::{GLContext, GLProfile, Window};
 use crate::framework::color::Color;
 use crate::framework::common;
 use crate::framework::rect::Rect;
+use crate::framework::key_codes::*;
 use crate::framework::graphics::gl_image::GLImage;
 use crate::framework::graphics::memory_image::MemoryImage;
 use crate::framework::graphics::image::Image;
@@ -109,6 +110,64 @@ pub struct SexyAppBase {
     pub screen_image: Option<*mut MemoryImage>,
     // 屏幕图像的 GL 纹理 ID（用于渲染到屏幕）
     pub screen_gl_texture: Option<u32>,
+}
+
+/// 将 SDL2 Keycode（C 风格的 int）转换为框架 KeyCode（Windows VK 兼容）
+/// 对应 C++ Input.cpp 中的 SDLKeyToKeyCode
+fn sdl_keycode_to_keycode(sdl_key: i32) -> KeyCode {
+    // 字母 a-z → 'A'-'Z' (65-90)
+    if sdl_key >= 'a' as i32 && sdl_key <= 'z' as i32 {
+        return (sdl_key - ('a' as i32) + ('A' as i32)) as KeyCode;
+    }
+    // 数字 0-9 → 48-57
+    if sdl_key >= '0' as i32 && sdl_key <= '9' as i32 {
+        return sdl_key as KeyCode;
+    }
+    match sdl_key {
+        8   => KEYCODE_BACKSPACE,      // SDLK_BACKSPACE
+        9   => KEYCODE_TAB,            // SDLK_TAB
+        13  => KEYCODE_RETURN,         // SDLK_RETURN
+        27  => KEYCODE_ESCAPE,         // SDLK_ESCAPE
+        32  => KEYCODE_SPACE,          // SDLK_SPACE
+        127 => KEYCODE_DELETE,         // SDLK_DELETE (ASCII DEL → VK_DELETE 46...)
+        // 这里 SDLK_DELETE=127 映射到 46，但 Rust 版 KEYCODE_DELETE=46
+        // 直接用 SDL 原始值可能会错，所以特殊处理
+        46  => KEYCODE_DELETE,         // 有些系统用 46
+
+        // 方向键
+        1073741903 | 273 => KEYCODE_UP,       // SDLK_UP / 某些平台
+        1073741904 | 274 => KEYCODE_DOWN,
+        1073741902 | 276 => KEYCODE_LEFT,
+        1073741905 | 275 => KEYCODE_RIGHT,
+
+        // 功能键
+        1073741882 => KEYCODE_F1,
+        1073741883 => KEYCODE_F2,
+        1073741884 => KEYCODE_F3,
+        1073741885 => KEYCODE_F4,
+        1073741886 => KEYCODE_F5,
+        1073741887 => KEYCODE_F6,
+        1073741888 => KEYCODE_F7,
+        1073741889 => KEYCODE_F8,
+        1073741890 => KEYCODE_F9,
+        1073741891 => KEYCODE_F10,
+        1073741892 => KEYCODE_F11,
+        1073741893 => KEYCODE_F12,
+
+        // 其他
+        1073741897 => KEYCODE_INSERT,    // SDLK_INSERT
+        1073741898 => KEYCODE_HOME,      // SDLK_HOME
+        1073741899 => KEYCODE_PAGE_UP,   // SDLK_PAGEUP
+        1073741901 => KEYCODE_END,       // SDLK_END
+        1073741900 => KEYCODE_PAGE_DOWN, // SDLK_PAGEDOWN
+
+        // 修饰键
+        1073742049 | 1073742053 => KEYCODE_SHIFT,   // LSHIFT / RSHIFT
+        1073742048 | 1073742052 => KEYCODE_CONTROL, // LCTRL / RCTRL
+        1073742050 | 1073742054 => KEYCODE_ALT,     // LALT / RALT
+
+        _ => sdl_key as KeyCode,
+    }
 }
 
 impl SexyAppBase {
@@ -594,7 +653,8 @@ impl SexyAppBase {
                     self.alt_down = keymod.intersects(
                         sdl2::keyboard::Mod::LALTMOD | sdl2::keyboard::Mod::RALTMOD,
                     );
-                    self.key_down(*kc);
+                    let key: i32 = (*kc).into();
+                    self.key_down(sdl_keycode_to_keycode(key));
                 }
 
                 Event::KeyDown { .. } => {} // no keycode
@@ -602,25 +662,35 @@ impl SexyAppBase {
                 Event::KeyUp {
                     keycode: Some(kc), ..
                 } => {
-                    self.key_up(*kc);
+                    let key: i32 = (*kc).into();
+                    self.key_up(sdl_keycode_to_keycode(key));
                 }
 
                 Event::KeyUp { .. } => {} // no keycode
 
                 Event::MouseButtonDown {
+                    mouse_btn, x, y, clicks, ..
+                } => {
+                    // C++ 编码：左键=1/2, 右键=-1/-2, 中键=3
+                    let btn = match mouse_btn {
+                        MouseButton::Left => clicks as i32,       // 单击=1, 双击=2
+                        MouseButton::Right => -(clicks as i32),   // 单击=-1, 双击=-2
+                        MouseButton::Middle => 3,                 // 中键=3
+                        _ => clicks as i32,
+                    };
+                    self.mouse_down(x, y, btn, clicks as i32);
+                }
+
+                Event::MouseButtonUp {
                     mouse_btn, x, y, ..
                 } => {
                     let btn = match mouse_btn {
                         MouseButton::Left => 1,
-                        MouseButton::Middle => 2,
-                        MouseButton::Right => 3,
+                        MouseButton::Right => -1,
+                        MouseButton::Middle => 3,
                         _ => 0,
                     };
-                    self.mouse_down(x, y, btn, 1);
-                }
-
-                Event::MouseButtonUp { x, y, .. } => {
-                    self.mouse_up(x, y);
+                    self.mouse_up(x, y, btn);
                 }
 
                 Event::MouseMotion { x, y, .. } => {
@@ -774,14 +844,53 @@ impl SexyAppBase {
 
     // ---- 输入事件处理（可被子类重写）----
 
-    pub fn key_down(&mut self, _key: i32) {}
-    pub fn key_up(&mut self, _key: i32) {}
-    pub fn mouse_down(&mut self, _x: i32, _y: i32, _btn: i32, _click_count: i32) {}
-    pub fn mouse_up(&mut self, _x: i32, _y: i32) {}
-    pub fn mouse_move(&mut self, _x: i32, _y: i32) {}
+    /// 按键按下（转发到 WidgetManager）
+    pub fn key_down(&mut self, key: i32) {
+        if let Some(wm) = self.widget_manager {
+            unsafe { (*wm).key_down(key as KeyCode); }
+        }
+    }
 
-    /// 鼠标滚轮（对应 C++ MouseWheel）
-    pub fn mouse_wheel(&mut self, _delta: i32) {}
+    /// 按键释放（转发到 WidgetManager）
+    pub fn key_up(&mut self, key: i32) {
+        if let Some(wm) = self.widget_manager {
+            unsafe { (*wm).key_up(key as KeyCode); }
+        }
+    }
+
+    /// 鼠标按下（转发到 WidgetManager，btn 采用 C++ 编码：左=1/2, 右=-1/-2, 中=3）
+    pub fn mouse_down(&mut self, x: i32, y: i32, btn: i32, _click_count: i32) {
+        if let Some(wm) = self.widget_manager {
+            unsafe {
+                (*wm).mouse_move(x, y);
+                (*wm).mouse_down(x, y, btn);
+            }
+        }
+    }
+
+    /// 鼠标释放（转发到 WidgetManager）
+    pub fn mouse_up(&mut self, x: i32, y: i32, btn: i32) {
+        if let Some(wm) = self.widget_manager {
+            unsafe {
+                (*wm).mouse_move(x, y);
+                (*wm).mouse_up(x, y, btn);
+            }
+        }
+    }
+
+    /// 鼠标移动（转发到 WidgetManager）
+    pub fn mouse_move(&mut self, x: i32, y: i32) {
+        if let Some(wm) = self.widget_manager {
+            unsafe { (*wm).mouse_move(x, y); }
+        }
+    }
+
+    /// 鼠标滚轮（转发到 WidgetManager）
+    pub fn mouse_wheel(&mut self, delta: i32) {
+        if let Some(wm) = self.widget_manager {
+            unsafe { (*wm).mouse_wheel(delta); }
+        }
+    }
 
     /// 更新应用单步（对应 C++ UpdateAppStep，供 Dialog::WaitForResult 使用）
     pub fn update_app_step(&mut self) -> bool {
