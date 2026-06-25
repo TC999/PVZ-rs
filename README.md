@@ -4,7 +4,6 @@
 
 ## 使用方法：
 1. 从[GitHub Actions](https://github.com/TC999/PVZ-rs/actions)下载 CI 产物
-2. 下载[这个文件](https://github.com/libsdl-org/SDL_mixer/releases/download/release-2.8.1/SDL2_mixer-devel-2.8.1-VC.zip)，提取`bin/架构代号/SDL2_mixer.dll`
 3. 从[此处](https://lib.openmpt.org/files/libopenmpt/dev/)下载带`windows`的版本，提取`bin/架构代号/libopenmpt.dll`
 4. 把上述文件全部复制到原版游戏目录下
 
@@ -15,7 +14,7 @@
   git clone https://github.com/TC999/PVZ-rs.git
 ```
 3. 安装依赖（仅限 Linux）
-Debian/Ubuntu
+- Debian/Ubuntu
 ```bash
   sudo apt-get install -y libsdl2-dev libsdl2-mixer-dev
 ```
