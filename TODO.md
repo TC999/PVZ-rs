@@ -2272,13 +2272,19 @@ class Plant : public GameObject)`
 
 **类/结构体:**
 
-- `[ ]` `class ReanimCacheImageVariation` (L16, 0 个方法, 3 个成员)
-- `[ ]` `class ReanimatorCache` (L26, 0 个方法, 5 个成员)
+- `[x]` `class ReanimCacheImageVariation` (L16, 0 个方法, 3 个成员)
+- `[x]` `class ReanimatorCache` (L26, 0 个方法, 5 个成员) — 类型定义完成，方法存根
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/system/reanimation_lawn.rs
+设计决策:
+- ReanimCacheImageVariation 结构体 → Rust struct（MemoryImage* → Option<*mut MemoryImage>）
+- ImageVariationList 类型别名 → TodList<ReanimCacheImageVariation>
+- ReanimatorCache 类 → Rust struct（固定大小数组使用字面量 77/4/37）
+- 所有方法签名存根已创建（待从 ReanimationLawn.cpp 翻译）
+- C++ typedef TodList<...> → Rust pub type ... = TodList<...>
 ```
 
 ### `[x]` `src\Lawn\System\SaveGame.cpp`

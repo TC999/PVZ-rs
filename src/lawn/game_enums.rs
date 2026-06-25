@@ -1693,4 +1693,7 @@ pub enum ReanimationType {
 pub const NUM_SEEDS_IN_CHOOSER: i32 = 49; // 对应 C++ SEED_IMITATER + 1，可选种子数量
 
 /// 僵尸类型计数常量
-pub const NUM_ZOMBIE_TYPES: i32 = 34; // 对应 C++ ZombieType 从 ZOMBIE_NORMAL 到 ZOMBIE_REDEYE_GARGANTUAR 的数量
+pub const NUM_ZOMBIE_TYPES: i32 = 34;
+pub const NUM_SEED_TYPES: usize = 77;
+pub const NUM_MOWER_TYPES: usize = 4;
+pub const NUM_CACHED_ZOMBIE_TYPES: usize = 37;
