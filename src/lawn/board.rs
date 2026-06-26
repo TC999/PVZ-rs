@@ -15,6 +15,7 @@ use crate::lawn::grid_item::{GridItem, GridItemType};
 use crate::lawn::seed_packet::SeedPacket;
 use crate::lawn::challenge::Challenge;
 use crate::lawn::cursor_object::CursorObject;
+use crate::lawn::tool_tip_widget::ToolTipWidget;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::rect::Rect;
 use crate::framework::color::Color;
@@ -352,6 +353,17 @@ pub struct Board {
 
     // 光标对象
     pub cursor_object: CursorObject,
+
+    // 交互状态
+    pub m_time_stop_counter: i32,        // 对应 C++ mTimeStopCounter
+    pub m_tutorial_timer: i32,           // 对应 C++ mTutorialTimer
+    pub m_tutorial_particle_id: u32,     // 对应 C++ mTutorialParticleID（ParticleSystemID）
+
+    // 工具提示
+    pub tool_tip: ToolTipWidget,         // 对应 C++ mToolTip
+
+    // 切场景引用（用于 CutScene 交互委托）
+    pub m_cut_scene: Option<*mut crate::lawn::cutscene::CutScene>,
 }
 
 impl Board {
@@ -453,6 +465,11 @@ impl Board {
             m_sukhbir_mode: false,
             m_super_mower_mode: false,
             cursor_object: CursorObject::new(),
+            m_time_stop_counter: 0,
+            m_tutorial_timer: 0,
+            m_tutorial_particle_id: 0,
+            tool_tip: ToolTipWidget::new(),
+            m_cut_scene: None,
         }
     }
 
@@ -2467,6 +2484,117 @@ impl Board {
     pub fn update_mouse_position(&mut self, x: i32, y: i32) {
         self.m_prev_mouse_x = x;
         self.m_prev_mouse_y = y;
+    }
+
+    /// 僵尸命中检测（对应 C++ ZombieHitTest L3117）
+    /// 返回鼠标位置下最上层的僵尸（越靠后的行中 y 值越大优先级越高）
+    pub fn zombie_hit_test(&self, mouse_x: i32, mouse_y: i32) -> Option<usize> {
+        let mut record: Option<usize> = None;
+        let mut record_y: i32 = i32::MIN;
+
+        for (i, z) in self.zombies.iter().enumerate() {
+            // 排除已死亡或没有有效碰撞框的僵尸
+            if z.dead {
+                continue;
+            }
+
+            // 检查僵尸矩形是否包含鼠标位置
+            if z.zombie_rect.contains(mouse_x, mouse_y) {
+                match record {
+                    None => {
+                        record = Some(i);
+                        record_y = z.base.y;
+                    }
+                    Some(_) if z.base.y > record_y => {
+                        record = Some(i);
+                        record_y = z.base.y;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        record
+    }
+
+    /// 更新工具提示（对应 C++ UpdateToolTip L3302 完整版）
+    /// 根据鼠标悬停的对象显示对应提示文本
+    pub fn update_tool_tip(&mut self, mouse_x: i32, mouse_y: i32) {
+        // 对话框中不可见，ZombiesWon 场景不可见
+        self.tool_tip.m_visible = false;
+
+        if self.m_paused || self.m_time_stop_counter > 0 {
+            return;
+        }
+
+        // 获取 App 引用
+        let app = match self.app {
+            Some(a) => unsafe { &*a },
+            None => return,
+        };
+
+        // 关卡开场（SCENE_LEVEL_INTRO）：显示僵尸名称提示
+        if app.game_scene == crate::lawn::lawn_app::GameScenes::MainMenu {
+            // 在选卡阶段显示僵尸提示
+            if let Some(z_idx) = self.zombie_hit_test(mouse_x, mouse_y) {
+                if let Some(z) = self.zombies.get(z_idx) {
+                    if z.from_wave == Zombie::ZOMBIE_WAVE_CUTSCENE {
+                        let def = get_zombie_definition(z.zombie_type);
+                        self.tool_tip.set_title(&format!("[{}]", def.zombie_name));
+                        self.tool_tip.set_label("[CLICK_TO_VIEW]");
+                        self.tool_tip.m_visible = true;
+                        self.tool_tip.m_center = true;
+                        let r = &z.zombie_rect;
+                        self.tool_tip.m_x = r.x + r.width / 2 + 5;
+                        self.tool_tip.m_y = r.y + r.height - 10;
+                        return;
+                    }
+                }
+            }
+            self.tool_tip.m_visible = false;
+            return;
+        }
+
+        // 游戏进行中
+        if !self.can_interact_with_board_buttons() {
+            return;
+        }
+
+        // 重置提示
+        self.tool_tip.set_title("");
+        self.tool_tip.set_label("");
+        self.tool_tip.set_warning_text("");
+        self.tool_tip.m_center = false;
+
+        // 委托 Challenge::UpdateToolTip
+        if let Some(ref ch) = self.challenge {
+            if ch.update_tool_tip(mouse_x, mouse_y) != 0 {
+                return;
+            }
+        }
+
+        // 命中检测
+        let mut hit_result = HitResult {
+            object: None,
+            object_type: GameObjectType::None,
+        };
+        self.mouse_hit_test(mouse_x, mouse_y, &mut hit_result);
+
+        // 根据命中对象类型设置提示
+        match hit_result.object_type {
+            GameObjectType::Coin => {
+                self.tool_tip.set_label("");
+                self.tool_tip.m_visible = true;
+            }
+            GameObjectType::SeedPacket => {
+                // 种子包提示 — 依赖种子包字段，暂简化
+                // 对应 C++ L3470-3664 的完整逻辑
+                self.tool_tip.m_visible = false;
+            }
+            _ => {
+                self.tool_tip.m_visible = false;
+            }
+        }
     }
 
     // ========== 进度条 ==========
