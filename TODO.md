@@ -1796,7 +1796,17 @@ MotionTrailFrame 和 GridItem 结构体已完整翻译。
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/lawn_common.rs
+设计决策:
+- gLawnEditWidgetColors 二维数组 → const LAWN_EDIT_WIDGET_COLORS
+- ModInRange/GridInRange → 自由函数 mod_in_range/grid_in_range
+- TileImageHorizontally/Vertically → tile_image_horizontally/vertically（使用 draw_image_src）
+- LawnEditWidget 类 → Rust struct（继承关系暂不处理）
+- CreateEditWidget/MakeNewCheckbox → 工厂函数（部分功能因资源依赖暂存根）
+- DrawEditBox → 暂存根（依赖 IMAGE_EDITBOX 资源）
+- GetSavedGameName/GetLegacySavedGameName → String format
+- GetCurrentDaysSince2000 → SystemTime 计算
+- cargo check 通过
 ```
 
 ### `[x]` `src\Lawn\LawnCommon.h`
@@ -1808,12 +1818,16 @@ MotionTrailFrame 和 GridItem 结构体已完整翻译。
 
 **类/结构体:**
 
-- `[ ]` `class LawnEditWidget : EditWidget` (L24, 0 个方法, 2 个成员)
+- `[x]` `class LawnEditWidget : EditWidget` (L24, 0 个方法, 2 个成员)
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/lawn_common.rs
+设计决策:
+- LawnEditWidget 继承 EditWidget → Rust 独立 struct（含 dialog 和 auto_cap_first_letter 字段）
+- KeyDown/KeyChar 方法已翻译，基类调用暂注释
+- cargo check 通过
 ```
 
 ### `[x]` `src\Lawn\LawnMower.cpp`
