@@ -245,6 +245,80 @@ impl std::ops::Sub for SexyVector2 {
 }
 
 // ============================================================
+// 3D 向量类型（对应 C++ SexyVector3）
+// ============================================================
+
+/// 3D 浮点向量（对应 C++ SexyVector3）
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(C)]
+pub struct SexyVector3 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+impl SexyVector3 {
+    pub const ZERO: SexyVector3 = SexyVector3 { x: 0.0, y: 0.0, z: 0.0 };
+
+    pub const fn new(x: f32, y: f32, z: f32) -> Self {
+        SexyVector3 { x, y, z }
+    }
+
+    /// 点积（对应 C++ Dot）
+    pub fn dot(self, v: SexyVector3) -> f32 {
+        self.x * v.x + self.y * v.y + self.z * v.z
+    }
+
+    /// 叉积（对应 C++ Cross）
+    pub fn cross(self, v: SexyVector3) -> SexyVector3 {
+        SexyVector3 {
+            x: self.y * v.z - self.z * v.y,
+            y: self.z * v.x - self.x * v.z,
+            z: self.x * v.y - self.y * v.x,
+        }
+    }
+
+    /// 模长（对应 C++ Magnitude）
+    pub fn magnitude(self) -> f32 {
+        (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
+    }
+
+    /// 归一化（对应 C++ Normalize）
+    pub fn normalize(self) -> SexyVector3 {
+        let mag = self.magnitude();
+        if mag != 0.0 { self / mag } else { self }
+    }
+}
+
+impl std::ops::Add for SexyVector3 {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self {
+        SexyVector3 { x: self.x + rhs.x, y: self.y + rhs.y, z: self.z + rhs.z }
+    }
+}
+
+impl std::ops::Sub for SexyVector3 {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self {
+        SexyVector3 { x: self.x - rhs.x, y: self.y - rhs.y, z: self.z - rhs.z }
+    }
+}
+
+impl std::ops::Mul<f32> for SexyVector3 {
+    type Output = Self;
+    fn mul(self, rhs: f32) -> Self {
+        SexyVector3 { x: self.x * rhs, y: self.y * rhs, z: self.z * rhs }
+    }
+}
+
+impl std::ops::Div<f32> for SexyVector3 {
+    type Output = Self;
+    fn div(self, rhs: f32) -> Self {
+        SexyVector3 { x: self.x / rhs, y: self.y / rhs, z: self.z / rhs }
+    }
+}
+
+// ============================================================
 // UTF8 编解码（对应 C++ Common.h UTF8DecodeNext）
 // ============================================================
 

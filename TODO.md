@@ -4284,12 +4284,19 @@ SexyAppBase 结构体已实现。
 **类/结构体:**
 
 - `[x] `class SexyVector2` (L13, 0 个方法, 2 个成员) — Rust common.rs:220
-- `[ ] `class SexyVector3` (L52, 0 个方法, 2 个成员) — Rust 侧未实现
+- `[x] `class SexyVector3` (L52, 0 个方法, 2 个成员) — Rust common.rs 已实现
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/framework/common.rs
+SexyVector3:
+- struct 字段：x, y, z（f32，#[repr(C)]）
+- 方法：new(), dot(), cross(), magnitude(), normalize()
+- 运算符：Add, Sub, Mul<f32>, Div<f32>
+- 常量：ZERO
+- 风格与 SexyVector2 一致
+编译状态: cargo check 通过
 ```
 
 ### `[x]` `src\SexyAppFramework\misc\XMLParser.cpp`
