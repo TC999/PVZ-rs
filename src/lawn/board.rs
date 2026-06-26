@@ -617,6 +617,9 @@ impl Board {
 
         // 检查游戏状态
         self.check_game_state();
+
+        // 更新火焰扫荡效果
+        self.update_fwoosh();
     }
 
     /// 更新阳光产生（对应 C++ UpdateSunSpawning）
