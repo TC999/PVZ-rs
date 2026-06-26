@@ -3107,7 +3107,7 @@ class TrailParams)`
 
 **类/结构体:**
 
-- `[ ]` `struct StringLessNoCase` (L369, 0 个方法, 0 个成员)
+- `[x]` `struct StringLessNoCase` (L369, 0 个方法, 0 个成员) — Rust 通过 case_insensitive_cmp 实现（profile_mgr.rs）
 
 **翻译备注:**
 
