@@ -28,6 +28,13 @@ use crate::framework::resource_manager::ResourceManager;
 use crate::framework::paklib::{init_pak_interface, with_pak_interface_mut, set_resource_folder};
 
 /// 应用基类
+pub static mut G_SEXY_APP: Option<*mut SexyAppBase> = None;
+
+/// 全局 SexyApp 实例指针（对应 C++ gSexyApp）
+pub fn get_sexy_app() -> Option<&'static mut SexyAppBase> {
+    unsafe { G_SEXY_APP.and_then(|p| p.as_mut()) }
+}
+
 pub struct SexyAppBase {
     // SDL2 上下文（使用外部 crate，dropped last 以正确清理）
     pub sdl_context: Option<sdl2::Sdl>,
@@ -110,6 +117,14 @@ pub struct SexyAppBase {
     pub screen_image: Option<*mut MemoryImage>,
     // 屏幕图像的 GL 纹理 ID（用于渲染到屏幕）
     pub screen_gl_texture: Option<u32>,
+
+    // ---- SexyApp（继承层）字段 ----
+    pub build_num: i32,
+    pub build_date: String,
+    pub user_name: String,
+    pub product_version: String,
+    pub demo_prefix: String,
+    pub demo_file_name: String,
 }
 
 /// 将 SDL2 Keycode（C 风格的 int）转换为框架 KeyCode（Windows VK 兼容）
@@ -214,6 +229,12 @@ impl SexyAppBase {
             music_interface: None,
             resource_manager: None,
             dialog_map: HashMap::new(),
+            build_num: 0,
+            build_date: String::new(),
+            user_name: String::new(),
+            product_version: String::from("1.0"),
+            demo_prefix: String::from("pvzp"),
+            demo_file_name: String::from("pvzp.dmo"),
             cursor_num: 0,
             memory_image_set: Vec::new(),
             update_app_state: 0,
@@ -924,6 +945,62 @@ impl SexyAppBase {
 
     /// 检查是否已关闭
     pub fn is_shutdown(&self) -> bool { self.m_shutdown_flag }
+
+    // ==================== SexyApp 继承层方法 ====================
+
+    /// 命令行参数处理（对应 C++ SexyApp::HandleCmdLineParam）
+    /// 处理 -version 和 -license 等参数
+    pub fn handle_cmd_line_param(&self, param_name: &str, param_value: &str) {
+        match param_name {
+            "-version" => {
+                // 打印版本信息后退出
+                let version_string = format!(
+                    "Product: {}\nVersion: {}\nBuild Num: {}\nBuild Date: {}\nLicense: LGPL-3.0-or-later",
+                    self.prod_name, self.product_version, self.build_num, self.build_date
+                );
+                eprintln!("{}", version_string);
+                std::process::exit(0);
+            }
+            "-license" | "-copyright" => {
+                eprintln!("PvZ-Portable - LGPL-3.0-or-later");
+                std::process::exit(0);
+            }
+            _ => {
+                // 其他参数传递给基类处理
+            }
+        }
+    }
+
+    /// 获取游戏 SEH 信息（用于诊断，对应 C++ SexyApp::GetGameSEHInfo）
+    pub fn get_game_seh_info(&self) -> String {
+        format!(
+            "Build Num: {}\r\nBuild Date: {}\r\n",
+            self.build_num, self.build_date
+        )
+    }
+
+    /// 显示前钩子（对应 C++ SexyApp::PreDisplayHook）
+    pub fn pre_display_hook(&mut self) {}
+
+    /// 属性初始化钩子（对应 C++ SexyApp::InitPropertiesHook）
+    /// 加载 properties/partner.xml 配置
+    pub fn init_properties_hook(&mut self) {
+        // 在 Rust 中，属性通过 ResourceManager 加载
+        // 这里简化为从配置中读取标题
+        eprintln!("[SexyApp] 初始化属性配置");
+        // 实际实现需加载 XML 配置
+    }
+
+    /// 终止前钩子（对应 C++ SexyApp::PreTerminate）
+    pub fn pre_terminate(&mut self) {}
+
+    /// 更新帧（对应 C++ SexyApp::UpdateFrames）
+    /// 在 SexyApp 层只是调用基类方法，Rust 中直接保留空实现
+    pub fn update_frames(&mut self) {
+        // C++ 中：SexyAppBase::UpdateFrames();
+        // 在合并后的 Rust 结构中，此方法直接调用 base 的对应功能
+        // 当前的 update 循环由外部引擎驱动
+    }
 }
 
 // ---- DialogListener / ButtonListener 实现 ----

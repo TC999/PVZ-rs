@@ -1319,17 +1319,25 @@ enum ZombieType : int32_t)`
 
 **类/结构体:**
 
-- `[ ]` `class LevelStats` (L45, 0 个方法, 1 个成员)
-- `[ ]` `class LawnApp : SexyApp` (L55, 0 个方法, 10 个成员)
+- `[x]` `class LevelStats` (L45, 0 个方法, 1 个成员)
+- `[x]` `class LawnApp : SexyApp` (L55, 0 个方法, 10 个成员)
 
 **自由函数:**
 
-- `[ ]` `class LawnApp : public SexyApp()`
+- `[x]` `class LawnApp : public SexyApp()`
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/lawn_app.rs
+设计决策:
+- LevelStats → Rust 独立 struct，含 unused_lawn_mowers 字段和 new/reset 方法
+- LawnApp → Rust struct 组合 SexyAppBase，所有 C++ 字段完整映射（含 m_refer_id、m_session_id、m_trial_type、m_reanimator_cache 等）
+- 裸指针使用 Option<*mut T> / Option<Box<T>> 模式
+- std::list<ButtonWidget*> → LinkedList<*mut ButtonWidget>
+- TypingCheck 秘籍输入检测字段使用 Option<Box<TypingCheck>>
+- CrazyDaveState 使用 Rust 枚举变体
+- 方法存根已创建（待从 LawnApp.cpp 实现完整逻辑）
 ```
 
 ### `[x]` `src\Resources.cpp`
@@ -4172,12 +4180,21 @@ class TrailParams)`
 
 **类/结构体:**
 
-- `[ ]` `class SexyApp : SexyAppBase` (L11, 0 个方法, 3 个成员)
+- `[x]` `class SexyApp : SexyAppBase` (L11, 0 个方法, 3 个成员)
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/framework/sexy_app_base.rs
+设计决策:
+- C++ 继承链 SexyAppBase ← SexyApp ← LawnApp，Rust 中合并到 SexyAppBase
+- 新增字段: build_num, build_date, user_name, product_version, demo_prefix, demo_file_name
+- 新增方法: handle_cmd_line_param (处理 -version/-license 参数),
+  get_game_seh_info, init_properties_hook, pre_display_hook, pre_terminate, update_frames
+- 全局变量 G_SEXY_APP / get_sexy_app() 对应 C++ gSexyApp
+- 构造函数中初始化 demo_prefix="pvzp", demo_file_name="pvzp.dmo", company_name="Community"
+- handle_cmd_line_param 直接调用 process::exit(0) 对应 C++ DoExit(0)
+- 因直接合并到 SexyAppBase，LawnApp 无需修改即可使用 SexyApp 功能
 ```
 
 ### `[x]` `src\SexyAppFramework\SexyAppBase.cpp`

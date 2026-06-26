@@ -21,6 +21,8 @@ use crate::todlib::reanimator::Reanimation;
 use crate::todlib::tod_particle::TodParticleSystem;
 use crate::todlib::tod_foley::FoleyManager;
 use crate::todlib::effect_system::EffectSystem;
+use crate::lawn::system::reanimation_lawn::ReanimatorCache;
+use crate::lawn::game_enums::TrialType;
 
 /// 游戏场景枚举（对应 C++ GameScenes）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -136,11 +138,27 @@ pub struct LawnApp {
     pub m_dialog_id: i32,
     pub m_tutorial_state: TutorialState,
 
+    // ---- 注册/标识信息 ----
+    pub m_refer_id: String,
+    pub m_register_link: String,
+    pub m_mod: String,
+    pub m_register_resources_loaded: bool,
+
     // ---- 其他 ----
     pub m_mute_sounds_for_cutscene: bool,
     pub m_first_time_game_selector: bool,
-    pub m_register_resources_loaded: bool,
     pub m_last_level_stats: Option<Box<LevelStats>>,
+
+    // ---- 线程状态 ----
+    pub m_loading_zombies_thread_completed: bool,
+
+    // ---- 会话/试用 ----
+    pub m_session_id: isize,
+    pub m_trial_type: TrialType,
+    pub m_debug_trial_locked: bool,
+
+    // ---- 重动画缓存 ----
+    pub m_reanimator_cache: Option<*mut ReanimatorCache>,
 
     // ---- 加载线程状态 ----
     pub m_loading_thread_started: bool,
@@ -189,8 +207,16 @@ impl LawnApp {
             m_dialog_id: -1, m_tutorial_state: TutorialState::Off,
             m_mute_sounds_for_cutscene: false,
             m_first_time_game_selector: false,
-            m_register_resources_loaded: false,
             m_last_level_stats: None,
+            m_register_resources_loaded: false,
+            m_refer_id: String::new(),
+            m_register_link: String::new(),
+            m_mod: String::new(),
+            m_loading_zombies_thread_completed: false,
+            m_session_id: 0,
+            m_trial_type: TrialType::None,
+            m_debug_trial_locked: false,
+            m_reanimator_cache: None,
             m_loading_thread_started: false,
             m_loading_thread_completed: false,
             m_loading_thread_tasks_completed: 0,
