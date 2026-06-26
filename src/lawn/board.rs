@@ -338,6 +338,7 @@ pub struct Board {
     pub m_graves_cleared: u32,
     pub m_plants_eaten: u32,
     pub m_plants_shoveled: u32,
+    pub m_coins_collected: i32,
 
     // 模式标志
     pub m_mustache_mode: bool,
@@ -439,6 +440,7 @@ impl Board {
             m_graves_cleared: 0,
             m_plants_eaten: 0,
             m_plants_shoveled: 0,
+            m_coins_collected: 0,
             m_mustache_mode: false,
             m_future_mode: false,
             m_pinata_mode: false,
@@ -3227,11 +3229,6 @@ impl Board {
         self.survival_save_score();
     }
 
-    /// 完成结束关卡序列（用于保存前清理，对应 C++ Board::CompleteEndLevelSequenceForSaving）
-    pub fn complete_end_level_sequence_for_saving(&mut self) {
-        // 空实现，待后续翻译 C++ Board::CompleteEndLevelSequenceForSaving
-    }
-
     // ========== 背景与资源 ==========
 
     /// 加载背景图片资源（对应 C++ Board::LoadBackgroundImages）
@@ -3497,6 +3494,85 @@ impl Board {
         // self.update_layers();
         // self.reset_fps_stats();
         false
+    }
+
+    /// 完成结束关卡序列（用于保存前清理，对应 C++ Board::CompleteEndLevelSequenceForSaving）
+    /// 将所有未触发的割草机转换为金币，收集正在收集的硬币，更新玩家资料
+    pub fn complete_end_level_sequence_for_saving(&mut self) {
+        if !self.can_drop_loot() {
+            return;
+        }
+
+        // 遍历所有未触发的割草机，将其转换为金币
+        for mower in &self.lawn_mowers {
+            if mower.mower_state != LawnMowerState::Triggered
+                && mower.mower_state != LawnMowerState::Squished
+            {
+                if let Some(app) = self.app {
+                    unsafe {
+                        if let Some(ref mut player) = (*app).player_info {
+                            // 每个未触发割草机奖励一个金币价值（简化版：直接加 100）
+                            player.m_coins += 100;
+                        }
+                    }
+                }
+                self.m_coins_collected += 100;
+            }
+        }
+
+        // 处理正在收集的硬币：标记为死亡（移除）
+        // 注：C++ 中调用 ScoreCoin() 处理正在收集的硬币，Rust 版简化处理
+        for coin in &mut self.coins {
+            coin.dead = true;
+        }
+
+        // C++ 中还会调用 mApp->UpdatePlayerProfileForFinishingLevel()
+        // 该方法暂未翻译，此处留空
+    }
+
+    /// 种植效果（音效和粒子），对应 C++ Board::DoPlantingEffects
+    pub fn do_planting_effects(&mut self, grid_x: i32, grid_y: i32, seed_type: SeedType) {
+        let a_x_pos = self.grid_to_pixel_x(grid_x, grid_y) + 41;
+        let mut a_y_pos = self.grid_to_pixel_y(grid_x, grid_y) + 74;
+
+        if seed_type == SeedType::Lilypad {
+            a_y_pos += 15;
+        } else if seed_type == SeedType::Flowerpot {
+            a_y_pos += 30;
+        }
+
+        if let Some(app) = self.app {
+            unsafe {
+                if self.m_background_type == BackgroundType::Greenhouse {
+                    (*app).play_foley(crate::todlib::tod_foley::FoleyType::Ceramic as i32);
+                    return;
+                }
+                if self.m_background_type == BackgroundType::Zombiquarium {
+                    (*app).play_foley(crate::todlib::tod_foley::FoleyType::PlantWater as i32);
+                    return;
+                }
+
+                // 飞行植物直接播放种植音效
+                // 注：Plant::IsFlying 暂未翻译，暂时跳过
+                if self.is_pool_square(grid_x, grid_y) {
+                    (*app).play_foley(crate::todlib::tod_foley::FoleyType::PlantWater as i32);
+                    (*app).add_tod_particle(
+                        a_x_pos as f32,
+                        a_y_pos as f32,
+                        301000,
+                        crate::lawn::game_enums::ParticleEffect::PlantingPool as i32,
+                    );
+                } else {
+                    (*app).play_foley(crate::todlib::tod_foley::FoleyType::Plant as i32);
+                    (*app).add_tod_particle(
+                        a_x_pos as f32,
+                        a_y_pos as f32,
+                        301000,
+                        crate::lawn::game_enums::ParticleEffect::Planting as i32,
+                    );
+                }
+            }
+        }
     }
 }
 
