@@ -1685,6 +1685,20 @@ impl Board {
         self.cursor_object.seed_type
     }
 
+    /// 从光标刷新种子包（对应 C++ RefreshSeedPacketFromCursor）
+    pub fn refresh_seed_packet_from_cursor(&mut self) {
+        match self.cursor_object.cursor_type {
+            CursorType::PlantFromUsableCoin => {
+                // 需要 Coin 的 DataArrayTryToGet 实现 — 暂略
+            }
+            CursorType::PlantFromBank => {
+                // 需要 SeedBank 和 SeedPacket 的 Activate — 暂略
+            }
+            _ => {}
+        }
+        self.clear_cursor();
+    }
+
     // ========== 僵尸查询 ==========
 
     /// 统计存活的大型僵尸数量（对应 C++ GetLiveGargantuarCount）
@@ -2202,6 +2216,61 @@ impl Board {
     /// 获取顶部植物（对应 C++ GetTopPlantAt 简化版）
     pub fn get_top_plant_at(&self, _grid_x: i32, _grid_y: i32) -> Option<&Plant> {
         self.plants.iter().find(|p| !p.dead)
+    }
+
+    /// 获取格子上的所有植物信息（对应 C++ GetPlantsOnLawn）
+    pub fn get_plants_on_lawn(&self, grid_x: i32, grid_y: i32) -> PlantsOnLawn {
+        let mut result = PlantsOnLawn {
+            under_plant: None,
+            pumpkin_plant: None,
+            flying_plant: None,
+            normal_plant: None,
+        };
+
+        if grid_x < 0 || grid_x >= MAX_GRID_SIZE_X as i32 || grid_y < 0 || grid_y >= MAX_GRID_SIZE_Y as i32 {
+            return result;
+        }
+
+        // Wallnut Bowling 和铁锹教程中不返回植物
+        // 暂略：is_wallnut_bowling_level / is_in_shovel_tutorial 依赖 CutScene
+
+        for (idx, plant) in self.plants.iter().enumerate() {
+            if plant.dead {
+                continue;
+            }
+
+            let mut seed_type = plant.seed_type;
+            if seed_type == SeedType::Imitater && plant.imitater_type != SeedType::None {
+                seed_type = plant.imitater_type;
+            }
+
+            // 检测植物是否位于目标格子内
+            if plant.start_row != grid_y {
+                continue;
+            }
+            if seed_type == SeedType::Cobcannon {
+                if plant.plant_col < grid_x - 1 || plant.plant_col > grid_x {
+                    continue;
+                }
+            } else if plant.plant_col != grid_x {
+                continue;
+            }
+
+            // 分类记录
+            if Plant::is_flying(seed_type) {
+                result.flying_plant = Some(idx);
+            } else if seed_type == SeedType::Flowerpot
+                || (seed_type == SeedType::Lilypad)  // && mApp->mGameMode != GameMode::ChallengeZenGarden
+            {
+                result.under_plant = Some(idx);
+            } else if seed_type == SeedType::Pumpkinshell {
+                result.pumpkin_plant = Some(idx);
+            } else {
+                result.normal_plant = Some(idx);
+            }
+        }
+
+        result
     }
 
     // ========== UI 更新 ==========
@@ -3728,6 +3797,30 @@ impl Board {
                 mower.visible = false;
                 self.lawn_mowers.push(mower);
             }
+        }
+    }
+
+    /// 初始化生存模式阶段（对应 C++ InitSurvivalStage）
+    pub fn init_survival_stage(&mut self) {
+        self.refresh_seed_packet_from_cursor();
+        // mApp->mSoundSystem->GamePause(true) — 依赖 SoundSystem 翻译
+        self.freeze_effects_for_cutscene(true);
+        self.m_level_complete = false;
+        self.init_zombie_waves();
+        // mApp->mGameScene = GameScenes::SCENE_LEVEL_INTRO — 依赖 GameScene 设置
+        // mApp->ShowSeedChooserScreen() — 依赖 LawnApp 方法
+        // mCutScene->StartLevelIntro() — 依赖 CutScene
+        // mSeedBank->UpdateWidth() — 依赖 SeedBank
+
+        /*for i in 0..SEEDBANK_MAX {
+            // 种子包重置 — 依赖 SeedBank 细节
+        }*/
+
+        if self.stage_has_fog() {
+            self.m_fog_blown_count_down = 150; // FOG_BLOW_RETURN_TIME
+        }
+        for j in 0..MAX_GRID_SIZE_Y {
+            self.m_wave_row_got_lawn_mowered[j] = -100;
         }
     }
 
