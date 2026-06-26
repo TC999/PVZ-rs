@@ -2,60 +2,169 @@
 // 对应 C++ src/Lawn/CursorObject.h / CursorObject.cpp
 
 use crate::lawn::game_enums::*;
-use crate::lawn::lawn_app::GameScenes as AppGameScenes;
 use crate::lawn::game_object::GameObject;
-use crate::lawn::board::{Board, MAX_GRID_SIZE_X, MAX_GRID_SIZE_Y};
+use crate::lawn::board::{Board, HitResult};
 use crate::framework::graphics::graphics::Graphics;
-use crate::framework::color::Color;
 
-/// 光标对象 — 用于拖放植物等操作
+/// 光标对象 — 用于拖放植物、工具等操作
+/// 对应 C++ CursorObject : GameObject（完整字段映射）
 pub struct CursorObject {
+    // 基础信息
     pub cursor_type: CursorType,
     pub seed_type: SeedType,
     pub imitater_type: SeedType,
+
+    // 选中索引/ID
+    pub seed_bank_index: i32,       // 对应 mSeedBankIndex（种子槽索引，-1 表示无效）
+    pub coin_id: CoinID,            // 对应 mCoinID（从阳光/硬币中取出的种子）
+    pub glove_plant_id: PlantID,    // 对应 mGlovePlantID（手套抓起的植物）
+    pub duplicator_plant_id: PlantID, // 对应 mDuplicatorPlantID（复制器复制的植物）
+    pub cob_cannon_plant_id: PlantID, // 对应 mCobCannonPlantID（玉米加农炮瞄准）
+
+    // 锤子/动画
+    pub hammer_down_counter: i32,      // 对应 mHammerDownCounter（锤子按下计数）
+    pub reanim_cursor_id: ReanimationID, // 对应 mReanimCursorID（光标上的动画实例）
+
+    // 位置与可见性
     pub x: i32,
     pub y: i32,
-    pub mouse_x: i32,
+    pub mouse_x: i32,          // 用于内部记录的鼠标原始坐标
     pub mouse_y: i32,
-    pub active: bool,
+    pub width: i32,
+    pub height: i32,
+    pub active: bool,          // 是否处于激活状态
+    pub visible: bool,         // 对应 mVisible（从 GameObject 继承）
 }
 
 impl CursorObject {
+    /// 构造函数（对应 C++ CursorObject::CursorObject()）
     pub fn new() -> Self {
         CursorObject {
             cursor_type: CursorType::Normal,
             seed_type: SeedType::None,
             imitater_type: SeedType::None,
+            seed_bank_index: -1,
+            coin_id: COINID_NULL,
+            glove_plant_id: PLANTID_NULL,
+            duplicator_plant_id: PLANTID_NULL,
+            cob_cannon_plant_id: PLANTID_NULL,
+            hammer_down_counter: 0,
+            reanim_cursor_id: REANIMATIONID_NULL,
             x: 0,
             y: 0,
             mouse_x: 0,
             mouse_y: 0,
+            width: 80,
+            height: 80,
             active: false,
+            visible: false,
         }
     }
 
-    /// 初始化拖放
+    /// 初始化拖放（对应 C++ 中设置 mType/mCursorType）
     pub fn init(&mut self, ctype: CursorType, seed_type: SeedType) {
         self.cursor_type = ctype;
         self.seed_type = seed_type;
         self.active = true;
+        self.visible = true;
     }
 
-    /// 更新位置
+    /// 更新光标位置（从鼠标坐标）
     pub fn update_position(&mut self, mx: i32, my: i32) {
         self.mouse_x = mx;
         self.mouse_y = my;
         self.x = mx - 25;
-        self.y = my - 25;
+        self.y = my - 35;
     }
 
-    /// 绘制
-    pub fn draw(&self, _g: &mut Graphics) {}
+    /// 更新（对应 C++ CursorObject::Update() L48-L71）
+    /// 需要 app 的 game_scene 和 mouse 状态，以及 board 的 cutscene
+    pub fn update(&mut self, mouse_x: i32, mouse_y: i32, is_playing: bool, _is_in_shovel_tutorial: bool) {
+        if !is_playing {
+            self.visible = false;
+            return;
+        }
 
-    /// 完成拖放
+        // 更新位置（C++ 中使用 WidgetManager::mLastMouseX/mY）
+        self.mouse_x = mouse_x;
+        self.mouse_y = mouse_y;
+        self.x = mouse_x - 25;
+        self.y = mouse_y - 35;
+        self.visible = true;
+    }
+
+    /// 销毁（对应 C++ CursorObject::Die() L73-L77）
+    /// 移除关联的 Reanimation 实例
+    pub fn die(&mut self) {
+        // 移除光标上的 Reanimation 动画（对应 C++ mApp->RemoveReanimation(mReanimCursorID)）
+        // 由于 App 引用不可达，此处仅重置 ID
+        self.reanim_cursor_id = REANIMATIONID_NULL;
+    }
+
+    /// 完成拖放/清除（对应 C++ ClearCursor 中的重置逻辑）
     pub fn deactivate(&mut self) {
         self.active = false;
+        self.visible = false;
+        self.seed_type = SeedType::None;
         self.cursor_type = CursorType::Normal;
+        self.seed_bank_index = -1;
+        self.coin_id = COINID_NULL;
+        self.duplicator_plant_id = PLANTID_NULL;
+        self.cob_cannon_plant_id = PLANTID_NULL;
+        self.glove_plant_id = PLANTID_NULL;
+        self.reanim_cursor_id = REANIMATIONID_NULL;
+    }
+
+    /// 绘制（对应 C++ CursorObject::Draw() L79-L224）
+    /// 根据光标类型绘制不同的工具/植物图标
+    pub fn draw(&self, _g: &mut Graphics) {
+        // 原始 C++ 实现根据 mCursorType 分支绘制不同图像：
+        //
+        // CURSOR_TYPE_SHOVEL         → DrawImage(IMAGE_SHOVEL)
+        // CURSOR_TYPE_WATERING_CAN   → DrawImage(IMAGE_WATERINGCAN / IMAGE_ZEN_GOLDTOOLRETICLE)
+        // CURSOR_TYPE_FERTILIZER     → DrawImage(IMAGE_FERTILIZER)
+        // CURSOR_TYPE_BUG_SPRAY      → DrawImage(IMAGE_BUG_SPRAY)
+        // CURSOR_TYPE_PHONOGRAPH     → DrawImage(IMAGE_PHONOGRAPH)
+        // CURSOR_TYPE_CHOCOLATE      → DrawImage(IMAGE_CHOCOLATE)
+        // CURSOR_TYPE_GLOVE          → DrawImage(IMAGE_ZEN_GARDENGLOVE)
+        // CURSOR_TYPE_MONEY_SIGN     → DrawImage(IMAGE_ZEN_MONEYSIGN)
+        // CURSOR_TYPE_TREE_FOOD      → DrawImage(IMAGE_TREEFOOD)
+        // CURSOR_TYPE_WHEEELBARROW   → DrawImage(IMAGE_ZEN_WHEELBARROW) + DrawPottedPlant
+        // CURSOR_TYPE_PLANT_FROM_GLOVE → DrawPottedPlant
+        // CURSOR_TYPE_PLANT_FROM_WHEEL_BARROW → DrawPottedPlant
+        // CURSOR_TYPE_PLANT_FROM_BANK/FROM_USABLE_COIN/FROM_DUPLICATOR → DrawSeedType
+        // CURSOR_TYPE_HAMMER         → ReanimationGet(mReanimCursorID)->Draw(g)
+        // CURSOR_TYPE_COBCANNON_TARGET → MouseHitTest → DrawImageCel(IMAGE_COBCANNON_TARGET)
+        // CURSOR_TYPE_NORMAL         → 不绘制
+        //
+        // 依赖：IMAGE_* 资源常量（Resources.h/Resources.cpp）和 ZenGarden::DrawPottedPlant
+        // 待资源管理和 ZenGarden 翻译完成后补充完整实现
+    }
+
+    /// 是否需要更新光标（对应 C++ 中 mApp->SetCursor 调用）
+    /// 返回当前光标的系统指针类型
+    pub fn get_cursor_type_for_app(&self) -> i32 {
+        match self.cursor_type {
+            CursorType::Shovel | CursorType::WateringCan |
+            CursorType::Fertilizer | CursorType::BugSpray |
+            CursorType::Phonograph | CursorType::Chocolate |
+            CursorType::Glove | CursorType::MoneySign |
+            CursorType::TreeFood | CursorType::Wheelbarrow |
+            CursorType::PlantFromGlove | CursorType::PlantFromWheelBarrow |
+            CursorType::PlantFromBank | CursorType::PlantFromUsableCoin |
+            CursorType::PlantFromDuplicator => {
+                // CURSOR_HAND / CURSOR_DRAGGING
+                0
+            }
+            CursorType::Hammer | CursorType::CobcannonTarget => {
+                // CURSOR_NONE（隐藏系统指针）
+                -1
+            }
+            CursorType::Normal => {
+                // CURSOR_POINTER
+                1
+            }
+        }
     }
 }
 
@@ -110,8 +219,8 @@ impl CursorPreview {
                 }
             };
 
-            // 检查游戏场景：非 SCENE_PLAYING 且非铲子教程时隐藏
-            if app.game_scene != AppGameScenes::Playing {
+            // 检查游戏场景
+            if app.game_scene != crate::lawn::lawn_app::GameScenes::Playing {
                 (false, SeedType::None, 0, 0, false, 0, 0)
             } else {
                 // 获取当前种子类型
@@ -121,12 +230,12 @@ impl CursorPreview {
 
                 let mut show = false;
                 if gx >= 0
-                    && (gx as usize) < MAX_GRID_SIZE_X
+                    && (gx as usize) < crate::lawn::board::MAX_GRID_SIZE_X
                     && gy >= 0
-                    && (gy as usize) <= MAX_GRID_SIZE_Y
+                    && (gy as usize) <= crate::lawn::board::MAX_GRID_SIZE_Y
                 {
                     if board.is_plant_in_cursor()
-                        && board.can_plant_at(gx, gy, seed_type) == PlantingReason::Ok
+                        && board.can_plant_at(gx, gy, seed_type) == crate::lawn::game_enums::PlantingReason::Ok
                     {
                         show = true;
                     }
@@ -181,7 +290,7 @@ impl CursorPreview {
 
         // 设置半透明颜色覆盖
         g.set_colorize_images(true);
-        g.set_color(&Color {
+        g.set_color(&crate::framework::color::Color {
             r: 255,
             g: 255,
             b: 255,
@@ -197,7 +306,7 @@ impl CursorPreview {
         let offset_x;
         let offset_y;
         if is_izombie {
-            // IZombie 模式偏移（Gargantuar 特殊偏移因 C++ 枚举未翻译到 SeedType 中，暂使用统一偏移）
+            // IZombie 模式偏移
             let height = self.plant_draw_height_offset(board, seed_type, self.grid_x, self.grid_y);
             offset_y = height - 78.0;
             offset_x = -49.0;
@@ -207,7 +316,7 @@ impl CursorPreview {
         }
 
         // 绘制种子类型预览
-        PlantDrawSeedType(
+        plant_draw_seed_type(
             g,
             seed_type,
             self.grid_x,
@@ -218,16 +327,16 @@ impl CursorPreview {
         );
 
         // COLUMN 挑战模式：在每一列都显示预览
-        if app.game_mode == GameMode::ChallengeColumns {
-            for y in 0..MAX_GRID_SIZE_Y {
+        if app.game_mode == crate::lawn::game_enums::GameMode::ChallengeColumns {
+            for y in 0..crate::lawn::board::MAX_GRID_SIZE_Y {
                 let y_i32 = y as i32;
                 if y_i32 != self.grid_y
                     && board.can_plant_at(self.grid_x, y_i32, seed_type)
-                        == PlantingReason::Ok
+                        == crate::lawn::game_enums::PlantingReason::Ok
                 {
                     let y_offset = 85.0 * (y_i32 - self.grid_y) as f32
                         + self.plant_draw_height_offset(board, seed_type, self.grid_x, y_i32);
-                    PlantDrawSeedType(g, seed_type, self.grid_x, y_i32, 0.0, y_offset, board);
+                    plant_draw_seed_type(g, seed_type, self.grid_x, y_i32, 0.0, y_offset, board);
                 }
             }
         }
@@ -259,7 +368,7 @@ impl Default for CursorPreview {
 
 /// 绘制种子类型预览（简化版，对应 C++ Plant::DrawSeedType）
 /// 完整实现在 Plant.cpp 中，此处仅做占位
-fn PlantDrawSeedType(
+fn plant_draw_seed_type(
     _g: &mut Graphics,
     _seed_type: SeedType,
     _grid_x: i32,
