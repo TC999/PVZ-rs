@@ -136,6 +136,28 @@ impl Coin {
     pub fn collect(&mut self) {
         self.dead = true;
     }
+
+    /// 命中检测（对应 C++ Coin::MouseHitTest L1428）
+    /// 根据硬币类型调整点击区域大小
+    pub fn mouse_hit_test(&self, x: i32, y: i32) -> bool {
+        if self.dead {
+            return false;
+        }
+
+        let extra = if matches!(self.coin_type, CoinType::Sun | CoinType::SmallSun | CoinType::LargeSun) {
+            15
+        } else {
+            0
+        };
+
+        let r = crate::framework::rect::Rect::new(
+            self.pos_x as i32 - 15 - extra,
+            self.pos_y as i32 - 15 - extra,
+            30 + extra * 2,
+            30 + extra * 2,
+        );
+        r.contains(x, y)
+    }
 }
 
 impl Default for Coin {

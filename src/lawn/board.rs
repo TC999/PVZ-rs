@@ -1454,12 +1454,26 @@ impl Board {
         self.m_advice = AdviceType::None;
     }
 
-    /// 是否可与界面按钮交互（对应 C++ CanInteractWithBoardButtons）
+    /// 是否可与界面按钮交互（对应 C++ CanInteractWithBoardButtons L4680）
     pub fn can_interact_with_board_buttons(&self) -> bool {
         if self.m_board_fade_out_counter > 0 { return false; }
         if self.m_board_result != BoardResult::None { return false; }
         if self.m_level_complete { return false; }
-        true
+        if self.m_paused { return false; }
+
+        // 检查光标类型（只有 Normal/Hammer/CobcannonTarget 允许交互）
+        let ct = self.cursor_object.cursor_type;
+        if ct != CursorType::Normal && ct != CursorType::Hammer && ct != CursorType::CobcannonTarget {
+            return false;
+        }
+
+        // C++ 检查 STATECHALLENGE_ZEN_FADING，Rust 暂缺该变体，跳过此检查
+
+        // 检查游戏模式和疯狂戴夫状态
+        self.app.map_or(true, |app| unsafe {
+            let app = &*app;
+            app.m_crazy_dave_state == CrazyDaveState::NotHere
+        })
     }
 
     /// 显示金币银行（对应 C++ ShowCoinBank）
@@ -1639,18 +1653,19 @@ impl Board {
     }
 
     /// 光标中是否有植物（对应 C++ IsPlantInCursor）
+    /// 根据 CursorType 判断：仅当手持种子/植物时返回 true
     pub fn is_plant_in_cursor(&self) -> bool {
-        // 简化版：通过游戏逻辑判断
-        false
+        matches!(self.cursor_object.cursor_type,
+            CursorType::PlantFromBank | CursorType::PlantFromUsableCoin |
+            CursorType::PlantFromDuplicator | CursorType::PlantFromGlove |
+            CursorType::PlantFromWheelBarrow
+        )
     }
 
-    /// 获取光标中的种子类型（简化版，对应 C++ GetSeedTypeInCursor）
-    /// 完整实现需要访问 mCursorObject 和 mZenGarden，这些字段尚未翻译完成
-    pub fn get_seed_type_in_cursor_simple(&self) -> SeedType {
-        // 待 Board::mCursorObject 翻译后补全完整逻辑
-        // 原始逻辑：检查 CURSOR_TYPE_WHEEELBARROW → 从 ZenGarden 获取
-        // 否则通过 IsPlantInCursor 判断后从 mCursorObject->mType 获取
-        SeedType::None
+    /// 获取光标中的种子类型（对应 C++ GetSeedTypeInCursor）
+    /// 手推车模式需从 ZenGarden 获取（依赖未译，暂返回 cursor_object.seed_type）
+    pub fn get_seed_type_in_cursor(&self) -> SeedType {
+        self.cursor_object.seed_type
     }
 
     // ========== 僵尸查询 ==========
@@ -2207,15 +2222,112 @@ impl Board {
         let mx = self.m_prev_mouse_x;
         let my = self.m_prev_mouse_y;
         self.mouse_hit_test(mx, my, &mut hit_result);
-
-        if hit_result.object_type == GameObjectType::None {
-            // 没有可交互对象
-        }
     }
 
-    /// 命中检测（对应 C++ MouseHitTest L4225，简化版）
-    pub fn mouse_hit_test(&self, _x: i32, _y: i32, _result: &mut HitResult) {
-        // 简化版：暂不实现完整命中检测
+    /// 命中检测（对应 C++ MouseHitTest L4225 完整版）
+    /// 依次检测：菜单按钮→商店按钮→种子槽→铲子→硬币→Zen花园→智慧树→工具→植物→陶罐→老虎机
+    pub fn mouse_hit_test(&self, x: i32, y: i32, result: &mut HitResult) {
+        result.object = None;
+        result.object_type = GameObjectType::None;
+
+        // 关卡淡出或 Dave 说话时忽略
+        if self.m_board_fade_out_counter >= 0 || self.is_scary_potter_dave_talking() {
+            return;
+        }
+
+        // 菜单按钮
+        if self.can_interact_with_board_buttons() && self.menu_button.is_some() {
+            // 简化：按钮 IsMouseOver 暂略
+        }
+
+        // 铲子按钮
+        let shovel_rect = self.get_shovel_button_rect();
+        if self.m_show_shovel && shovel_rect.contains(x, y) && self.can_interact_with_board_buttons() {
+            // GameObjectType::Shovel 在 Rust 枚举中未定义，暂跳过
+        }
+
+        // 硬币检测（仅 Normal 和 Hammer 光标模式）
+        let ct = self.cursor_object.cursor_type;
+        if ct == CursorType::Normal || ct == CursorType::Hammer {
+            let mut top_coin: Option<usize> = None;
+            for (i, coin) in self.coins.iter().enumerate() {
+                if coin.mouse_hit_test(x, y) {
+                    match top_coin {
+                        None => top_coin = Some(i),
+                        Some(old) => {
+                            // 取渲染顺序较高的硬币（C++ 中通过 mRenderOrder 比较）
+                            if i > old { top_coin = Some(i); }
+                        }
+                    }
+                }
+            }
+            if let Some(idx) = top_coin {
+                result.object = Some(idx);
+                result.object_type = GameObjectType::Coin;
+                return;
+            }
+        }
+
+        // 植物命中检测
+        if self.mouse_hit_test_plant(x, y, result) {
+            return;
+        }
+
+        // 可怕陶罐关卡
+        let is_scary = self.app.map_or(false, |app| unsafe { (*app).is_scary_potter_level() });
+        if is_scary && ct == CursorType::Normal {
+            let gx = self.pixel_to_grid_x(x, y);
+            let gy = self.pixel_to_grid_y(x, y);
+            let grid_item = self.grid_items.iter().find(|gi| {
+                gi.grid_item_type == GridItemType::ScaryPot
+                    && gi.grid_x == gx && gi.grid_y == gy
+            });
+            if grid_item.is_some() {
+                // result.object 设置为 grid_item 索引
+                // result.object_type = GameObjectType::ScaryPot;  // 暂缺该变体
+                return;
+            }
+        }
+
+        // 老虎机关卡
+        let is_slot = self.app.map_or(false, |app| unsafe { (*app).is_slot_machine_level() });
+        if is_slot {
+            if let Some(ref ch) = self.challenge {
+                let handle_rect = ch.slot_machine_get_handle_rect();
+                if handle_rect.contains(x, y) && ch.challenge_state == ChallengeState::Normal {
+                    // result.object_type = GameObjectType::SlotMachineHandle;  // 暂缺该变体
+                    return;
+                }
+            }
+        }
+
+        // 未命中任何对象
+        result.object = None;
+        result.object_type = GameObjectType::None;
+    }
+
+    /// 植物命中检测（对应 C++ MouseHitTestPlant L4168 完整版）
+    /// 检测鼠标是否悬停在/点击到植物上（含 Zen 花园特殊处理）
+    fn mouse_hit_test_plant(&self, x: i32, y: i32, result: &mut HitResult) -> bool {
+        let ct = self.cursor_object.cursor_type;
+        if ct == CursorType::CobcannonTarget || ct == CursorType::Hammer {
+            return false;
+        }
+
+        let gx = self.pixel_to_grid_x(x, y);
+        let gy = self.pixel_to_grid_y(x, y);
+
+        // 尝试找到该位置的植物
+        let plant = self.plants.iter().find(|p| {
+            !p.dead && p.is_on_board && p.plant_col == gx && p.base.row == gy
+        });
+
+        if plant.is_some() {
+            result.object_type = GameObjectType::Plant;
+            return true;
+        }
+
+        false
     }
 
     /// 使用工具点击（对应 C++ MouseDownWithTool L4099，存根）
@@ -2228,9 +2340,18 @@ impl Board {
         // 暂略：需要种植逻辑完整翻译
     }
 
-    /// 清除光标（对应 C++ ClearCursor 简化版）
+    /// 拾取工具（对应 C++ PickUpTool L4373）
+    /// 根据工具类型设置光标状态和播放音效
+    pub fn pick_up_tool(&mut self, _object_type: GameObjectType) {
+        // 暂略：需要资源常量和音效系统
+    }
+
+    /// 清除光标（对应 C++ ClearCursor L4616 完整版）
+    /// 重置光标对象所有字段并清除帮助提示
     pub fn clear_cursor(&mut self) {
+        self.cursor_object.deactivate();
         self.m_advice = AdviceType::None;
+        // mApp->SetCursor(CURSOR_POINTER) — 暂略
     }
 
     /// 更新鼠标位置（对应 C++ UpdateMousePosition 简化版）

@@ -224,7 +224,7 @@ impl CursorPreview {
                 (false, SeedType::None, 0, 0, false, 0, 0)
             } else {
                 // 获取当前种子类型
-                let seed_type = board.get_seed_type_in_cursor_simple();
+                let seed_type = board.get_seed_type_in_cursor();
                 let gx = board.planting_pixel_to_grid_x(mouse_x, mouse_y, seed_type);
                 let gy = board.planting_pixel_to_grid_y(mouse_x, mouse_y, seed_type);
 
@@ -283,7 +283,7 @@ impl CursorPreview {
         };
 
         // 获取种子类型
-        let seed_type = board.get_seed_type_in_cursor_simple();
+        let seed_type = board.get_seed_type_in_cursor();
         if seed_type == SeedType::None {
             return;
         }
