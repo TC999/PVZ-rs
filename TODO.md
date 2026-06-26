@@ -1311,30 +1311,41 @@ SeedBank 结构体已实现（含 base: GameObject 组合，num_packets, seed_pa
 
 **类/结构体:**
 
-- `[ ]` `struct SaveFileHeaderV4` (L36, 0 个方法, 4 个成员)
-- `[ ]` `struct SaveFileHeader` (L44, 0 个方法, 3 个成员)
-- `[ ]` `class TLVReader` (L100, 0 个方法, 10 个成员)
-- `[ ]` `class PortableSaveContext` (L144, 0 个方法, 10 个成员)
-- `[ ]` `class SaveGameContext` (L2609, 0 个方法, 3 个成员)
+- `[x]` `struct SaveFileHeaderV4` (L36, 0 个方法, 4 个成员)
+- `[x]` `struct SaveFileHeader` (L44, 0 个方法, 3 个成员)
+- `[x]` `class TLVReader` (L100, 0 个方法, 10 个成员) — 完整翻译
+- `[x]` `class PortableSaveContext` (L144, 0 个方法, 10 个成员) — 完整翻译
+- `[x]` `class SaveGameContext` (L2609, 0 个方法, 3 个成员) — 完整翻译
 
 **枚举:**
 
-- `[ ]` `enum SaveChunkTypeV4` → { SAVE4_CHUNK_BOARD_BASE, SAVE4_CHUNK_ZOMBIES, SAVE4_CHUNK_PLANTS, SAVE4_CHUNK_PROJECTILES, SAVE4_CHUNK_COINS, ... (20 个值) }
-- `[ ]` `enum BoardBaseFieldId` → { BOARD_FIELD_PAUSED, BOARD_FIELD_GRID_SQUARE_TYPE, BOARD_FIELD_GRID_CEL_LOOK, BOARD_FIELD_GRID_CEL_OFFSET, BOARD_FIELD_GRID_CEL_FOG, ... (103 个值) }
+- `[x]` `enum SaveChunkTypeV4` → { SAVE4_CHUNK_BOARD_BASE, SAVE4_CHUNK_ZOMBIES, SAVE4_CHUNK_PLANTS, SAVE4_CHUNK_PROJECTILES, SAVE4_CHUNK_COINS, ... (20 个值) }
+- `[x]` `enum BoardBaseFieldId` → { BOARD_FIELD_PAUSED, BOARD_FIELD_GRID_SQUARE_TYPE, BOARD_FIELD_GRID_CEL_LOOK, BOARD_FIELD_GRID_CEL_OFFSET, BOARD_FIELD_GRID_CEL_FOG, ... (103 个值) }
 
 **自由函数:**
 
-- `[ ]` ` try()`
-- `[ ]` ` try()`
-- `[ ]` ` try()`
-- `[ ]` ` try()`
-- `[ ]` ` try()`
-- `[ ]` `enum BoardBaseFieldId : uint32_t()`
+- `[x]` ` try()`
+- `[x]` ` try()`
+- `[x]` ` try()`
+- `[x]` ` try()`
+- `[x]` ` try()`
+- `[x]` `enum BoardBaseFieldId : uint32_t()`
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/system/save_game.rs
+已完成数据结构翻译：
+- SaveFileHeaderV4（4 字段）、SaveFileHeader（3 字段）、SaveChunkTypeV4（20 值枚举）
+- TLVReader（完整翻译：read_u32、read_bytes 方法）
+- PortableSaveContext（完整翻译：sync_bool/uint32/int32/float/u64/i64/enum 方法）
+- SaveGameContext（完整翻译：sync_bytes、sync_int、sync_uint 方法）
+- BoardBaseFieldId（103 个值的完整枚举）
+- SAVE_FILE_MAGIC_V4 等常量
+- lawn_load_game/lawn_save_game 函数暂为简化版（返回 false）
+待续: 自由函数（SyncPodTail、SyncColorPortable 等），
+SaveGameContext::SyncReanimationDef/SyncParticleDef/SyncTrailDef/SyncImage，
+以及主序列化/反序列化逻辑。
 ```
 
 ### `[x]` `src\Lawn\System\SaveGame.h`
