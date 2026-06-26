@@ -2509,6 +2509,107 @@ impl Board {
 
         // 更新格子物品
         self.update_grid_items_detailed();
+
+        // 更新浓雾
+        self.update_fog();
+    }
+
+    /// 更新浓雾效果（对应 C++ UpdateFog）
+    /// 雾的能见度受 m_fog_blown_count_down 影响，植物灯笼/火炬可以驱散局部浓雾
+    fn update_fog(&mut self) {
+        if !self.stage_has_fog() {
+            return;
+        }
+
+        // 雾的恢复速度
+        // C++ 有三级速度：mFogBlownCountDown >= 2000 时 = 20, > 0 时 = 1, 否则 = 3
+        let fog_fade_in_speed: i32;
+        if self.m_fog_blown_count_down > 0 && self.m_fog_blown_count_down < 2000 {
+            fog_fade_in_speed = 1;
+        } else if self.m_fog_blown_count_down > 0 {
+            fog_fade_in_speed = 20;
+        } else {
+            fog_fade_in_speed = 3;
+        }
+
+        let a_left = self.left_fog_column() as usize;
+        for x in a_left..MAX_GRID_SIZE_X {
+            let fog_max = if x == a_left { 200 } else { 255 };
+            for y in 0..=MAX_GRID_SIZE_Y {
+                self.grid_cel_fog[x][y] = std::cmp::min(
+                    self.grid_cel_fog[x][y] + fog_fade_in_speed,
+                    fog_max,
+                );
+            }
+        }
+
+        // 灯笼草（Pl lantern）驱散周围 4 格，火炬树桩驱散周围 1 格
+        // 先收集要驱散雾的植物位置，避免借用冲突
+        let fog_plants: Vec<(i32, i32, i32)> = self.plants.iter()
+            .filter(|plant| {
+                // 等同于 C++ NotOnGround() 检查
+                !plant.dead && !plant.squished && plant.on_bungee_state == PlantOnBungeeState::NotOnBungee
+            })
+            .filter_map(|plant| {
+                if plant.seed_type == SeedType::Plantern {
+                    Some((plant.plant_col, plant.base.row, 4))
+                } else if plant.seed_type == SeedType::Torchwood {
+                    Some((plant.plant_col, plant.base.row, 1))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for (col, row, size) in fog_plants {
+            self.clear_fog_around_plant(col, row, size);
+        }
+    }
+
+    /// 清除植物周围的浓雾（对应 C++ ClearFogAroundPlant）
+    fn clear_fog_around_plant(&mut self, plant_col: i32, plant_row: i32, size: i32) {
+        let fog_fade_out_speed: i32;
+        if self.m_fog_blown_count_down > 0 && self.m_fog_blown_count_down < 2000 {
+            fog_fade_out_speed = 2;
+        } else if self.m_fog_blown_count_down > 0 {
+            fog_fade_out_speed = 40;
+        } else {
+            fog_fade_out_speed = 6;
+        }
+
+        let a_left = self.left_fog_column();
+        let fog_offset_x = (self.m_fog_offset as i32 + 50) / 100;
+        let mut start_x = plant_col - size - fog_offset_x;
+        let mut end_x = plant_col + size - fog_offset_x;
+        start_x = std::cmp::max(start_x, a_left);
+        end_x = std::cmp::min(end_x, MAX_GRID_SIZE_X as i32 - 1);
+
+        let mut start_y = plant_row - size;
+        let mut end_y = plant_row + size;
+        start_y = std::cmp::max(start_y, 0);
+        end_y = std::cmp::min(end_y, MAX_GRID_SIZE_Y as i32);
+
+        for x in start_x..=end_x {
+            for y in start_y..=end_y {
+                let dist_x = (x + fog_offset_x - plant_col).abs();
+                let dist_y = (y - plant_row).abs();
+                if size == 4 {
+                    if dist_x > 3 || dist_y > 2 {
+                        continue;
+                    }
+                    if dist_x + dist_y == 5 {
+                        continue;
+                    }
+                } else if dist_x + dist_y > size {
+                    continue;
+                }
+
+                self.grid_cel_fog[x as usize][y as usize] = std::cmp::max(
+                    self.grid_cel_fog[x as usize][y as usize] - fog_fade_out_speed,
+                    0,
+                );
+            }
+        }
     }
 
     /// 更新火焰扫荡效果（对应 C++ UpdateFwoosh 简化版）
