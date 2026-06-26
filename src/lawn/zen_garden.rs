@@ -207,8 +207,13 @@ impl ZenGarden {
     }
 
     pub fn can_drop_potted_plant_loot(&self) -> bool {
-        // TODO: 从 ZenGarden.cpp 翻译
-        false
+        if let Some(app) = self.app {
+            unsafe {
+                (*app).has_finished_adventure() && !self.is_zen_garden_full(true)
+            }
+        } else {
+            false
+        }
     }
 
     pub fn show_tutorial_arrow_on_watering_can(&self) {
@@ -335,8 +340,16 @@ impl ZenGarden {
     }
 
     pub fn can_drop_chocolate(&self) -> bool {
-        // TODO: 从 ZenGarden.cpp 翻译
-        false
+        if let Some(app) = self.app {
+            unsafe {
+                self.has_purchased_stinky()
+                    && (*app).player_info.as_ref().map_or(false, |p| {
+                        p.m_purchases[StoreItem::Chocolate as usize] < 1000 + 10
+                    })
+            }
+        } else {
+            false
+        }
     }
 
     pub fn feed_chocolate_to_plant(&self, plant: &mut Plant) {
@@ -406,3 +419,4 @@ impl Default for ZenGarden {
         ZenGarden::new()
     }
 }
+

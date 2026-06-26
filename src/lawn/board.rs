@@ -253,6 +253,7 @@ pub struct Board {
     pub m_sun_count: i32,
     pub m_sun_countdown: i32,
     pub m_num_suns_fallen: i32,
+    pub m_sun_money: i32,
 
     // 金钱
     pub m_coin_bank: i64,
@@ -273,6 +274,7 @@ pub struct Board {
     pub m_level_complete: bool,
     pub m_game_over: bool,
     pub m_game_over_countdown: i32,
+    pub m_dropped_first_coin: bool,
     pub m_board_fade_out_counter: i32,
     pub m_next_survival_stage_counter: i32,
     pub m_score_next_mower_counter: i32,
@@ -396,6 +398,7 @@ impl Board {
             m_sun_count: 50,
             m_sun_countdown: SUN_COUNTDOWN,
             m_num_suns_fallen: 0,
+            m_sun_money: 0,
             m_coin_bank: 0,
             m_coin_bank_fade_count: 0,
             m_wave_count: 0,
@@ -412,6 +415,7 @@ impl Board {
             m_level_complete: false,
             m_game_over: false,
             m_game_over_countdown: 0,
+            m_dropped_first_coin: false,
             m_board_fade_out_counter: -1,
             m_next_survival_stage_counter: 0,
             m_score_next_mower_counter: 0,
@@ -1617,6 +1621,141 @@ impl Board {
     /// 是否可以掉落战利品（对应 C++ CanDropLoot）
     pub fn can_drop_loot(&self) -> bool {
         !self.is_first_time_adventure() || self.level >= 11
+    }
+
+    /// 掉落战利品（对应 C++ DropLootPiece）
+    /// 根据关卡进度、游戏模式、随机概率决定掉落硬币/礼物/巧克力等
+    fn drop_loot_piece(&mut self, pos_x: i32, pos_y: i32, drop_factor: i32) {
+        if let Some(app) = self.app {
+            unsafe {
+                // 首次冒险模式特殊掉落
+                if (*app).is_first_time_adventure_mode() {
+                    if self.level == 22
+                        && self.m_current_wave > 5
+                        && !(*app).player_info.as_ref().map_or(false, |p| p.m_has_unlocked_minigames)
+                        && self.count_coin_by_type(CoinType::PresentMinigames) == 0
+                    {
+                        (*app).play_foley(crate::todlib::tod_foley::FoleyType::ArtChallenge as i32);
+                        self.add_coin(pos_x as f32, pos_y as f32, CoinType::PresentMinigames, CoinMotion::Coin);
+                        return;
+                    }
+                    if self.level == 36
+                        && self.m_current_wave > 5
+                        && !(*app).player_info.as_ref().map_or(false, |p| p.m_has_unlocked_puzzle_mode)
+                        && self.count_coin_by_type(CoinType::PresentPuzzleMode) == 0
+                    {
+                        (*app).play_foley(crate::todlib::tod_foley::FoleyType::ArtChallenge as i32);
+                        self.add_coin(pos_x as f32, pos_y as f32, CoinType::PresentPuzzleMode, CoinMotion::Coin);
+                        return;
+                    }
+                }
+
+                let mut drop_hit = common::rand_range(30000);
+                if (*app).is_first_time_adventure_mode() && self.level == 11 && !self.m_dropped_first_coin && self.m_current_wave > 5 {
+                    drop_hit = 1000;
+                }
+                if (*app).game_mode == GameMode::ChallengeColumns {
+                    drop_hit *= 5;
+                }
+
+                if (*app).is_whack_a_zombie_level() {
+                    let sun_chance_min = 2500;
+                    let sun_chance_max = if self.m_sun_money > 500 {
+                        2800
+                    } else if self.m_sun_money > 350 {
+                        3100
+                    } else if self.m_sun_money > 200 {
+                        3700
+                    } else {
+                        5000
+                    };
+                    if drop_hit >= sun_chance_min * drop_factor && drop_hit <= sun_chance_max * drop_factor {
+                        (*app).play_foley(crate::todlib::tod_foley::FoleyType::SpawnSun as i32);
+                        self.add_coin((pos_x - 20) as f32, pos_y as f32, CoinType::Sun, CoinMotion::Coin);
+                        self.add_coin((pos_x - 40) as f32, pos_y as f32, CoinType::Sun, CoinMotion::Coin);
+                        self.add_coin((pos_x - 60) as f32, pos_y as f32, CoinType::Sun, CoinMotion::Coin);
+                        return;
+                    }
+                }
+
+                if self.m_total_spawned_waves > 70 {
+                    return;
+                }
+
+                // 计算各掉落物概率阈值
+                let potted_plant_chance = {
+                    let zg = (*app).zen_garden;
+                    if zg.map_or(true, |z| unsafe { !(*z).can_drop_potted_plant_loot() }) {
+                        0
+                    } else if (*app).is_adventure_mode() && !(*app).is_first_time_adventure_mode() {
+                        24
+                    } else {
+                        if (*app).is_survival_endless((*app).game_mode) { 3 } else { 12 }
+                    }
+                };
+
+                let chocolate_chance = if (*app).zen_garden.map_or(false, |z| unsafe { (*z).can_drop_chocolate() }) {
+                    if (*app).is_adventure_mode() && !(*app).is_first_time_adventure_mode() {
+                        potted_plant_chance + 72
+                    } else {
+                        potted_plant_chance + if (*app).is_survival_endless((*app).game_mode) { 9 } else { 36 }
+                    }
+                } else {
+                    potted_plant_chance
+                };
+
+                let diamond_chance = chocolate_chance + 14;
+                let gold_chance = chocolate_chance + 250;
+                let silver_chance = chocolate_chance + 2500;
+
+                let coin_type = if drop_hit < potted_plant_chance * drop_factor {
+                    CoinType::PresentPlant
+                } else if drop_hit < chocolate_chance * drop_factor {
+                    CoinType::Chocolate
+                } else if drop_hit < diamond_chance * drop_factor {
+                    if (*app).player_info.as_ref().map_or(true, |p| p.m_purchases[StoreItem::PacketUpgrade as usize] < 1) {
+                        CoinType::Gold
+                    } else {
+                        CoinType::Diamond
+                    }
+                } else if drop_hit < gold_chance * drop_factor {
+                    CoinType::Gold
+                } else if drop_hit < silver_chance * drop_factor {
+                    CoinType::Silver
+                } else {
+                    return;
+                };
+
+                // 核桃保龄球关卡不掉钱
+                if (*app).is_wallnut_bowling_level()
+                    && (coin_type == CoinType::Gold || coin_type == CoinType::Silver || coin_type == CoinType::Diamond)
+                {
+                    return;
+                }
+
+                // L11 特殊：确保玩家有足够钱买第一个种子槽升级
+                if (*app).is_first_time_adventure_mode() && self.level == 11 {
+                    let gold_value = match coin_type {
+                        CoinType::Diamond => 1000,
+                        CoinType::Gold => 100,
+                        CoinType::Silver => 10,
+                        _ => 0,
+                    };
+                    let money = 100  // Coin::GetCoinValue(COIN_GOLD) 值
+                        * self.lawn_mowers.len() as i32
+                        + (*app).player_info.as_ref().map_or(0, |p| p.m_coins)
+                        + self.count_coins_being_collected();
+                    if gold_value + money
+                        >= crate::lawn::widget::store_screen::StoreScreen::get_item_cost(StoreItem::PacketUpgrade)
+                    {
+                        return;
+                    }
+                }
+
+                (*app).play_foley(crate::todlib::tod_foley::FoleyType::SpawnSun as i32);
+                self.add_coin(pos_x as f32, pos_y as f32, coin_type, CoinMotion::Coin);
+            }
+        }
     }
 
     // ========== 实体创建 ==========
