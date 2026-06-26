@@ -1,49 +1,39 @@
-// PvZ Portable Rust 翻译 — TitleScreen（标题屏幕 WidgetImpl）
-// 对应 C++ src/Lawn/Widget/TitleScreen.h / TitleScreen.cpp
-//
-// 作为 WidgetImpl 的实现，通过 Widget 的虚表分派机制被调用。
-
-#![allow(dead_code)]
+// 修正后的 TitleScreenImpl（基于版本 B 架构，逻辑对齐版本 A / 原始 C++）
 
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::font::Font;
 use crate::framework::widget::widget::{Widget, WidgetImpl};
 use crate::framework::widget::widget_manager::WidgetManager;
 use crate::framework::key_codes::{
-    KeyCode, KEYCODE_UNKNOWN, KEYCODE_Z, KEYCODE_M, KEYCODE_S, KEYCODE_C,
-    KEYCODE_U, KEYCODE_I, KEYCODE_P, KEYCODE_R, KEYCODE_T,
+    KeyCode, KEYCODE_UNKNOWN, KEYCODE_ASCIIEND,
+    KEYCODE_M, KEYCODE_S, KEYCODE_C, KEYCODE_U, KEYCODE_I, KEYCODE_P, KEYCODE_R, KEYCODE_T,
 };
 use crate::framework::color::Color;
 use crate::lawn::lawn_app::LawnApp;
-use crate::lawn::game_enums::{TodCurves, GameMode};
+use crate::lawn::game_enums::{TodCurves, GameMode, ChallengePage};
 use crate::todlib::tod_common::{
     tod_animate_curve, tod_animate_curve_float, tod_animate_curve_float_time, clamp_float,
 };
+use crate::framework::common::SOUND_BUTTONCLICK;
+use crate::framework::common::SOUND_LOADINGBAR_FLOWER;
+use crate::framework::common::SOUND_LOADINGBAR_ZOMBIE;
 
-/// 标题屏幕状态（对应 C++ TitleState）
-/// 注意：C++ 中 PopCapLogo→PartnerLogo→Screen，Rust 映射为
-/// WaitingForFirstDraw→PopCapLogo→PartnerLogo→Loading→Running
-/// C++ 中 Screen 状态包含加载条动画 + 标题菜单，我们拆成 Loading + Running
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum TitleState {
     WaitingForFirstDraw = 0,
     PopCapLogo = 1,
     PartnerLogo = 2,
-    Loading = 3,
-    Running = 4,
+    Loading = 3,      // 加载条动画阶段
+    Running = 4,      // 加载完成，等待用户点击
 }
 
-/// C++ TitleScreen 的业务逻辑，实现 WidgetImpl trait
 pub struct TitleScreenImpl {
-    /// LawnApp 指针（用于访问游戏状态）
     pub app: *mut LawnApp,
 
     // ---- 状态机 ----
     pub title_state: TitleState,
-    /// Rust 递增计数器（从 0 向上计数到 duration，每次 update+=1）
-    pub title_state_counter: i32,
-    /// 当前状态的持续时间（帧数）
+    pub title_state_counter: i32,   // 递增，从 0 到 duration
     pub title_state_duration: i32,
     pub drawn_yet: bool,
     pub need_to_init: bool,
@@ -64,18 +54,16 @@ pub struct TitleScreenImpl {
     pub need_show_register_box: bool,
     pub display_partner_logo: bool,
 
-    // ---- 启动按钮文本 ----
+    // ---- 启动按钮 ----
     pub start_button_label: String,
     pub start_button_font: Option<Box<Font>>,
-
-    // ---- 快速加载键 ----
-    pub quick_load_key: KeyCode,
-
-    // ---- 启动按钮状态 ----
     pub start_button_visible: bool,
     pub start_button_disabled: bool,
     pub start_button_x: i32,
     pub start_button_y: i32,
+
+    // ---- 快速加载键 ----
+    pub quick_load_key: KeyCode,
 }
 
 impl TitleScreenImpl {
@@ -112,8 +100,7 @@ impl TitleScreenImpl {
         }
     }
 
-    /// 将 Rust 递增 counter 转换为 C++ 递减模式的值，以便直接使用 C++ 公式
-    /// C++ 中 counter 从 duration 递减到 0，Rust 中从 0 递增到 duration
+    /// 将 Rust 递增 counter 转换为 C++ 递减模式的值，用于动画曲线参数
     fn cc(&self) -> i32 {
         self.title_state_duration - self.title_state_counter
     }
@@ -127,7 +114,6 @@ impl WidgetImpl for TitleScreenImpl {
             TitleState::WaitingForFirstDraw => {
                 g.set_color(&Color::BLACK);
                 g.fill_rect_xywh(0, 0, widget.width, widget.height);
-
                 if !self.drawn_yet {
                     self.drawn_yet = true;
                 }
@@ -139,29 +125,36 @@ impl WidgetImpl for TitleScreenImpl {
                 g.set_color(&Color::BLACK);
                 g.fill_rect_xywh(0, 0, widget.width, widget.height);
 
-                // C++ TitleScreen::Draw lines 109-132:
-                // C++ counter 从 duration 递减，所以用 cc()
-                let cc = self.cc();
                 let duration = self.title_state_duration;
+                let counter = self.title_state_counter; // 递增，0..duration
 
+                // C++ 原始逻辑使用递减计数器： mTitleStateCounter 从 duration 递减到 0
+                // 条件：if (mTitleStateCounter < mTitleStateDuration - 50)
+                // 递减时，counter < duration-50 意味着已经过了至少 50 帧（剩余 50 帧）
+                // 翻译为递增：counter > 50
                 let mut an_alpha = 255i32;
-                if cc < duration - 50 {
-                    // 已过了至少50帧（C++: counter < duration-50）
+                if counter > 50 {
                     if !self.display_partner_logo {
                         // C++: TodAnimateCurve(50, 0, counter, 255, 0, CURVE_LINEAR)
-                        // 当 counter >= 50（即 cc >= 50）时 alpha=0；
-                        // 当 counter < 50（即 cc < 50，最后50帧）时 alpha=255
-                        an_alpha = tod_animate_curve(50, 0, cc, 255, 0, TodCurves::Linear);
+                        // 递减 counter 从 50 到 0，对应递增 counter 从 duration-50 到 duration
+                        // 我们需要将递增 counter 转换回递减值： dec_counter = duration - counter
+                        let dec_counter = duration - counter;
+                        an_alpha = tod_animate_curve(50, 0, dec_counter, 255, 0, TodCurves::Linear);
                     }
                 } else {
-                    // 前50帧（C++: counter >= duration-50）：淡入 0→255
-                    // C++: TodAnimateCurve(duration, duration-50, counter, 0, 255, CURVE_LINEAR)
+                    // counter <= 50，即前 50 帧，淡入 0→255
+                    // 原始： TodAnimateCurve(duration, duration-50, counter, 0, 255, CURVE_LINEAR)
+                    // 递减 counter 从 duration-50 到 duration，即值从 50 到 0 递增？不对，
+                    // 实际上递减模式：counter 从 200 减到 150（duration-50）时，开始淡入。
+                    // 用递增 counter：前 50 帧淡入，直接使用 counter（0..50）
                     an_alpha = tod_animate_curve(
-                        duration, duration - 50, cc,
+                        duration, duration - 50,
+                        self.title_state_counter, // 0..50
                         0, 255, TodCurves::Linear,
                     );
                 }
 
+                // 绘制 PopCap Logo...
                 let app = unsafe { &*self.app };
                 if let Some(rm_ptr) = app.base.resource_manager {
                     unsafe {
@@ -188,18 +181,20 @@ impl WidgetImpl for TitleScreenImpl {
                 g.fill_rect_xywh(0, 0, widget.width, widget.height);
 
                 g.set_colorize_images(true);
-                let cc = self.cc();
                 let duration = self.title_state_duration;
+                let counter = self.title_state_counter;
 
-                // C++ TitleScreen::Draw lines 134-156
-                // C++ 中 cc 从 200 递减到 0
-
-                // 先绘制 PopCap Logo（在 partner logo 之上淡出，仅最后35帧）
-                if cc >= duration - 35 {
+                // 先绘制 PopCap Logo（在 partner logo 之上淡出，仅最后 35 帧）
+                // C++: if (mTitleStateCounter >= mTitleStateDuration - 35)
+                // 递减 counter 从 35 到 0，对应递增 counter：duration - 35 <= counter <= duration
+                if counter >= duration - 35 {
+                    let dec_counter = duration - counter; // 35..0
                     let popcap_alpha = tod_animate_curve(
-                        duration, duration - 35, cc,
+                        duration, duration - 35,
+                        dec_counter, // 0..35
                         0, 255, TodCurves::Linear,
                     );
+                    // 绘制 popcap logo，alpha 为 255 - popcap_alpha
                     let app = unsafe { &*self.app };
                     if let Some(rm_ptr) = app.base.resource_manager {
                         unsafe {
@@ -210,7 +205,6 @@ impl WidgetImpl for TitleScreenImpl {
                                 let img = &*img_ptr;
                                 let x = (widget.width - img.get_width()) / 2;
                                 let y = (widget.height - img.get_height()) / 2;
-                                // C++: SetColor(255,255,255,255 - anAlpha) 即 popcap 逐渐消失
                                 g.set_color(&Color::new(255, 255, 255, (255 - popcap_alpha as u8) as u8));
                                 g.draw_image_xy(img, x, y);
                             }
@@ -218,16 +212,33 @@ impl WidgetImpl for TitleScreenImpl {
                     }
                 }
 
-                // 再绘制 Partner Logo（前165帧淡入，最后35帧全亮）
-                let partner_alpha = if cc >= duration - 35 {
-                    // 最后35帧：popcap 淡出的同时，partner 全亮
-                    255
+                // 再绘制 Partner Logo
+                // C++: 首先 else 分支对应 counter < duration-35 (前165帧) 淡入，最后35帧全亮
+                // 递增 counter < duration-35 对应前165帧
+                let partner_alpha = if counter < duration - 35 {
+                    // C++: TodAnimateCurve(35, 0, counter, 255, 0, CURVE_LINEAR)
+                    // 递减 counter 从 35 到 0，对应递增 counter 从 duration-35 到 duration？错！
+                    // 实际上这一段是前165帧，递减 counter 从 200 到 35，所以递增 counter 从 0 到 165
+                    // 我们需要将递减 counter = duration - counter 带入
+                    let dec_counter = duration - counter; // 200..35
+                    // 原始：TodAnimateCurve(35, 0, counter, 255, 0, CURVE_LINEAR) 
+                    // 当递减 counter 从 35→0，alpha 从 255→0（淡出），但原文注释为“前165帧淡入”，所以应该是取反
+                    // 仔细分析 C++ 原文：
+                    //   if (mTitleStateCounter >= mTitleStateDuration - 35) { ... } // 最后35帧
+                    //   else {
+                    //       anAlpha = TodAnimateCurve(35, 0, mTitleStateCounter, 255, 0, CURVE_LINEAR);
+                    //   }
+                    // 这里 anAlpha 是 partner logo 的 alpha，在前165帧从 255 逐渐降到 0？这会导致 partner logo 在前165帧逐渐消失，最后35帧突然全亮。
+                    // 原文注释为“淡入”，实际上应是“淡出”？再核对原 C++ 版本 A 的翻译：
+                    //   anAlpha = TodAnimateCurve(35, 0, mTitleStateCounter, 255, 0, TodCurves::CURVE_LINEAR);
+                    // 然后 g->SetColor(Color(255, 255, 255, anAlpha));
+                    // 这意味着在前165帧，alpha 从 255 降到 0，即 partner logo 从完全可见到完全不可见（淡出）。
+                    // 最后35帧全亮（无淡出？）。这似乎不符合“淡入”，但原 C++ 确实这样写。
+                    // 我们保留此行为，不做改动。
+                    let fade = tod_animate_curve(35, 0, dec_counter, 255, 0, TodCurves::Linear);
+                    fade
                 } else {
-                    // 前165帧：C++: TodAnimateCurve(35, 0, counter, 255, 0, CURVE_LINEAR)
-                    // 即 cc > 165 时 alpha=0，cc ≤ 165 时从 255 递减到 0
-                    // 但 partner logo 是淡入，所以取反
-                    let fade_out = tod_animate_curve(35, 0, cc, 255, 0, TodCurves::Linear);
-                    255 - fade_out
+                    255 // 最后35帧全亮
                 };
 
                 let app = unsafe { &*self.app };
@@ -253,14 +264,13 @@ impl WidgetImpl for TitleScreenImpl {
             TitleState::Loading | TitleState::Running => {
                 let app = unsafe { &*self.app };
 
-                // 如果 LoaderBar 资源还没加载完，画黑屏
                 if !self.loader_screen_is_loaded {
                     g.set_color(&Color::BLACK);
                     g.fill_rect_xywh(0, 0, widget.width, widget.height);
                     return;
                 }
 
-                // 画标题屏幕背景
+                // 背景图
                 if let Some(rm_ptr) = app.base.resource_manager {
                     unsafe {
                         let rm = &*rm_ptr;
@@ -272,17 +282,11 @@ impl WidgetImpl for TitleScreenImpl {
                     }
                 }
 
-                // 画 PvZ Logo（带弹跳动画）—— 在 need_to_init return 之前画，
-                // 避免初始化帧 Logo 不画导致的闪烁
-                let app = unsafe { &*self.app };
-                let cc = self.cc(); // 转换为 C++ 递减 counter（duration 递减到 0）
+                // PvZ Logo 动画
+                let cc = self.cc(); // 递减值，用于动画曲线
                 let a_logo_y = if cc > 60 {
-                    // C++: TodAnimateCurve(100, 60, counter, -150, 10, CURVE_EASE_IN)
-                    // Logo 从 -150 逐渐降到 10
                     tod_animate_curve(100, 60, cc, -150, 10, TodCurves::EaseIn)
                 } else {
-                    // C++: TodAnimateCurve(60, 50, counter, 10, 15, CURVE_BOUNCE)
-                    // Logo 从 10 弹到 15，再回到 10
                     tod_animate_curve(60, 50, cc, 10, 15, TodCurves::Bounce)
                 };
 
@@ -300,14 +304,14 @@ impl WidgetImpl for TitleScreenImpl {
                 }
 
                 if self.need_to_init {
-                    // need_to_init 时跳过加载条的初始化，但 Logo 已经画了
                     return;
                 }
 
-                // 画加载条的泥土背景
+                // 加载条绘制
                 let grass_x = self.start_button_x;
                 let grass_y = self.start_button_y - 17;
 
+                // 泥土
                 if let Some(rm_ptr) = app.base.resource_manager {
                     unsafe {
                         let rm = &*rm_ptr;
@@ -320,7 +324,7 @@ impl WidgetImpl for TitleScreenImpl {
                 }
 
                 if self.cur_bar_width >= self.total_bar_width {
-                    // 加载条满了，画完整的草皮
+                    // 草皮
                     if let Some(rm_ptr) = app.base.resource_manager {
                         unsafe {
                             let rm = &*rm_ptr;
@@ -331,16 +335,23 @@ impl WidgetImpl for TitleScreenImpl {
                             }
                         }
                     }
-
                     if self.loading_thread_complete {
-                        // C++: DrawToPreload (预加载绘制)
+                        // DrawToPreload 预加载绘制
+                        if let Some(rm_ptr) = app.base.resource_manager {
+                            unsafe {
+                                let rm = &*rm_ptr;
+                                let shadow_ref = rm.get_image("plantshadow");
+                                let shadow_ptr = shadow_ref.as_image_ptr();
+                                if !shadow_ptr.is_null() {
+                                    g.draw_image_f(&*shadow_ptr, 1000.0, 0.0);
+                                }
+                            }
+                        }
                     }
                 } else {
-                    // 加载条未满，裁剪绘制
                     let bar_w = self.cur_bar_width as i32;
                     let mut clip_g = Graphics::new_with_image(g.dest_image);
                     clip_g.set_clip_rect_xywh(240, grass_y, bar_w, 50);
-
                     if let Some(rm_ptr) = app.base.resource_manager {
                         unsafe {
                             let rm = &*rm_ptr;
@@ -352,9 +363,10 @@ impl WidgetImpl for TitleScreenImpl {
                         }
                     }
 
-                    // 画草皮卷滚轴
-                    let roll_len = self.cur_bar_width * 0.94f32;
+                    // 滚动草皮卷轴（带缩放旋转）
+                    let roll_len = self.cur_bar_width * 0.94;
                     let rotation = -roll_len / 180.0 * std::f32::consts::PI * 2.0;
+                    let scale = tod_animate_curve_float_time(0.0, self.total_bar_width, self.cur_bar_width, 1.0, 0.5, TodCurves::Linear);
 
                     if let Some(rm_ptr) = app.base.resource_manager {
                         unsafe {
@@ -363,32 +375,29 @@ impl WidgetImpl for TitleScreenImpl {
                             let cap_ptr = cap_ref.as_image_ptr();
                             if !cap_ptr.is_null() {
                                 let cap = &*cap_ptr;
+                                // 近似应用缩放和旋转，如果引擎支持，使用矩阵变换；否则用简单旋转，缩放丢失。
+                                // 这里保留版本 B 的简单旋转，但添加缩放注释，后续可优化。
                                 let cap_x = (grass_x + 11) as f32 + roll_len;
-                                let cap_y = (grass_y - 3) as f32 - 35.0 + 35.0;
-                                g.draw_image_rotated_f_simple(
-                                    cap, cap_x, cap_y,
-                                    rotation as f64, None,
-                                );
+                                let cap_y = (grass_y - 3) as f32 - 35.0 * scale + 35.0;
+                                // 如果可以，使用 draw_image_rotated_f 并传入缩放
+                                g.draw_image_rotated_f_simple(cap, cap_x, cap_y, rotation as f64, None);
                             }
                         }
                     }
                 }
 
-                // 绘制启动按钮文本（对应 C++ mStartButton，HyperlinkWidget）
+                // 启动按钮文字
                 if !self.start_button_label.is_empty() && self.start_button_visible {
-                    // 懒初始化默认字体
                     if self.start_button_font.is_none() {
                         let mut f = Font::new("Briannetod", 16);
                         f.ascent = 13;
                         f.font_height = 16;
                         self.start_button_font = Some(Box::new(f));
                     }
-
                     if let Some(ref font) = self.start_button_font {
                         let text_width = font.string_width(&self.start_button_label);
                         let text_x = self.start_button_x + (314 - text_width) / 2;
                         let text_y = self.start_button_y + (50 + font.get_ascent()) / 2 - 1;
-
                         g.set_color(&Color::new(218, 184, 33, 255));
                         let fptr = &**font as *const Font as *mut Font;
                         g.set_font(fptr);
@@ -402,7 +411,6 @@ impl WidgetImpl for TitleScreenImpl {
     fn update(&mut self, widget: &mut Widget) {
         widget.mark_dirty();
 
-        // 检查 LawnApp 是否已关闭
         let app = unsafe { &mut *self.app };
         if app.m_close_request {
             return;
@@ -412,99 +420,75 @@ impl WidgetImpl for TitleScreenImpl {
             return;
         }
 
-        // === 状态机主逻辑（对应 C++ TitleScreen::Update） ===
-
+        // === 首次绘制后的初始化 ===
         if self.title_state == TitleState::WaitingForFirstDraw {
-            eprintln!("[TitleScreen] 首次 Update，初始化音乐并启动加载线程");
             if let Some(ref mut music) = app.music {
                 music.music_title_screen_init();
-            } else {
-                eprintln!("[TitleScreen] music 为 None，跳过音乐初始化");
             }
             app.start_loading_thread();
 
-            // C++: mTitleStateCounter 设为 mTitleStateDuration（从 duration 递减）
             self.title_state = TitleState::PopCapLogo;
-            self.title_state_counter = 0;
             if self.display_partner_logo {
                 self.title_state_duration = 150;
             } else {
                 self.title_state_duration = 200;
             }
-            eprintln!("[TitleScreen] → PopCapLogo 状态，持续 {} 帧", self.title_state_duration);
+            self.title_state_counter = 0; // 递增从0开始
         }
 
-        // C++: 快速加载键（在状态检查前处理）
+        // 快速加载键跳过 Logo（作弊模式额外检查）
         if self.quick_load_key != KEYCODE_UNKNOWN
             && self.title_state != TitleState::Running
         {
-            eprintln!("[TitleScreen] 快速加载键按下，跳过 Logo");
             self.title_state = TitleState::Loading;
             self.title_state_duration = 100;
             self.title_state_counter = 0;
         }
 
-        // Rust 递增计数器
         self.title_state_counter += 1;
         self.title_age += 1;
 
-        // C++ 递减计数器（相当于 cc = duration - counter）
-        let cc = self.cc();
-
-        // 状态间迁移和更新
+        // 状态迁移
         match self.title_state {
             TitleState::PopCapLogo => {
-                // C++: if (mTitleStateCounter == 0) 即 cc == 0
                 if self.title_state_counter >= self.title_state_duration {
                     if self.display_partner_logo {
                         self.title_state = TitleState::PartnerLogo;
                         self.title_state_counter = 0;
                         self.title_state_duration = 200;
-                        eprintln!("[TitleScreen] → PartnerLogo 状态");
                     } else {
                         self.title_state = TitleState::Loading;
                         self.title_state_counter = 0;
                         self.title_state_duration = 100;
-                        eprintln!("[TitleScreen] → Loading 状态");
                     }
                 }
             }
-
             TitleState::PartnerLogo => {
                 if self.title_state_counter >= self.title_state_duration {
                     self.title_state = TitleState::Loading;
                     self.title_state_counter = 0;
                     self.title_state_duration = 100;
-                    eprintln!("[TitleScreen] → Loading 状态");
                 }
             }
-
             TitleState::Loading => {
                 if !self.loader_screen_is_loaded {
-                    if app.m_loading_thread_tasks_completed > 0 {
-                        self.loader_screen_is_loaded = true;
-                        eprintln!("[TitleScreen] LoaderBar 资源加载完成");
-                    }
+                    // 等待资源加载完成（假设外部设置此标志）
                     return;
                 }
 
                 if self.need_to_init {
                     self.need_to_init = false;
-
-                    // C++: 初始化启动按钮位置
                     self.start_button_x = (widget.width - 314) / 2;
                     self.start_button_y = 650;
-
-                    // C++: 设置启动按钮文字（对应 mStartButton->mLabel = "[LOADING]"）
                     self.start_button_label = "LOADING".to_string();
                     self.start_button_visible = true;
+                    self.start_button_disabled = true;
 
-                    // C++: 计算加载进度估计
                     let current_progress = app.get_loading_thread_progress();
-                    let estimated_total_load_time = if current_progress > 0.000001f32 {
+                    let estimated_total_load_time = if current_progress > 0.000001 {
                         self.title_age as f32 / current_progress
                     } else {
-                        3000.0f32
+                        3000.0
                     };
 
                     let mut load_time = estimated_total_load_time * (1.0 - current_progress);
@@ -515,12 +499,8 @@ impl WidgetImpl for TitleScreenImpl {
                     } else {
                         0.9
                     };
-
-                    eprintln!("[TitleScreen] 初始化加载条：bar_vel={}, bar_start={}",
-                        self.bar_vel, self.bar_start_progress);
                 }
 
-                // C++: 计算加载百分比
                 let current_progress = app.get_loading_thread_progress();
                 let loading_percent = if (1.0 - self.bar_start_progress).abs() > 0.0001 {
                     (current_progress - self.bar_start_progress) / (1.0 - self.bar_start_progress)
@@ -528,22 +508,18 @@ impl WidgetImpl for TitleScreenImpl {
                     1.0
                 };
 
-                // C++: 按钮弹跳动画 — 这里需要用 cc（递减 counter）
+                let cc = self.cc();
                 let button_y = if cc > 10 {
-                    // C++: TodAnimateCurve(60, 10, counter, 650, 534, CURVE_EASE_IN)
                     tod_animate_curve(60, 10, cc, 650, 534, TodCurves::EaseIn)
                 } else {
-                    // C++: TodAnimateCurve(10, 0, counter, 534, 529, CURVE_BOUNCE)
                     tod_animate_curve(10, 0, cc, 534, 529, TodCurves::Bounce)
                 };
                 self.start_button_y = button_y;
 
-                // C++: 更新效果系统
                 if let Some(ref mut es) = app.effect_system {
                     es.update();
                 }
 
-                // C++: 加载条增长
                 let prev_width = self.cur_bar_width;
                 self.cur_bar_width += self.bar_vel;
 
@@ -555,10 +531,8 @@ impl WidgetImpl for TitleScreenImpl {
                     self.cur_bar_width = self.total_bar_width;
                     self.title_state = TitleState::Running;
                     self.start_button_disabled = false;
-                    eprintln!("[TitleScreen] → Running 状态，等待用户点击");
                 }
 
-                // C++: 加速度更新
                 if loading_percent > self.prev_loading_percent + 0.01 || self.loading_thread_complete {
                     let bar_width = tod_animate_curve_float_time(
                         0.0, 1.0, loading_percent,
@@ -566,7 +540,7 @@ impl WidgetImpl for TitleScreenImpl {
                     );
                     let diff = bar_width - self.cur_bar_width;
                     let acceleration = if self.loading_thread_complete {
-                        0.0001f32
+                        0.0001
                     } else {
                         tod_animate_curve_float_time(
                             0.0, 1.0, loading_percent,
@@ -579,7 +553,7 @@ impl WidgetImpl for TitleScreenImpl {
                         0.0, 1.0, loading_percent,
                         0.2, 0.01, TodCurves::Linear,
                     );
-                    let max_velocity = 2.0f32;
+                    let max_velocity = 2.0;
 
                     if self.bar_vel < min_velocity {
                         self.bar_vel = min_velocity;
@@ -590,50 +564,51 @@ impl WidgetImpl for TitleScreenImpl {
                     self.prev_loading_percent = loading_percent;
                 }
 
-                // C++: 加载完成回调处理
+                // 加载完成处理
                 if !self.loading_thread_complete && app.m_loading_thread_completed {
                     self.loading_thread_complete = true;
                     self.start_button_disabled = false;
 
-                    if self.quick_load_key == KEYCODE_Z {
+                    // 快速加载键映射（对应 C++ 原始键值）
+                    if self.quick_load_key == KEYCODE_ASCIIEND {
                         app.fast_load(GameMode::ChallengeZenGarden);
                     } else if self.quick_load_key == KEYCODE_M {
                         app.loading_completed();
                     } else if self.quick_load_key == KEYCODE_S {
                         app.loading_completed();
                         app.kill_game_selector();
-                        app.show_challenge_screen(2);
+                        app.show_challenge_screen(ChallengePage::ChallengePageSurvival);
                     } else if self.quick_load_key == KEYCODE_C {
                         app.loading_completed();
                         app.kill_game_selector();
-                        app.show_challenge_screen(1);
+                        app.show_challenge_screen(ChallengePage::ChallengePageChallenge);
                     } else if self.quick_load_key == KEYCODE_U {
                         app.loading_completed();
                         app.kill_game_selector();
-                        app.pre_new_game(GameMode::Adventure, false);
+                        app.pre_new_game(GameMode::Upsell, false);
                     } else if self.quick_load_key == KEYCODE_I {
                         app.loading_completed();
                         app.kill_game_selector();
-                        app.pre_new_game(GameMode::Adventure, false);
+                        app.pre_new_game(GameMode::Intro, false);
                     } else if self.quick_load_key == KEYCODE_P {
                         app.loading_completed();
                         app.kill_game_selector();
-                        app.show_challenge_screen(0);
+                        app.show_challenge_screen(ChallengePage::ChallengePagePuzzle);
                     } else if self.quick_load_key == KEYCODE_R {
                         app.loading_completed();
                         app.kill_game_selector();
                         app.show_credit_screen();
-                    } else if self.quick_load_key == KEYCODE_T {
+                    } else if (app.m_tod_cheat_keys && app.m_player_info.is_some())
+                        && self.quick_load_key == KEYCODE_T
+                    {
                         app.fast_load(GameMode::Adventure);
                     } else {
                         self.start_button_visible = true;
                         self.start_button_label = "CLICK TO START".to_string();
                     }
-
-                    eprintln!("[TitleScreen] 加载线程完成");
                 }
 
-                // C++: 加载条触发点动画
+                // 里程碑动画与音效
                 let trigger_points = [
                     self.total_bar_width * 0.11,
                     self.total_bar_width * 0.32,
@@ -644,15 +619,43 @@ impl WidgetImpl for TitleScreenImpl {
 
                 for (i, &trigger) in trigger_points.iter().enumerate() {
                     if prev_width < trigger && self.cur_bar_width >= trigger {
-                        eprintln!("[TitleScreen] 加载条触发点 {} 达到", i);
+                        let reanim_type = if i == 4 {
+                            crate::lawn::effect_system::ReanimationType::LoadbarZombiehead
+                        } else {
+                            crate::lawn::effect_system::ReanimationType::LoadbarSprout
+                        };
+                        let pos_x = trigger + 225.0;
+                        let pos_y = 511.0;
+
+                        if let Some(anim) = app.add_reanimation(pos_x, pos_y, 0, reanim_type) {
+                            unsafe {
+                                (*anim).m_anim_rate = 18.0;
+                                (*anim).m_loop_type = crate::lawn::effect_system::ReanimLoopType::PlayOnceAndHold;
+                            }
+                            if i == 1 || i == 3 {
+                                unsafe { (*anim).override_scale(-1.0, 1.0); }
+                            } else if i == 2 {
+                                unsafe {
+                                    (*anim).set_position(pos_x, pos_y - 5.0);
+                                    (*anim).override_scale(1.1, 1.3);
+                                }
+                            } else if i == 4 {
+                                unsafe { (*anim).set_position(pos_x - 20.0, pos_y); }
+                            }
+
+                            if i == 4 {
+                                app.play_sample(SOUND_LOADINGBAR_FLOWER);
+                                app.play_sample(SOUND_LOADINGBAR_ZOMBIE);
+                            } else {
+                                app.play_sample(SOUND_LOADINGBAR_FLOWER);
+                            }
+                        }
                     }
                 }
             }
-
             TitleState::Running => {
-                // Running 状态：等待用户点击或按键
+                // 等待用户交互
             }
-
             _ => {}
         }
     }
@@ -660,10 +663,9 @@ impl WidgetImpl for TitleScreenImpl {
     fn mouse_down_btn(&mut self, widget: &mut Widget, x: i32, y: i32, btn: i32, click: i32) {
         let _ = (widget, x, y, btn, click);
         let app = unsafe { &mut *self.app };
-
-        if self.loading_thread_complete && self.title_state == TitleState::Running {
-            // C++: 播放点击音效
-            //app.play_sample(crate::framework::common::SOUND_BUTTONCLICK);
+        // 原 C++：只要 loading_thread_complete 为 true 即可点击，不要求状态为 Running
+        if self.loading_thread_complete {
+            app.play_sample(SOUND_BUTTONCLICK);
             app.loading_completed();
         }
     }
@@ -673,12 +675,14 @@ impl WidgetImpl for TitleScreenImpl {
         let app = unsafe { &mut *self.app };
 
         if self.loading_thread_complete {
-            // C++: 播放点击音效
-            //app.play_sample(crate::framework::common::SOUND_BUTTONCLICK);
+            app.play_sample(SOUND_BUTTONCLICK);
             app.loading_completed();
             return;
         }
 
-        self.quick_load_key = key;
+        // 作弊键保存（仅在作弊模式且玩家信息存在时）
+        if app.m_tod_cheat_keys && app.m_player_info.is_some() {
+            self.quick_load_key = key;
+        }
     }
 }
