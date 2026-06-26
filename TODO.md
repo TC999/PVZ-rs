@@ -1755,7 +1755,9 @@ GameObject 结构体和实现已完整翻译。
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/grid_item.rs
+MotionTrailFrame 和 GridItem 结构体已完整翻译。
+方法实现（共 18 个方法）尚未翻译，仅保留注释占位。
 ```
 
 ### `[x]` `src\Lawn\GridItem.h`
@@ -1768,13 +1770,19 @@ GameObject 结构体和实现已完整翻译。
 
 **类/结构体:**
 
-- `[ ]` `class MotionTrailFrame` (L19, 0 个方法, 3 个成员)
-- `[ ]` `class GridItem` (L27, 0 个方法, 10 个成员)
+- `[x]` `class MotionTrailFrame` (L19, 0 个方法, 3 个成员)
+- `[x]` `class GridItem` (L27, 0 个方法, 10 个成员)
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/grid_item.rs
+设计决策:
+- MotionTrailFrame → Rust struct（pos_x, pos_y, anim_time）
+- GridItem 补全所有 C++ 字段，不继承 GameObject
+- NUM_MOTION_TRAIL_FRAMES(12) 常量 → const NUM_MOTION_TRAIL_FRAMES
+- 本地 GridItemType 保留（board.rs 依赖其 Grave/Rake 等变体）
+- cargo check 通过
 ```
 
 ### `[x]` `src\Lawn\LawnCommon.cpp`
