@@ -3775,12 +3775,16 @@ SexyAppBase 结构体已实现。
 
 **类/结构体:**
 
-- `[ ]` `class TriVertex` (L13, 0 个方法, 1 个成员)
+- `[x]` `class TriVertex` (L13, 0 个方法, 1 个成员) — 已在 gl_interface.rs:47 实现
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/framework/graphics/gl_interface.rs
+TriVertex:
+- #[repr(C)] 结构体，5 个字段（x, y, u, v, f32, color: u32）
+- 已在多个模块中引用（effect_system, graphics, reanimator）
+编译状态: 已在现有编译通过代码中
 ```
 
 ### `[x]` `src\SexyAppFramework\imagelib\ImageLib.cpp`
