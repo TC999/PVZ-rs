@@ -9,7 +9,8 @@ use crate::framework::rect::Rect;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
 use crate::framework::graphics::gl_interface::TriVertex;
-use crate::todlib::definition::{ReanimatorDefinition, ReanimatorTrackInstance};
+use crate::todlib::definition::{ReanimatorDefinition, ReanimatorTrackInstance, ReanimatorTransform};
+use crate::todlib::data_array::DataArray;
 
 /// 动画类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -175,3 +176,119 @@ impl Default for Reanimation {
         Reanimation::new()
     }
 }
+
+// ══════════════════════════════════════════════════════
+// ║  Reanimator 辅助数据结构
+// ══════════════════════════════════════════════════════
+
+/// 重动画标志（对应 C++ ReanimFlags）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum ReanimFlags {
+    NoAtlas,
+    FastDrawInSwMode,
+}
+
+/// 重动画变换数组（对应 C++ ReanimatorTransformArray）
+/// 用于定义文件中的原始格式（指针+计数）
+#[derive(Debug, Clone, Copy)]
+pub struct ReanimatorTransformArray {
+    pub transforms: Option<*mut ReanimatorTransform>,
+    pub count: i32,
+}
+
+/// 重动画轨道（对应 C++ ReanimatorTrack）
+pub struct ReanimatorTrack {
+    pub name: Option<&'static str>,
+    pub transforms: ReanimatorTransformArray,
+}
+
+impl Default for ReanimatorTrack {
+    fn default() -> Self {
+        ReanimatorTrack {
+            name: None,
+            transforms: ReanimatorTransformArray {
+                transforms: None,
+                count: 0,
+            },
+        }
+    }
+}
+
+/// 重动画轨道数组（对应 C++ ReanimatorTrackArray）
+/// 用于定义文件中的原始格式（指针+计数）
+#[derive(Debug, Clone, Copy)]
+pub struct ReanimatorTrackArray {
+    pub tracks: Option<*mut ReanimatorTrack>,
+    pub count: i32,
+}
+
+/// 重动画帧时间（对应 C++ ReanimatorFrameTime）
+#[derive(Debug, Clone, Copy)]
+pub struct ReanimatorFrameTime {
+    pub fraction: f32,
+    pub anim_frame_before_int: i32,
+    pub anim_frame_after_int: i32,
+}
+
+impl Default for ReanimatorFrameTime {
+    fn default() -> Self {
+        ReanimatorFrameTime {
+            fraction: 0.0,
+            anim_frame_before_int: 0,
+            anim_frame_after_int: 0,
+        }
+    }
+}
+
+/// 重动画参数 — 动画类型与文件名的映射（对应 C++ ReanimationParams）
+#[derive(Debug, Clone)]
+pub struct ReanimationParams {
+    pub reanim_type: ReanimationType,
+    pub reanim_file_name: Option<&'static str>,
+    pub reanim_param_flags: i32,
+}
+
+/// 重动画持有者（对应 C++ ReanimationHolder）
+pub struct ReanimationHolder {
+    pub reanimations: DataArray<Reanimation>,
+}
+
+impl ReanimationHolder {
+    pub fn new() -> Self {
+        ReanimationHolder {
+            reanimations: DataArray::new(),
+        }
+    }
+
+    pub fn initialize_holder(&mut self) {
+        // TODO: 从 Reanimator.cpp 翻译
+    }
+
+    pub fn dispose_holder(&mut self) {
+        // TODO: 从 Reanimator.cpp 翻译
+    }
+
+    pub fn alloc_reanimation(
+        &mut self,
+        _x: f32,
+        _y: f32,
+        _render_order: i32,
+        _reanim_type: ReanimationType,
+    ) -> Option<*mut Reanimation> {
+        None
+    }
+}
+
+// ── 常量 ──────────────────────────────────────────────
+
+/// 默认占位值
+pub const DEFAULT_FIELD_PLACEHOLDER: f32 = -10000.0;
+/// 每帧更新秒数
+pub const SECONDS_PER_UPDATE: f64 = 0.01;
+/// 隐藏渲染组
+pub const RENDER_GROUP_HIDDEN: i32 = -1;
+/// 普通渲染组
+pub const RENDER_GROUP_NORMAL: i32 = 0;
+/// 无基础姿势
+pub const NO_BASE_POSE: i32 = -2;

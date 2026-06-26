@@ -2495,24 +2495,24 @@ ReanimAtlasImage 和 ReanimAtlas 结构体已实现。
 
 **类/结构体:**
 
-- `[ ]` `struct ReanimatorTransformArray` (L42, 0 个方法, 2 个成员)
-- `[ ]` `class ReanimatorTrack` (L47, 0 个方法, 2 个成员)
-- `[ ]` `struct ReanimatorTrackArray` (L57, 0 个方法, 2 个成员)
+- `[x]` `struct ReanimatorTransformArray` (L42, 0 个方法, 2 个成员) — 完整翻译
+- `[x]` `class ReanimatorTrack` (L47, 0 个方法, 2 个成员) — 完整翻译
+- `[x]` `struct ReanimatorTrackArray` (L57, 0 个方法, 2 个成员) — 完整翻译
 - `[~]` `class ReanimatorDefinition` (L67, 0 个方法, 3 个成员) — 简化版在 definition.rs
-- `[ ]` `class ReanimationParams` (L85, 0 个方法, 3 个成员)
-- `[ ]` `class ReanimationHolder` (L117, 0 个方法, 1 个成员)
-- `[ ]` `class ReanimatorFrameTime` (L136, 0 个方法, 3 个成员)
+- `[x]` `class ReanimationParams` (L85, 0 个方法, 3 个成员) — 完整翻译
+- `[x]` `class ReanimationHolder` (L117, 0 个方法, 1 个成员) — 完整翻译
+- `[x]` `class ReanimatorFrameTime` (L136, 0 个方法, 3 个成员) — 完整翻译
 - `[~]` `class ReanimatorTransform` (L144, 0 个方法, 10 个成员) — 简化版在 definition.rs
-- `[ ]` `class ReanimatorTrackInstance` (L163, 0 个方法, 10 个成员)
+- `[x]` `class ReanimatorTrackInstance` (L163, 0 个方法, 10 个成员) — 已在 definition.rs 简化实现
 - `[x]` `class Reanimation` (L185, 0 个方法, 10 个成员)
 
 **枚举:**
 
-- `[ ]` `enum ReanimFlags` → { REANIM_NO_ATLAS, REANIM_FAST_DRAW_IN_SW_MODE }
+- `[x]` `enum ReanimFlags` → { REANIM_NO_ATLAS, REANIM_FAST_DRAW_IN_SW_MODE }
 
 **自由函数:**
 
-- `[ ]` ` enum({
+- `[x]` ` enum({
     RENDER_GROUP_HIDDEN = -1,
     RENDER_GROUP_NORMAL = 0
 };
