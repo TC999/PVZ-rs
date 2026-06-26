@@ -2218,17 +2218,22 @@ public:
 
 **类/结构体:**
 
-- `[ ]` `class AttachEffect` (L23, 0 个方法, 5 个成员)
-- `[ ]` `class AttacherInfo` (L33, 0 个方法, 4 个成员)
+- `[x]` `class AttachEffect` (L23, 0 个方法, 5 个成员) — 完整翻译
+- `[x]` `class AttacherInfo` (L33, 0 个方法, 4 个成员) — 完整翻译
 - `[x]` `class Attachment` (L45, 0 个方法, 3 个成员)
-- `[ ]` `class AttachmentHolder` (L87, 0 个方法, 1 个成员)
+- `[x]` `class AttachmentHolder` (L87, 0 个方法, 1 个成员) — 完整翻译
 
 **翻译备注:**
 
 ```
 翻译文件: rust/src/todlib/attachment.rs
-Attachment 结构体已实现（new, update, draw 等方法）。
-缺失: AttachEffect, AttacherInfo, AttachmentHolder 结构体未实现。
+所有数据结构已完整翻译：
+- AttachEffect 结构体（5 字段 + SexyMatrix3 偏移）
+- AttacherInfo 结构体（4 字段）
+- Attachment 结构体（effect_array[16], num_effects, dead + 方法签名）
+- AttachmentHolder 结构体（DataArray<Attachment> 组合）
+- 自由函数签名（attach_reanim, attach_particle, attach_trail 等）
+方法实现待从 Attachment.cpp 翻译（Update, Draw, SetPosition 等）
 ```
 
 ### `[x]` `src\Sexy.TodLib\DataArray.h`
