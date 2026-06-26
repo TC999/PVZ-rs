@@ -316,6 +316,10 @@ pub struct Board {
     pub m_ice_timer: [i32; MAX_GRID_SIZE_Y],
     pub m_ice_min_x: [i32; MAX_GRID_SIZE_Y],
     pub m_ice_trap_counter: i32,
+
+    // 火焰扫荡效果（对应 C++ mFwooshCountDown / mFwooshID）
+    pub m_fwoosh_count_down: i32,
+    pub m_fwoosh_id: [[ReanimationID; 12]; MAX_GRID_SIZE_Y],
     pub m_ice_particle: i32,
 
     // 屏幕震动
@@ -423,6 +427,8 @@ impl Board {
             m_ice_timer: [0; MAX_GRID_SIZE_Y],
             m_ice_min_x: [0; MAX_GRID_SIZE_Y],
             m_ice_trap_counter: 0,
+            m_fwoosh_count_down: 0,
+            m_fwoosh_id: [[REANIMATIONID_NULL; 12]; MAX_GRID_SIZE_Y],
             m_ice_particle: 0,
             m_shake_counter: 0,
             m_shake_amount_x: 0,
