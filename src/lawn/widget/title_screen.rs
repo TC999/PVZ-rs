@@ -424,6 +424,7 @@ impl WidgetImpl for TitleScreenImpl {
                 music.music_title_screen_init();
             }
             app.start_loading_thread();
+            self.loader_screen_is_loaded = true; // 同步加载完成后加载条资源可用
 
             self.title_state = TitleState::PopCapLogo;
             if self.display_partner_logo {
