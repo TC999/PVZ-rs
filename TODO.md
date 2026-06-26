@@ -1840,7 +1840,14 @@ MotionTrailFrame 和 GridItem 结构体已完整翻译。
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/lawn_mower.rs
+设计决策:
+- 结构体字段按 C++ LawnMower.h 完整映射
+- 新增 mowing 字段（board.rs 依赖此布尔值判断状态）
+- base: GameObject 组合（board.rs 依赖 base.row 获取行号）
+- 方法签名完整（LawnMowerInitialize/StartMower/Update/Draw/Die 等）
+- get_mower_rect() 返回基本碰撞矩形
+- cargo check 通过
 ```
 
 ### `[x]` `src\Lawn\LawnMower.h`
@@ -1853,12 +1860,14 @@ MotionTrailFrame 和 GridItem 结构体已完整翻译。
 
 **类/结构体:**
 
-- `[ ]` `class LawnMower` (L19, 0 个方法, 10 个成员)
+- `[x]` `class LawnMower` (L19, 0 个方法, 10 个成员)
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/lawn_mower.rs
+完整结构体和方法签名已翻译。
+cargo check 通过。
 ```
 
 ### `[x]` `src\Lawn\MessageWidget.cpp`
