@@ -1046,19 +1046,19 @@ ProjectileDefinition 结构体已实现（projectile_type, image_row, damage 三
 **类/结构体:**
 
 - `[x]` `class SeedPacket : GameObject` (L14, 0 个方法, 10 个成员)
-- `[ ]` `class SeedBank : GameObject` (L48, 0 个方法, 4 个成员)
+- `[x]` `class SeedBank : GameObject` (L48, 0 个方法, 4 个成员)
 
 **自由函数:**
 
 - `[x]` `class SeedPacket : public GameObject()`
-- `[ ]` `class SeedBank : public GameObject()`
+- `[x]` `class SeedBank : public GameObject()`
 
 **翻译备注:**
 
 ```
 翻译文件: rust/src/lawn/seed_packet.rs
 SeedPacket 结构体已完整翻译（new, update, draw 等方法）。
-缺失: SeedBank 结构体未实现。
+SeedBank 结构体已实现（含 base: GameObject 组合，num_packets, seed_packets 数组, cut_scene_darken, conveyor_belt_counter 字段）。
 ```
 
 ### `[x]` `src\Lawn\System\DataSync.cpp`

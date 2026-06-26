@@ -2,6 +2,8 @@
 // 对应 C++ src/Lawn/SeedPacket.h / SeedPacket.cpp
 
 use crate::lawn::game_enums::*;
+use crate::lawn::game_object::GameObject;
+use crate::lawn::board::HitResult;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::rect::Rect;
 
@@ -58,5 +60,45 @@ impl SeedPacket {
 impl Default for SeedPacket {
     fn default() -> Self {
         SeedPacket::new()
+    }
+}
+
+/// 种子银行 — 管理多个种子槽（对应 C++ SeedBank : GameObject）
+pub struct SeedBank {
+    pub base: GameObject,
+    pub num_packets: i32,
+    pub seed_packets: [SeedPacket; SEEDBANK_MAX as usize],
+    pub cut_scene_darken: i32,
+    pub conveyor_belt_counter: i32,
+}
+
+impl SeedBank {
+    pub fn new() -> Self {
+        SeedBank {
+            base: GameObject::new(),
+            num_packets: SEEDBANK_MAX,
+            seed_packets: std::array::from_fn(|_| SeedPacket::new()),
+            cut_scene_darken: 0,
+            conveyor_belt_counter: 0,
+        }
+    }
+
+    /// 绘制种子银行
+    pub fn draw(&self, _g: &mut Graphics) {
+        // 待 SeedPacket.cpp 翻译时实现完整绘制逻辑
+        for packet in &self.seed_packets {
+            // 每个种子槽的绘制由 SeedPacket::draw 处理
+        }
+    }
+
+    /// 鼠标点击测试
+    pub fn mouse_hit_test(&self, _x: i32, _y: i32, _hit_result: &mut HitResult) -> bool {
+        false
+    }
+}
+
+impl Default for SeedBank {
+    fn default() -> Self {
+        SeedBank::new()
     }
 }
