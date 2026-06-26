@@ -1468,10 +1468,26 @@ enum ZombieType : int32_t)`
 - 注意：C++ 中 mZombieHealthWaveStart / mLastBungeeWave / mHugeWaveCountDown 字段未在 Rust Board 中定义，对应初始化跳过
 
 待翻译的主要模块（按优先级排序）：
-1. DrawBackdrop / DrawLevel（完整绘制逻辑）
+1. DrawBackdrop / DrawLevel / DrawGameObjects（完整绘制逻辑）
 2. MouseDown / MouseUp（完整版交互逻辑）
-3. Update 完整版（CutScene、Fwoosh、Tutorial 等）
-4. SpawnZombieWave / SpawnZombiesFromPool / SpawnZombiesFromGraves（僵尸生成）
+3. Update 完整版（Fwoosh、Tutorial、Ice、Fog 等）
+
+本轮新增翻译（当前轮次）：
+- spawn_zombies_from_pool()：完整实现，水池区域加权随机+墓穴僵尸
+- spawn_zombies_from_sky()：完整实现，屋顶关卡蹦极投放
+- spawn_zombies_from_graves()：完整实现，墓碑遍历+分行调用池/空/房
+- setup_bungee_drop() / bungee_drop_zombie()：蹦极网格+投放逻辑
+- spawn_zombie_wave()：从简化版升级为完整版，使用预计算波次列表 m_zombies_in_wave，支持蹦极闪电战/雪橇替代/最后一波旗帜逻辑
+- BungeeDropGrid 结构体重构：Vec<tuple> -> [TodWeightedGridArray; MAX_POOL_GRID_SIZE]
+- Board 新增 m_ice_trap_counter 字段（Zomboni 冰冻陷阱计数器）
+- tod_common.rs 新增 tod_pick_from_weighted_grid_array() 辅助函数
+- get_live_gargantuar_count() / get_boss_zombie() / get_boss_zombie_mut()：僵尸查询方法
+- bungee_is_targeting_cell()：蹦极瞄准检查
+- update_zombie_spawning()：简化版僵尸生成更新（含墓碑升起倒计时）
+- update_ice()：冰道融化倒计时和冰陷阱计时器
+- update_game()：主更新循环（合并 UpdateGame 核心逻辑）
+- update_grid_items_detailed()：格子物品更新（墓碑计数器递增）
+- update_fwoosh()：火焰扫荡效果（暂不完整实现）
 ```
 
 ### `[x]` `src\Lawn\Board.h`

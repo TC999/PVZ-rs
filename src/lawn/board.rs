@@ -7,7 +7,7 @@
 use crate::lawn::game_enums::*;
 use crate::lawn::lawn_app::LawnApp;
 use crate::lawn::plant::Plant;
-use crate::lawn::zombie::{Zombie, get_zombie_definition};
+use crate::lawn::zombie::{Zombie, get_zombie_definition, MAX_ZOMBIE_FOLLOWERS};
 use crate::lawn::projectile::Projectile;
 use crate::lawn::coin::Coin;
 use crate::lawn::lawn_mower::LawnMower;
@@ -20,7 +20,7 @@ use crate::framework::color::Color;
 use crate::framework::common;
 use crate::todlib::tod_particle::ParticleSystem;
 use crate::todlib::reanimator::Reanimation;
-use crate::todlib::tod_common::{TodSmoothArray, TodWeightedArray, tod_pick_from_weighted_array, tod_animate_curve};
+use crate::todlib::tod_common::{TodSmoothArray, TodWeightedArray, TodWeightedGridArray, tod_pick_from_weighted_array, tod_pick_from_weighted_grid_array, tod_animate_curve};
 
 pub const MAX_GRID_SIZE_X: usize = 9;
 pub const MAX_GRID_SIZE_Y: usize = 6;
@@ -44,6 +44,7 @@ pub const G_ZOMBIE_WAVES: [i32; NUM_LEVELS as usize] = [
     10, 20, 20, 30, 20, 20, 30, 20, 30, 30,
 ];
 pub const MAX_RENDER_ITEMS: usize = 2048;
+pub const MAX_POOL_GRID_SIZE: usize = 8;
 pub const PROGRESS_METER_COUNTER: i32 = 150;
 
 /// 命中结果（对应 C++ HitResult）
@@ -103,7 +104,17 @@ pub struct PlantsOnLawn {
 
 /// Bungee 僵尸掉落网格（对应 C++ BungeeDropGrid）
 pub struct BungeeDropGrid {
-    pub grid_array: Vec<(i32, i32, i32)>,  // (grid_x, grid_y, weight)
+    pub grid_array: [TodWeightedGridArray; MAX_POOL_GRID_SIZE],
+    pub grid_array_count: usize,
+}
+
+impl BungeeDropGrid {
+    pub fn new() -> Self {
+        BungeeDropGrid {
+            grid_array: [TodWeightedGridArray { x: 0, y: 0, weight: 0 }; MAX_POOL_GRID_SIZE],
+            grid_array_count: 0,
+        }
+    }
 }
 
 /// 将行号转换为 Y 坐标
@@ -304,6 +315,7 @@ pub struct Board {
     // 冻结/减速效果
     pub m_ice_timer: [i32; MAX_GRID_SIZE_Y],
     pub m_ice_min_x: [i32; MAX_GRID_SIZE_Y],
+    pub m_ice_trap_counter: i32,
     pub m_ice_particle: i32,
 
     // 屏幕震动
@@ -410,6 +422,7 @@ impl Board {
             m_board_rand_seed: 0,
             m_ice_timer: [0; MAX_GRID_SIZE_Y],
             m_ice_min_x: [0; MAX_GRID_SIZE_Y],
+            m_ice_trap_counter: 0,
             m_ice_particle: 0,
             m_shake_counter: 0,
             m_shake_amount_x: 0,
@@ -659,7 +672,7 @@ impl Board {
 
     /// 更新波次
     fn update_waves(&mut self) {
-        if self.m_current_wave >= self.m_total_waves { return; }
+        if self.m_current_wave >= self.m_num_waves { return; }
 
         self.m_zombie_countdown -= 1;
         if self.m_zombie_countdown <= 0 {
@@ -667,35 +680,213 @@ impl Board {
         }
     }
 
-    /// 生成一波僵尸
+    /// 生成一波僵尸（对应 C++ SpawnZombieWave）
+    /// 从预计算的波次列表 m_zombies_in_wave 中读取当前波次的僵尸并生成
     fn spawn_zombie_wave(&mut self) {
-        self.m_current_wave += 1;
-
-        // 根据关卡和波次生成不同的僵尸
-        let count = match self.level {
-            1 => 3,
-            2..=5 => 3 + self.m_current_wave,
-            _ => 5 + self.m_current_wave,
-        };
-
-        for _ in 0..count {
-            let ztype = if self.level >= 3 && crate::todlib::tod_common::rand_range_int(0, 100) < 30 {
-                ZombieType::TrafficCone
-            } else {
-                ZombieType::Normal
-            };
-
-            let row = crate::todlib::tod_common::rand_range_int(0, 5);
-            let mut zombie = Zombie::new();
-            zombie.zombie_initialize(row, ztype, false, None, self.m_current_wave);
-            self.zombies.push(zombie);
+        // 调用挑战模式的波次钩子（如果有）
+        if let Some(ref mut challenge) = self.challenge {
+            challenge.spawn_zombie_wave();
         }
 
-        self.m_zombie_countdown = ZOMBIE_COUNTDOWN + crate::todlib::tod_common::rand_range_int(0, ZOMBIE_COUNTDOWN_RANGE);
+        // 判断当前关卡类型
+        let is_bungee_blitz = self.app.map_or(false, |app| unsafe { (*app).is_bungee_blitz_level() });
+        let is_continuous = self.app.map_or(false, |app| unsafe { (*app).is_continuous_challenge() });
 
-        // 旗子波次
-        if self.m_current_wave % 5 == 0 {
-            self.m_flag_countdown = FLAG_RAISE_TIME;
+        if is_bungee_blitz {
+            // 蹦极闪电战：使用蹦极僵尸投放
+            let mut bungee_drop_grid = BungeeDropGrid::new();
+            Self::setup_bungee_drop(&mut bungee_drop_grid);
+
+            for i in 0..MAX_ZOMBIES_IN_WAVE {
+                let ztype = self.m_zombies_in_wave[self.m_current_wave as usize][i];
+                if ztype == ZombieType::Invalid {
+                    break;
+                }
+
+                if ztype == ZombieType::Bungee || ztype == ZombieType::Zamboni {
+                    self.add_zombie(ztype, self.m_current_wave);
+                } else {
+                    self.bungee_drop_zombie(&mut bungee_drop_grid, ztype);
+                }
+            }
+        } else {
+            // 普通波次：从波次列表直接生成
+            for i in 0..MAX_ZOMBIES_IN_WAVE {
+                let ztype = self.m_zombies_in_wave[self.m_current_wave as usize][i];
+                if ztype == ZombieType::Invalid {
+                    break;
+                }
+
+                if ztype == ZombieType::Bobsled && !self.can_add_bob_sled() {
+                    // 无法生成雪橇僵尸小队时，用 4 只普通僵尸代替
+                    for _ in 0..MAX_ZOMBIE_FOLLOWERS {
+                        self.add_zombie(ZombieType::Normal, self.m_current_wave);
+                    }
+                } else {
+                    self.add_zombie(ztype, self.m_current_wave);
+                }
+            }
+        }
+
+        // 最后一波：启动墓碑升起计时器
+        if self.m_current_wave == self.m_num_waves - 1 && !is_continuous {
+            self.m_rise_from_grave_counter = 210;
+        }
+
+        // 旗子波次：举旗
+        if self.is_flag_wave(self.m_current_wave) {
+            self.m_flag_raise_counter = FLAG_RAISE_TIME;
+        }
+
+        self.m_current_wave += 1;
+        self.m_total_spawned_waves += 1;
+    }
+
+    /*
+    ============================================================
+    僵尸生成辅助方法（对应 C++ Board.cpp SpawnZombiesFromPool 等）
+    ============================================================
+    */
+
+    /// 从水池生成僵尸（对应 C++ SpawnZombiesFromPool）
+    /// 在泳池关卡的池水区域（第2-3行，第5-8列）生成从墓穴中升起的僵尸
+    fn spawn_zombies_from_pool(&mut self) {
+        if self.m_ice_trap_counter > 0 {
+            return;
+        }
+
+        let (a_count, a_zombie_points) = match self.level {
+            21 | 22 | 31 | 32 => (2, 3),
+            23 | 24 | 25 | 33 | 34 | 35 => (3, 5),
+            _ => (3, 7),
+        };
+
+        let mut a_grid_array = [TodWeightedGridArray { x: 0, y: 0, weight: 0 }; MAX_POOL_GRID_SIZE];
+        let mut a_grid_array_count = 0;
+        for a_grid_x in 5..MAX_GRID_SIZE_X {
+            for a_grid_y in 2..=3 {
+                a_grid_array[a_grid_array_count] = TodWeightedGridArray { x: a_grid_x as i32, y: a_grid_y, weight: 10000 };
+                a_grid_array_count += 1;
+                debug_assert!(a_grid_array_count <= MAX_POOL_GRID_SIZE);
+            }
+        }
+
+        let mut zombie_points = a_zombie_points;
+        for _ in 0..a_count {
+            if let Some(idx) = tod_pick_from_weighted_grid_array(&mut a_grid_array, a_grid_array_count) {
+                a_grid_array[idx].weight = 0;
+                let grid_x = a_grid_array[idx].x;
+                let grid_y = a_grid_array[idx].y;
+
+                let ztype = self.pick_grave_rising_zombie_type();
+                let mut zombie = Zombie::new();
+                zombie.zombie_initialize(grid_y, ztype, false, None, self.m_current_wave);
+                self.zombies.push(zombie);
+
+                zombie_points -= get_zombie_definition(ztype).zombie_value;
+                if zombie_points < 1 { zombie_points = 1; }
+            }
+        }
+    }
+
+    /// 设置蹦极僵尸掉落网格（对应 C++ SetupBungeeDrop）
+    fn setup_bungee_drop(bungee_drop: &mut BungeeDropGrid) {
+        bungee_drop.grid_array_count = 0;
+        for grid_x in 4..MAX_GRID_SIZE_X {
+            for grid_y in 0..=4 {
+                let count = bungee_drop.grid_array_count;
+                bungee_drop.grid_array[count] = TodWeightedGridArray { x: grid_x as i32, y: grid_y, weight: 10000 };
+                bungee_drop.grid_array_count += 1;
+                debug_assert!(bungee_drop.grid_array_count <= MAX_POOL_GRID_SIZE);
+            }
+        }
+    }
+
+    /// 蹦极僵尸投放僵尸（对应 C++ BungeeDropZombie）
+    fn bungee_drop_zombie(&mut self, bungee_drop: &mut BungeeDropGrid, zombie_type: ZombieType) {
+        if let Some(idx) = tod_pick_from_weighted_grid_array(&mut bungee_drop.grid_array, bungee_drop.grid_array_count) {
+            bungee_drop.grid_array[idx].weight = 1;
+
+            let mut bungee_zombie = Zombie::new();
+            bungee_zombie.zombie_initialize(0, ZombieType::Bungee, false, None, self.m_current_wave);
+            self.zombies.push(bungee_zombie);
+
+            let mut zombie = Zombie::new();
+            zombie.zombie_initialize(0, zombie_type, false, None, self.m_current_wave);
+            self.zombies.push(zombie);
+        }
+    }
+
+    /// 从空中生成僵尸（对应 C++ SpawnZombiesFromSky）
+    /// 用于屋顶关卡，通过蹦极僵尸投放
+    fn spawn_zombies_from_sky(&mut self) {
+        if self.m_ice_trap_counter > 0 {
+            return;
+        }
+
+        let (a_count, mut zombie_points) = match self.level {
+            41 | 42 => (2, 3),
+            43 | 44 | 45 => (3, 5),
+            _ => (3, 7),
+        };
+
+        let mut bungee_drop_grid = BungeeDropGrid::new();
+        Self::setup_bungee_drop(&mut bungee_drop_grid);
+
+        let mut a_count = a_count;
+        if a_count > bungee_drop_grid.grid_array_count as i32 {
+            a_count = bungee_drop_grid.grid_array_count as i32;
+        }
+
+        if bungee_drop_grid.grid_array_count == 0 || a_count <= 0 {
+            return;
+        }
+
+        for _ in 0..a_count {
+            let ztype = self.pick_grave_rising_zombie_type();
+            self.bungee_drop_zombie(&mut bungee_drop_grid, ztype);
+            zombie_points -= get_zombie_definition(ztype).zombie_value;
+            if zombie_points < 1 { zombie_points = 1; }
+        }
+    }
+
+    /// 从墓碑生成僵尸（对应 C++ SpawnZombiesFromGraves）
+    fn spawn_zombies_from_graves(&mut self) {
+        let app_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+        // GAMEMODE_CHALLENGE_WAR_AND_PEAS_2 暂未翻译，仅检查 WarAndPeas
+        if app_mode == GameMode::ChallengeWarAndPeas {
+            return;
+        }
+
+        if self.stage_has_roof() {
+            self.spawn_zombies_from_sky();
+            return;
+        } else if self.stage_has_pool() {
+            self.spawn_zombies_from_pool();
+            return;
+        }
+
+        // 遍历所有格子系统，从墓碑生成僵尸
+        let mut to_spawn: Vec<(i32, i32)> = Vec::new();
+        for item in &self.grid_items {
+            if item.grid_item_type != GridItemType::Grave || item.counter < 100 {
+                continue;
+            }
+            // GAMEMODE_CHALLENGE_GRAVE_DANGER 暂未翻译，跳过对应检查
+            // if app_mode == GameMode::ChallengeGraveDanger {
+            //     let rand_val = crate::todlib::tod_common::rand_range_int(0, self.m_num_waves - 1);
+            //     if rand_val > self.m_current_wave {
+            //         continue;
+            //     }
+            // }
+            to_spawn.push((item.grid_x, item.grid_y));
+        }
+
+        for (grid_x, grid_y) in to_spawn {
+            let ztype = self.pick_grave_rising_zombie_type();
+            let mut zombie = Zombie::new();
+            zombie.zombie_initialize(grid_y, ztype, false, None, self.m_current_wave);
+            self.zombies.push(zombie);
         }
     }
 
@@ -1384,6 +1575,37 @@ impl Board {
     pub fn is_plant_in_cursor(&self) -> bool {
         // 简化版：通过游戏逻辑判断
         false
+    }
+
+    // ========== 僵尸查询 ==========
+
+    /// 统计存活的大型僵尸数量（对应 C++ GetLiveGargantuarCount）
+    pub fn get_live_gargantuar_count(&self) -> i32 {
+        self.zombies.iter().filter(|z| {
+            z.has_head
+                && !z.dead
+                && (z.zombie_type == ZombieType::Gargantuar || z.zombie_type == ZombieType::RedeEyeGargantuar)
+        }).count() as i32
+    }
+
+    /// 获取 BOSS 僵尸（对应 C++ GetBossZombie）
+    pub fn get_boss_zombie(&self) -> Option<&Zombie> {
+        self.zombies.iter().find(|z| !z.dead && z.zombie_type == ZombieType::Boss)
+    }
+
+    /// 获取 BOSS 僵尸（可变引用）
+    pub fn get_boss_zombie_mut(&mut self) -> Option<&mut Zombie> {
+        self.zombies.iter_mut().find(|z| !z.dead && z.zombie_type == ZombieType::Boss)
+    }
+
+    /// 检查蹦极僵尸是否正在瞄准某格（对应 C++ BungeeIsTargetingCell）
+    pub fn bungee_is_targeting_cell(&self, grid_x: i32, grid_y: i32) -> bool {
+        self.zombies.iter().any(|z| {
+            !z.dead
+                && z.zombie_type == ZombieType::Bungee
+                && z.base.row == grid_y
+                && z.target_col == grid_x
+        })
     }
 
     // ========== 屏幕震动 ==========
@@ -2150,6 +2372,101 @@ impl Board {
         for coin in &mut self.coins { coin.update(); }
         for mower in &mut self.lawn_mowers { mower.update(); }
         for item in &mut self.grid_items { item.update(); }
+    }
+
+    // ========== 更新循环 ==========
+
+    /// 更新僵尸生成（对应 C++ UpdateZombieSpawning 简化版）
+    /// 控制僵尸从墓碑/水池/天空的生成时机
+    fn update_zombie_spawning(&mut self) {
+        // 如果关卡已结束，提前返回
+        if self.has_level_award_dropped() {
+            return;
+        }
+
+        // 墓碑升起计时器
+        if self.m_rise_from_grave_counter > 0 {
+            self.m_rise_from_grave_counter -= 1;
+            if self.m_rise_from_grave_counter == 0 {
+                self.spawn_zombies_from_graves();
+            }
+        }
+
+        // 如果已经是最后波次且不是生存模式，提前返回
+        let app_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+        if self.m_current_wave >= self.m_num_waves {
+            if self.is_final_survival_stage() || app_mode == GameMode::ChallengeLastStand {
+                return;
+            }
+            if !self.app.map_or(false, |app| unsafe { (*app).is_survival_mode() })
+                && !self.app.map_or(false, |app| unsafe { (*app).is_continuous_challenge() })
+            {
+                return;
+            }
+        }
+
+        // 波次倒计时——由 update_waves 处理
+    }
+
+    /// 更新冰冻效果（对应 C++ UpdateIce 简化版）
+    /// 管理冰道融化计时器
+    fn update_ice(&mut self) {
+        for row in 0..MAX_GRID_SIZE_Y {
+            if self.m_ice_timer[row] > 0 {
+                self.m_ice_timer[row] -= 1;
+                if self.m_ice_timer[row] == 0 {
+                    self.m_ice_min_x[row] = 0;
+                }
+            }
+        }
+
+        if self.m_ice_trap_counter > 0 {
+            self.m_ice_trap_counter -= 1;
+        }
+    }
+
+    /// 更新格子物品（对应 C++ UpdateGridItems 简化版）
+    fn update_grid_items_detailed(&mut self) {
+        for item in &mut self.grid_items {
+            // 格子物品计数器递增
+            if item.grid_item_type == GridItemType::Grave {
+                item.counter += 1;
+            }
+        }
+    }
+
+    /// 主更新循环（对应 C++ UpdateGame 简化版）
+    /// 合并了 UpdateGame 的核心逻辑
+    fn update_game(&mut self) {
+        // 更新所有游戏对象
+        self.update_game_objects();
+
+        // Fog 偏移更新（简化版）
+        if self.stage_has_fog() && self.m_fog_blown_count_down > 0 {
+            self.m_fog_blown_count_down -= 1;
+        }
+
+        // 游戏场景检查
+        let scene = self.app.map_or(crate::lawn::lawn_app::GameScenes::Playing, |app| unsafe { (*app).game_scene });
+        if scene != crate::lawn::lawn_app::GameScenes::Playing {
+            return;
+        }
+
+        self.m_main_counter += 1;
+        self.update_sun_spawning();
+        self.update_zombie_spawning();
+        self.update_ice();
+        self.update_waves();
+        self.update_progress_meter();
+
+        // 更新格子物品
+        self.update_grid_items_detailed();
+    }
+
+    /// 更新火焰扫荡效果（对应 C++ UpdateFwoosh 简化版）
+    fn update_fwoosh(&mut self) {
+        // 火焰扫荡效果与 Reanimation 系统绑定，暂不实现完整逻辑
+        // 完整版需要管理 mFwooshID 二维数组和 mFwooshCountDown
     }
 
     // ========== 特殊格子操作 ==========
