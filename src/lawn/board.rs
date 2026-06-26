@@ -14,6 +14,7 @@ use crate::lawn::lawn_mower::LawnMower;
 use crate::lawn::grid_item::{GridItem, GridItemType};
 use crate::lawn::seed_packet::SeedPacket;
 use crate::lawn::challenge::Challenge;
+use crate::lawn::cursor_object::CursorObject;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::rect::Rect;
 use crate::framework::color::Color;
@@ -348,6 +349,9 @@ pub struct Board {
     pub m_daisy_mode: bool,
     pub m_sukhbir_mode: bool,
     pub m_super_mower_mode: bool,
+
+    // 光标对象
+    pub cursor_object: CursorObject,
 }
 
 impl Board {
@@ -448,6 +452,7 @@ impl Board {
             m_daisy_mode: false,
             m_sukhbir_mode: false,
             m_super_mower_mode: false,
+            cursor_object: CursorObject::new(),
         }
     }
 
@@ -1335,31 +1340,63 @@ impl Board {
         g.fill_rect_xywh(0, 0, self.m_width, self.m_height);
     }
 
-    /// 点击事件
-    pub fn mouse_down(&mut self, x: i32, y: i32, _click_count: i32) {
-        // 检查是否点击了种子槽
-        for packet in &self.seed_bank {
-            // 点击种子槽开始种植
+    /// 鼠标按下事件（对应 C++ MouseDown L4479，完整版）
+    pub fn mouse_down(&mut self, x: i32, y: i32, click_count: i32) {
+        self.update_mouse_position(x, y);
+        self.ignore_mouse_up = !self.can_interact_with_board_buttons();
+
+        if self.m_board_fade_out_counter >= 0 {
+            return;
         }
 
-        // 检查是否点击了阳光/硬币
-        for coin in &mut self.coins {
-            if coin.is_sun && !coin.dead {
-                let coin_rect = Rect::new(
-                    coin.pos_x as i32 - 15,
-                    coin.pos_y as i32 - 15,
-                    30,
-                    30,
-                );
-                if coin_rect.contains(x, y) {
-                    coin.collect();
-                    if coin.coin_type == CoinType::Sun {
-                        self.m_sun_count += coin.value;
-                    }
-                    break;
-                }
+        // 命中检测
+        let mut hit_result = HitResult {
+            object: None,
+            object_type: GameObjectType::None,
+        };
+        self.mouse_hit_test(x, y, &mut hit_result);
+
+        // 委托 Challenge::MouseDown
+        if let Some(ref mut challenge) = self.challenge {
+            if challenge.mouse_down(x, y, click_count, &mut hit_result) != 0 {
+                return;
             }
         }
+
+        // 更新光标
+        self.update_cursor();
+
+        // 处理关卡场景
+        if self.m_paused {
+            return;
+        }
+
+        // 处理工具点击
+        let cursor_type = self.cursor_object.cursor_type;
+        let is_tool = matches!(cursor_type,
+            CursorType::Shovel | CursorType::WateringCan | CursorType::Fertilizer |
+            CursorType::BugSpray | CursorType::Phonograph | CursorType::Chocolate |
+            CursorType::Glove | CursorType::MoneySign | CursorType::Wheelbarrow |
+            CursorType::TreeFood
+        );
+
+        if is_tool {
+            self.mouse_down_with_tool(x, y, click_count, cursor_type);
+        } else if self.is_plant_in_cursor() {
+            self.mouse_down_with_plant(x, y, click_count);
+        } else if hit_result.object_type != GameObjectType::None {
+            match hit_result.object_type {
+                GameObjectType::SeedPacket => {
+                    // ((SeedPacket*)obj)->MouseDown — 暂略
+                }
+                GameObjectType::Plant => {
+                    // ((Plant*)obj)->MouseDown — 暂略
+                }
+                _ => {}
+            }
+        }
+
+        self.update_cursor();
     }
 
     /// 键盘事件
@@ -2140,6 +2177,55 @@ impl Board {
     /// 更新层（对应 C++ UpdateLayers）
     pub fn update_layers(&mut self) {
         // 简化版：在 Rust 框架中无需操作 WidgetManager 层
+    }
+
+    /// 鼠标释放事件（对应 C++ MouseUp L4700）
+    pub fn mouse_up(&mut self, _x: i32, _y: i32, _click_count: i32) {
+        if self.ignore_mouse_up {
+            self.ignore_mouse_up = false;
+            return;
+        }
+
+        if !self.can_interact_with_board_buttons() || _click_count <= 0 {
+            return;
+        }
+
+        self.update_cursor();
+    }
+
+    /// 更新光标形状（对应 C++ UpdateCursor L3008，简化版）
+    pub fn update_cursor(&mut self) {
+        if self.m_paused || self.m_board_fade_out_counter >= 0 {
+            return;
+        }
+
+        // 命中检测决定光标形状（简化版）
+        let mut hit_result = HitResult {
+            object: None,
+            object_type: GameObjectType::None,
+        };
+        let mx = self.m_prev_mouse_x;
+        let my = self.m_prev_mouse_y;
+        self.mouse_hit_test(mx, my, &mut hit_result);
+
+        if hit_result.object_type == GameObjectType::None {
+            // 没有可交互对象
+        }
+    }
+
+    /// 命中检测（对应 C++ MouseHitTest L4225，简化版）
+    pub fn mouse_hit_test(&self, _x: i32, _y: i32, _result: &mut HitResult) {
+        // 简化版：暂不实现完整命中检测
+    }
+
+    /// 使用工具点击（对应 C++ MouseDownWithTool L4099，存根）
+    pub fn mouse_down_with_tool(&mut self, _x: i32, _y: i32, _click_count: i32, _cursor_type: CursorType) {
+        // 暂略：需要 ZenGarden 模块完整翻译
+    }
+
+    /// 手持植物点击（对应 C++ MouseDownWithPlant L3689，存根）
+    pub fn mouse_down_with_plant(&mut self, _x: i32, _y: i32, _click_count: i32) {
+        // 暂略：需要种植逻辑完整翻译
     }
 
     /// 清除光标（对应 C++ ClearCursor 简化版）
