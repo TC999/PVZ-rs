@@ -3201,6 +3201,45 @@ impl Board {
     pub fn freeze_effects_for_cutscene(&mut self, _freeze: bool) {
         // 暂未实现完整逻辑
     }
+
+    // ========== 割草机查询 ==========
+
+    /// 获取最下面的未触发割草机（对应 C++ Board::GetBottomLawnMower）
+    pub fn get_bottom_lawn_mower(&self) -> Option<&LawnMower> {
+        let mut bottom_mower: Option<&LawnMower> = None;
+        for mower in &self.lawn_mowers {
+            if mower.mower_state == LawnMowerState::Triggered
+                || mower.mower_state == LawnMowerState::Squished
+            {
+                continue;
+            }
+            if bottom_mower.map_or(true, |b| b.base.row < mower.base.row) {
+                bottom_mower = Some(mower);
+            }
+        }
+        bottom_mower
+    }
+
+    // ========== 波次统计 ==========
+
+    /// 计算指定波次中的僵尸数量（对应 C++ Board::NumberZombiesInWave）
+    pub fn number_zombies_in_wave(&self, wave_index: i32) -> i32 {
+        debug_assert!(wave_index >= 0 && wave_index < MAX_ZOMBIE_WAVES as i32);
+        let wave_idx = wave_index as usize;
+        for i in 0..MAX_ZOMBIES_IN_WAVE {
+            if self.m_zombies_in_wave[wave_idx][i] == ZombieType::Invalid {
+                return i as i32;
+            }
+        }
+        0
+    }
+
+    // ========== 存档 ==========
+
+    /// 保存游戏（对应 C++ Board::SaveGame）
+    pub fn save_game(&self, _file_name: &str) {
+        // LawnSaveGame(this, theFileName) — 暂由外部存档管理器处理
+    }
 }
 
 impl Default for Board {
