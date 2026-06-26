@@ -1010,7 +1010,7 @@ class Plant : public GameObject)`
 
 **类/结构体:**
 
-- `[ ]` `class ProjectileDefinition` (L18, 0 个方法, 3 个成员)
+- `[x]` `class ProjectileDefinition` (L18, 0 个方法, 3 个成员)
 - `[x]` `class Projectile : GameObject` (L27, 0 个方法, 10 个成员)
 
 **翻译备注:**
@@ -1018,7 +1018,8 @@ class Plant : public GameObject)`
 ```
 翻译文件: rust/src/lawn/projectile.rs
 Projectile 结构体已完整翻译，包含 base: GameObject 组合，new(), projectile_initialize(), update(), draw() 等方法。
-缺失: ProjectileDefinition 结构体未实现。
+ProjectileDefinition 结构体已实现（projectile_type, image_row, damage 三个字段）。
+全局数组 gProjectileDefinition[NUM_PROJECTILES] 将在 Projectile.cpp 主体翻译时实现。
 ```
 
 ### `[x]` `src\Lawn\SeedPacket.cpp`

@@ -199,3 +199,13 @@ impl Default for Projectile {
         Projectile::new()
     }
 }
+
+/// 子弹定义表条目（对应 C++ ProjectileDefinition）
+/// 存储每种子弹类型的静态属性：类型、图像行索引、伤害值
+/// 全局数组 gProjectileDefinition[NUM_PROJECTILES] 将在 Projectile.cpp 主体翻译时实现
+#[derive(Debug, Clone, Copy)]
+pub struct ProjectileDefinition {
+    pub projectile_type: ProjectileType,
+    pub image_row: i32,
+    pub damage: i32,
+}
