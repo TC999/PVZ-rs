@@ -1880,7 +1880,14 @@ cargo check 通过。
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/widget/message_widget.rs
+设计决策:
+- MessageWidget 结构体完整映射 C++ 字段
+- clear_reanim/clear_label/set_label/update/draw 方法已实现
+- 复杂绘制逻辑（Draw 中约150行按样式分支）暂存根
+- 使用 Rust 版 MessageStyle 枚举（与 C++ 枚举变体名不同）
+- LayoutReanimText/DrawReanimatedText/GetFont 暂存根
+- cargo check 通过
 ```
 
 ### `[x]` `src\Lawn\MessageWidget.h`
@@ -1893,12 +1900,14 @@ cargo check 通过。
 
 **类/结构体:**
 
-- `[ ]` `class MessageWidget` (L21, 0 个方法, 10 个成员)
+- `[x]` `class MessageWidget` (L21, 0 个方法, 10 个成员)
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/widget/message_widget.rs
+结构体和关键方法已翻译。
+cargo check 通过。
 ```
 
 ### `[x]` `src\Lawn\Plant.cpp`
