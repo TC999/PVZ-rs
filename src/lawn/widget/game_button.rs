@@ -6,6 +6,7 @@ use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
 use crate::framework::graphics::font::Font;
 use crate::framework::color::Color;
+use crate::framework::widget::dialog_button::DialogButton;
 
 /// 游戏中的自定义按钮（对应 C++ GameButton）
 pub struct GameButton {
@@ -94,4 +95,55 @@ impl GameButton {
     pub fn mouse_up_btn(&mut self, _x: i32, _y: i32, _b: i32, _c: i32) { self.is_down = false; }
     pub fn mouse_enter(&mut self) { self.is_over = true; }
     pub fn mouse_leave(&mut self) { self.is_over = false; }
+}
+
+/// 石头风格按钮（对应 C++ LawnStoneButton : DialogButton）
+pub struct LawnStoneButton {
+    pub dialog_button: DialogButton,
+}
+
+impl LawnStoneButton {
+    pub fn draw(&self, _g: &mut Graphics) {}
+
+    pub fn set_label(&mut self, _label: &str) {}
+}
+
+/// 新型按钮（对应 C++ NewLawnButton : DialogButton）
+pub struct NewLawnButton {
+    pub dialog_button: DialogButton,
+    pub hilite_font: Option<Box<Font>>,
+    pub text_down_offset_x: i32,
+    pub text_down_offset_y: i32,
+    pub button_offset_x: i32,
+    pub button_offset_y: i32,
+    pub use_polygon_shape: bool,
+    pub polygon_shape: [(f64, f64); 4],
+}
+
+impl NewLawnButton {
+    pub fn new() -> Self {
+        NewLawnButton {
+            dialog_button: DialogButton::new(std::ptr::null_mut(), 0, None),
+            hilite_font: None,
+            text_down_offset_x: 0,
+            text_down_offset_y: 0,
+            button_offset_x: 0,
+            button_offset_y: 0,
+            use_polygon_shape: false,
+            polygon_shape: [(0.0, 0.0); 4],
+        }
+    }
+
+    pub fn draw(&self, _g: &mut Graphics) {}
+
+    pub fn is_point_visible(&self, _x: i32, _y: i32) -> bool {
+        true
+    }
+
+    pub fn set_label(&mut self, _label: &str) {}
+
+    pub fn set_offset(&mut self, x: i32, y: i32) {
+        self.button_offset_x = x;
+        self.button_offset_y = y;
+    }
 }

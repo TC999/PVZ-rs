@@ -1740,14 +1740,14 @@ public:
 
 **类/结构体:**
 
-- `[ ]` `class GameButton` (L13, 0 个方法, 10 个成员)
-- `[ ]` `class LawnStoneButton : DialogButton` (L85, 0 个方法, 0 个成员)
-- `[ ]` `class NewLawnButton : DialogButton` (L94, 0 个方法, 7 个成员)
+- `[x]` `class GameButton` (L13, 0 个方法, 10 个成员)
+- `[x]` `class LawnStoneButton : DialogButton` (L85, 0 个方法, 0 个成员)
+- `[x]` `class NewLawnButton : DialogButton` (L94, 0 个方法, 7 个成员)
 
 **自由函数:**
 
-- `[ ]` `class LawnStoneButton : public DialogButton()`
-- `[ ]` `class NewLawnButton : public DialogButton()`
+- `[x]` `class LawnStoneButton : public DialogButton()`
+- `[x]` `class NewLawnButton : public DialogButton()`
 
 **翻译备注:**
 
