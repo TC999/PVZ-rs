@@ -1780,7 +1780,7 @@ public:
 **类/结构体:**
 
 - `[x]` `class GameSelector : Widget, ButtonListener` (L29, 0 个方法, 10 个成员) — 对应 GameSelectorImpl + WidgetImpl trait
-- `[ ]` `class GameSelectorOverlay : Widget` (L128, 0 个方法, 1 个成员) — Rust 侧未实现
+- `[x]` `class GameSelectorOverlay : Widget` (L128, 0 个方法, 1 个成员) — 已实现
 
 **枚举:**
 
@@ -1788,7 +1788,7 @@ public:
 
 **自由函数:**
 
-- `[ ]` `class GameSelectorOverlay : public Widget()` — Rust 侧未实现
+- `[x]` `class GameSelectorOverlay : public Widget()` — 已实现
 
 **翻译备注:**
 
@@ -1798,7 +1798,8 @@ public:
 - GameSelectorImpl 组合 WidgetImpl trait（draw/update/key_down/mouse_down 等方法已实现）
 - 按钮用 Vec<GameBtnData> 替代 C++ NewLawnButton 数组
 - SelectorAnimState 四个变体全部翻译完成
-- GameSelectorOverlay 尚未实现（draw_overlay 逻辑直接合并在 GameSelectorImpl 中）
+- GameSelectorOverlay 已实现为 GameSelectorOverlayImpl（WidgetImpl trait，委托调用 draw_overlay_internal）
+- draw_overlay 逻辑提取为 draw_overlay_internal 共享方法
 - 33KB 的 Rust 文件对应 1.5KB C++ 头文件 + 1.5KB C++ 实现
 ```
 

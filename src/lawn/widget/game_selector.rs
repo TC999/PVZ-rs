@@ -205,6 +205,9 @@ pub struct GameSelectorImpl {
     pub mouse_x: i32,
     pub mouse_y: i32,
 
+    // ---- 覆盖绘制子控件（对应 C++ mOverlayWidget） ----
+    pub overlay_widget: Option<Box<Widget>>,
+
     // ---- 是否已初始化 ----
     pub synced: bool,
 }
@@ -235,6 +238,7 @@ impl GameSelectorImpl {
             fonts_init: false,
             briannetod16: None,
             mouse_x: 0, mouse_y: 0,
+            overlay_widget: None,
             synced: false,
         };
 
@@ -541,6 +545,65 @@ impl GameSelectorImpl {
     }
 }
 
+impl GameSelectorImpl {
+    /// 提取的覆盖绘制逻辑（供 draw_overlay 和 GameSelectorOverlayImpl 共享）
+    pub fn draw_overlay_internal(&mut self, g: &mut Graphics) {
+        let app = unsafe { &*self.app };
+        g.set_linear_blend(true);
+
+        if app.player_info.is_none() {
+            return;
+        }
+
+        // 绘制关卡编号
+        if !app.is_ice_demo() && !self.show_start_button {
+            let stage = clamp_int((self.level - 1) / 10 + 1, 1, 6);
+            let sub = self.level - (stage - 1) * 10;
+            let tx = self.offset_x as f32;
+            let ty = self.offset_y as f32;
+
+            let level_img = get_image(app, "IMAGE_SELECTORSCREEN_LEVELNUMBERS");
+            if !level_img.is_null() {
+                g.set_colorize_images(true);
+                g.set_color(&Color::WHITE);
+                unsafe {
+                    g.draw_image_cel_rc(&*level_img,
+                        (tx + 486.0) as i32, (ty + 47.0) as i32,
+                        stage - 1, 0);
+                    if sub < 10 {
+                        g.draw_image_cel_rc(&*level_img,
+                            (tx + 509.0) as i32, (ty + 50.0) as i32,
+                            sub - 1, 0);
+                    }
+                }
+                g.set_colorize_images(false);
+            }
+        }
+
+        // 绘制其他按钮（Store、Almanac、ZenGarden、Achievements）
+        for btn in &self.buttons {
+            match btn.id {
+                GS_STORE | GS_ALMANAC | GS_ZEN_GARDEN | GS_ACHIEVEMENTS => {
+                    self.draw_button_at(g, btn, 0.0, 0.0);
+                }
+                _ => {}
+            }
+        }
+
+        // 绘制奖杯
+        if self.has_trophy {
+            let trophy_img = get_image(app, "IMAGE_SUNFLOWER_TROPHY");
+            if !trophy_img.is_null() {
+                let cel = if app.earned_gold_trophy() { 1 } else { 0 };
+                unsafe {
+                    g.draw_image_cel(&*trophy_img,
+                        self.offset_x + 12, self.offset_y + 345, cel);
+                }
+            }
+        }
+    }
+}
+
 // ============================================================
 // WidgetImpl — 实现
 // ============================================================
@@ -610,59 +673,7 @@ impl WidgetImpl for GameSelectorImpl {
 
     fn draw_overlay(&mut self, widget: &Widget, g: &mut Graphics) {
         let _ = widget;
-        let app = unsafe { &*self.app };
-        g.set_linear_blend(true);
-
-        if app.player_info.is_none() {
-            return;
-        }
-
-        // 绘制关卡编号
-        if !app.is_ice_demo() && !self.show_start_button {
-            let stage = clamp_int((self.level - 1) / 10 + 1, 1, 6);
-            let sub = self.level - (stage - 1) * 10;
-            let tx = self.offset_x as f32;
-            let ty = self.offset_y as f32;
-
-            let level_img = get_image(app, "IMAGE_SELECTORSCREEN_LEVELNUMBERS");
-            if !level_img.is_null() {
-                g.set_colorize_images(true);
-                g.set_color(&Color::WHITE);
-                unsafe {
-                    g.draw_image_cel_rc(&*level_img,
-                        (tx + 486.0) as i32, (ty + 47.0) as i32,
-                        stage - 1, 0);
-                    if sub < 10 {
-                        g.draw_image_cel_rc(&*level_img,
-                            (tx + 509.0) as i32, (ty + 50.0) as i32,
-                            sub - 1, 0);
-                    }
-                }
-                g.set_colorize_images(false);
-            }
-        }
-
-        // 绘制其他按钮（Store、Almanac、ZenGarden、Achievements）
-        for btn in &self.buttons {
-            match btn.id {
-                GS_STORE | GS_ALMANAC | GS_ZEN_GARDEN | GS_ACHIEVEMENTS => {
-                    self.draw_button_at(g, btn, 0.0, 0.0);
-                }
-                _ => {}
-            }
-        }
-
-        // 绘制奖杯
-        if self.has_trophy {
-            let trophy_img = get_image(app, "IMAGE_SUNFLOWER_TROPHY");
-            if !trophy_img.is_null() {
-                let cel = if app.earned_gold_trophy() { 1 } else { 0 };
-                unsafe {
-                    g.draw_image_cel(&*trophy_img,
-                        self.offset_x + 12, self.offset_y + 345, cel);
-                }
-            }
-        }
+        self.draw_overlay_internal(g);
     }
 
     fn update(&mut self, widget: &mut Widget) {
@@ -928,5 +939,38 @@ impl GameSelectorImpl {
         } else {
             unsafe { g.draw_image_xy(&*img, draw_x, draw_y); }
         }
+    }
+}
+
+// ============================================================
+// GameSelectorOverlayImpl — 覆盖绘制子控件（对应 C++ GameSelectorOverlay）
+// ============================================================
+/// 作为 GameSelector 的子 widget，其 Draw 委托回父控件的覆盖绘制逻辑。
+/// 在 C++ 中，GameSelectorOverlay::Draw(g) 调用 mParent->DrawOverlay(g)。
+pub struct GameSelectorOverlayImpl {
+    pub parent: *mut GameSelectorImpl,
+}
+
+impl GameSelectorOverlayImpl {
+    pub fn new(parent: *mut GameSelectorImpl) -> Self {
+        GameSelectorOverlayImpl { parent }
+    }
+
+    /// 创建包装此实现的新 Widget，并设置初始属性
+    ///（对应 C++ 构造函数中 mMouseVisible = false, mHasAlpha = true）
+    pub fn create_widget(parent: *mut GameSelectorImpl) -> Widget {
+        let mut w = Widget::new();
+        w.has_alpha = true;
+        w.mouse_visible = false;
+        w.impl_ = Some(Box::new(GameSelectorOverlayImpl::new(parent)));
+        w
+    }
+}
+
+impl WidgetImpl for GameSelectorOverlayImpl {
+    fn draw(&mut self, widget: &Widget, g: &mut Graphics) {
+        let _ = widget;
+        let parent = unsafe { &mut *self.parent };
+        parent.draw_overlay_internal(g);
     }
 }
