@@ -1469,11 +1469,6 @@ impl Board {
         if self.is_first_time_adventure() && self.level < 5 { 3 } else { 6 }
     }
 
-    /// 当前关卡是否需要选择种子（对应 C++ ChooseSeedsOnCurrentLevel）
-    pub fn choose_seeds_on_current_level(&self) -> bool {
-        !self.is_first_time_adventure() || self.level > 7
-    }
-
     /// 某行是否可以生成僵尸（对应 C++ RowCanHaveZombies）
     pub fn row_can_have_zombies(&self, row: i32) -> bool {
         if row < 0 || row >= MAX_GRID_SIZE_Y as i32 { return false; }
@@ -3007,6 +3002,204 @@ impl Board {
 
         // 注意：C++ 中还有 mZombieHealthWaveStart = 0, mLastBungeeWave = 0,
         // mHugeWaveCountDown = 0 等字段初始化，这些字段在 Rust Board 中暂缺
+    }
+
+    // ========== 生命周期管理 ==========
+
+    /// 清理棋盘资源（对应 C++ Board::DisposeBoard）
+    pub fn dispose_board(&mut self) {
+        if let Some(app) = self.app {
+            unsafe {
+                if (*app).game_mode == GameMode::ChallengeZenGarden {
+                    if let Some(zg) = (*app).zen_garden {
+                        (*zg).leave_garden();
+                    }
+                }
+                if (*app).game_mode == GameMode::ChallengeTreeOfWisdom {
+                    if let Some(ref mut challenge) = self.challenge {
+                        // challenge.tree_of_wisdom_leave() — 暂略
+                    }
+                }
+                // 停止雨声 Foley
+                if let Some(ref ss) = (*app).sound_system {
+                    ss.stop_foley(crate::todlib::tod_foley::FoleyType::Rain);
+                }
+                // 清理 ZenGarden 对 Board 的引用
+                if let Some(zg) = (*app).zen_garden {
+                    (*zg).board = Some(std::ptr::null_mut());
+                }
+                (*app).crazy_dave_die();
+                if let Some(ref es) = (*app).effect_system {
+                    // es.effect_system_free_all() — 暂略
+                }
+            }
+        }
+    }
+
+    /// 尝试保存游戏（对应 C++ Board::TryToSaveGame）
+    pub fn try_to_save_game(&mut self) {
+        if !self.need_save_game() {
+            return;
+        }
+
+        if self.m_board_fade_out_counter > 0 {
+            self.complete_end_level_sequence_for_saving();
+            return;
+        }
+
+        // MkDir 和文件系统操作暂略
+        // let a_file_name = get_saved_game_name(mApp->mGameMode, mApp->mPlayerInfo->mId);
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(ref mut music) = (*app).music {
+                    music.game_music_pause(true);
+                }
+            }
+        }
+        // LawnSaveGame(this, aFileName) — 暂略
+        // self.app.map(|app| unsafe { (*app).clear_update_backlog() });
+        self.survival_save_score();
+    }
+
+    /// 完成结束关卡序列（用于保存前清理，对应 C++ Board::CompleteEndLevelSequenceForSaving）
+    pub fn complete_end_level_sequence_for_saving(&mut self) {
+        // 空实现，待后续翻译 C++ Board::CompleteEndLevelSequenceForSaving
+    }
+
+    // ========== 背景与资源 ==========
+
+    /// 加载背景图片资源（对应 C++ Board::LoadBackgroundImages）
+    pub fn load_background_images(&mut self, _app: *mut crate::lawn::lawn_app::LawnApp) {
+        // C++ 实现通过 mLoadedResourceNames 延迟加载资源
+        // Rust 版本暂用简化方式处理背景类型选择
+        let _background = self.m_background_type;
+        // 资源加载在 Rust 版本中另由 ResourceManager 处理
+    }
+
+    // ========== 关卡初始化 ==========
+
+    /// 初始化割草机（对应 C++ Board::InitLawnMowers）
+    pub fn init_lawn_mowers(&mut self) {
+        let game_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+
+        // 不需要割草机的模式
+        if game_mode == GameMode::ChallengeBeghouled
+            || game_mode == GameMode::ChallengeBeghouledTwist
+            || game_mode == GameMode::ChallengeZenGarden
+            || game_mode == GameMode::ChallengeTreeOfWisdom
+            || game_mode == GameMode::ChallengeLastStand
+            || game_mode == GameMode::ChallengeZombiquarium
+            || self.app.map_or(false, |app| unsafe { (*app).is_squirrel_level() })
+            || self.app.map_or(false, |app| unsafe { (*app).is_izombie_level() })
+            || (self.stage_has_roof()
+                && self.app.map_or(true, |app| unsafe {
+                    (*app).player_info.as_ref().map_or(true, |p| {
+                        !p.m_purchases[StoreItem::RoofCleaner as usize] != 0
+                    })
+                }))
+        {
+            return;
+        }
+
+        for a_row in 0..(MAX_GRID_SIZE_Y as i32) {
+            // ChallengeResodded 在 Rust GameMode 枚举中暂缺，简化处理
+            let should_create = if self.app.map_or(false, |app| unsafe {
+                (*app).is_adventure_mode() && self.level == 35
+            }) {
+                true
+            } else if !self.app.map_or(false, |app| unsafe { (*app).is_scary_potter_level() })
+                && self.m_plant_row[a_row as usize] != PlantRowType::Dirt
+            {
+                true
+            } else {
+                false
+            };
+
+            if should_create {
+                let mut mower = LawnMower::new();
+                mower.lawn_mower_initialize(a_row);
+                mower.visible = false;
+                self.lawn_mowers.push(mower);
+            }
+        }
+    }
+
+    /// 当前关卡是否可以选择种子（对应 C++ Board::ChooseSeedsOnCurrentLevel）
+    pub fn choose_seeds_on_current_level(&self) -> bool {
+        if self.app.map_or(false, |app| unsafe {
+            (*app).is_challenge_without_seed_bank()
+        }) || self.has_conveyor_belt_seed_bank()
+        {
+            return false;
+        }
+
+        let game_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+        if game_mode == GameMode::ChallengeIceLevel
+            || game_mode == GameMode::ChallengeBeghouled
+            || game_mode == GameMode::ChallengeBeghouledTwist
+            || game_mode == GameMode::ChallengeZombiquarium
+        {
+            return false;
+        }
+
+        if self.app.map_or(false, |app| unsafe {
+            (*app).is_izombie_level() || (*app).is_slot_machine_level()
+        }) {
+            return false;
+        }
+
+        !self.app.map_or(true, |app| unsafe {
+            (*app).is_first_time_adventure_mode()
+        }) || self.level > 7
+    }
+
+    /// 开始关卡（对应 C++ Board::StartLevel）
+    pub fn start_level(&mut self) {
+        self.m_coin_bank_fade_count = 0;
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(ref mut stats) = (*app).m_last_level_stats {
+                    stats.reset();
+                }
+                if let Some(ref mut challenge) = self.challenge {
+                    challenge.start_level();
+                }
+
+                // 生存无尽模式特殊处理
+                let survival_stage = (*app).game_mode as i32 - GameMode::SurvivalEndlessStage1 as i32;
+                if survival_stage >= 0 && survival_stage <= 4 {
+                    if self.get_survival_flags_completed() >= 20 {
+                        // ReportAchievement::GiveAchievement 暂略
+                    }
+                }
+
+                if (*app).is_survival_mode()
+                    && self.challenge.as_ref().map_or(false, |c| c.survival_stage > 0)
+                {
+                    self.freeze_effects_for_cutscene(false);
+                    // mApp->mSoundSystem->GamePause(false) — 暂略
+                }
+
+                let gm = (*app).game_mode;
+                if gm == GameMode::ChallengeIceLevel
+                    || gm == GameMode::ChallengeZenGarden
+                    || gm == GameMode::ChallengeTreeOfWisdom
+                    // GAMEMODE_UPSELL 和 GAMEMODE_INTRO 在 Rust GameMode 枚举中暂缺
+                    || (*app).is_final_boss_level()
+                {
+                    return;
+                }
+
+                if let Some(ref mut music) = (*app).music {
+                    music.start_game_music();
+                }
+            }
+        }
+    }
+
+    /// 冻结/解冻过场动画效果（对应 C++ Board::FreezeEffectsForCutscene）
+    pub fn freeze_effects_for_cutscene(&mut self, _freeze: bool) {
+        // 暂未实现完整逻辑
     }
 }
 
