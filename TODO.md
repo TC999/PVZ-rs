@@ -551,12 +551,12 @@ struct 使用 base: GameObject 组合模式替代 C++ 继承。
 **类/结构体:**
 
 - `[~]` `class CursorObject : GameObject` (L9, 0 个方法, 10 个成员)
-- `[ ]` `class CursorPreview : GameObject` (L31, 0 个方法, 2 个成员)
+- `[x]` `class CursorPreview : GameObject` (L31, 0 个方法, 2 个成员) — 完整翻译
 
 **自由函数:**
 
 - `[~]` `class CursorObject : public GameObject()`
-- `[ ]` `class CursorPreview : public GameObject()`
+- `[x]` `class CursorPreview : public GameObject()`
 
 **翻译备注:**
 
@@ -564,7 +564,17 @@ struct 使用 base: GameObject 组合模式替代 C++ 继承。
 翻译文件: rust/src/lawn/cursor_object.rs
 CursorObject 结构体已实现（new, init, update_position, draw, deactivate），
 但字段比 C++ 精简（缺少 mSeedBankIndex, mCoinID, mGlovePlantID 等），
-未使用 GameObject 组合。CursorPreview 结构体尚未实现。
+未使用 GameObject 组合。
+
+CursorPreview 结构体已完整翻译（new, update, draw），使用 GameObject 组合模式。
+设计决策:
+- update() 使用作用域块隔离 board/app 借用，避免 Rust 借用冲突
+- draw() 保留完整分支结构（IZombie 偏移、COLUMN 挑战模式多列预览）
+- GetSeedTypeInCursor() → board.get_seed_type_in_cursor_simple()（简化版）
+- PlantDrawHeightOffset() → 私有辅助方法，返回默认值 0.0
+- PlantDrawSeedType() → 简化为自由函数（空函数体，待 Plant 模块翻译后完善）
+- ZenGarden 相关分支因依赖未翻译暂跳过
+- 所有简化点已在注释中说明
 ```
 
 ### `[x]` `src\Lawn\CutScene.cpp`
@@ -839,7 +849,7 @@ cargo check 通过。
 
 - `[x]` `class MagnetItem` (L130, 0 个方法, 5 个成员)
 - `[x]` `class Plant : GameObject` (L145, 0 个方法, 10 个成员)
-- `[ ]` `class PlantDefinition` (L305, 0 个方法, 9 个成员)
+- `[x]` `class PlantDefinition` (L305, 0 个方法, 9 个成员)
 
 **枚举:**
 
@@ -847,8 +857,8 @@ cargo check 通过。
 - `[x]` `enum PlantWeapon` → { WEAPON_PRIMARY, WEAPON_SECONDARY }
 - `[x]` `enum PlantOnBungeeState` → { NOT_ON_BUNGEE, GETTING_GRABBED_BY_BUNGEE, RISING_WITH_BUNGEE }
 - `[x]` `enum PlantState` → { STATE_NOTREADY, STATE_READY, STATE_DOINGSPECIAL, STATE_SQUASH_LOOK, STATE_SQUASH_PRE_LAUNCH, ... (49 个值) }
-- `[ ]` `enum PLANT_LAYER` → { PLANT_LAYER_BELOW, PLANT_LAYER_MAIN, PLANT_LAYER_REANIM, PLANT_LAYER_REANIM_HEAD, PLANT_LAYER_REANIM_BLINK, ... (7 个值) }
-- `[ ]` `enum PLANT_ORDER` → { PLANT_ORDER_LILYPAD, PLANT_ORDER_NORMAL, PLANT_ORDER_PUMPKIN, PLANT_ORDER_FLYER, PLANT_ORDER_CHERRYBOMB }
+- `[x]` `enum PLANT_LAYER` → { PLANT_LAYER_BELOW, PLANT_LAYER_MAIN, PLANT_LAYER_REANIM, PLANT_LAYER_REANIM_HEAD, PLANT_LAYER_REANIM_BLINK, ... (7 个值) }
+- `[x]` `enum PLANT_ORDER` → { PLANT_ORDER_LILYPAD, PLANT_ORDER_NORMAL, PLANT_ORDER_PUMPKIN, PLANT_ORDER_FLYER, PLANT_ORDER_CHERRYBOMB }
 - `[x]` `enum MagnetItemType` → { MAGNET_ITEM_NONE, MAGNET_ITEM_PAIL_1, MAGNET_ITEM_PAIL_2, MAGNET_ITEM_PAIL_3, MAGNET_ITEM_FOOTBALL_HELMET_1, ... (22 个值) }
 
 **翻译备注:**
@@ -857,7 +867,10 @@ cargo check 通过。
 翻译文件: rust/src/lawn/plant.rs, rust/src/lawn/game_enums.rs
 MagnetItem 结构体、Plant 结构体已在 plant.rs 完整翻译。
 PlantSubClass, PlantWeapon, PlantOnBungeeState, PlantState, MagnetItemType 枚举定义在 game_enums.rs 中。
-缺失: PlantDefinition 结构体未实现; PLANT_LAYER/PLANT_ORDER 枚举未定义。
+PlantDefinition 结构体已在 plant.rs 中定义（含所有 9 个字段映射）。
+PLANT_LAYER → PlantLayer 枚举（6 个变体 + repr(i32)）。
+PLANT_ORDER → PlantOrder 枚举（5 个变体 + repr(i32)），均在 game_enums.rs 中。
+全局数组 gPlantDefs 和 GetPlantDefinition() 函数将在 Plant.cpp 主体翻译时实现。
 ```
     STATE_SQUASH_FALLING,
     STATE_SQUASH_DONE_FALLING,

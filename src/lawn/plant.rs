@@ -374,3 +374,20 @@ impl Default for Plant {
         Plant::new()
     }
 }
+
+/// 植物定义表条目（对应 C++ PlantDefinition）
+/// 存储每个种子类型的静态属性：图像、重动画类型、花费、冷却时间等
+/// 全局数组 gPlantDefs[SeedType::NUM_SEED_TYPES] 和 GetPlantDefinition() 函数
+/// 将在 Plant.cpp 主体翻译时实现
+#[derive(Debug, Clone, Copy)]
+pub struct PlantDefinition {
+    pub seed_type: SeedType,
+    pub plant_image: Option<*mut Image>,
+    pub reanimation_type: ReanimationType,
+    pub packet_index: i32,
+    pub seed_cost: i32,
+    pub refresh_time: i32,
+    pub sub_class: PlantSubClass,
+    pub launch_rate: i32,
+    pub plant_name: Option<&'static str>,
+}

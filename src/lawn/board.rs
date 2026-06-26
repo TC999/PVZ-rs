@@ -1605,6 +1605,15 @@ impl Board {
         false
     }
 
+    /// 获取光标中的种子类型（简化版，对应 C++ GetSeedTypeInCursor）
+    /// 完整实现需要访问 mCursorObject 和 mZenGarden，这些字段尚未翻译完成
+    pub fn get_seed_type_in_cursor_simple(&self) -> SeedType {
+        // 待 Board::mCursorObject 翻译后补全完整逻辑
+        // 原始逻辑：检查 CURSOR_TYPE_WHEEELBARROW → 从 ZenGarden 获取
+        // 否则通过 IsPlantInCursor 判断后从 mCursorObject->mType 获取
+        SeedType::None
+    }
+
     // ========== 僵尸查询 ==========
 
     /// 统计存活的大型僵尸数量（对应 C++ GetLiveGargantuarCount）

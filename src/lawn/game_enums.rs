@@ -884,6 +884,35 @@ pub enum MagnetItemType {
 }
 
 // ============================================================
+// PlantLayer — 植物渲染层级
+// 对应 C++ Plant.h PLANT_LAYER
+// ============================================================
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum PlantLayer {
+    Below = -1,
+    Main,
+    Reanim,
+    ReanimHead,
+    ReanimBlink,
+    OnTop,
+}
+
+// ============================================================
+// PlantOrder — 植物在同一格内的绘制顺序
+// 对应 C++ Plant.h PLANT_ORDER
+// ============================================================
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum PlantOrder {
+    Lilypad,
+    Normal,
+    Pumpkin,
+    Flyer,
+    Cherrybomb,
+}
+
+// ============================================================
 // DamageFlags — 伤害标志位（bitmask）
 // 对应 C++ ConstEnums.h DamageFlags
 // ============================================================
