@@ -23,5 +23,6 @@ pub mod mod_val;
 pub mod reg_emu;
 pub mod tod_debug;
 pub mod xml_parser;
+pub mod resources;
 
 

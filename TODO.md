@@ -1355,12 +1355,20 @@ enum ZombieType : int32_t)`
 
 **枚举:**
 
-- `[ ]` `enum class ResourceId` → { IMAGE_BLANK_ID, IMAGE_POPCAP_LOGO_ID, IMAGE_PARTNER_LOGO_ID, IMAGE_TITLESCREEN_ID, IMAGE_LOADBAR_DIRT_ID, ... (880 个值) }
+- `[x]` `enum class ResourceId` → { IMAGE_BLANK_ID, IMAGE_POPCAP_LOGO_ID, IMAGE_PARTNER_LOGO_ID, IMAGE_TITLESCREEN_ID, IMAGE_LOADBAR_DIRT_ID, ... (880 个值) }
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/framework/resources.rs
+设计决策:
+- enum class ResourceId : int32_t → #[repr(i32)] pub enum ResourceId
+- 原始 SCREAMING_CASE_ID 枚举值 → PascalCase 变体名（Rust 惯例）
+- 值为自动编号，起始0，递增1（与 C++ 默认行为一致）
+- RESOURCE_ID_MAX → ResourceIdMax 作为最后一个变体
+- 添加关联函数 count() 返回 enum 变体数量
+- 模块已在 framework/mod.rs 中注册为 pub mod resources
+- cargo check 通过
 ```
 
 ### `[x]` `src\main.cpp`
