@@ -2021,7 +2021,28 @@ private:
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/zombie.rs
+
+当前进度：Zombie::update() 已升级为完整版（含相位分派、特殊僵尸类型行为更新）
+新增方法：
+- update()：升级为完整版，根据 ZombiePhase 分派到不同的更新路径（Burned/Mowered/Dying/Normal）
+  - 正常相位下调用 update_playing() 处理移动、减速效果等核心逻辑
+  - 特殊僵尸类型 Bungee/Pogo 调用专用更新方法
+  - 计数器递减（just_got_shot/shield_recoil/zombie_fade）
+- update_burn()：存根（待从 UpdateBurn 翻译）
+- update_mowered()：存根（待从 UpdateMowered 翻译）
+- update_playing()：从原 update() 抽取，包含减速/移动/行走逻辑
+- update_zombie_bungee()：存根（待从 UpdateZombieBungee 翻译）
+- update_zombie_pogo()：存根（待从 UpdateZombiePogo 翻译）
+
+待翻译的主要方法（按优先级排序）：
+1. UpdatePlaying 完整版（含各僵尸类型特殊行为：撑杆跳、海豚、潜水、玩偶匣等）
+2. UpdateDeath / UpdateMowered / UpdateBurn
+3. 各僵尸类型更新方法（约 30 个）
+4. Draw / DrawZombieHead 完整版
+5. Animate / 动画系统
+
+编译状态: cargo check 通过
 ```
 
 ### `[x]` `src\Lawn\Zombie.h`

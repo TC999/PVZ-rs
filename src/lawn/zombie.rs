@@ -329,7 +329,7 @@ impl Zombie {
         };
     }
 
-    /// 更新僵尸
+    /// 更新僵尸（对应 C++ Zombie::Update）
     pub fn update(&mut self) {
         if self.dead {
             self.update_death();
@@ -339,6 +339,58 @@ impl Zombie {
         self.anim_counter += 1;
         self.zombie_age += 1;
 
+        // 根据当前相位分发更新逻辑
+        if self.zombie_phase == ZombiePhase::Burned {
+            self.update_burn();
+        } else if self.zombie_phase == ZombiePhase::Mowered {
+            self.update_mowered();
+        } else if self.zombie_phase == ZombiePhase::Dying {
+            self.update_death();
+            self.update_zombie_walking();
+        } else {
+            if self.phase_counter > 0 {
+                self.phase_counter -= 1;
+            }
+
+            // 常规移动和行为更新
+            self.update_playing();
+
+            // 特殊僵尸类型的行为更新
+            if self.zombie_type == ZombieType::Bungee {
+                self.update_zombie_bungee();
+            }
+            if self.zombie_type == ZombieType::Pogo {
+                self.update_zombie_pogo();
+            }
+        }
+
+        // 计数器递减
+        self.just_got_shot_counter -= 1;
+        if self.shield_just_got_shot_counter > 0 {
+            self.shield_just_got_shot_counter -= 1;
+        }
+        if self.shield_recoil_counter > 0 {
+            self.shield_recoil_counter -= 1;
+        }
+        if self.zombie_fade > 0 {
+            self.zombie_fade -= 1;
+            if self.zombie_fade == 0 {
+                self.die_no_loot();
+            }
+        }
+
+        self.base.x = self.pos_x as i32;
+        self.base.y = self.pos_y as i32;
+    }
+
+    /// 更新燃烧效果（对应 C++ Zombie::UpdateBurn）
+    fn update_burn(&mut self) {}
+
+    /// 更新被碾压效果（对应 C++ Zombie::UpdateMowered）
+    fn update_mowered(&mut self) {}
+
+    /// 更新僵尸的 Playing 阶段行为（对应 C++ Zombie::UpdatePlaying）
+    fn update_playing(&mut self) {
         // 减速效果
         if self.chilled_counter > 0 {
             self.chilled_counter -= 1;
@@ -357,9 +409,14 @@ impl Zombie {
         self.zombie_rect = self.get_zombie_rect();
         self.zombie_attack_rect = self.get_zombie_attack_rect();
 
-        // 更新相位
         self.update_zombie_walking();
     }
+
+    /// 更新蹦极僵尸（对应 C++ Zombie::UpdateZombieBungee）
+    fn update_zombie_bungee(&mut self) {}
+
+    /// 更新弹簧僵尸（对应 C++ Zombie::UpdateZombiePogo）
+    fn update_zombie_pogo(&mut self) {}
 
     /// 更新僵尸行走
     pub fn update_zombie_walking(&mut self) {
