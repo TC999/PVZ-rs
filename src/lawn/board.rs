@@ -715,7 +715,7 @@ impl Board {
 
     /// 生成一波僵尸（对应 C++ SpawnZombieWave）
     /// 从预计算的波次列表 m_zombies_in_wave 中读取当前波次的僵尸并生成
-    fn spawn_zombie_wave(&mut self) {
+    pub fn spawn_zombie_wave(&mut self) {
         // 调用挑战模式的波次钩子（如果有）
         if let Some(ref mut challenge) = self.challenge {
             challenge.spawn_zombie_wave();
@@ -3670,7 +3670,15 @@ impl Board {
         if let Some(app) = self.app {
             unsafe { (*app).m_saw_yeti = false; }
         }
+    }
 
+    /// 判断是否为最终 Boss 战（对应 C++ IsFinalBossLevel）
+    pub fn is_final_boss_level(&self) -> bool {
+        false
+    }
+
+    /// 设置僵尸波次的初始倒计时
+    fn init_zombie_countdown(&mut self) {
         if self.is_first_time_adventure() && self.level == 2 {
             self.m_zombie_countdown = ZOMBIE_COUNTDOWN * 2;
         } else if self.app.map_or(false, |app| unsafe { (*app).is_survival_mode() })
