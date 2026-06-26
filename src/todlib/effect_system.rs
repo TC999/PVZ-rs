@@ -89,3 +89,52 @@ impl Default for EffectSystem {
         EffectSystem::new()
     }
 }
+
+/// 最大三角形数量
+pub const MAX_TRIANGLES: usize = 256;
+
+/// 三角形顶点（对应 C++ TodTriVertex）
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct TodTriVertex {
+    pub x: f32,
+    pub y: f32,
+    pub u: f32,
+    pub v: f32,
+    pub color: u32,
+}
+
+impl Default for TodTriVertex {
+    fn default() -> Self {
+        TodTriVertex {
+            x: 0.0,
+            y: 0.0,
+            u: 0.0,
+            v: 0.0,
+            color: 0,
+        }
+    }
+}
+
+/// 三角形组（对应 C++ TodTriangleGroup）
+/// 存储一批需要绘制的三角形，最多 MAX_TRIANGLES 个，每个 3 个顶点
+pub struct TodTriangleGroup {
+    pub image: Option<*mut Image>,
+    pub vert_array: [[TriVertex; 3]; MAX_TRIANGLES],
+    pub triangle_count: i32,
+    pub draw_mode: i32,
+}
+
+impl Default for TodTriangleGroup {
+    fn default() -> Self {
+        TodTriangleGroup {
+            image: None,
+            vert_array: unsafe { std::mem::zeroed() },
+            triangle_count: 0,
+            draw_mode: 0,
+        }
+    }
+}
+
+use crate::framework::graphics::gl_interface::TriVertex;
+use crate::framework::graphics::image::Image;

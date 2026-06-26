@@ -2396,8 +2396,8 @@ class DefMap)`
 
 **类/结构体:**
 
-- `[ ]` `class TodTriVertex` (L16, 0 个方法, 5 个成员)
-- `[ ]` `class TodTriangleGroup` (L26, 0 个方法, 4 个成员)
+- `[x]` `class TodTriVertex` (L16, 0 个方法, 5 个成员) — 完整翻译
+- `[x]` `class TodTriangleGroup` (L26, 0 个方法, 4 个成员) — 完整翻译
 - `[x]` `class EffectSystem` (L139, 0 个方法, 4 个成员)
 
 **翻译备注:**
@@ -2405,7 +2405,9 @@ class DefMap)`
 ```
 翻译文件: rust/src/todlib/effect_system.rs
 EffectSystem 结构体已实现（new, update, draw 等方法）。
-缺失: TodTriVertex, TodTriangleGroup 结构体未实现。
+TodTriVertex 结构体已完整翻译（5 字段：#[repr(C)] f32*4 + u32 color）。
+TodTriangleGroup 结构体已完整翻译（4 字段：Image*, TriVertex[256][3], triangleCount, drawMode）。
+MAX_TRIANGLES 常量已定义。
 ```
 
 ### `[x]` `src\Sexy.TodLib\FilterEffect.cpp`
@@ -2972,14 +2974,15 @@ class TodParticleHolder)`
 
 **枚举:**
 
-- `[ ]` `enum TodStringFormatFlag` → { TOD_FORMAT_IGNORE_NEWLINES, TOD_FORMAT_HIDE_UNTIL_MAGNETSHROOM }
+- `[x]` `enum TodStringFormatFlag` → { TOD_FORMAT_IGNORE_NEWLINES, TOD_FORMAT_HIDE_UNTIL_MAGNETSHROOM } — 完整翻译
 
 **翻译备注:**
 
 ```
 翻译文件: rust/src/todlib/tod_string_file.rs
 TodStringFormat（对应 C++ TodStringListFormat）和 TodStringFile 结构体已实现。
-缺失: TodStringFormatFlag 枚举未定义。
+TodStringFormatFlag 枚举（2 个变体）已完整翻译。
+TodStringListFormat 结构体已添加（5 字段：format_name, new_font, new_color, line_spacing_offset, format_flags）。
 ```
 
 ### `[x]` `src\Sexy.TodLib\Trail.cpp`

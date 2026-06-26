@@ -60,3 +60,40 @@ impl Default for TodStringFile {
         TodStringFile::new()
     }
 }
+
+// ══════════════════════════════════════════════════════
+// ║  TodString 格式系统（对应 C++ TodStringFile.h）
+// ══════════════════════════════════════════════════════
+
+/// 字符串格式标志位（对应 C++ TodStringFormatFlag）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum TodStringFormatFlag {
+    IgnoreNewlines,
+    HideUntilMagnetshroom,
+}
+
+/// 字符串列表格式（对应 C++ TodStringListFormat）
+/// 描述一个字符串段落的格式：字体、颜色、行间距偏移、格式标志
+#[derive(Debug, Clone)]
+pub struct TodStringListFormat {
+    pub format_name: Option<&'static str>,
+    pub new_font: Option<*mut std::ffi::c_void>,   // _Font**
+    pub new_color: Color,
+    pub line_spacing_offset: i32,
+    pub format_flags: u32,
+}
+
+impl Default for TodStringListFormat {
+    fn default() -> Self {
+        TodStringListFormat {
+            format_name: None,
+            new_font: None,
+            new_color: Color::new(0, 0, 0, 0),
+            line_spacing_offset: 0,
+            format_flags: 0,
+        }
+    }
+}
+
+use crate::framework::color::Color;
