@@ -1288,6 +1288,9 @@ impl Board {
 
         // 绘制 UI（阳光计数、种子槽等）
         self.draw_ui(g);
+
+        // 淡出效果（覆盖在最上层）
+        self.draw_fade_out(g);
     }
 
     /// 绘制背景
@@ -1298,6 +1301,27 @@ impl Board {
     /// 绘制 UI
     fn draw_ui(&self, _g: &Graphics) {
         // 绘制阳光数量、种子选择器等
+    }
+
+    /// 绘制淡出效果（对应 C++ DrawFadeOut）
+    /// 在关卡结束或进入下一关时播放黑白淡出动画
+    fn draw_fade_out(&self, g: &mut Graphics) {
+        if self.m_board_fade_out_counter < 0 || self.is_survival_stage_with_repick() {
+            return;
+        }
+
+        let an_alpha = tod_animate_curve(
+            200, 0, self.m_board_fade_out_counter, 0, 255, TodCurves::Linear,
+        );
+
+        // 第 10/20/30/40/50 关（Boss 关）用黑色，其他关用白色
+        if self.level == 9 || self.level == 19 || self.level == 29 || self.level == 39 || self.level == 49
+        {
+            g.set_color(&Color::new(0, 0, 0, an_alpha as u8));
+        } else {
+            g.set_color(&Color::new(255, 255, 255, an_alpha as u8));
+        }
+        g.fill_rect_xywh(0, 0, self.m_width, self.m_height);
     }
 
     /// 点击事件
@@ -2420,13 +2444,36 @@ impl Board {
         }
     }
 
-    /// 更新格子物品（对应 C++ UpdateGridItems 简化版）
+    /// 更新格子物品（对应 C++ UpdateGridItems 完整版）
+    /// 处理墓碑计数器、弹坑消失、以及各格子物品的逐帧更新
     fn update_grid_items_detailed(&mut self) {
+        // 不能直接获取 &mut self.app 和 &mut self.grid_items 同时可变，
+        // 所以先取出需要的信息
+        let scene_playing = self.app.map_or(false, |app| unsafe {
+            (*app).game_scene == crate::lawn::lawn_app::GameScenes::Playing
+        });
+
         for item in &mut self.grid_items {
-            // 格子物品计数器递增
-            if item.grid_item_type == GridItemType::Grave {
+            // 墓碑计数器递增（不超过 100）
+            if self.m_enable_grave_stones
+                && item.grid_item_type == GridItemType::Grave
+                && item.counter < 100
+            {
                 item.counter += 1;
             }
+
+            // 弹坑计数器递减，到 0 时消失
+            if item.grid_item_type == GridItemType::Crater && scene_playing {
+                if item.counter > 0 {
+                    item.counter -= 1;
+                }
+                if item.counter == 0 {
+                    item.grid_item_die();
+                }
+            }
+
+            // 调用格子物品的逐帧更新
+            item.update();
         }
     }
 

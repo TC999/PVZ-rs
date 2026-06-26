@@ -130,12 +130,17 @@ impl GridItem {
     /// 绘制
     pub fn draw(&self, _g: &mut Graphics) {}
 
+    /// 格子物品消亡（对应 C++ GridItemDie）
+    /// 设置 dead 标记，等待清理
+    pub fn grid_item_die(&mut self) {
+        self.dead = true;
+    }
+
     // 以下方法签名对应 C++ GridItem 的公开方法，方法体待从 GridItem.cpp 翻译
     /*
     pub fn draw_ladder(&self, g: &mut Graphics) {}
     pub fn draw_crater(&self, g: &mut Graphics) {}
     pub fn draw_grave_stone(&self, g: &mut Graphics) {}
-    pub fn grid_item_die(&mut self) {}
     pub fn add_grave_stone_particles(&mut self) {}
     pub fn draw_grid_item(&self, g: &mut Graphics) {}
     pub fn draw_grid_item_overlay(&self, g: &mut Graphics) {}
