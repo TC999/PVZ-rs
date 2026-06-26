@@ -3240,6 +3240,75 @@ impl Board {
     pub fn save_game(&self, _file_name: &str) {
         // LawnSaveGame(this, theFileName) — 暂由外部存档管理器处理
     }
+
+    // ========== 钉耙 ==========
+
+    /// 放置钉耙（对应 C++ Board::PlaceRake）
+    pub fn place_rake(&mut self) {
+        let has_rake = self.app.map_or(false, |app| unsafe {
+            (*app).player_info.as_ref().map_or(false, |p| {
+                p.m_purchases[StoreItem::Rake as usize] != 0
+            })
+        });
+        if !has_rake {
+            return;
+        }
+
+        let mut a_grid_x = 7;
+        let is_scary = self.app.map_or(false, |app| unsafe { (*app).is_scary_potter_level() });
+        if is_scary {
+            for item in &self.grid_items {
+                if item.grid_item_type == GridItemType::ScaryPot
+                    && item.grid_x <= a_grid_x
+                    && item.grid_x > 0
+                {
+                    a_grid_x = item.grid_x - 1;
+                }
+            }
+        } else if !self.stage_has_zombie_walk_in_from_right() {
+            return;
+        }
+
+        // 构建加权行选择数组
+        let mut pick_array = [TodWeightedArray { item: 0, weight: 0 }; MAX_GRID_SIZE_Y];
+        let mut pick_count = 0;
+        for a_row in 0..(MAX_GRID_SIZE_Y as i32) {
+            if a_row != 5 && self.m_plant_row[a_row as usize] == PlantRowType::Normal {
+                pick_array[pick_count].weight = 1;
+                pick_array[pick_count].item = a_row as usize;
+                pick_count += 1;
+            }
+        }
+        if pick_count == 0 {
+            return;
+        }
+
+        let a_grid_y = tod_pick_from_weighted_array(&pick_array[..pick_count]) as i32;
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(ref mut player) = (*app).player_info {
+                    player.m_purchases[StoreItem::Rake as usize] -= 1;
+                }
+            }
+        }
+
+        let mut rake = GridItem::new();
+        rake.grid_item_initialize(GridItemType::Rake, a_grid_x, a_grid_y);
+        rake.pos_x = self.grid_to_pixel_x(a_grid_x, a_grid_y) as f32;
+        rake.pos_y = self.grid_to_pixel_y(a_grid_x, a_grid_y) as f32;
+        rake.render_order = make_render_order(301000/*RenderLayer::GraveStone*/, a_grid_y, 9);
+        rake.grid_item_state = GridItemState::RakeAttracting;
+        // Reanimation 创建暂略（需 CreateRakeReanim 翻译）
+        self.grid_items.push(rake);
+    }
+
+    // ========== 粒子管理 ==========
+
+    /// 移除指定类型的粒子效果（对应 C++ Board::RemoveParticleByType）
+    pub fn remove_particle_by_type(&mut self, effect_type: ParticleEffect) {
+        // 使用 retain 来移除匹配的粒子
+        // 注意：Rust 版粒子系统使用 Vec<TodParticleSystem>，暂未完全实现迭代
+    }
 }
 
 impl Default for Board {
