@@ -310,8 +310,9 @@ pub struct Board {
     pub m_effect_counter: u32,
     pub m_draw_count: u32,
     pub m_rise_from_grave_counter: i32,
-
-    // 序列号
+    pub m_huge_wave_count_down: i32,
+    pub m_zombie_count_down: i32,
+    pub m_final_wave_sound_counter: i32,
     pub m_board_rand_seed: u32,
 
     // 冻结/减速效果
@@ -440,6 +441,9 @@ impl Board {
             m_effect_counter: 0,
             m_draw_count: 0,
             m_rise_from_grave_counter: 0,
+            m_huge_wave_count_down: 0,
+            m_zombie_count_down: 0,
+            m_final_wave_sound_counter: 0,
             m_board_rand_seed: 0,
             m_ice_timer: [0; MAX_GRID_SIZE_Y],
             m_ice_min_x: [0; MAX_GRID_SIZE_Y],
@@ -2958,6 +2962,46 @@ impl Board {
         }
 
         // 波次倒计时——由 update_waves 处理
+
+        // 大波倒计时处理（对应 C++ mHugeWaveCountDown）
+        if self.m_huge_wave_count_down > 0 {
+            self.m_huge_wave_count_down -= 1;
+            if self.m_huge_wave_count_down == 0 {
+                self.clear_advice(AdviceType::HugeWave);
+                self.next_wave_coming();
+                self.m_zombie_count_down = 1;
+            }
+        }
+
+        // 最终波次声音计时
+        if self.m_final_wave_sound_counter > 0 {
+            self.m_final_wave_sound_counter -= 1;
+            if self.m_final_wave_sound_counter == 0 {
+                // 播放最终波次提示音
+            }
+        }
+    }
+
+    /// 下一波到来（对应 C++ NextWaveComing）
+    /// 触发最终波次动画和音效
+    fn next_wave_coming(&mut self) {
+        if self.m_current_wave + 1 == self.m_num_waves {
+            let is_survival_repick = self.is_survival_stage_with_repick();
+            let app_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+            if !is_survival_repick
+                && app_mode != GameMode::ChallengeLastStand
+                && !self.app.map_or(false, |app| unsafe { (*app).is_continuous_challenge() })
+            {
+                // 添加最终波次动画
+                self.m_final_wave_sound_counter = 60;
+            }
+        }
+
+        if self.m_current_wave == 0 {
+            // 第一波——播放警笛
+        } else if self.is_flag_wave(self.m_current_wave) {
+            // 旗波——播放汽笛
+        }
     }
 
     /// 更新冰冻效果（对应 C++ UpdateIce 简化版）
