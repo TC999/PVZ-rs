@@ -280,7 +280,11 @@ impl WidgetImpl for TitleScreenImpl {
                     }
                 }
 
-                // PvZ Logo 动画
+                if self.need_to_init {
+                    return;
+                }
+
+                // PvZ Logo 动画（原始 C++ 在 need_to_init 检查之后绘制）
                 let cc = self.cc(); // 递减值，用于动画曲线
                 let a_logo_y = if cc > 60 {
                     tod_animate_curve(100, 60, cc, -150, 10, TodCurves::EaseIn)
@@ -299,10 +303,6 @@ impl WidgetImpl for TitleScreenImpl {
                             g.draw_image_xy(img, lx, a_logo_y);
                         }
                     }
-                }
-
-                if self.need_to_init {
-                    return;
                 }
 
                 // 加载条绘制
@@ -584,11 +584,11 @@ impl WidgetImpl for TitleScreenImpl {
                     } else if self.quick_load_key == KEYCODE_U {
                         app.loading_completed();
                         app.kill_game_selector();
-                        app.pre_new_game(GameMode::Adventure, false);
+                        app.pre_new_game(GameMode::Upsell, false);
                     } else if self.quick_load_key == KEYCODE_I {
                         app.loading_completed();
                         app.kill_game_selector();
-                        app.pre_new_game(GameMode::Adventure, false);
+                        app.pre_new_game(GameMode::Intro, false);
                     } else if self.quick_load_key == KEYCODE_P {
                         app.loading_completed();
                         app.kill_game_selector();

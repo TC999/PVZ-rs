@@ -217,6 +217,10 @@ pub enum GameMode {
     ChallengeTimeAttack,
     ChallengeMovingTarget,
     ChallengeHeavyWeapons,
+    /// 对应 C++ GAMEMODE_UPSELL
+    Upsell,
+    /// 对应 C++ GAMEMODE_INTRO
+    Intro,
     MaxGameModes,
 }
 

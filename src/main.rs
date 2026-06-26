@@ -17,10 +17,24 @@ mod todlib;
 mod lawn;
 
 use lawn::LawnApp;
+use todlib::init_lawn_string_formats;
 
 fn main() {
+    // 初始化字符串格式（对应 C++ TodStringListSetColors(gLawnStringFormats, gLawnStringFormatCount)）
+    init_lawn_string_formats();
+
     // 创建 LawnApp
     let mut app = LawnApp::new();
+
+    // 传递命令行参数（对应 C++ gLawnApp->SetArgs(argc, argv)）
+    let args: Vec<String> = std::env::args().collect();
+    let mut arg_cstrings: Vec<std::ffi::CString> = args.iter()
+        .map(|s| std::ffi::CString::new(s.as_str()).unwrap_or_default())
+        .collect();
+    let mut arg_ptrs: Vec<*mut std::os::raw::c_char> = arg_cstrings.iter_mut()
+        .map(|cs| cs.as_ptr() as *mut std::os::raw::c_char)
+        .collect();
+    app.base.set_args(arg_ptrs.len() as i32, arg_ptrs.as_mut_ptr());
 
     // 初始化 SDL、创建窗口、初始化 OpenGL（通过 SexyAppBase）
     app.init();

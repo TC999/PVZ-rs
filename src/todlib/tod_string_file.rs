@@ -18,6 +18,32 @@ pub struct TodStringFormat {
 pub static mut gLawnStringFormats: Vec<TodStringFormat> = Vec::new();
 pub static mut gLawnStringFormatCount: i32 = 0;
 
+/// 初始化草坪游戏使用的字符串格式（对应 C++ gLawnStringFormats[12]）
+/// 这些格式控制对话框中不同段落的颜色和行间距。
+pub fn init_lawn_string_formats() {
+    let list_formats = vec![
+        ("NORMAL",         Color::new(40,   50,   90,   255), 0),
+        ("FLAVOR",         Color::new(143,  67,   27,   255), TodStringFormatFlag::IgnoreNewlines as u32),
+        ("KEYWORD",        Color::new(143,  67,   27,   255), 0),
+        ("NOCTURNAL",      Color::new(136,  50,   170,  255), 0),
+        ("AQUATIC",        Color::new(11,   161,  219,  255), 0),
+        ("STAT",           Color::new(204,  36,   29,   255), 0),
+        ("METAL",          Color::new(204,  36,   29,   255), TodStringFormatFlag::HideUntilMagnetshroom as u32),
+        ("KEYMETAL",       Color::new(143,  67,   27,   255), TodStringFormatFlag::HideUntilMagnetshroom as u32),
+        ("SHORTLINE",      Color::new(0,    0,    0,    0),   0),
+        ("EXTRASHORTLINE", Color::new(0,    0,    0,    0),   0),
+        ("CREDITS1",       Color::new(0,    0,    0,    0),   0),
+        ("CREDITS2",       Color::new(0,    0,    0,    0),   0),
+    ];
+    let formats: Vec<TodStringFormat> = list_formats.iter().map(|(tag, color, _flags)| {
+        TodStringFormat {
+            tag: tag.to_string(),
+            color: color.to_argb(),
+        }
+    }).collect();
+    tod_string_list_set_colors(&formats, 12);
+}
+
 /// 初始化字符串颜色
 pub fn tod_string_list_set_colors(formats: &[TodStringFormat], _count: i32) {
     unsafe {
