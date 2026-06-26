@@ -95,3 +95,149 @@ impl Default for ReanimatorTransform {
         }
     }
 }
+
+// ══════════════════════════════════════════════════════
+// ║  定义系统数据结构（对应 C++ Definition.h）
+// ══════════════════════════════════════════════════════
+
+/// 定义字段类型（对应 C++ DefFieldType）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum DefFieldType {
+    Invalid,
+    Int,
+    Float,
+    String,
+    Enum,
+    Vector2,
+    Array,
+    TrackFloat,
+    Flags,
+    Image,
+    Font,
+}
+
+/// 定义符号 — 标志/枚举值的名称映射（对应 C++ DefSymbol）
+#[derive(Debug, Clone, Copy)]
+pub struct DefSymbol {
+    pub symbol_value: i32,
+    pub symbol_name: Option<&'static str>,
+}
+
+/// 结构字段 — 记录类成员变量的布局信息（对应 C++ DefField）
+#[derive(Debug, Clone, Copy)]
+pub struct DefField {
+    pub field_name: Option<&'static str>,
+    pub field_offset: i32,
+    pub field_type: DefFieldType,
+    pub extra_data: Option<*const std::ffi::c_void>,
+}
+
+/// 定义结构图 — 描述定义数据类的存储格式（对应 C++ DefMap）
+#[derive(Debug, Clone, Copy)]
+pub struct DefMap {
+    pub map_fields: Option<*const DefField>,
+    pub def_size: i32,
+    pub constructor_func: Option<unsafe extern "C" fn(*mut std::ffi::c_void) -> *mut std::ffi::c_void>,
+}
+
+/// 定义数组 — 指针+数量组合（对应 C++ DefinitionArrayDef）
+#[derive(Debug, Clone, Copy)]
+pub struct DefinitionArrayDef {
+    pub array_data: Option<*mut std::ffi::c_void>,
+    pub array_count: i32,
+}
+
+/// 压缩定义数据头（对应 C++ CompressedDefinitionHeader）
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct CompressedDefinitionHeader {
+    pub cookie: u32,
+    pub uncompressed_size: u32,
+}
+
+/// 定义资源路径映射（对应 C++ DefLoadResPath）
+#[derive(Debug, Clone, Copy)]
+pub struct DefLoadResPath {
+    pub prefix: Option<&'static str>,
+    pub directory: Option<&'static str>,
+}
+
+// ── 定义系统的构造函数声明 ─────────────────────────
+
+/// 粒子定义构造函数
+pub unsafe extern "C" fn tod_particle_definition_constructor(ptr: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+    ptr
+}
+
+/// 发射器定义构造函数
+pub unsafe extern "C" fn tod_emitter_definition_constructor(ptr: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+    ptr
+}
+
+/// 粒子字段构造函数
+pub unsafe extern "C" fn particle_field_constructor(ptr: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+    ptr
+}
+
+/// 拖尾定义构造函数
+pub unsafe extern "C" fn trail_definition_constructor(ptr: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+    ptr
+}
+
+/// 重动画变换构造函数
+pub unsafe extern "C" fn reanimator_transform_constructor(ptr: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+    ptr
+}
+
+/// 重动画轨道构造函数
+pub unsafe extern "C" fn reanimator_track_constructor(ptr: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+    ptr
+}
+
+/// 重动画定义构造函数
+pub unsafe extern "C" fn reanimator_definition_constructor(ptr: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+    ptr
+}
+
+// ── 自由函数签名 ──────────────────────────────────
+
+/// 从 XML 文件路径获取编译文件路径
+pub fn definition_get_compiled_file_path_from_xml_path(_xml_path: &str) -> String {
+    String::new()
+}
+
+/// 检查文件是否在 PAK 文件中
+pub fn is_file_in_pak_file(_file_path: &str) -> bool {
+    false
+}
+
+/// 检查定义是否已编译
+pub fn definition_is_compiled(_xml_path: &str) -> bool {
+    false
+}
+
+/// 读取编译后的定义文件
+pub fn definition_read_compiled_file(
+    _compiled_path: &str,
+    _def_map: Option<&DefMap>,
+    _definition: Option<*mut std::ffi::c_void>,
+) -> bool {
+    false
+}
+
+/// 用默认值填充定义
+pub fn definition_fill_with_defaults(
+    _def_map: Option<&DefMap>,
+    _definition: Option<*mut std::ffi::c_void>,
+) {
+}
+
+/// 从符号名查找符号值
+pub fn def_symbol_value_from_string(
+    _symbol_map: Option<&[DefSymbol]>,
+    _name: &str,
+) -> Option<i32> {
+    None
+}
+

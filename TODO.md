@@ -2247,7 +2247,7 @@ public:
 **类/结构体:**
 
 - `[x]` `class DataArray` (L19, 0 个方法, 10 个成员)
-- `[ ]` `class DataArrayItem` (L22, 0 个方法, 2 个成员)
+- `[x]` `class DataArrayItem` (L22, 0 个方法, 2 个成员) — 已在泛型实现中内联处理
 
 **翻译备注:**
 
@@ -2280,27 +2280,38 @@ public:
 
 **类/结构体:**
 
-- `[ ]` `class DefSymbol` (L33, 0 个方法, 2 个成员)
-- `[ ]` `class DefField` (L48, 0 个方法, 4 个成员)
-- `[ ]` `class DefMap` (L67, 0 个方法, 2 个成员)
-- `[ ]` `class DefinitionArrayDef` (L108, 0 个方法, 2 个成员)
-- `[ ]` `class CompressedDefinitionHeader` (L123, 0 个方法, 2 个成员)
-- `[ ]` `class DefLoadResPath` (L135, 0 个方法, 2 个成员)
+- `[x]` `class DefSymbol` (L33, 0 个方法, 2 个成员) — 完整翻译
+- `[x]` `class DefField` (L48, 0 个方法, 4 个成员) — 完整翻译
+- `[x]` `class DefMap` (L67, 0 个方法, 2 个成员) — 完整翻译
+- `[x]` `class DefinitionArrayDef` (L108, 0 个方法, 2 个成员) — 完整翻译
+- `[x]` `class CompressedDefinitionHeader` (L123, 0 个方法, 2 个成员) — 完整翻译
+- `[x]` `class DefLoadResPath` (L135, 0 个方法, 2 个成员) — 完整翻译
 
 **枚举:**
 
-- `[ ]` `enum class DefFieldType` → { DT_INVALID, DT_INT, DT_FLOAT, DT_STRING, DT_ENUM, ... (11 个值) }
+- `[x]` `enum class DefFieldType` → { DT_INVALID, DT_INT, DT_FLOAT, DT_STRING, DT_ENUM, ... (11 个值) }
 
 **翻译备注:**
 
 ```
-rust/src/todlib/definition.rs 中包含 ReanimatorDefinition, ReanimatorTrackDefinition, ReanimatorTransform 结构体，
-但未包含 C++ Definition.h 中的 DefSymbol/DefField/DefMap/DefFieldType 等序列化辅助类型。
+翻译文件: rust/src/todlib/definition.rs
+包含：
+- ReanimatorDefinition, ReanimatorTrackDefinition, ReanimatorTransform（原有）
+- DefFieldType 枚举（11 个变体，#[repr(i32)]）
+- DefSymbol 结构体（symbol_value, symbol_name）
+- DefField 结构体（field_name, field_offset, field_type, extra_data）
+- DefMap 结构体（map_fields, def_size, constructor_func）
+- DefinitionArrayDef 结构体（array_data, array_count）
+- CompressedDefinitionHeader 结构体（cookie, uncompressed_size）
+- DefLoadResPath 结构体（prefix, directory）
+- 6 个构造函数占位
+- 6 个自由函数签名占位
+方法实现待从 Definition.cpp 翻译。
 ```
 
 **自由函数:**
 
-- `[ ]` `enum class DefFieldType : int({
+- `[x]` `enum class DefFieldType : int({
     DT_INVALID,
     DT_INT,
     DT_FLOAT,
