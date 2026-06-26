@@ -96,12 +96,16 @@ impl WidgetManager {
 
     /// 添加 Widget
     pub fn add_widget(&mut self, widget: *mut Widget) {
+        unsafe {
+            (*widget).widget_manager = Some(self as *mut WidgetManager);
+        }
         self.widget_list.push(widget);
     }
 
     /// 移除 Widget
     pub fn remove_widget(&mut self, widget: *mut Widget) {
         self.widget_list.retain(|w| *w != widget);
+        self.disable_widget(widget);
     }
 
     /// 禁用控件
@@ -118,6 +122,7 @@ impl WidgetManager {
             self.set_focus(new_focus);
         }
         if Some(w) == self.over_widget { self.over_widget = None; }
+        if Some(w) == self.last_down_widget { self.last_down_widget = None; }
     }
 
     /// 重新计算鼠标
