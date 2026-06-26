@@ -1454,9 +1454,7 @@ SaveGameContext::SyncReanimationDef/SyncParticleDef/SyncTrailDef/SyncImage，
 
 **自由函数:**
 
-- `[ ]` `class AlmanacDialog : public LawnDialog({
-private:
-	enum)`
+- `[x]` `class AlmanacDialog : public LawnDialog({` — 自动生成产物，对应主类 AlmanacDialog 已在 almanac_dialog.rs 中实现
 
 **翻译备注:**
 
@@ -1496,9 +1494,7 @@ private:
 
 **自由函数:**
 
-- `[ ]` `class AwardScreen : public Widget({
-private:
-	enum)`
+- `[x]` `class AwardScreen : public Widget({` — 自动生成产物，对应主类 AwardScreen 已在 award_screen.rs 中实现
 
 **翻译备注:**
 
@@ -2803,7 +2799,7 @@ enum FoleyType : int32_t
 };
 
 class FoleyParams)`
-- `[ ]` `class TodDSoundInstance : public SDLSoundInstance()`
+- `[x]` `class TodDSoundInstance : public SDLSoundInstance()` — 已在 tod_foley.rs 中实现
 
 **翻译备注:**
 
@@ -3302,7 +3298,7 @@ SexyAppBase 结构体已实现。
 
 **类/结构体:**
 
-- `[ ]` `class GLImage : MemoryImage` (L14, 0 个方法, 1 个成员)
+- `[x]` `class GLImage : MemoryImage` (L14, 0 个方法, 1 个成员)
 
 **翻译备注:**
 
@@ -3802,7 +3798,7 @@ TriVertex:
 
 **类/结构体:**
 
-- `[ ]` `class Image` (L12, 0 个方法, 3 个成员)
+- `[x]` `class Image` (L12, 0 个方法, 3 个成员) — 已在 imagelib/mod.rs:10 实现
 
 **翻译备注:**
 
@@ -3895,10 +3891,10 @@ TriVertex:
 
 **类/结构体:**
 
-- `[ ]` `class DataElement` (L11, 0 个方法, 1 个成员)
-- `[ ]` `class SingleDataElement : DataElement` (L23, 0 个方法, 1 个成员)
-- `[ ]` `class ListDataElement : DataElement` (L38, 0 个方法, 2 个成员)
-- `[ ]` `class DescParser` (L56, 0 个方法, 5 个成员)
+- `[x]` `class DataElement` (L11, 0 个方法, 1 个成员) — Rust 中用 enum DataElement 替代 (desc_parser.rs:19)
+- `[x]` `class SingleDataElement : DataElement` (L23, 0 个方法, 1 个成员) — Rust 中用 enum DataElement 变体替代
+- `[x]` `class ListDataElement : DataElement` (L38, 0 个方法, 2 个成员) — Rust 中用 enum DataElement 变体替代
+- `[ ]` `class DescParser` (L56, 0 个方法, 5 个成员) — Rust 侧未实现
 
 **翻译备注:**
 
@@ -4058,9 +4054,9 @@ TriVertex:
 
 **类/结构体:**
 
-- `[ ]` `class PerfTimer` (L13, 0 个方法, 3 个成员)
-- `[ ]` `class SexyPerf` (L36, 0 个方法, 0 个成员)
-- `[ ]` `class SexyAutoPerf` (L51, 0 个方法, 3 个成员)
+- `[x]` `class PerfTimer` (L13, 0 个方法, 3 个成员) — 已在 perf_timer.rs:10 实现
+- `[ ]` `class SexyPerf` (L36, 0 个方法, 0 个成员) — Rust 侧未实现
+- `[ ]` `class SexyAutoPerf` (L51, 0 个方法, 3 个成员) — Rust 侧未实现
 
 **翻译备注:**
 
@@ -4311,9 +4307,9 @@ SexyVector3:
 
 **类/结构体:**
 
-- `[ ]` `class XMLParam` (L17, 0 个方法, 2 个成员)
-- `[ ]` `class XMLElement` (L29, 0 个方法, 6 个成员)
-- `[ ]` `class XMLParser` (L51, 0 个方法, 10 个成员)
+- `[x]` `class XMLParam` (L17, 0 个方法, 2 个成员) — 已在 xml_parser.rs:12 实现
+- `[x]` `class XMLElement` (L29, 0 个方法, 6 个成员) — 已在 xml_parser.rs:21 实现
+- `[x]` `class XMLParser` (L51, 0 个方法, 10 个成员) — 已在 xml_parser.rs:52 实现
 
 **枚举:**
 
@@ -4420,20 +4416,20 @@ SexyVector3:
 
 **类/结构体:**
 
-- `[ ]` `struct TextureDataPiece` (L38, 0 个方法, 1 个成员)
-- `[ ]` `struct GLVertex` (L57, 0 个方法, 6 个成员)
-- `[ ]` `struct VertexList` (L69, 0 个方法, 10 个成员)
-- `[ ]` `struct TextureData` (L133, 0 个方法, 5 个成员)
-- `[ ]` `class GLInterface : NativeDisplay` (L166, 0 个方法, 10 个成员)
+- `[x]` `struct TextureDataPiece` (L38, 0 个方法, 1 个成员) — 已在 gl_interface.rs:77 实现
+- `[x]` `struct GLVertex` (L57, 0 个方法, 6 个成员) — 已在 gl_interface.rs:35 实现
+- `[x]` `struct VertexList` (L69, 0 个方法, 10 个成员) — 已在 gl_interface.rs:1338 实现
+- `[x]` `struct TextureData` (L133, 0 个方法, 5 个成员) — 已在 gl_interface.rs:490 实现
+- `[x]` `class GLInterface : NativeDisplay` (L166, 0 个方法, 10 个成员) — 已在 gl_interface.rs:1528 实现
 
 **枚举:**
 
-- `[ ]` `enum RenderImageFlags` → { RenderImageFlag_MinimizeNumSubdivisions, RenderImageFlag_Use64By64Subdivisions, RenderImageFlag_UseA4R4G4B4, RenderImageFlag_UseA8R8G8B8, RenderImageFlag_Repeat, ... (6 个值) }
-- `[ ]` `enum PixelFormat` → { PixelFormat_Unknown, PixelFormat_A8R8G8B8, PixelFormat_A4R4G4B4, PixelFormat_R5G6B5, PixelFormat_Palette8 }
+- `[~]` `enum RenderImageFlags` → { ... (6 个值) } — Rust 侧有方法实现但无独立 enum 定义
+- `[x]` `enum PixelFormat` → { PixelFormat_Unknown, ..., PixelFormat_Palette8 } — 已在 gl_interface.rs:66 实现
 
 **自由函数:**
 
-- `[ ]` `class GLInterface : public NativeDisplay()`
+- `[x]` `class GLInterface : public NativeDisplay()` — 自动生成产物，对应主类 GLInterface 已实现
 
 **翻译备注:**
 
