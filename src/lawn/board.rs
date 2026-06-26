@@ -3309,6 +3309,29 @@ impl Board {
         // 使用 retain 来移除匹配的粒子
         // 注意：Rust 版粒子系统使用 Vec<TodParticleSystem>，暂未完全实现迭代
     }
+
+    // ========== GridItem 快捷查询 ==========
+
+    /// 获取指定位置的惊吓盒（对应 C++ Board::GetScaryPotAt）
+    pub fn get_scary_pot_at(&self, grid_x: i32, grid_y: i32) -> Option<&GridItem> {
+        self.get_grid_item_at(GridItemType::ScaryPot, grid_x, grid_y)
+    }
+
+    /// 获取指定位置的禅境工具（对应 C++ Board::GetZenToolAt）
+    pub fn get_zen_tool_at(&self, grid_x: i32, grid_y: i32) -> Option<&GridItem> {
+        self.get_grid_item_at(GridItemType::ZenTool, grid_x, grid_y)
+    }
+
+    // ========== 存档加载 ==========
+
+    /// 加载存档（对应 C++ Board::LoadGame 简化版）
+    pub fn load_game(&mut self, _file_name: &str) -> bool {
+        // LawnLoadGame(this, theFileName) — 暂略
+        // LoadBackgroundImages();
+        // self.update_layers();
+        // self.reset_fps_stats();
+        false
+    }
 }
 
 impl Default for Board {
