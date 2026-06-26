@@ -29,21 +29,32 @@ impl GameObject {
             width: 0,
             height: 0,
             visible: true,
-            row: 0,
+            row: -1,
             render_order: 0,
         }
     }
 
     /// 开始绘制（设置裁剪区域）
-    pub fn begin_draw(&self, _g: &mut Graphics) -> bool {
+    /// 如果对象不可见，返回 false；否则将坐标转换为 Graphics 上下文
+    pub fn begin_draw(&self, g: &mut Graphics) -> bool {
+        if !self.visible {
+            return false;
+        }
+        g.translate(self.x, self.y);
         true
     }
 
     /// 结束绘制
-    pub fn end_draw(&self, _g: &mut Graphics) {}
+    /// 恢复 Graphics 上下文的坐标转换
+    pub fn end_draw(&self, g: &mut Graphics) {
+        g.translate(-self.x, -self.y);
+    }
 
     /// 创建父级图形帧
-    pub fn make_parent_graphics_frame(&self, _g: &mut Graphics) {}
+    /// 恢复 Graphics 上下文的坐标转换
+    pub fn make_parent_graphics_frame(&self, g: &mut Graphics) {
+        g.translate(-self.x, -self.y);
+    }
 
     /// 获取 Board 引用
     pub fn get_board(&self) -> Option<&Board> {

@@ -1716,7 +1716,14 @@ class Challenge)`
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/game_object.rs
+设计决策:
+- 构造函数中 mRow = -1 → row: -1（修正原 Rust 代码中的 0）
+- BeginDraw: 添加 mVisible 检查 + Translate(mX, mY) 调用
+- EndDraw: 添加 Translate(-mX, -mY) 调用
+- MakeParentGraphicsFrame: 添加 Translate(-mX, -mY) 调用
+- 全局变量 gLawnApp 暂无法在构造函数中直接使用，app/board 初始化为 None
+- cargo check 通过
 ```
 
 ### `[x]` `src\Lawn\GameObject.h`
@@ -1729,12 +1736,13 @@ class Challenge)`
 
 **类/结构体:**
 
-- `[ ]` `class GameObject` (L15, 0 个方法, 9 个成员)
+- `[x]` `class GameObject` (L15, 0 个方法, 9 个成员)
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/game_object.rs
+GameObject 结构体和实现已完整翻译。
 ```
 
 ### `[x]` `src\Lawn\GridItem.cpp`
