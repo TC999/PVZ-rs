@@ -70,6 +70,11 @@ pub struct Reanimation {
     pub m_extra_int: i32,
     pub m_extra_float: f32,
     pub m_owner: Option<*mut std::ffi::c_void>,
+    // 渲染位置覆盖（用于 EffectSystem 中的独立定位）
+    pub m_x: f32,
+    pub m_y: f32,
+    pub m_override_scale_x: f32,
+    pub m_override_scale_y: f32,
 }
 
 impl Reanimation {
@@ -90,6 +95,10 @@ impl Reanimation {
             m_extra_int: 0,
             m_extra_float: 0.0,
             m_owner: None,
+            m_x: 0.0,
+            m_y: 0.0,
+            m_override_scale_x: 1.0,
+            m_override_scale_y: 1.0,
         }
     }
 
@@ -168,6 +177,18 @@ impl Reanimation {
             }
         }
         true
+    }
+
+    /// 设置位置（对应 C++ SetPosition）
+    pub fn set_position(&mut self, x: f32, y: f32) {
+        self.m_x = x;
+        self.m_y = y;
+    }
+
+    /// 覆盖缩放（对应 C++ OverrideScale）
+    pub fn override_scale(&mut self, sx: f32, sy: f32) {
+        self.m_override_scale_x = sx;
+        self.m_override_scale_y = sy;
     }
 }
 

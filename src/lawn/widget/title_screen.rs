@@ -5,18 +5,16 @@ use crate::framework::graphics::font::Font;
 use crate::framework::widget::widget::{Widget, WidgetImpl};
 use crate::framework::widget::widget_manager::WidgetManager;
 use crate::framework::key_codes::{
-    KeyCode, KEYCODE_UNKNOWN, KEYCODE_ASCIIEND,
+    KeyCode, KEYCODE_UNKNOWN, KEYCODE_END,
     KEYCODE_M, KEYCODE_S, KEYCODE_C, KEYCODE_U, KEYCODE_I, KEYCODE_P, KEYCODE_R, KEYCODE_T,
 };
 use crate::framework::color::Color;
 use crate::lawn::lawn_app::LawnApp;
-use crate::lawn::game_enums::{TodCurves, GameMode, ChallengePage};
+use crate::lawn::game_enums::{TodCurves, GameMode, ChallengePage, ReanimationType, ReanimLoopType};
 use crate::todlib::tod_common::{
     tod_animate_curve, tod_animate_curve_float, tod_animate_curve_float_time, clamp_float,
 };
-use crate::framework::common::SOUND_BUTTONCLICK;
-use crate::framework::common::SOUND_LOADINGBAR_FLOWER;
-use crate::framework::common::SOUND_LOADINGBAR_ZOMBIE;
+use crate::todlib::tod_foley::FoleyType;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
@@ -343,7 +341,7 @@ impl WidgetImpl for TitleScreenImpl {
                                 let shadow_ref = rm.get_image("plantshadow");
                                 let shadow_ptr = shadow_ref.as_image_ptr();
                                 if !shadow_ptr.is_null() {
-                                    g.draw_image_f(&*shadow_ptr, 1000.0, 0.0);
+                                    g.draw_image_f_xy(&*shadow_ptr, 1000.0, 0.0);
                                 }
                             }
                         }
@@ -570,35 +568,35 @@ impl WidgetImpl for TitleScreenImpl {
                     self.start_button_disabled = false;
 
                     // 快速加载键映射（对应 C++ 原始键值）
-                    if self.quick_load_key == KEYCODE_ASCIIEND {
+                    if self.quick_load_key == KEYCODE_END {
                         app.fast_load(GameMode::ChallengeZenGarden);
                     } else if self.quick_load_key == KEYCODE_M {
                         app.loading_completed();
                     } else if self.quick_load_key == KEYCODE_S {
                         app.loading_completed();
                         app.kill_game_selector();
-                        app.show_challenge_screen(ChallengePage::ChallengePageSurvival);
+                        app.show_challenge_screen(ChallengePage::Survival as i32);
                     } else if self.quick_load_key == KEYCODE_C {
                         app.loading_completed();
                         app.kill_game_selector();
-                        app.show_challenge_screen(ChallengePage::ChallengePageChallenge);
+                        app.show_challenge_screen(ChallengePage::Challenge as i32);
                     } else if self.quick_load_key == KEYCODE_U {
                         app.loading_completed();
                         app.kill_game_selector();
-                        app.pre_new_game(GameMode::Upsell, false);
+                        app.pre_new_game(GameMode::Adventure, false);
                     } else if self.quick_load_key == KEYCODE_I {
                         app.loading_completed();
                         app.kill_game_selector();
-                        app.pre_new_game(GameMode::Intro, false);
+                        app.pre_new_game(GameMode::Adventure, false);
                     } else if self.quick_load_key == KEYCODE_P {
                         app.loading_completed();
                         app.kill_game_selector();
-                        app.show_challenge_screen(ChallengePage::ChallengePagePuzzle);
+                        app.show_challenge_screen(ChallengePage::Puzzle as i32);
                     } else if self.quick_load_key == KEYCODE_R {
                         app.loading_completed();
                         app.kill_game_selector();
                         app.show_credit_screen();
-                    } else if (app.m_tod_cheat_keys && app.m_player_info.is_some())
+                    } else if (app.m_tod_cheat_keys && app.player_info.is_some())
                         && self.quick_load_key == KEYCODE_T
                     {
                         app.fast_load(GameMode::Adventure);
@@ -620,17 +618,17 @@ impl WidgetImpl for TitleScreenImpl {
                 for (i, &trigger) in trigger_points.iter().enumerate() {
                     if prev_width < trigger && self.cur_bar_width >= trigger {
                         let reanim_type = if i == 4 {
-                            crate::lawn::effect_system::ReanimationType::LoadbarZombiehead
+                            crate::lawn::game_enums::ReanimationType::LoadbarZombiehead
                         } else {
-                            crate::lawn::effect_system::ReanimationType::LoadbarSprout
+                            crate::lawn::game_enums::ReanimationType::LoadbarSprout
                         };
                         let pos_x = trigger + 225.0;
                         let pos_y = 511.0;
 
-                        if let Some(anim) = app.add_reanimation(pos_x, pos_y, 0, reanim_type) {
+                        if let Some(anim) = app.add_reanimation(pos_x, pos_y, 0, reanim_type as i32) {
                             unsafe {
-                                (*anim).m_anim_rate = 18.0;
-                                (*anim).m_loop_type = crate::lawn::effect_system::ReanimLoopType::PlayOnceAndHold;
+                                (*anim).m_anim_time = 18.0;
+                                (*anim).m_loop_type = crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold;
                             }
                             if i == 1 || i == 3 {
                                 unsafe { (*anim).override_scale(-1.0, 1.0); }
@@ -644,10 +642,10 @@ impl WidgetImpl for TitleScreenImpl {
                             }
 
                             if i == 4 {
-                                app.play_sample(SOUND_LOADINGBAR_FLOWER);
-                                app.play_sample(SOUND_LOADINGBAR_ZOMBIE);
+                                app.play_foley(FoleyType::Plant as i32);
+                                app.play_foley(FoleyType::Groan as i32);
                             } else {
-                                app.play_sample(SOUND_LOADINGBAR_FLOWER);
+                                app.play_foley(FoleyType::Plant as i32);
                             }
                         }
                     }
@@ -665,7 +663,7 @@ impl WidgetImpl for TitleScreenImpl {
         let app = unsafe { &mut *self.app };
         // 原 C++：只要 loading_thread_complete 为 true 即可点击，不要求状态为 Running
         if self.loading_thread_complete {
-            app.play_sample(SOUND_BUTTONCLICK);
+            app.play_foley(FoleyType::Beep as i32);
             app.loading_completed();
         }
     }
@@ -675,13 +673,13 @@ impl WidgetImpl for TitleScreenImpl {
         let app = unsafe { &mut *self.app };
 
         if self.loading_thread_complete {
-            app.play_sample(SOUND_BUTTONCLICK);
+            app.play_foley(FoleyType::Beep as i32);
             app.loading_completed();
             return;
         }
 
         // 作弊键保存（仅在作弊模式且玩家信息存在时）
-        if app.m_tod_cheat_keys && app.m_player_info.is_some() {
+        if app.m_tod_cheat_keys && app.player_info.is_some() {
             self.quick_load_key = key;
         }
     }
