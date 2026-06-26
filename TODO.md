@@ -1631,7 +1631,7 @@ private:
 
 **类/结构体:**
 
-- `[ ]` `class CheatDialog : LawnDialog, EditListener` (L9, 0 个方法, 2 个成员)
+- `[x]` `class CheatDialog : LawnDialog, EditListener` (L9, 0 个方法, 2 个成员) — 完整翻译
 
 **翻译备注:**
 
@@ -1661,11 +1661,11 @@ private:
 
 **类/结构体:**
 
-- `[ ]` `class ContinueDialog : LawnDialog` (L8, 0 个方法, 2 个成员)
+- `[x]` `class ContinueDialog : LawnDialog` (L8, 0 个方法, 2 个成员) — 完整翻译
 
 **自由函数:**
 
-- `[ ]` `class ContinueDialog : public LawnDialog({
+- `[x]` `class ContinueDialog : public LawnDialog({
 public:
 	enum)`
 
@@ -1816,11 +1816,11 @@ public:
 
 **类/结构体:**
 
-- `[ ]` `class ImitaterDialog : LawnDialog` (L9, 0 个方法, 2 个成员)
+- `[x]` `class ImitaterDialog : LawnDialog` (L9, 0 个方法, 2 个成员) — 完整翻译
 
 **自由函数:**
 
-- `[ ]` `class ImitaterDialog : public LawnDialog()`
+- `[x]` `class ImitaterDialog : public LawnDialog()`
 
 **翻译备注:**
 
@@ -1919,7 +1919,7 @@ public:
 
 **类/结构体:**
 
-- `[ ]` `class NewUserDialog : LawnDialog, EditListener` (L9, 0 个方法, 2 个成员)
+- `[x]` `class NewUserDialog : LawnDialog, EditListener` (L9, 0 个方法, 2 个成员) — 完整翻译
 
 **翻译备注:**
 
@@ -2055,7 +2055,7 @@ private:
 
 **类/结构体:**
 
-- `[ ]` `class UserDialog : LawnDialog, ListListener, EditListener` (L15, 0 个方法, 4 个成员)
+- `[x]` `class UserDialog : LawnDialog, ListListener, EditListener` (L15, 0 个方法, 4 个成员) — 完整翻译
 
 **翻译备注:**
 
