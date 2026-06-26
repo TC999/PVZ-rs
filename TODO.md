@@ -1773,7 +1773,16 @@ public:
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/widget/imitater_dialog.rs
+所有方法已从 C++ 完整翻译：
+- new()：构造函数（app、尺寸、ToolTipWidget）
+- seed_hit_test()：遍历种子 0..Gatlingpea，矩形碰撞检测
+- get_seed_position()：8 列网格位置计算
+- update()：调用 show_tool_tip()
+- show_tool_tip()/remove_tool_tip()：悬停提示
+- draw()：种子绘制存根
+- mouse_down()：选择模仿者类型（简化）
+编译状态: cargo check 通过
 ```
 
 ### `[x]` `src\Lawn\Widget\LawnDialog.cpp`
@@ -3233,7 +3242,7 @@ SexyAppBase 结构体已实现。
 
 **类/结构体:**
 
-- `[ ]` `class Color` (L11, 0 个方法, 8 个成员)
+- `[x]` `class Color` (L11, 0 个方法, 8 个成员) — 已在 rust/src/framework/color.rs 实现
 
 **翻译备注:**
 
@@ -3263,7 +3272,7 @@ SexyAppBase 结构体已实现。
 
 **类/结构体:**
 
-- `[ ]` `class _Font` (L16, 0 个方法, 4 个成员)
+- `[x]` `class _Font` (L16, 0 个方法, 4 个成员) — 已在 rust/src/framework/graphics/font.rs 实现
 
 **翻译备注:**
 
@@ -3824,7 +3833,7 @@ TriVertex:
 
 **类/结构体:**
 
-- `[ ]` `class Buffer` (L14, 0 个方法, 4 个成员)
+- `[x]` `class Buffer` (L14, 0 个方法, 4 个成员) — 已在 rust/src/framework/buffer.rs 实现
 
 **翻译备注:**
 
@@ -3917,9 +3926,9 @@ TriVertex:
 
 **类/结构体:**
 
-- `[ ]` `class FlagsMod` (L9, 0 个方法, 2 个成员)
-- `[ ]` `class ModalFlags` (L33, 0 个方法, 3 个成员)
-- `[ ]` `class AutoModalFlags` (L53, 0 个方法, 3 个成员)
+- `[x]` `class FlagsMod` (L9, 0 个方法, 2 个成员) — 已在 flags.rs 实现
+- `[x]` `class ModalFlags` (L33, 0 个方法, 3 个成员) — 已在 flags.rs 实现
+- `[x]` `class AutoModalFlags` (L53, 0 个方法, 3 个成员) — 已在 flags.rs 实现
 
 **翻译备注:**
 
@@ -3950,7 +3959,7 @@ TriVertex:
 
 **枚举:**
 
-- `[ ]` `enum KeyCode` → { KEYCODE_UNKNOWN, KEYCODE_LBUTTON, KEYCODE_RBUTTON, KEYCODE_CANCEL, KEYCODE_MBUTTON, ... (91 个值) }
+- `[x]` `enum KeyCode` → { KEYCODE_UNKNOWN, ... (91 个值) } — 已在 rust/src/framework/key_codes.rs 实现
 
 **翻译备注:**
 
@@ -3981,8 +3990,8 @@ TriVertex:
 
 **类/结构体:**
 
-- `[ ]` `class MTRand` (L11, 0 个方法, 2 个成员)
-- `[ ]` `struct MTAutoDisallowRand` (L35, 0 个方法, 0 个成员)
+- `[x]` `class MTRand` (L11, 0 个方法, 2 个成员) — 已在 rust/src/framework/mt_rand.rs 实现
+- `[x]` `struct MTAutoDisallowRand` (L35, 0 个方法, 0 个成员) — 已在 mt_rand.rs 实现
 
 **翻译备注:**
 
@@ -4068,7 +4077,7 @@ TriVertex:
 
 **类/结构体:**
 
-- `[ ]` `class TPoint` (L11, 0 个方法, 3 个成员)
+- `[x]` `class TPoint` (L11, 0 个方法, 3 个成员) — 已在 point.rs 实现
 
 **翻译备注:**
 
@@ -4127,7 +4136,7 @@ TriVertex:
 
 **类/结构体:**
 
-- `[ ]` `struct Ratio` (L8, 0 个方法, 3 个成员)
+- `[x]` `struct Ratio` (L8, 0 个方法, 3 个成员) — 已在 ratio.rs 实现
 
 **翻译备注:**
 
