@@ -1594,7 +1594,7 @@ private:
 
 **自由函数:**
 
-- `[ ]` `private: enum()`
+- `[x]` `private: enum()` — 解析产物，无实际对应；ChallengeScreen 已完整翻译至 challenge_screen.rs
 
 **翻译备注:**
 
@@ -1710,12 +1710,14 @@ public:
 
 **自由函数:**
 
-- `[ ]` `class CreditsOverlay : public Widget()`
+- `[x]` `class CreditsOverlay : public Widget()` — Rust credit_screen.rs:130 已实现
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/widget/credit_screen.rs
+- CreditsOverlay struct 已定义（含字段 parent: Option<*mut CreditScreen>）
+- new() 和 draw() 方法已实现
 ```
 
 ### `[x]` `src\Lawn\Widget\GameButton.cpp`
@@ -1777,21 +1779,27 @@ public:
 
 **类/结构体:**
 
-- `[ ]` `class GameSelector : Widget, ButtonListener` (L29, 0 个方法, 10 个成员)
-- `[ ]` `class GameSelectorOverlay : Widget` (L128, 0 个方法, 1 个成员)
+- `[x]` `class GameSelector : Widget, ButtonListener` (L29, 0 个方法, 10 个成员) — 对应 GameSelectorImpl + WidgetImpl trait
+- `[ ]` `class GameSelectorOverlay : Widget` (L128, 0 个方法, 1 个成员) — Rust 侧未实现
 
 **枚举:**
 
-- `[ ]` `enum SelectorAnimState` → { SELECTOR_OPEN, SELECTOR_NEW_USER, SELECTOR_SHOW_SIGN, SELECTOR_IDLE }
+- `[x]` `enum SelectorAnimState` → { SELECTOR_OPEN, SELECTOR_NEW_USER, SELECTOR_SHOW_SIGN, SELECTOR_IDLE } — 已在 rust/src/lawn/widget/game_selector.rs:45 完整实现
 
 **自由函数:**
 
-- `[ ]` `class GameSelectorOverlay : public Widget()`
+- `[ ]` `class GameSelectorOverlay : public Widget()` — Rust 侧未实现
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/lawn/widget/game_selector.rs
+设计决策:
+- GameSelectorImpl 组合 WidgetImpl trait（draw/update/key_down/mouse_down 等方法已实现）
+- 按钮用 Vec<GameBtnData> 替代 C++ NewLawnButton 数组
+- SelectorAnimState 四个变体全部翻译完成
+- GameSelectorOverlay 尚未实现（draw_overlay 逻辑直接合并在 GameSelectorImpl 中）
+- 33KB 的 Rust 文件对应 1.5KB C++ 头文件 + 1.5KB C++ 实现
 ```
 
 ### `[x]` `src\Lawn\Widget\ImitaterDialog.cpp`
@@ -1856,7 +1864,7 @@ public:
 
 **自由函数:**
 
-- `[ ]` `class LawnDialog : public Dialog()`
+- `[x]` `class LawnDialog : public Dialog()` — Rust lawn_dialog.rs:73 LawnDialog::new() 已实现
 
 **翻译备注:**
 
@@ -1992,10 +2000,10 @@ public:
 
 **自由函数:**
 
-- `[ ]` `class StoreScreen : public Dialog({
+- `[x]` `class StoreScreen : public Dialog({
 private:
-    enum)`
-- `[ ]` `class StoreScreenOverlay : public Widget()`
+    enum)` — Rust store_screen.rs:48 StoreScreen::new() 已实现
+- `[x]` `class StoreScreenOverlay : public Widget()` — Rust store_screen.rs:120 StoreScreenOverlay::new() 已实现
 
 **翻译备注:**
 
@@ -2139,7 +2147,7 @@ private:
 
 **自由函数:**
 
-- `[ ]` `enum ZombieAttackType : int32_t({
+- `[x] `enum ZombieAttackType : int32_t({
     ATTACKTYPE_CHEW,
     ATTACKTYPE_DRIVE_OVER,
     ATTACKTYPE_VAULT,
@@ -2902,7 +2910,7 @@ TodListNode<T> 和 TodList<T> 泛型结构体已实现。
 
 **自由函数:**
 
-- `[ ]` `enum ParticleSystemTracks : int32_t({
+- `[x] `enum ParticleSystemTracks : int32_t({
 	TRACK_SPAWN_RATE,
 	TRACK_SPAWN_MIN_ACTIVE,
 	TRACK_SPAWN_MAX_ACTIVE,
@@ -3342,20 +3350,20 @@ SexyAppBase 结构体已实现。
 
 **类/结构体:**
 
-- `[ ]` `struct TextureDataPiece` (L36, 0 个方法, 1 个成员)
-- `[ ]` `struct GLVertex` (L51, 0 个方法, 6 个成员)
-- `[ ]` `struct VertexList` (L61, 0 个方法, 10 个成员)
-- `[ ]` `struct TextureData` (L124, 0 个方法, 5 个成员)
-- `[ ]` `class GLInterface : NativeDisplay` (L156, 0 个方法, 10 个成员)
+- `[x] `struct TextureDataPiece` (L36, 0 个方法, 1 个成员) — Rust gl_interface.rs:77
+- `[x] `struct GLVertex` (L51, 0 个方法, 6 个成员) — Rust gl_interface.rs:35
+- `[x] `struct VertexList` (L61, 0 个方法, 10 个成员) — Rust gl_interface.rs:1338
+- `[x] `struct TextureData` (L124, 0 个方法, 5 个成员) — Rust gl_interface.rs:490
+- `[x] `class GLInterface : NativeDisplay` (L156, 0 个方法, 10 个成员) — Rust gl_interface.rs:1528
 
 **枚举:**
 
-- `[ ]` `enum RenderImageFlags` → { RenderImageFlag_MinimizeNumSubdivisions, RenderImageFlag_Use64By64Subdivisions, RenderImageFlag_UseA4R4G4B4, RenderImageFlag_UseA8R8G8B8, RenderImageFlag_Repeat, ... (6 个值) }
-- `[ ]` `enum PixelFormat` → { PixelFormat_Unknown, PixelFormat_A8R8G8B8, PixelFormat_A4R4G4B4, PixelFormat_R5G6B5, PixelFormat_Palette8 }
+- `[ ] `enum RenderImageFlags` → { RenderImageFlag_MinimizeNumSubdivisions, RenderImageFlag_Use64By64Subdivisions, RenderImageFlag_UseA4R4G4B4, RenderImageFlag_UseA8R8G8B8, RenderImageFlag_Repeat, ... (6 个值) } — Rust 侧未实现
+- `[x] `enum PixelFormat` → { PixelFormat_Unknown, PixelFormat_A8R8G8B8, PixelFormat_A4R4G4B4, PixelFormat_R5G6B5, PixelFormat_Palette8 } — Rust gl_interface.rs:66
 
 **自由函数:**
 
-- `[ ]` `class GLInterface : public NativeDisplay()`
+- `[x] `class GLInterface : public NativeDisplay()` — Rust gl_interface.rs + native_display.rs 已实现
 
 **翻译备注:**
 
@@ -3399,10 +3407,10 @@ SexyAppBase 结构体已实现。
 
 **类/结构体:**
 
-- `[ ]` `struct Edge` (L21, 0 个方法, 4 个成员)
-- `[ ]` `class GraphicsState` (L31, 0 个方法, 10 个成员)
-- `[ ]` `class Graphics : GraphicsState` (L58, 0 个方法, 4 个成员)
-- `[ ]` `class GraphicsAutoState` (L182, 0 个方法, 1 个成员)
+- `[x] `struct Edge` (L21, 0 个方法, 4 个成员) — Rust graphics.rs:26
+- `[x] `class GraphicsState` (L31, 0 个方法, 10 个成员) — Rust graphics.rs:99
+- `[x] `class Graphics : GraphicsState` (L58, 0 个方法, 4 个成员) — Rust graphics.rs:47
+- `[x] `class GraphicsAutoState` (L182, 0 个方法, 1 个成员) — Rust graphics.rs:1801
 
 **翻译备注:**
 
@@ -3432,13 +3440,13 @@ SexyAppBase 结构体已实现。
 
 **类/结构体:**
 
-- `[ ]` `struct Span` (L14, 0 个方法, 3 个成员)
-- `[ ]` `struct AnimInfo` (L29, 0 个方法, 6 个成员)
-- `[ ]` `class Image` (L51, 0 个方法, 7 个成员)
+- `[x] `struct Span` (L14, 0 个方法, 3 个成员) — Rust image.rs:18
+- `[x] `struct AnimInfo` (L29, 0 个方法, 6 个成员) — Rust image.rs:36
+- `[x] `class Image` (L51, 0 个方法, 7 个成员) — Rust image.rs:158
 
 **枚举:**
 
-- `[ ]` `enum AnimType` → { AnimType_None, AnimType_Once, AnimType_PingPong, AnimType_Loop }
+- `[x] `enum AnimType` → { AnimType_None, AnimType_Once, AnimType_PingPong, AnimType_Loop } — Rust image.rs:27
 
 **翻译备注:**
 
@@ -3468,16 +3476,16 @@ SexyAppBase 结构体已实现。
 
 **类/结构体:**
 
-- `[ ]` `class CharData` (L20, 0 个方法, 5 个成员)
-- `[ ]` `class FontLayer` (L36, 0 个方法, 10 个成员)
-- `[ ]` `class FontData : DescParser` (L75, 0 个方法, 9 个成员)
-- `[ ]` `class ActiveFontLayer` (L110, 0 个方法, 5 个成员)
-- `[ ]` `class RenderCommand` (L128, 0 个方法, 7 个成员)
-- `[ ]` `class ImageFont : _Font` (L142, 0 个方法, 8 个成员)
+- `[x] `class CharData` (L20, 0 个方法, 5 个成员) — Rust image_font.rs:29
+- `[x] `class FontLayer` (L36, 0 个方法, 10 个成员) — Rust image_font.rs:69
+- `[x] `class FontData : DescParser` (L75, 0 个方法, 9 个成员) — Rust image_font.rs:161
+- `[x] `class ActiveFontLayer` (L110, 0 个方法, 5 个成员) — Rust image_font.rs:799
+- `[x] `class RenderCommand` (L128, 0 个方法, 7 个成员) — Rust image_font.rs:837
+- `[x] `class ImageFont : _Font` (L142, 0 个方法, 8 个成员) — Rust image_font.rs:859
 
 **自由函数:**
 
-- `[ ]` `class FontData : public DescParser()`
+- `[x] `class FontData : public DescParser()` — Rust image_font.rs 中已实现
 
 **翻译备注:**
 
@@ -3508,7 +3516,7 @@ SexyAppBase 结构体已实现。
 
 **类/结构体:**
 
-- `[ ]` `class MemoryImage : Image` (L21, 0 个方法, 10 个成员)
+- `[x] `class MemoryImage : Image` (L21, 0 个方法, 10 个成员) — Rust memory_image.rs:24
 
 **翻译备注:**
 
@@ -3537,7 +3545,7 @@ SexyAppBase 结构体已实现。
 
 **类/结构体:**
 
-- `[ ]` `class NativeDisplay` (L12, 0 个方法, 10 个成员)
+- `[x] `class NativeDisplay` (L12, 0 个方法, 10 个成员) — Rust native_display.rs:10
 
 **翻译备注:**
 
@@ -3748,8 +3756,8 @@ SexyAppBase 结构体已实现。
 
 **类/结构体:**
 
-- `[ ]` `class SharedImage` (L16, 0 个方法, 2 个成员)
-- `[ ]` `class SharedImageRef` (L27, 0 个方法, 6 个成员)
+- `[x] `class SharedImage` (L16, 0 个方法, 2 个成员) — Rust shared_image.rs:18
+- `[x] `class SharedImageRef` (L27, 0 个方法, 6 个成员) — Rust shared_image.rs:41
 
 **翻译备注:**
 
@@ -4216,15 +4224,15 @@ SexyAppBase 结构体已实现。
 
 **类/结构体:**
 
-- `[ ]` `class ResourceManager` (L30, 0 个方法, 10 个成员)
-- `[ ]` `struct BaseRes` (L41, 0 个方法, 6 个成员)
-- `[ ]` `struct ImageRes : BaseRes` (L54, 0 个方法, 10 个成员)
-- `[ ]` `struct SoundRes : BaseRes` (L76, 0 个方法, 3 个成员)
-- `[ ]` `struct FontRes : BaseRes` (L86, 0 个方法, 8 个成员)
+- `[x] `class ResourceManager` (L30, 0 个方法, 10 个成员) — Rust resource_manager.rs:90
+- `[x] `struct BaseRes` (L41, 0 个方法, 6 个成员) — Rust resource_manager.rs:30
+- `[x] `struct ImageRes : BaseRes` (L54, 0 个方法, 10 个成员) — Rust resource_manager.rs:47
+- `[x] `struct SoundRes : BaseRes` (L76, 0 个方法, 3 个成员) — Rust resource_manager.rs:62
+- `[x] `struct FontRes : BaseRes` (L86, 0 个方法, 8 个成员) — Rust resource_manager.rs:71
 
 **枚举:**
 
-- `[ ]` `enum ResType` → { ResType_Image, ResType_Sound, ResType_Font }
+- `[x] `enum ResType` → { ResType_Image, ResType_Sound, ResType_Font } — Rust resource_manager.rs:22
 
 **翻译备注:**
 
@@ -4255,9 +4263,9 @@ SexyAppBase 结构体已实现。
 
 **类/结构体:**
 
-- `[ ]` `class SexyMatrix3` (L13, 0 个方法, 1 个成员)
-- `[ ]` `class SexyTransform2D : SexyMatrix3` (L41, 0 个方法, 1 个成员)
-- `[ ]` `class Transform` (L63, 0 个方法, 3 个成员)
+- `[x] `class SexyMatrix3` (L13, 0 个方法, 1 个成员) — Rust sexy_matrix.rs:9
+- `[x] `class SexyTransform2D : SexyMatrix3` (L41, 0 个方法, 1 个成员) — Rust sexy_matrix.rs 中已实现
+- `[x] `class Transform` (L63, 0 个方法, 3 个成员) — Rust sexy_matrix.rs:169
 
 **翻译备注:**
 
@@ -4274,8 +4282,8 @@ SexyAppBase 结构体已实现。
 
 **类/结构体:**
 
-- `[ ]` `class SexyVector2` (L13, 0 个方法, 2 个成员)
-- `[ ]` `class SexyVector3` (L52, 0 个方法, 2 个成员)
+- `[x] `class SexyVector2` (L13, 0 个方法, 2 个成员) — Rust common.rs:220
+- `[ ] `class SexyVector3` (L52, 0 个方法, 2 个成员) — Rust 侧未实现
 
 **翻译备注:**
 
@@ -4361,11 +4369,11 @@ SexyAppBase 结构体已实现。
 
 **类/结构体:**
 
-- `[ ]` `class PakRecord` (L20, 0 个方法, 5 个成员)
-- `[ ]` `class PakCollection` (L35, 0 个方法, 1 个成员)
-- `[ ]` `struct PFILE` (L49, 0 个方法, 3 个成员)
-- `[ ]` `class PakInterfaceBase` (L56, 0 个方法, 0 个成员)
-- `[ ]` `class PakInterface : PakInterfaceBase` (L70, 0 个方法, 2 个成员)
+- `[x] `class PakRecord` (L20, 0 个方法, 5 个成员) — Rust paklib/mod.rs:45
+- `[x] `class PakCollection` (L35, 0 个方法, 1 个成员) — Rust paklib/mod.rs:59
+- `[ ] `struct PFILE` (L49, 0 个方法, 3 个成员) — Rust 侧未实现
+- `[ ] `class PakInterfaceBase` (L56, 0 个方法, 0 个成员) — Rust 侧未实现
+- `[x] `class PakInterface : PakInterfaceBase` (L70, 0 个方法, 2 个成员) — Rust paklib/mod.rs:243
 
 **翻译备注:**
 
