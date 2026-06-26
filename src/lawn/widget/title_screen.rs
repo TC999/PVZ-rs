@@ -657,24 +657,28 @@ impl WidgetImpl for TitleScreenImpl {
         }
     }
 
-    fn key_down(&mut self, widget: &mut Widget, key: KeyCode, wm: &mut WidgetManager) {
-        let _ = (widget, wm);
-        let app = unsafe { &mut *self.app };
-
-        if self.loading_thread_complete {
-            app.loading_completed();
-            return;
-        }
-
-        self.quick_load_key = key;
-    }
-
     fn mouse_down_btn(&mut self, widget: &mut Widget, x: i32, y: i32, btn: i32, click: i32) {
         let _ = (widget, x, y, btn, click);
         let app = unsafe { &mut *self.app };
 
         if self.loading_thread_complete && self.title_state == TitleState::Running {
+            // C++: 播放点击音效
+            //app.play_sample(crate::framework::common::SOUND_BUTTONCLICK);
             app.loading_completed();
         }
+    }
+
+    fn key_down(&mut self, widget: &mut Widget, key: KeyCode, wm: &mut WidgetManager) {
+        let _ = (widget, wm);
+        let app = unsafe { &mut *self.app };
+
+        if self.loading_thread_complete {
+            // C++: 播放点击音效
+            //app.play_sample(crate::framework::common::SOUND_BUTTONCLICK);
+            app.loading_completed();
+            return;
+        }
+
+        self.quick_load_key = key;
     }
 }

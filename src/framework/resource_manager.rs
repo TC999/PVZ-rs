@@ -556,7 +556,16 @@ impl ResourceManager {
     pub fn replace_font(&mut self, _id: &str, _font: *mut Font) -> bool { false }
 
     /// 删除图像资源（对应 C++ DeleteImage）
-    pub fn delete_image(&mut self, _name: &str) {}
+    /// 删除图像资源（对应 C++ DeleteImage）
+    pub fn delete_image(&mut self, name: &str) {
+        let lower = string_to_lower(name);
+        if let Some(res_ptr) = self.image_map.remove(&lower) {
+            unsafe {
+                // 释放资源（SharedImageRef 在 drop 时会自动释放图像内存）
+                let _ = Box::from_raw(res_ptr);
+            }
+        }
+    }
 
     /// 加载图像（对应 C++ LoadImage）
     pub fn load_image(&mut self, _name: &str) -> SharedImageRef { SharedImageRef::new() }
@@ -635,3 +644,4 @@ impl Drop for ResourceManager {
         }
     }
 }
+
