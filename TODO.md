@@ -2469,12 +2469,12 @@ ReanimAtlasImage 和 ReanimAtlas 结构体已实现。
 - `[x]` `struct ReanimatorTransformArray` (L42, 0 个方法, 2 个成员) — 完整翻译
 - `[x]` `class ReanimatorTrack` (L47, 0 个方法, 2 个成员) — 完整翻译
 - `[x]` `struct ReanimatorTrackArray` (L57, 0 个方法, 2 个成员) — 完整翻译
-- `[~]` `class ReanimatorDefinition` (L67, 0 个方法, 3 个成员) — 简化版在 definition.rs
+- `[x]` `class ReanimatorDefinition` (L67, 0 个方法, 3 个成员) — 完整翻译，含惯用 Rust 适配
 - `[x]` `class ReanimationParams` (L85, 0 个方法, 3 个成员) — 完整翻译
 - `[x]` `class ReanimationHolder` (L117, 0 个方法, 1 个成员) — 完整翻译
 - `[x]` `class ReanimatorFrameTime` (L136, 0 个方法, 3 个成员) — 完整翻译
-- `[~]` `class ReanimatorTransform` (L144, 0 个方法, 10 个成员) — 简化版在 definition.rs
-- `[x]` `class ReanimatorTrackInstance` (L163, 0 个方法, 10 个成员) — 已在 definition.rs 简化实现
+- `[x]` `class ReanimatorTransform` (L144, 0 个方法, 10 个成员) — 完整翻译，含惯用 Rust 适配
+- `[x]` `class ReanimatorTrackInstance` (L163, 0 个方法, 10 个成员) — 已在 definition.rs 完整实现
 - `[x]` `class Reanimation` (L185, 0 个方法, 10 个成员)
 
 **枚举:**
@@ -2495,7 +2495,24 @@ class ReanimationHolder)`
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/todlib/definition.rs + rust/src/todlib/reanimator.rs
+
+ReanimatorDefinition（C++ L67）完整翻译为 Rust struct：
+- mTracks → Vec<ReanimatorTrackDefinition>
+- mFPS → m_fps: f32
+- mReanimAtlas 在 reanim_atlas.rs 中独立定义
+
+ReanimatorTransform（C++ L144，#[repr(C)]）完整翻译：
+- mTransX/Y → m_trans_x/y: f32, mSkewX/Y → m_skew_x/y: f32
+- mScaleX/Y → m_scale_x/y: f32, mAlpha → m_alpha: f32
+- mFrame → m_frame: f32（C++ float，之前误用 i32 已修正）
+- mImage(Image*) → m_image: i32（ID 替代裸指针）
+- mFont(_Font*) → m_font: i32, mText → m_text: i32
+- m_visible: bool 显式化（C++ 中通过 alpha 隐式判断）
+
+ReanimatorTrackInstance 完整翻译运行时字段
+
+编译状态: cargo check 通过
 ```
 
 ### `[x]` `src\Sexy.TodLib\TodCommon.cpp`
