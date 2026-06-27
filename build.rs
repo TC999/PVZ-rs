@@ -6,8 +6,84 @@
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 
+    copy_game_assets();
+
     #[cfg(target_os = "windows")]
     setup_sdl2_mixer_windows();
+}
+
+/// 将 properties/ 目录和 main.pak 复制到目标输出目录（target/{profile}/）
+/// 这些文件是游戏运行所需的资源。如果不存在则静默跳过。
+fn copy_game_assets() {
+    use std::path::PathBuf;
+    use std::{env, fs};
+
+    let proj = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
+    let target_dir = proj.join("target").join(&profile);
+
+    // 确保目标目录存在
+    let _ = fs::create_dir_all(&target_dir);
+
+    // 复制 main.pak
+    let pak_src = proj.join("main.pak");
+    if pak_src.exists() {
+        let pak_dst = target_dir.join("main.pak");
+        if fs::copy(&pak_src, &pak_dst).is_ok() {
+            println!("cargo:warning=已复制 main.pak -> {}", pak_dst.display());
+        }
+    } else {
+        println!("cargo:warning=main.pak 未找到，跳过复制 (运行时需要此文件)");
+    }
+
+    // 复制 properties/ 目录
+    let props_src = proj.join("properties");
+    if props_src.exists() && props_src.is_dir() {
+        let props_dst = target_dir.join("properties");
+        let _ = fs::remove_dir_all(&props_dst);
+        if copy_dir_recursively(&props_src, &props_dst) {
+            println!("cargo:warning=已复制 properties/ -> {}", props_dst.display());
+        }
+    } else {
+        println!("cargo:warning=properties/ 未找到，跳过复制 (运行时需要此目录)");
+    }
+}
+
+/// 递归复制目录内容
+fn copy_dir_recursively(src: &std::path::Path, dst: &std::path::Path) -> bool {
+    use std::fs;
+
+    if !dst.exists() {
+        if fs::create_dir_all(dst).is_err() {
+            return false;
+        }
+    }
+
+    if let Ok(entries) = fs::read_dir(src) {
+        for entry in entries {
+            if let Ok(entry) = entry {
+                let file_type = match entry.file_type() {
+                    Ok(t) => t,
+                    Err(_) => continue,
+                };
+                let src_path = entry.path();
+                let dst_path = dst.join(entry.file_name());
+
+                if file_type.is_dir() {
+                    if !copy_dir_recursively(&src_path, &dst_path) {
+                        return false;
+                    }
+                } else if file_type.is_file() {
+                    if fs::copy(&src_path, &dst_path).is_err() {
+                        return false;
+                    }
+                }
+            }
+        }
+        true
+    } else {
+        false
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -43,20 +119,17 @@ fn setup_sdl2_mixer_windows() {
         println!("cargo:rustc-link-search={}", dest.display());
         println!("cargo:warning=SDL2_mixer .lib: {}\\SDL2_mixer.lib ({})", dest.display(), arch_dir);
 
-        // 复制 DLL
+        // 复制 DLL 到正确的输出目录
         let dll_src = dest.join("SDL2_mixer.dll");
         if dll_src.exists() {
-            // target 目录就在项目目录下
-            let target_root = proj.join("target");
-            for sub in &["debug", "release"] {
-                let dll_dst = target_root.join(sub).join("SDL2_mixer.dll");
-                if let Some(parent) = dll_dst.parent() {
-                    let _ = fs::create_dir_all(parent);
-                }
-                if fs::copy(&dll_src, &dll_dst).is_ok() {
-                    println!("cargo:warning=SDL2_mixer.dll -> {}", dll_dst.display());
-                };
+            let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
+            let dll_dst = proj.join("target").join(&profile).join("SDL2_mixer.dll");
+            if let Some(parent) = dll_dst.parent() {
+                let _ = fs::create_dir_all(parent);
             }
+            if fs::copy(&dll_src, &dll_dst).is_ok() {
+                println!("cargo:warning=SDL2_mixer.dll -> {}", dll_dst.display());
+            };
         }
     } else {
         println!("cargo:warning=SDL2_mixer.lib 未找到，请手动下载开发包到:");
@@ -69,7 +142,7 @@ fn setup_sdl2_mixer_windows() {
 fn download_and_extract(version: &str, arch_dir: &std::path::Path, done_file: &std::path::Path, arch_label: &str) {
     use std::process::Command;
 
-    // 下载到项目 SDL2_mixer-{version}/ 目录
+    // 将 properties/ 目录以及 main.pak 复制到程序目录下
     let sdk_dir = arch_dir.parent().unwrap().parent().unwrap(); // lib 的父父目录
     let zip_path = sdk_dir.join("SDL2_mixer.zip");
     let extract_dir = sdk_dir.join("_extract");
