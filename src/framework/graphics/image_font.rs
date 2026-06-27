@@ -7,6 +7,7 @@
 #![allow(dead_code)]
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Mutex;
 
 use crate::framework::color::Color;
@@ -167,7 +168,7 @@ pub struct FontData {
     pub define_map: DataElementMap,
     /// FontData 特有字段
     pub initialized: bool,
-    pub ref_count: i32,
+    pub ref_count: AtomicI32,
     pub app: *mut (),
     pub default_point_size: i32,
     pub char_map: CharMap,
@@ -186,7 +187,7 @@ impl FontData {
             current_line: String::new(),
             define_map: HashMap::new(),
             initialized: false,
-            ref_count: 0,
+            ref_count: AtomicI32::new(0),
             app: std::ptr::null_mut(),
             default_point_size: 0,
             char_map: HashMap::new(),
@@ -199,13 +200,18 @@ impl FontData {
 
     /// 增加引用计数
     pub fn ref_count_inc(&mut self) {
-        self.ref_count += 1;
+        self.ref_count.fetch_add(1, Ordering::Relaxed);
     }
 
     /// 减少引用计数，归零时返回 true（对应 C++ DeRef）
     pub fn ref_count_dec(&mut self) -> bool {
-        self.ref_count -= 1;
-        self.ref_count == 0
+        let prev = self.ref_count.fetch_sub(1, Ordering::Release);
+        if prev == 1 {
+            std::sync::atomic::fence(Ordering::Acquire);
+            true
+        } else {
+            false
+        }
     }
 
     /// 加载字体描述文件（对应 C++ Load）
@@ -405,7 +411,7 @@ impl DescParser for FontData {
                 }
                 false
             }
-            "SETCHARMAN" => {
+            "SETCHARMAP" => {
                 if list.len() == 3 {
                     let mut from_vec = Vec::new();
                     let mut to_vec = Vec::new();
@@ -1513,6 +1519,33 @@ impl ImageFont {
         } else {
             unsafe { (*self.font_data).default_point_size }
         }
+    }
+
+    // ---- 基类接口方法（对应 C++ _Font::GetAscent/GetHeight 等，自缓存字段读取） ----
+
+    /// 获取上升高度（对应 C++ GetAscent）
+    pub fn get_ascent(&self) -> i32 {
+        self.ascent
+    }
+
+    /// 获取字体高度（对应 C++ GetHeight）
+    pub fn get_height(&self) -> i32 {
+        self.height
+    }
+
+    /// 获取上升填充（对应 C++ GetAscentPadding）
+    pub fn get_ascent_padding(&self) -> i32 {
+        self.ascent_padding
+    }
+
+    /// 获取行间距偏移（对应 C++ GetLineSpacingOffset）
+    pub fn get_line_spacing_offset(&self) -> i32 {
+        self.line_spacing_offset
+    }
+
+    /// 获取行距（含偏移，对应 C++ GetLineSpacing）
+    pub fn get_line_spacing(&self) -> i32 {
+        self.height + self.line_spacing_offset
     }
 
     pub fn add_tag(&mut self, tag: &str) -> bool {
