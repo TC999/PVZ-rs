@@ -30,10 +30,14 @@ properties/ 目录
 
 ## 使用方法：
 1. 从[GitHub Actions](https://github.com/TC999/PVZ-rs/actions)下载 CI 产物
-3. 从[此处](https://lib.openmpt.org/files/libopenmpt/dev/)下载带`windows`的版本，提取`bin/架构代号/libopenmpt.dll`
-4. 把上述文件全部复制到原版游戏目录下
+1. （非必须）从[此处][libopenmpt]下载带`windows`的版本，提取`bin/架构代号/libopenmpt.dll`
+1. 把上述文件全部复制到原版游戏目录下
 
 ## 编译方法
+> ![tips]
+>
+> 提示：`build.rs`中有自动复制原始游戏素材到程序目录的逻辑，无需手动操作。你只需要把正版游戏的`properties/`目录以及`main.pak`放到本项目根目录下即可。
+
 1. 安装 Rust 和 Git
 2. 克隆项目
 ```bash
@@ -62,7 +66,7 @@ properties/ 目录
 - 感谢 DeepSeek 提供的廉价大模型！
 
 ## ⚠️ 开发者叠甲时间(关于本项目含硅量的声明)
-> **太长不看版**: 没错,这是一个纯正的 Vibe-coded(**凭感觉编程**) 项目!
+> **太长不看版**: 没错,这是一个纯正的 Vibe-coding(**凭感觉编程**) 项目!
 >
 > **坦白局**: 本项目含有大量由 LLM 辅助生成的底层代码。如果你在翻看 commit 记录时闻到了一股浓浓的"AI 味",自信点,你的直觉非常准确。
 >
@@ -73,6 +77,9 @@ properties/ 目录
 [gpl3]: https://www.gnu.org/licenses/gpl-3.0.en.html
 [steam-link]: https://store.steampowered.com/app/3590/Plants_vs_Zombies_GOTY_Edition/
 [ea-link]: https://www.ea.com/games/plants-vs-zombies/plants-vs-zombies
+
+[libopenmpt]: https://lib.openmpt.org/files/libopenmpt/dev/
+
 
 [wszqkzqk]: https://github.com/wszqkzqk
 [PvZ-Portable]: https://github.com/wszqkzqk/PvZ-Portable
