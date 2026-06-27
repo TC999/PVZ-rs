@@ -9,7 +9,7 @@ use crate::framework::rect::Rect;
 /// 字体基类（对应 C++ _Font）
 /// 在 C++ 中 Font 是基类，由 SysFont 和 ImageFont 继承。
 /// Rust 版本将常用方法作为默认实现，子类型可以通过其他方式扩展。
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Font {
     /// 字体名称
     pub name: String,
@@ -31,6 +31,8 @@ pub struct Font {
     pub descent: i32,
     /// 基线填充（额外留白）
     pub ascent_padding: i32,
+    /// 行间距偏移（C++ mLineSpacingOffset）
+    pub line_spacing_offset: i32,
 }
 
 impl Font {
@@ -46,6 +48,7 @@ impl Font {
             ascent: (size as f64 * 0.85) as i32,
             descent: (size as f64 * 0.15) as i32,
             ascent_padding: 0,
+            line_spacing_offset: 0,
         }
     }
 
@@ -87,14 +90,28 @@ impl Font {
         self.ascent_padding
     }
 
-    /// 获取下降高度
-    pub fn get_descent(&self) -> i32 {
-        self.descent
+    /// 获取字体高度
+    /// 对应 C++ GetHeight()
+    pub fn get_height(&self) -> i32 {
+        self.font_height
     }
 
-    /// 获取行距
+    /// 获取下降高度
+    /// 对应 C++ GetDescent()，计算方式：font_height - ascent
+    pub fn get_descent(&self) -> i32 {
+        self.font_height - self.ascent
+    }
+
+    /// 获取行距偏移
+    /// 对应 C++ GetLineSpacingOffset()
+    pub fn get_line_spacing_offset(&self) -> i32 {
+        self.line_spacing_offset
+    }
+
+    /// 获取行距（含偏移）
+    /// 对应 C++ GetLineSpacing()，计算方式：font_height + line_spacing_offset
     pub fn get_line_spacing(&self) -> i32 {
-        self.line_spacing
+        self.font_height + self.line_spacing_offset
     }
 
     /// 绘制字符串（默认实现）
