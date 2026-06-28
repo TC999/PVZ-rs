@@ -30,7 +30,7 @@ properties/ 目录
 
 ## 使用方法：
 1. 从[GitHub Actions](https://github.com/TC999/PVZ-rs/actions)下载 CI 产物
-1. （非必须）从[此处][libopenmpt]下载带`windows`的版本，提取`bin/架构代号/libopenmpt.dll`
+1. （仅 Windows，非必须）从[此处][libopenmpt]下载带`windows`的版本，提取`bin/架构代号/libopenmpt.dll`
 1. 把上述文件全部复制到原版游戏目录下
 
 ## 编译方法
