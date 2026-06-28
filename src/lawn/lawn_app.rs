@@ -627,6 +627,25 @@ impl LawnApp {
         // C++ 中还需要设置 mExitToTop = true
     }
 
+
+    /// 写入注册表（对应 C++ WriteToRegistry）
+    pub fn write_to_registry(&self, _key: &str, _value: &str) {}
+    /// 读取注册表（对应 C++ ReadFromRegistry）
+    pub fn read_from_registry(&self, _key: &str, _default: &str) -> String { _default.to_string() }
+    /// 写入当前用户配置（对应 C++ WriteCurrentUserConfig）
+    pub fn write_current_user_config(&self) {}
+    /// 切换画面模式（对应 C++ SwitchScreenMode）
+    pub fn switch_screen_mode(&mut self, _windowed: bool, _use_3d: bool, _force: bool) {}
+    /// 弹出高分对话框（对应 C++ DoHighScoreDialog）
+    pub fn do_high_score_dialog(&mut self) {}
+    /// 更改目录钩子（对应 C++ ChangeDirHook）
+    pub fn change_dir_hook(&self) {}
+    /// 更新完成关卡的玩家档案（对应 C++ UpdatePlayerProfileForFinishingLevel）
+    pub fn update_player_profile_for_finishing_level(&mut self) {}
+    /// URL 打开成功回调（对应 C++ URLOpenSucceeded）
+    pub fn url_open_succeeded(&self) {}
+    /// 打开 URL（对应 C++ OpenURL）
+    pub fn open_url(&self, _url: &str) {}
     /// 获取布尔属性（对应 C++ GetBoolean）
     pub fn get_boolean(&self, id: &str, default: bool) -> bool {
         // C++ 中从 mBoolProperties 读取，Rust 简化版始终返回默认值

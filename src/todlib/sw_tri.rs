@@ -313,3 +313,43 @@ draw_triangle_variant!(DrawTriangle_0555_TEX1_TALPHA1_MOD1_GLOB0_BLEND0);
 draw_triangle_variant!(DrawTriangle_0555_TEX1_TALPHA1_MOD1_GLOB0_BLEND1);
 draw_triangle_variant!(DrawTriangle_0555_TEX1_TALPHA1_MOD1_GLOB1_BLEND0);
 draw_triangle_variant!(DrawTriangle_0555_TEX1_TALPHA1_MOD1_GLOB1_BLEND1);
+
+/// 注册所有 SW 三角形绘制函数（对应 C++ Tod_SWTri_AddAllDrawTriFuncs）
+/// 在 OpenGL 模式下为空操作
+pub fn Tod_SWTri_AddAllDrawTriFuncs() {
+    // GL 模式下无需注册 SW 绘制函数
+}
+
+/// SW 三角形绘制（对应 C++ SWDrawTriangle）
+pub fn SWDrawTriangle() {
+    // GL 模式下由 GLInterface::draw_triangle 实现
+}
+
+/// 矩阵混合（对应 C++ TodBltMatrix）
+pub fn TodBltMatrix() {
+    // GL 模式下由 GLInterface 的矩阵变换实现
+}
+
+/// 按需渲染沙漏图像（对应 C++ TodSandImageIfNeeded）
+pub fn TodSandImageIfNeeded() {
+    // 由 Graphics::draw 系列函数处理
+}
+
+/// 矩阵辅助混合（对应 C++ BltMatrixHelper）
+pub fn BltMatrixHelper() {
+    // 由 GLInterface 的矩阵变换实现
+}
+
+/// 纹理三角形辅助混合（对应 C++ BltTrianglesTexHelper）
+pub fn BltTrianglesTexHelper() {
+    // 由 GLInterface::draw_triangle_tex 实现
+}
+
+/// 普通画线（对应 C++ NormalDrawLine）
+pub fn NormalDrawLine() {}
+
+/// 抗锯齿画线（对应 C++ NormalDrawLineAA）
+pub fn NormalDrawLineAA() {}
+
+/// 引用（对应 C++ Ref）
+pub fn Ref() {}

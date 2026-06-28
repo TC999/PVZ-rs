@@ -152,3 +152,11 @@ pub fn draw_credits_content(g: &mut Graphics, y_pos: i32, do_draw: bool) -> i32 
     a_y += line_height + 20;
     a_y
 }
+
+/// 绘制预加载画面（对应 C++ DrawToPreload）
+pub fn draw_to_preload(g: &mut Graphics) {
+    g.set_color(&Color::BLACK);
+    g.fill_rect_xywh(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
+    g.set_color(&Color::WHITE);
+    g.draw_string("Loading...", BOARD_WIDTH / 2 - 30, BOARD_HEIGHT / 2);
+}

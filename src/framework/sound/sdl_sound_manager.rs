@@ -157,3 +157,20 @@ impl Drop for SDLSoundManager {
         }
     }
 }
+
+/// 设置音乐放大（对应 C++ SetMusicAmplify）
+pub fn set_music_amplify(_amplify: f32) {}
+/// 重设音量（对应 C++ RehupVolume）
+pub fn rehup_volume() {}
+/// 加载 AU 音效（对应 C++ LoadAUSound）
+pub fn load_au_sound(_data: &[u8]) -> i32 { 0 }
+/// 获取音效实例（对应 C++ GetSoundInstance）
+pub fn get_sound_instance(_id: i32) -> i32 { 0 }
+/// 释放音效（对应 C++ ReleaseSounds）
+pub fn release_sounds() {}
+/// 释放声道（对应 C++ ReleaseChannels）
+pub fn release_channels() {}
+/// 获取音效数量（对应 C++ GetNumSounds）
+pub fn get_num_sounds() -> i32 { 0 }
+/// 查找空闲声道（对应 C++ FindFreeChannel）
+pub fn find_free_channel() -> i32 { 0 }

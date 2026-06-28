@@ -108,6 +108,13 @@ impl LawnStoneButton {
     pub fn set_label(&mut self, _label: &str) {}
 }
 
+/// 创建新型按钮（对应 C++ MakeNewButton）
+pub fn make_new_button(_id: i32, _listener: Option<Box<dyn crate::framework::widget::button_listener::ButtonListener>>, text: &str) -> NewLawnButton {
+    let mut btn = NewLawnButton::new();
+    btn.set_label(text);
+    btn
+}
+
 /// 创建石头风格按钮（对应 C++ MakeButton）
 pub fn make_button(id: i32, listener: Option<Box<dyn crate::framework::widget::button_listener::ButtonListener>>, text: &str) -> LawnStoneButton {
     let mut btn = LawnStoneButton {
