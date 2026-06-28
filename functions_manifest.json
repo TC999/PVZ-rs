@@ -1,0 +1,2777 @@
+[
+  {
+    "name": "GetFlashingColor",
+    "signature": "Color (uint32_t, int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_SetMusicEffectPosition",
+    "signature": "int (Mix_Music *, Sint16, Uint8)",
+    "line": 0
+  },
+  {
+    "name": "Mix_SetMusicEffectDistance",
+    "signature": "int (Mix_Music *, Uint8)",
+    "line": 0
+  },
+  {
+    "name": "Mix_SetMusicEffectReverseStereo",
+    "signature": "int (Mix_Music *, int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_ReserveChannels",
+    "signature": "int (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_FadeInMusic",
+    "signature": "int (Mix_Music *, int, int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_ModMusicSetChannelMute",
+    "signature": "int (int, int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_ModMusicSetChannelVolume",
+    "signature": "int (int, int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_StartTrack",
+    "signature": "int (Mix_Music *, int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_GetNumTracks",
+    "signature": "int (Mix_Music *)",
+    "line": 0
+  },
+  {
+    "name": "Mix_SetMusicPositionStream",
+    "signature": "int (Mix_Music *, double)",
+    "line": 0
+  },
+  {
+    "name": "Mix_SetMusicPosition",
+    "signature": "int (double)",
+    "line": 0
+  },
+  {
+    "name": "Mix_SetMusicTempo",
+    "signature": "int (Mix_Music *, double)",
+    "line": 0
+  },
+  {
+    "name": "Mix_GetMusicTempo",
+    "signature": "double (Mix_Music *)",
+    "line": 0
+  },
+  {
+    "name": "Mix_GetMusicLoopStartTime",
+    "signature": "double (Mix_Music *)",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_getBankNames",
+    "signature": "const char *const *()",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_getBankID",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_setBankID",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_getTremolo",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_setTremolo",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_getVibrato",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_setVibrato",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_getScaleMod",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_setScaleMod",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_getAdLibMode",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_setAdLibMode",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_getLogarithmicVolumes",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_setLogarithmicVolumes",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_getVolumeModel",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_setVolumeModel",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_getFullRangeBrightness",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_setFullRangeBrightness",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_getAutoArpeggio",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_setAutoArpeggio",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_getChannelAllocMode",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_setChannelAllocMode",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_getFullPanStereo",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_setFullPanStereo",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_getEmulator",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_setEmulator",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_getChipsCount",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_setChipsCount",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_setSetDefaults",
+    "signature": "void ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_ADLMIDI_setCustomBankFile",
+    "signature": "void (const char *)",
+    "line": 0
+  },
+  {
+    "name": "Mix_OPNMIDI_setSetDefaults",
+    "signature": "void ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_OPNMIDI_getVolumeModel",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_OPNMIDI_setVolumeModel",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_OPNMIDI_getFullRangeBrightness",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_OPNMIDI_setFullRangeBrightness",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_OPNMIDI_getAutoArpeggio",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_OPNMIDI_setAutoArpeggio",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_OPNMIDI_getChannelAllocMode",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_OPNMIDI_setChannelAllocMode",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_OPNMIDI_getFullPanStereo",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_OPNMIDI_setFullPanStereo",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_OPNMIDI_getEmulator",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_OPNMIDI_setEmulator",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_OPNMIDI_getChipsCount",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_OPNMIDI_setChipsCount",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_OPNMIDI_setCustomBankFile",
+    "signature": "void (const char *)",
+    "line": 0
+  },
+  {
+    "name": "Mix_GME_SetSpcEchoDisabled",
+    "signature": "void (Mix_Music *, int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_GME_GetSpcEchoDisabled",
+    "signature": "int (Mix_Music *)",
+    "line": 0
+  },
+  {
+    "name": "Mix_GetMidiPlayer",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_GetNextMidiPlayer",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_SetMidiPlayer",
+    "signature": "int (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_SetLockMIDIArgs",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "Mix_GetMidiDevice",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_GetNextMidiDevice",
+    "signature": "int ()",
+    "line": 0
+  },
+  {
+    "name": "Mix_SetMidiDevice",
+    "signature": "int (int)",
+    "line": 0
+  },
+  {
+    "name": "BoardInitForPlayer",
+    "signature": "void ()",
+    "line": 266
+  },
+  {
+    "name": "CountSunFlowers",
+    "signature": "int ()",
+    "line": 2325
+  },
+  {
+    "name": "CanAddBobSled",
+    "signature": "bool ()",
+    "line": 2687
+  },
+  {
+    "name": "MouseDrag",
+    "signature": "void (int, int)",
+    "line": 3111
+  },
+  {
+    "name": "ZombieHitTest",
+    "signature": "Zombie *(int, int)",
+    "line": 3117
+  },
+  {
+    "name": "ClearCursor",
+    "signature": "void ()",
+    "line": 4616
+  },
+  {
+    "name": "ShowCoinBank",
+    "signature": "void (int)",
+    "line": 4762
+  },
+  {
+    "name": "UpdateLayers",
+    "signature": "void ()",
+    "line": 5922
+  },
+  {
+    "name": "SetMustacheMode",
+    "signature": "void (bool)",
+    "line": 7661
+  },
+  {
+    "name": "TodCrash",
+    "signature": "void ()",
+    "line": 7857
+  },
+  {
+    "name": "AddSunMoney",
+    "signature": "void (int)",
+    "line": 8623
+  },
+  {
+    "name": "GetSeedPacketPositionX",
+    "signature": "int (int)",
+    "line": 8906
+  },
+  {
+    "name": "RemoveParticleByType",
+    "signature": "void (ParticleEffect)",
+    "line": 9720
+  },
+  {
+    "name": "ShakeBoard",
+    "signature": "void (int, int)",
+    "line": 9789
+  },
+  {
+    "name": "IZombiePlaceZombie",
+    "signature": "void (ZombieType, int, int)",
+    "line": 4265
+  },
+  {
+    "name": "KeyDown",
+    "signature": "void (KeyCode)",
+    "line": 90
+  },
+  {
+    "name": "KeyChar",
+    "signature": "void (char)",
+    "line": 97
+  },
+  {
+    "name": "CreateEditWidget",
+    "signature": "LawnEditWidget *(int, EditListener *, Dialog *)",
+    "line": 108
+  },
+  {
+    "name": "LawnMowerInitialize",
+    "signature": "void (int)",
+    "line": 30
+  },
+  {
+    "name": "ClearReanim",
+    "signature": "void ()",
+    "line": 47
+  },
+  {
+    "name": "Draw",
+    "signature": "void (Graphics *)",
+    "line": 327
+  },
+  {
+    "name": "PoolEffectInitialize",
+    "signature": "void ()",
+    "line": 34
+  },
+  {
+    "name": "UpdateReanimationForVariation",
+    "signature": "void (Reanimation *, DrawVariation)",
+    "line": 31
+  },
+  {
+    "name": "Update",
+    "signature": "void ()",
+    "line": 86
+  },
+  {
+    "name": "MouseDown",
+    "signature": "void (int, int, int)",
+    "line": 202
+  },
+  {
+    "name": "MouseUp",
+    "signature": "void (int, int, int)",
+    "line": 212
+  },
+  {
+    "name": "MouseWheel",
+    "signature": "void (int)",
+    "line": 229
+  },
+  {
+    "name": "GiveAchievement",
+    "signature": "void (LawnApp *, int, bool)",
+    "line": 239
+  },
+  {
+    "name": "ClearPlantsAndZombies",
+    "signature": "void ()",
+    "line": 118
+  },
+  {
+    "name": "SetupPlant",
+    "signature": "void ()",
+    "line": 150
+  },
+  {
+    "name": "GetZombieType",
+    "signature": "ZombieType (int)",
+    "line": 264
+  },
+  {
+    "name": "GetSeedPosition",
+    "signature": "void (SeedType, int &, int &)",
+    "line": 536
+  },
+  {
+    "name": "AlmanacInitForPlayer",
+    "signature": "void ()",
+    "line": 709
+  },
+  {
+    "name": "IsPaperNote",
+    "signature": "bool ()",
+    "line": 267
+  },
+  {
+    "name": "StartButtonPressed",
+    "signature": "void ()",
+    "line": 488
+  },
+  {
+    "name": "DrawAchievements",
+    "signature": "void (Graphics *)",
+    "line": 622
+  },
+  {
+    "name": "GetChallengeDefinition",
+    "signature": "const ChallengeDefinition &(int)",
+    "line": 220
+  },
+  {
+    "name": "ShowPageButtons",
+    "signature": "bool ()",
+    "line": 363
+  },
+  {
+    "name": "AddedToManager",
+    "signature": "void (WidgetManager *)",
+    "line": 603
+  },
+  {
+    "name": "RemovedFromManager",
+    "signature": "void (WidgetManager *)",
+    "line": 611
+  },
+  {
+    "name": "ButtonPress",
+    "signature": "void (int)",
+    "line": 619
+  },
+  {
+    "name": "ButtonDepress",
+    "signature": "void (int)",
+    "line": 625
+  },
+  {
+    "name": "UpdateToolTip",
+    "signature": "void ()",
+    "line": 656
+  },
+  {
+    "name": "GetPreferredHeight",
+    "signature": "int (int)",
+    "line": 62
+  },
+  {
+    "name": "Resize",
+    "signature": "void (int, int, int, int)",
+    "line": 67
+  },
+  {
+    "name": "EditWidgetText",
+    "signature": "void (int, const std::string &)",
+    "line": 92
+  },
+  {
+    "name": "AllowChar",
+    "signature": "bool (int, char)",
+    "line": 98
+  },
+  {
+    "name": "RestartLoopingSounds",
+    "signature": "void ()",
+    "line": 128
+  },
+  {
+    "name": "PreLoadCredits",
+    "signature": "void ()",
+    "line": 398
+  },
+  {
+    "name": "DrawCreditsContent",
+    "signature": "int (Graphics *, int, bool)",
+    "line": 740
+  },
+  {
+    "name": "FindSubReanim",
+    "signature": "Reanimation *(Reanimation *, ReanimationType)",
+    "line": 1079
+  },
+  {
+    "name": "UpdateMovie",
+    "signature": "void ()",
+    "line": 1197
+  },
+  {
+    "name": "PauseCredits",
+    "signature": "void ()",
+    "line": 1718
+  },
+  {
+    "name": "MakeButton",
+    "signature": "LawnStoneButton *(int, ButtonListener *, const std::string &)",
+    "line": 296
+  },
+  {
+    "name": "IsPointVisible",
+    "signature": "bool (int, int)",
+    "line": 396
+  },
+  {
+    "name": "MakeNewButton",
+    "signature": "NewLawnButton *(int, ButtonListener *, const std::string &, _Font *, Image *, Image *, Image *)",
+    "line": 405
+  },
+  {
+    "name": "SyncButtons",
+    "signature": "void ()",
+    "line": 407
+  },
+  {
+    "name": "DrawOverlay",
+    "signature": "void (Graphics *)",
+    "line": 635
+  },
+  {
+    "name": "UpdateTooltip",
+    "signature": "void ()",
+    "line": 743
+  },
+  {
+    "name": "TrackButton",
+    "signature": "void (DialogButton *, const char *, float, float)",
+    "line": 1003
+  },
+  {
+    "name": "OrderInManagerChanged",
+    "signature": "void ()",
+    "line": 1060
+  },
+  {
+    "name": "ButtonMouseEnter",
+    "signature": "void (int)",
+    "line": 1222
+  },
+  {
+    "name": "ClickedAdventure",
+    "signature": "void ()",
+    "line": 1244
+  },
+  {
+    "name": "AddPreviewProfiles",
+    "signature": "void ()",
+    "line": 1390
+  },
+  {
+    "name": "SeedHitTest",
+    "signature": "SeedType (int, int)",
+    "line": 50
+  },
+  {
+    "name": "ShowToolTip",
+    "signature": "void ()",
+    "line": 110
+  },
+  {
+    "name": "GetLeft",
+    "signature": "int ()",
+    "line": 87
+  },
+  {
+    "name": "SetButtonDelay",
+    "signature": "void (int)",
+    "line": 182
+  },
+  {
+    "name": "CheckboxChecked",
+    "signature": "void ()",
+    "line": 214
+  },
+  {
+    "name": "Dispose",
+    "signature": "void ()",
+    "line": 413
+  },
+  {
+    "name": "SliderVal",
+    "signature": "void (int, double)",
+    "line": 214
+  },
+  {
+    "name": "CrazyDavePickSeeds",
+    "signature": "void ()",
+    "line": 225
+  },
+  {
+    "name": "SeedNotRecommendedToPick",
+    "signature": "unsigned int (SeedType)",
+    "line": 326
+  },
+  {
+    "name": "UpdateViewLawn",
+    "signature": "void ()",
+    "line": 443
+  },
+  {
+    "name": "DisplayRepickWarningDialog",
+    "signature": "bool (const char *)",
+    "line": 565
+  },
+  {
+    "name": "UpdateImitaterButton",
+    "signature": "void ()",
+    "line": 973
+  },
+  {
+    "name": "PickedPlantType",
+    "signature": "bool (SeedType)",
+    "line": 1083
+  },
+  {
+    "name": "UpdateAfterPurchase",
+    "signature": "void ()",
+    "line": 1141
+  },
+  {
+    "name": "GetStoreItemType",
+    "signature": "StoreItem (int)",
+    "line": 159
+  },
+  {
+    "name": "IsItemUnavailable",
+    "signature": "bool (StoreItem)",
+    "line": 225
+  },
+  {
+    "name": "SetBubbleText",
+    "signature": "void (int, int, bool)",
+    "line": 538
+  },
+  {
+    "name": "IsPageShown",
+    "signature": "bool (StorePages)",
+    "line": 816
+  },
+  {
+    "name": "GetItemCost",
+    "signature": "int (StoreItem)",
+    "line": 880
+  },
+  {
+    "name": "EnableButtons",
+    "signature": "void (bool)",
+    "line": 1170
+  },
+  {
+    "name": "DrawToPreload",
+    "signature": "void (Graphics *)",
+    "line": 85
+  },
+  {
+    "name": "GetSelName",
+    "signature": "std::string ()",
+    "line": 116
+  },
+  {
+    "name": "ListClicked",
+    "signature": "void (int, int, int)",
+    "line": 160
+  },
+  {
+    "name": "CanDropPottedPlantLoot",
+    "signature": "bool ()",
+    "line": 341
+  },
+  {
+    "name": "MouseDownWithMoneySign",
+    "signature": "void (Plant *)",
+    "line": 453
+  },
+  {
+    "name": "UpdateYeti",
+    "signature": "void ()",
+    "line": 3923
+  },
+  {
+    "name": "IsBobsledTeamWithSled",
+    "signature": "bool ()",
+    "line": 9495
+  },
+  {
+    "name": "Shutdown",
+    "signature": "void ()",
+    "line": 311
+  },
+  {
+    "name": "KillBoard",
+    "signature": "void ()",
+    "line": 327
+  },
+  {
+    "name": "LostFocus",
+    "signature": "void ()",
+    "line": 383
+  },
+  {
+    "name": "WriteToRegistry",
+    "signature": "void ()",
+    "line": 393
+  },
+  {
+    "name": "ReadFromRegistry",
+    "signature": "void ()",
+    "line": 404
+  },
+  {
+    "name": "WriteCurrentUserConfig",
+    "signature": "bool ()",
+    "line": 410
+  },
+  {
+    "name": "DoDialogDelay",
+    "signature": "Dialog *(int, bool, const std::string &, const std::string &, const std::string &, int)",
+    "line": 814
+  },
+  {
+    "name": "KillNewOptionsDialog",
+    "signature": "bool ()",
+    "line": 1126
+  },
+  {
+    "name": "ModalClose",
+    "signature": "void ()",
+    "line": 1178
+  },
+  {
+    "name": "KillDialog",
+    "signature": "bool (int)",
+    "line": 1186
+  },
+  {
+    "name": "ShowResourceError",
+    "signature": "void (bool)",
+    "line": 1213
+  },
+  {
+    "name": "ChangeDirHook",
+    "signature": "bool (const char *)",
+    "line": 1353
+  },
+  {
+    "name": "Start",
+    "signature": "void ()",
+    "line": 1358
+  },
+  {
+    "name": "DebugKeyDown",
+    "signature": "bool (int)",
+    "line": 1366
+  },
+  {
+    "name": "HandleCmdLineParam",
+    "signature": "void (const std::string &, const std::string &)",
+    "line": 1371
+  },
+  {
+    "name": "UpdatePlayerProfileForFinishingLevel",
+    "signature": "bool ()",
+    "line": 1387
+  },
+  {
+    "name": "ToggleSlowMo",
+    "signature": "void ()",
+    "line": 1695
+  },
+  {
+    "name": "FastLoad",
+    "signature": "void (GameMode)",
+    "line": 1810
+  },
+  {
+    "name": "LoadingCompleted",
+    "signature": "void ()",
+    "line": 1827
+  },
+  {
+    "name": "URLOpenSucceeded",
+    "signature": "void (const std::string &)",
+    "line": 1852
+  },
+  {
+    "name": "OpenURL",
+    "signature": "bool (const std::string &, bool)",
+    "line": 1858
+  },
+  {
+    "name": "ConfirmQuit",
+    "signature": "void ()",
+    "line": 1875
+  },
+  {
+    "name": "ButtonDownTick",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "ButtonMouseLeave",
+    "signature": "void (int)",
+    "line": 0
+  },
+  {
+    "name": "ButtonMouseMove",
+    "signature": "void (int, int, int)",
+    "line": 0
+  },
+  {
+    "name": "CenterDialog",
+    "signature": "void (Dialog *, int, int)",
+    "line": 2057
+  },
+  {
+    "name": "UpdateApp",
+    "signature": "bool ()",
+    "line": 2316
+  },
+  {
+    "name": "CloseRequestAsync",
+    "signature": "void ()",
+    "line": 2339
+  },
+  {
+    "name": "GetAwardSeedForLevel",
+    "signature": "SeedType (int)",
+    "line": 2346
+  },
+  {
+    "name": "GetMoneyString",
+    "signature": "std::string (int)",
+    "line": 3245
+  },
+  {
+    "name": "SwitchScreenMode",
+    "signature": "void (bool, bool, bool)",
+    "line": 3337
+  },
+  {
+    "name": "DoHighScoreDialog",
+    "signature": "void ()",
+    "line": 3373
+  },
+  {
+    "name": "PruneDeadEffects",
+    "signature": "void (Attachment *)",
+    "line": 30
+  },
+  {
+    "name": "TodDrawTriangle_8888_TEX1_TALPHA0_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 487
+  },
+  {
+    "name": "TodDrawTriangle_8888_TEX1_TALPHA0_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 498
+  },
+  {
+    "name": "TodDrawTriangle_8888_TEX1_TALPHA0_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 5
+  },
+  {
+    "name": "TodDrawTriangle_8888_TEX1_TALPHA0_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 16
+  },
+  {
+    "name": "TodDrawTriangle_8888_TEX1_TALPHA0_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 27
+  },
+  {
+    "name": "TodDrawTriangle_8888_TEX1_TALPHA0_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 38
+  },
+  {
+    "name": "TodDrawTriangle_8888_TEX1_TALPHA0_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 49
+  },
+  {
+    "name": "TodDrawTriangle_8888_TEX1_TALPHA0_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 60
+  },
+  {
+    "name": "TodDrawTriangle_8888_TEX1_TALPHA1_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 71
+  },
+  {
+    "name": "TodDrawTriangle_8888_TEX1_TALPHA1_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 82
+  },
+  {
+    "name": "TodDrawTriangle_8888_TEX1_TALPHA1_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 93
+  },
+  {
+    "name": "TodDrawTriangle_8888_TEX1_TALPHA1_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 104
+  },
+  {
+    "name": "TodDrawTriangle_8888_TEX1_TALPHA1_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 4
+  },
+  {
+    "name": "TodDrawTriangle_8888_TEX1_TALPHA1_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 15
+  },
+  {
+    "name": "TodDrawTriangle_8888_TEX1_TALPHA1_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 26
+  },
+  {
+    "name": "TodDrawTriangle_8888_TEX1_TALPHA1_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 37
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA0_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 48
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA0_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 59
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA0_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 70
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA0_MOD0_GLOB1_BLEND0_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 94
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA0_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 105
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA0_MOD0_GLOB1_BLEND1_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 19
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA0_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 30
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA0_MOD1_GLOB0_BLEND0_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 54
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA0_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 65
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA0_MOD1_GLOB0_BLEND1_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 89
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA0_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 100
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA0_MOD1_GLOB1_BLEND0_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 17
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA0_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 28
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA0_MOD1_GLOB1_BLEND1_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 52
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA1_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 63
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA1_MOD0_GLOB0_BLEND0_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 87
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA1_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 98
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA1_MOD0_GLOB0_BLEND1_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 15
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA1_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 26
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA1_MOD0_GLOB1_BLEND0_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 50
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA1_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 61
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA1_MOD0_GLOB1_BLEND1_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 85
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA1_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 96
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA1_MOD1_GLOB0_BLEND0_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 14
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA1_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 25
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA1_MOD1_GLOB0_BLEND1_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 49
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA1_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 60
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA1_MOD1_GLOB1_BLEND0_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 84
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA1_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 95
+  },
+  {
+    "name": "TodDrawTriangle_0888_TEX1_TALPHA1_MOD1_GLOB1_BLEND1_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 12
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA0_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 23
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA0_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 34
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA0_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 45
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA0_MOD0_GLOB1_BLEND0_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 69
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA0_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 80
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA0_MOD0_GLOB1_BLEND1_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 104
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA0_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 6
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA0_MOD1_GLOB0_BLEND0_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 30
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA0_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 41
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA0_MOD1_GLOB0_BLEND1_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 65
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA0_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 76
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA0_MOD1_GLOB1_BLEND0_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 100
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA0_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 4
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA0_MOD1_GLOB1_BLEND1_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 28
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA1_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 39
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA1_MOD0_GLOB0_BLEND0_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 63
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA1_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 74
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA1_MOD0_GLOB0_BLEND1_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 98
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA1_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 2
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA1_MOD0_GLOB1_BLEND0_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 26
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA1_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 37
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA1_MOD0_GLOB1_BLEND1_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 61
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA1_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 72
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA1_MOD1_GLOB0_BLEND0_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 96
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA1_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 107
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA1_MOD1_GLOB0_BLEND1_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 23
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA1_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 34
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA1_MOD1_GLOB1_BLEND0_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 58
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA1_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 69
+  },
+  {
+    "name": "TodDrawTriangle_0565_TEX1_TALPHA1_MOD1_GLOB1_BLEND1_ADDITIVE",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 93
+  },
+  {
+    "name": "TodDrawTriangle_0555_TEX1_TALPHA0_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 104
+  },
+  {
+    "name": "TodDrawTriangle_0555_TEX1_TALPHA0_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 7
+  },
+  {
+    "name": "TodDrawTriangle_0555_TEX1_TALPHA0_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 18
+  },
+  {
+    "name": "TodDrawTriangle_0555_TEX1_TALPHA0_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 29
+  },
+  {
+    "name": "TodDrawTriangle_0555_TEX1_TALPHA0_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 40
+  },
+  {
+    "name": "TodDrawTriangle_0555_TEX1_TALPHA0_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 51
+  },
+  {
+    "name": "TodDrawTriangle_0555_TEX1_TALPHA0_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 62
+  },
+  {
+    "name": "TodDrawTriangle_0555_TEX1_TALPHA0_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 73
+  },
+  {
+    "name": "TodDrawTriangle_0555_TEX1_TALPHA1_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 84
+  },
+  {
+    "name": "TodDrawTriangle_0555_TEX1_TALPHA1_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 95
+  },
+  {
+    "name": "TodDrawTriangle_0555_TEX1_TALPHA1_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 106
+  },
+  {
+    "name": "TodDrawTriangle_0555_TEX1_TALPHA1_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 5
+  },
+  {
+    "name": "TodDrawTriangle_0555_TEX1_TALPHA1_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 16
+  },
+  {
+    "name": "TodDrawTriangle_0555_TEX1_TALPHA1_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 27
+  },
+  {
+    "name": "TodDrawTriangle_0555_TEX1_TALPHA1_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 38
+  },
+  {
+    "name": "TodDrawTriangle_0555_TEX1_TALPHA1_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 49
+  },
+  {
+    "name": "RGB_to_HSL",
+    "signature": "void (float, float, float, float &, float &, float &)",
+    "line": 27
+  },
+  {
+    "name": "Tod_SWTri_AddAllDrawTriFuncs",
+    "signature": "void ()",
+    "line": 40
+  },
+  {
+    "name": "TodSandImageIfNeeded",
+    "signature": "void (Image *)",
+    "line": 700
+  },
+  {
+    "name": "TodBltMatrix",
+    "signature": "void (Graphics *, Image *, const SexyMatrix3 &, const Rect &, const Color &, int, const Rect &)",
+    "line": 712
+  },
+  {
+    "name": "Initialize",
+    "signature": "void (int, int)",
+    "line": 27
+  },
+  {
+    "name": "AllocParticleSystemFromDef",
+    "signature": "TodParticleSystem *(float, float, int, TodParticleDefinition *, ParticleEffect)",
+    "line": 1267
+  },
+  {
+    "name": "Rand",
+    "signature": "int ()",
+    "line": 77
+  },
+  {
+    "name": "StrFormat",
+    "signature": "std::string (const char *, ...)",
+    "line": 385
+  },
+  {
+    "name": "GetGameSEHInfo",
+    "signature": "std::string ()",
+    "line": 103
+  },
+  {
+    "name": "PreDisplayHook",
+    "signature": "void ()",
+    "line": 112
+  },
+  {
+    "name": "InitPropertiesHook",
+    "signature": "void ()",
+    "line": 116
+  },
+  {
+    "name": "Init",
+    "signature": "void ()",
+    "line": 132
+  },
+  {
+    "name": "PreTerminate",
+    "signature": "void ()",
+    "line": 141
+  },
+  {
+    "name": "UpdateFrames",
+    "signature": "void ()",
+    "line": 145
+  },
+  {
+    "name": "SexyDumpUnfreed",
+    "signature": "void ()",
+    "line": 0
+  },
+  {
+    "name": "DialogButtonDepress",
+    "signature": "void (int, int)",
+    "line": 867
+  },
+  {
+    "name": "GotFocus",
+    "signature": "void ()",
+    "line": 875
+  },
+  {
+    "name": "ProcessSafeDeleteList",
+    "signature": "void ()",
+    "line": 2442
+  },
+  {
+    "name": "Create",
+    "signature": "void (int, int)",
+    "line": 54
+  },
+  {
+    "name": "FillScanLinesWithCoverage",
+    "signature": "void (Span *, int, const Color &, int, const uint8_t *, int, int, int, int)",
+    "line": 63
+  },
+  {
+    "name": "Check3D",
+    "signature": "bool (GLImage *)",
+    "line": 90
+  },
+  {
+    "name": "PolyFill3D",
+    "signature": "bool (const Point *, int, const Rect *, const Color &, int, int, int)",
+    "line": 111
+  },
+  {
+    "name": "FillRect",
+    "signature": "void (const Rect &, const Color &, int)",
+    "line": 117
+  },
+  {
+    "name": "DrawLine",
+    "signature": "void (double, double, double, double, const Color &, int)",
+    "line": 122
+  },
+  {
+    "name": "DrawLineAA",
+    "signature": "void (double, double, double, double, const Color &, int)",
+    "line": 127
+  },
+  {
+    "name": "Blt",
+    "signature": "void (Image *, int, int, const Rect &, const Color &, int, bool)",
+    "line": 132
+  },
+  {
+    "name": "BltF",
+    "signature": "void (Image *, float, float, const Rect &, const Rect &, const Color &, int)",
+    "line": 149
+  },
+  {
+    "name": "BltRotated",
+    "signature": "void (Image *, float, float, const Rect &, const Rect &, const Color &, int, double, float, float)",
+    "line": 166
+  },
+  {
+    "name": "StretchBlt",
+    "signature": "void (Image *, const Rect &, const Rect &, const Rect &, const Color &, int, bool)",
+    "line": 178
+  },
+  {
+    "name": "BltMatrix",
+    "signature": "void (Image *, float, float, const SexyMatrix3 &, const Rect &, const Color &, int, const Rect &, bool)",
+    "line": 187
+  },
+  {
+    "name": "BltTrianglesTex",
+    "signature": "void (Image *, const TriVertex (*)[3], int, const Rect &, const Color &, int, float, float, bool)",
+    "line": 194
+  },
+  {
+    "name": "BltMirror",
+    "signature": "void (Image *, int, int, const Rect &, const Color &, int, bool)",
+    "line": 201
+  },
+  {
+    "name": "StretchBltMirror",
+    "signature": "void (Image *, const Rect &, const Rect &, const Rect &, const Color &, int, bool)",
+    "line": 213
+  },
+  {
+    "name": "glad_gl_load_GL_ES_VERSION_2_0",
+    "signature": "void (GLADuserptrloadfunc, void *)",
+    "line": 1477
+  },
+  {
+    "name": "glad_gl_get_extensions",
+    "signature": "int (const char **, char ***)",
+    "line": 1635
+  },
+  {
+    "name": "SetDrawMode",
+    "signature": "void (int)",
+    "line": 1089
+  },
+  {
+    "name": "AddGLImage",
+    "signature": "void (GLImage *)",
+    "line": 1097
+  },
+  {
+    "name": "CreateImageTexture",
+    "signature": "bool (MemoryImage *)",
+    "line": 1254
+  },
+  {
+    "name": "Duplicate",
+    "signature": "DataElement *()",
+    "line": 57
+  },
+  {
+    "name": "Ref",
+    "signature": "void ()",
+    "line": 187
+  },
+  {
+    "name": "DataToLayer",
+    "signature": "bool (DataElement *, FontLayer **)",
+    "line": 217
+  },
+  {
+    "name": "Load",
+    "signature": "bool (SexyAppBase *, const std::string &)",
+    "line": 1057
+  },
+  {
+    "name": "GenerateActiveFontLayers",
+    "signature": "void ()",
+    "line": 1234
+  },
+  {
+    "name": "CharWidthKern",
+    "signature": "int (char32_t, char32_t)",
+    "line": 1402
+  },
+  {
+    "name": "CharWidth",
+    "signature": "int (char32_t)",
+    "line": 1461
+  },
+  {
+    "name": "SetPointSize",
+    "signature": "void (int)",
+    "line": 1669
+  },
+  {
+    "name": "NormalDrawLine",
+    "signature": "void (double, double, double, double, const Color &)",
+    "line": 116
+  },
+  {
+    "name": "NormalDrawLineAA",
+    "signature": "void (double, double, double, double, const Color &)",
+    "line": 628
+  },
+  {
+    "name": "CommitBits",
+    "signature": "void ()",
+    "line": 733
+  },
+  {
+    "name": "ClearRect",
+    "signature": "void (const Rect &)",
+    "line": 1271
+  },
+  {
+    "name": "Clear",
+    "signature": "void ()",
+    "line": 1286
+  },
+  {
+    "name": "BltMatrixHelper",
+    "signature": "void (Image *, float, float, const SexyMatrix3 &, const Rect &, const Color &, int, const Rect &, void *, int, int, bool)",
+    "line": 1683
+  },
+  {
+    "name": "BltTrianglesTexHelper",
+    "signature": "void (Image *, const TriVertex (*)[3], int, const Rect &, const Color &, int, void *, int, int, float, float, bool)",
+    "line": 1730
+  },
+  {
+    "name": "Palletize",
+    "signature": "bool ()",
+    "line": 1811
+  },
+  {
+    "name": "DrawTriangle_8888_TEX0_TALPHA0_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 111
+  },
+  {
+    "name": "DrawTriangle_8888_TEX0_TALPHA0_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 122
+  },
+  {
+    "name": "DrawTriangle_8888_TEX0_TALPHA0_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 133
+  },
+  {
+    "name": "DrawTriangle_8888_TEX0_TALPHA0_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 144
+  },
+  {
+    "name": "DrawTriangle_8888_TEX0_TALPHA0_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 155
+  },
+  {
+    "name": "DrawTriangle_8888_TEX0_TALPHA0_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 166
+  },
+  {
+    "name": "DrawTriangle_8888_TEX0_TALPHA0_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 177
+  },
+  {
+    "name": "DrawTriangle_8888_TEX0_TALPHA0_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 10
+  },
+  {
+    "name": "DrawTriangle_8888_TEX0_TALPHA1_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 21
+  },
+  {
+    "name": "DrawTriangle_8888_TEX0_TALPHA1_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 32
+  },
+  {
+    "name": "DrawTriangle_8888_TEX0_TALPHA1_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 43
+  },
+  {
+    "name": "DrawTriangle_8888_TEX0_TALPHA1_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 54
+  },
+  {
+    "name": "DrawTriangle_8888_TEX0_TALPHA1_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 65
+  },
+  {
+    "name": "DrawTriangle_8888_TEX0_TALPHA1_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 76
+  },
+  {
+    "name": "DrawTriangle_8888_TEX0_TALPHA1_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 87
+  },
+  {
+    "name": "DrawTriangle_8888_TEX0_TALPHA1_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 98
+  },
+  {
+    "name": "DrawTriangle_8888_TEX1_TALPHA0_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 109
+  },
+  {
+    "name": "DrawTriangle_8888_TEX1_TALPHA0_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 120
+  },
+  {
+    "name": "DrawTriangle_8888_TEX1_TALPHA0_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 9
+  },
+  {
+    "name": "DrawTriangle_8888_TEX1_TALPHA0_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 20
+  },
+  {
+    "name": "DrawTriangle_8888_TEX1_TALPHA0_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 31
+  },
+  {
+    "name": "DrawTriangle_8888_TEX1_TALPHA0_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 42
+  },
+  {
+    "name": "DrawTriangle_8888_TEX1_TALPHA0_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 53
+  },
+  {
+    "name": "DrawTriangle_8888_TEX1_TALPHA0_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 64
+  },
+  {
+    "name": "DrawTriangle_8888_TEX1_TALPHA1_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 75
+  },
+  {
+    "name": "DrawTriangle_8888_TEX1_TALPHA1_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 86
+  },
+  {
+    "name": "DrawTriangle_8888_TEX1_TALPHA1_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 97
+  },
+  {
+    "name": "DrawTriangle_8888_TEX1_TALPHA1_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 108
+  },
+  {
+    "name": "DrawTriangle_8888_TEX1_TALPHA1_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 119
+  },
+  {
+    "name": "DrawTriangle_8888_TEX1_TALPHA1_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 8
+  },
+  {
+    "name": "DrawTriangle_8888_TEX1_TALPHA1_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 19
+  },
+  {
+    "name": "DrawTriangle_8888_TEX1_TALPHA1_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 30
+  },
+  {
+    "name": "DrawTriangle_0888_TEX0_TALPHA0_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 41
+  },
+  {
+    "name": "DrawTriangle_0888_TEX0_TALPHA0_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 52
+  },
+  {
+    "name": "DrawTriangle_0888_TEX0_TALPHA0_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 63
+  },
+  {
+    "name": "DrawTriangle_0888_TEX0_TALPHA0_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 74
+  },
+  {
+    "name": "DrawTriangle_0888_TEX0_TALPHA0_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 85
+  },
+  {
+    "name": "DrawTriangle_0888_TEX0_TALPHA0_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 96
+  },
+  {
+    "name": "DrawTriangle_0888_TEX0_TALPHA0_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 107
+  },
+  {
+    "name": "DrawTriangle_0888_TEX0_TALPHA0_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 118
+  },
+  {
+    "name": "DrawTriangle_0888_TEX0_TALPHA1_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 7
+  },
+  {
+    "name": "DrawTriangle_0888_TEX0_TALPHA1_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 18
+  },
+  {
+    "name": "DrawTriangle_0888_TEX0_TALPHA1_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 29
+  },
+  {
+    "name": "DrawTriangle_0888_TEX0_TALPHA1_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 40
+  },
+  {
+    "name": "DrawTriangle_0888_TEX0_TALPHA1_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 51
+  },
+  {
+    "name": "DrawTriangle_0888_TEX0_TALPHA1_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 62
+  },
+  {
+    "name": "DrawTriangle_0888_TEX0_TALPHA1_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 73
+  },
+  {
+    "name": "DrawTriangle_0888_TEX0_TALPHA1_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 84
+  },
+  {
+    "name": "DrawTriangle_0888_TEX1_TALPHA0_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 95
+  },
+  {
+    "name": "DrawTriangle_0888_TEX1_TALPHA0_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 106
+  },
+  {
+    "name": "DrawTriangle_0888_TEX1_TALPHA0_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 117
+  },
+  {
+    "name": "DrawTriangle_0888_TEX1_TALPHA0_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 6
+  },
+  {
+    "name": "DrawTriangle_0888_TEX1_TALPHA0_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 17
+  },
+  {
+    "name": "DrawTriangle_0888_TEX1_TALPHA0_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 28
+  },
+  {
+    "name": "DrawTriangle_0888_TEX1_TALPHA0_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 39
+  },
+  {
+    "name": "DrawTriangle_0888_TEX1_TALPHA0_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 50
+  },
+  {
+    "name": "DrawTriangle_0888_TEX1_TALPHA1_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 61
+  },
+  {
+    "name": "DrawTriangle_0888_TEX1_TALPHA1_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 72
+  },
+  {
+    "name": "DrawTriangle_0888_TEX1_TALPHA1_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 83
+  },
+  {
+    "name": "DrawTriangle_0888_TEX1_TALPHA1_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 94
+  },
+  {
+    "name": "DrawTriangle_0888_TEX1_TALPHA1_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 105
+  },
+  {
+    "name": "DrawTriangle_0888_TEX1_TALPHA1_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 116
+  },
+  {
+    "name": "DrawTriangle_0888_TEX1_TALPHA1_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 5
+  },
+  {
+    "name": "DrawTriangle_0888_TEX1_TALPHA1_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 16
+  },
+  {
+    "name": "DrawTriangle_0565_TEX0_TALPHA0_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 27
+  },
+  {
+    "name": "DrawTriangle_0565_TEX0_TALPHA0_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 38
+  },
+  {
+    "name": "DrawTriangle_0565_TEX0_TALPHA0_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 49
+  },
+  {
+    "name": "DrawTriangle_0565_TEX0_TALPHA0_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 60
+  },
+  {
+    "name": "DrawTriangle_0565_TEX0_TALPHA0_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 71
+  },
+  {
+    "name": "DrawTriangle_0565_TEX0_TALPHA0_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 82
+  },
+  {
+    "name": "DrawTriangle_0565_TEX0_TALPHA0_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 93
+  },
+  {
+    "name": "DrawTriangle_0565_TEX0_TALPHA0_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 104
+  },
+  {
+    "name": "DrawTriangle_0565_TEX0_TALPHA1_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 115
+  },
+  {
+    "name": "DrawTriangle_0565_TEX0_TALPHA1_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 4
+  },
+  {
+    "name": "DrawTriangle_0565_TEX0_TALPHA1_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 15
+  },
+  {
+    "name": "DrawTriangle_0565_TEX0_TALPHA1_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 26
+  },
+  {
+    "name": "DrawTriangle_0565_TEX0_TALPHA1_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 37
+  },
+  {
+    "name": "DrawTriangle_0565_TEX0_TALPHA1_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 48
+  },
+  {
+    "name": "DrawTriangle_0565_TEX0_TALPHA1_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 59
+  },
+  {
+    "name": "DrawTriangle_0565_TEX0_TALPHA1_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 70
+  },
+  {
+    "name": "DrawTriangle_0565_TEX1_TALPHA0_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 81
+  },
+  {
+    "name": "DrawTriangle_0565_TEX1_TALPHA0_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 92
+  },
+  {
+    "name": "DrawTriangle_0565_TEX1_TALPHA0_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 103
+  },
+  {
+    "name": "DrawTriangle_0565_TEX1_TALPHA0_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 114
+  },
+  {
+    "name": "DrawTriangle_0565_TEX1_TALPHA0_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 3
+  },
+  {
+    "name": "DrawTriangle_0565_TEX1_TALPHA0_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 14
+  },
+  {
+    "name": "DrawTriangle_0565_TEX1_TALPHA0_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 25
+  },
+  {
+    "name": "DrawTriangle_0565_TEX1_TALPHA0_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 36
+  },
+  {
+    "name": "DrawTriangle_0565_TEX1_TALPHA1_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 47
+  },
+  {
+    "name": "DrawTriangle_0565_TEX1_TALPHA1_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 58
+  },
+  {
+    "name": "DrawTriangle_0565_TEX1_TALPHA1_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 69
+  },
+  {
+    "name": "DrawTriangle_0565_TEX1_TALPHA1_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 80
+  },
+  {
+    "name": "DrawTriangle_0565_TEX1_TALPHA1_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 91
+  },
+  {
+    "name": "DrawTriangle_0565_TEX1_TALPHA1_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 102
+  },
+  {
+    "name": "DrawTriangle_0565_TEX1_TALPHA1_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 113
+  },
+  {
+    "name": "DrawTriangle_0565_TEX1_TALPHA1_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 2
+  },
+  {
+    "name": "DrawTriangle_0555_TEX0_TALPHA0_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 13
+  },
+  {
+    "name": "DrawTriangle_0555_TEX0_TALPHA0_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 24
+  },
+  {
+    "name": "DrawTriangle_0555_TEX0_TALPHA0_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 35
+  },
+  {
+    "name": "DrawTriangle_0555_TEX0_TALPHA0_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 46
+  },
+  {
+    "name": "DrawTriangle_0555_TEX0_TALPHA0_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 57
+  },
+  {
+    "name": "DrawTriangle_0555_TEX0_TALPHA0_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 68
+  },
+  {
+    "name": "DrawTriangle_0555_TEX0_TALPHA0_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 79
+  },
+  {
+    "name": "DrawTriangle_0555_TEX0_TALPHA0_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 90
+  },
+  {
+    "name": "DrawTriangle_0555_TEX0_TALPHA1_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 101
+  },
+  {
+    "name": "DrawTriangle_0555_TEX0_TALPHA1_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 112
+  },
+  {
+    "name": "DrawTriangle_0555_TEX0_TALPHA1_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 2
+  },
+  {
+    "name": "DrawTriangle_0555_TEX0_TALPHA1_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 13
+  },
+  {
+    "name": "DrawTriangle_0555_TEX0_TALPHA1_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 24
+  },
+  {
+    "name": "DrawTriangle_0555_TEX0_TALPHA1_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 35
+  },
+  {
+    "name": "DrawTriangle_0555_TEX0_TALPHA1_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 46
+  },
+  {
+    "name": "DrawTriangle_0555_TEX0_TALPHA1_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 57
+  },
+  {
+    "name": "DrawTriangle_0555_TEX1_TALPHA0_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 68
+  },
+  {
+    "name": "DrawTriangle_0555_TEX1_TALPHA0_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 79
+  },
+  {
+    "name": "DrawTriangle_0555_TEX1_TALPHA0_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 90
+  },
+  {
+    "name": "DrawTriangle_0555_TEX1_TALPHA0_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 101
+  },
+  {
+    "name": "DrawTriangle_0555_TEX1_TALPHA0_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 112
+  },
+  {
+    "name": "DrawTriangle_0555_TEX1_TALPHA0_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 2
+  },
+  {
+    "name": "DrawTriangle_0555_TEX1_TALPHA0_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 13
+  },
+  {
+    "name": "DrawTriangle_0555_TEX1_TALPHA0_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 24
+  },
+  {
+    "name": "DrawTriangle_0555_TEX1_TALPHA1_MOD0_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 35
+  },
+  {
+    "name": "DrawTriangle_0555_TEX1_TALPHA1_MOD0_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 46
+  },
+  {
+    "name": "DrawTriangle_0555_TEX1_TALPHA1_MOD0_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 57
+  },
+  {
+    "name": "DrawTriangle_0555_TEX1_TALPHA1_MOD0_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 68
+  },
+  {
+    "name": "DrawTriangle_0555_TEX1_TALPHA1_MOD1_GLOB0_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 79
+  },
+  {
+    "name": "DrawTriangle_0555_TEX1_TALPHA1_MOD1_GLOB0_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 90
+  },
+  {
+    "name": "DrawTriangle_0555_TEX1_TALPHA1_MOD1_GLOB1_BLEND0",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 101
+  },
+  {
+    "name": "DrawTriangle_0555_TEX1_TALPHA1_MOD1_GLOB1_BLEND1",
+    "signature": "void (SWHelper::SWVertex *, void *, const unsigned int, const SWHelper::SWTextureInfo *, SWHelper::SWDiffuse &)",
+    "line": 112
+  },
+  {
+    "name": "SWDrawTriangle",
+    "signature": "void (bool, bool, bool, bool, SWVertex *, unsigned int *, const unsigned int, const SWTextureInfo *, SWDiffuse &, int, bool)",
+    "line": 660
+  },
+  {
+    "name": "my_error_exit",
+    "signature": "void (j_common_ptr)",
+    "line": 831
+  },
+  {
+    "name": "init_source",
+    "signature": "void (j_decompress_ptr)",
+    "line": 1076
+  },
+  {
+    "name": "fill_input_buffer",
+    "signature": "boolean (j_decompress_ptr)",
+    "line": 1082
+  },
+  {
+    "name": "skip_input_data",
+    "signature": "void (j_decompress_ptr, long)",
+    "line": 1107
+  },
+  {
+    "name": "term_source",
+    "signature": "void (j_decompress_ptr)",
+    "line": 1121
+  },
+  {
+    "name": "DeleteResource",
+    "signature": "void ()",
+    "line": 45
+  },
+  {
+    "name": "FClose",
+    "signature": "int (PFILE *)",
+    "line": 227
+  },
+  {
+    "name": "FSeek",
+    "signature": "int (PFILE *, long, int)",
+    "line": 235
+  },
+  {
+    "name": "FTell",
+    "signature": "int (PFILE *)",
+    "line": 254
+  },
+  {
+    "name": "FRead",
+    "signature": "size_t (void *, int, int, PFILE *)",
+    "line": 262
+  },
+  {
+    "name": "FGetC",
+    "signature": "int (PFILE *)",
+    "line": 280
+  },
+  {
+    "name": "UnGetC",
+    "signature": "int (int, PFILE *)",
+    "line": 297
+  },
+  {
+    "name": "FGetS",
+    "signature": "char *(char *, int, PFILE *)",
+    "line": 309
+  },
+  {
+    "name": "FEof",
+    "signature": "int (PFILE *)",
+    "line": 335
+  },
+  {
+    "name": "LoadMusic",
+    "signature": "bool (int, const std::string &)",
+    "line": 49
+  },
+  {
+    "name": "PlayMusic",
+    "signature": "void (int, int, bool)",
+    "line": 70
+  },
+  {
+    "name": "StopMusic",
+    "signature": "void (int)",
+    "line": 87
+  },
+  {
+    "name": "PauseMusic",
+    "signature": "void (int)",
+    "line": 100
+  },
+  {
+    "name": "ResumeMusic",
+    "signature": "void (int)",
+    "line": 110
+  },
+  {
+    "name": "StopAllMusic",
+    "signature": "void ()",
+    "line": 121
+  },
+  {
+    "name": "UnloadMusic",
+    "signature": "void (int)",
+    "line": 133
+  },
+  {
+    "name": "UnloadAllMusic",
+    "signature": "void ()",
+    "line": 147
+  },
+  {
+    "name": "PauseAllMusic",
+    "signature": "void ()",
+    "line": 158
+  },
+  {
+    "name": "ResumeAllMusic",
+    "signature": "void ()",
+    "line": 168
+  },
+  {
+    "name": "FadeIn",
+    "signature": "void (int, int, double, bool)",
+    "line": 178
+  },
+  {
+    "name": "FadeOut",
+    "signature": "void (int, bool, double)",
+    "line": 196
+  },
+  {
+    "name": "FadeOutAll",
+    "signature": "void (bool, double)",
+    "line": 212
+  },
+  {
+    "name": "SetSongVolume",
+    "signature": "void (int, double)",
+    "line": 226
+  },
+  {
+    "name": "SetSongMaxVolume",
+    "signature": "void (int, double)",
+    "line": 239
+  },
+  {
+    "name": "IsPlaying",
+    "signature": "bool (int)",
+    "line": 252
+  },
+  {
+    "name": "SetVolume",
+    "signature": "void (double)",
+    "line": 264
+  },
+  {
+    "name": "SetMusicAmplify",
+    "signature": "void (int, double)",
+    "line": 269
+  },
+  {
+    "name": "GetMusicOrder",
+    "signature": "int (int)",
+    "line": 311
+  },
+  {
+    "name": "RehupVolume",
+    "signature": "void ()",
+    "line": 57
+  },
+  {
+    "name": "SetBaseVolume",
+    "signature": "void (double)",
+    "line": 176
+  },
+  {
+    "name": "SetBasePan",
+    "signature": "void (int)",
+    "line": 182
+  },
+  {
+    "name": "AdjustPitch",
+    "signature": "void (double)",
+    "line": 188
+  },
+  {
+    "name": "SetPan",
+    "signature": "void (int)",
+    "line": 199
+  },
+  {
+    "name": "Play",
+    "signature": "bool (bool, bool)",
+    "line": 205
+  },
+  {
+    "name": "Stop",
+    "signature": "void ()",
+    "line": 228
+  },
+  {
+    "name": "IsReleased",
+    "signature": "bool ()",
+    "line": 247
+  },
+  {
+    "name": "GetVolume",
+    "signature": "double ()",
+    "line": 255
+  },
+  {
+    "name": "Initialized",
+    "signature": "bool ()",
+    "line": 79
+  },
+  {
+    "name": "LoadAUSound",
+    "signature": "bool (intptr_t, const std::string &)",
+    "line": 84
+  },
+  {
+    "name": "LoadSound",
+    "signature": "intptr_t (const std::string &)",
+    "line": 295
+  },
+  {
+    "name": "ReleaseSound",
+    "signature": "void (intptr_t)",
+    "line": 316
+  },
+  {
+    "name": "GetSoundInstance",
+    "signature": "SoundInstance *(intptr_t)",
+    "line": 356
+  },
+  {
+    "name": "ReleaseSounds",
+    "signature": "void ()",
+    "line": 376
+  },
+  {
+    "name": "ReleaseChannels",
+    "signature": "void ()",
+    "line": 388
+  },
+  {
+    "name": "GetMasterVolume",
+    "signature": "double ()",
+    "line": 400
+  },
+  {
+    "name": "SetMasterVolume",
+    "signature": "void (double)",
+    "line": 405
+  },
+  {
+    "name": "Flush",
+    "signature": "void ()",
+    "line": 410
+  },
+  {
+    "name": "StopAllSounds",
+    "signature": "void ()",
+    "line": 415
+  },
+  {
+    "name": "GetFreeSoundId",
+    "signature": "intptr_t ()",
+    "line": 428
+  },
+  {
+    "name": "GetNumSounds",
+    "signature": "int ()",
+    "line": 439
+  },
+  {
+    "name": "FindFreeChannel",
+    "signature": "int ()",
+    "line": 451
+  },
+  {
+    "name": "SetFont",
+    "signature": "void (_Font *)",
+    "line": 70
+  },
+  {
+    "name": "SetDisabled",
+    "signature": "void (bool)",
+    "line": 224
+  },
+  {
+    "name": "MouseEnter",
+    "signature": "void ()",
+    "line": 232
+  },
+  {
+    "name": "MouseLeave",
+    "signature": "void ()",
+    "line": 245
+  },
+  {
+    "name": "MouseMove",
+    "signature": "void (int, int)",
+    "line": 260
+  },
+  {
+    "name": "SetColor",
+    "signature": "void (int, const Color &)",
+    "line": 138
+  },
+  {
+    "name": "SetButtonFont",
+    "signature": "void (_Font *)",
+    "line": 158
+  },
+  {
+    "name": "IsModal",
+    "signature": "bool ()",
+    "line": 397
+  },
+  {
+    "name": "ClearWidthCheckFonts",
+    "signature": "void ()",
+    "line": 74
+  },
+  {
+    "name": "UpdateCaretPos",
+    "signature": "void ()",
+    "line": 195
+  },
+  {
+    "name": "EnforceMaxPixels",
+    "signature": "void ()",
+    "line": 252
+  },
+  {
+    "name": "GetCharAt",
+    "signature": "int (int, int)",
+    "line": 573
+  },
+  {
+    "name": "HiliteWord",
+    "signature": "void ()",
+    "line": 656
+  },
+  {
+    "name": "MarkDirty",
+    "signature": "void ()",
+    "line": 702
+  },
+  {
+    "name": "GetSortKey",
+    "signature": "std::string (int)",
+    "line": 73
+  },
+  {
+    "name": "AddLine",
+    "signature": "int (const std::string &, bool)",
+    "line": 168
+  },
+  {
+    "name": "SetLineColor",
+    "signature": "void (int, const Color &)",
+    "line": 264
+  },
+  {
+    "name": "ScrollPosition",
+    "signature": "void (int, double)",
+    "line": 425
+  },
+  {
+    "name": "SetHilite",
+    "signature": "void (int, bool)",
+    "line": 434
+  },
+  {
+    "name": "SetSelect",
+    "signature": "void (int)",
+    "line": 497
+  },
+  {
+    "name": "SetInvisIfNoScroll",
+    "signature": "void (bool)",
+    "line": 64
+  },
+  {
+    "name": "ClampValue",
+    "signature": "void ()",
+    "line": 217
+  },
+  {
+    "name": "ThumbCompare",
+    "signature": "int (int, int)",
+    "line": 312
+  },
+  {
+    "name": "GetLastColor",
+    "signature": "Color (const std::string &)",
+    "line": 196
+  },
+  {
+    "name": "GetTextIndexAt",
+    "signature": "void (int, int, int *)",
+    "line": 369
+  },
+  {
+    "name": "GetSelection",
+    "signature": "std::string ()",
+    "line": 410
+  },
+  {
+    "name": "WidgetRemovedHelper",
+    "signature": "void ()",
+    "line": 60
+  },
+  {
+    "name": "RemoveAllWidgets",
+    "signature": "void (bool, bool)",
+    "line": 60
+  },
+  {
+    "name": "FreeResources",
+    "signature": "void ()",
+    "line": 73
+  },
+  {
+    "name": "GetWidgetFlags",
+    "signature": "int ()",
+    "line": 106
+  },
+  {
+    "name": "StartTextInput",
+    "signature": "bool (std::string &)",
+    "line": 324
+  }
+]
