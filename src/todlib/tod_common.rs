@@ -324,3 +324,36 @@ pub fn get_flashing_color(counter: u32, flash_time: i32) -> Color {
     let grayness = clamp_int(200 * (time_inf - time_age).abs() / time_inf + 55, 0, 255) as u8;
     Color::new(grayness, grayness, grayness, 255)
 }
+
+/// RGB 转 HSL（对应 C++ RGB_to_HSL）
+/// 输入 R/G/B 范围 [0.0, 1.0]，输出 H [0.0, 1.0), S [0.0, 1.0], L [0.0, 1.0]
+pub fn rgb_to_hsl(r: f32, g: f32, b: f32) -> (f32, f32, f32) {
+    let maxval = r.max(g).max(b);
+    let minval = r.min(g).min(b);
+
+    let l = (minval + maxval) / 2.0;
+    if l <= 0.0 {
+        return (0.0, 0.0, 0.0);
+    }
+
+    let delta = maxval - minval;
+    let mut s = delta;
+    if s <= 0.0 {
+        return (0.0, 0.0, l);
+    }
+    s /= if l <= 0.5 { minval + maxval } else { 2.0 - minval - maxval };
+
+    let r2 = (maxval - r) / delta;
+    let g2 = (maxval - g) / delta;
+    let b2 = (maxval - b) / delta;
+
+    let h = if maxval == r {
+        if g == minval { 5.0 + b2 } else { 1.0 - g2 }
+    } else if maxval == g {
+        if b == minval { 1.0 + r2 } else { 3.0 - b2 }
+    } else {
+        if r == minval { 3.0 + g2 } else { 5.0 - r2 }
+    } / 6.0;
+
+    (h, s, l)
+}

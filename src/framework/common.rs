@@ -463,3 +463,23 @@ pub fn xml_encode_string(s: &str) -> String {
         .replace('"', "&quot;")
         .replace('\'', "&apos;")
 }
+
+/// 格式化字符串宏（对应 C++ StrFormat）
+/// 用法：str_format!("{} {}", a, b) 等价于 format!("{} {}", a, b)
+/// C++ 的 StrFormat 是 printf 风格变参函数，Rust 中用 format! 宏替代
+#[macro_export]
+macro_rules! str_format {
+    ($($arg:tt)*) => {
+        format!($($arg)*)
+    };
+}
+
+/// 调试转储未释放内存（对应 C++ SexyDumpUnfreed）
+/// Rust 没有手动内存管理，此函数为空操作
+pub fn sexy_dump_unfreed() {
+    // Rust 自动管理内存，无需手动转储
+    #[cfg(debug_assertions)]
+    {
+        // 无操作
+    }
+}

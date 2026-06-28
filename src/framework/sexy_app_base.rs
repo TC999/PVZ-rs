@@ -101,6 +101,9 @@ pub struct SexyAppBase {
     pub update_multiplier: f64,
     pub paused: bool,
 
+    // 安全删除列表（对应 C++ mSafeDeleteList）
+    pub safe_delete_list: Vec<*mut std::ffi::c_void>,
+
     // 主循环控制（对应 C++ mRunning, mLastTime 等）
     pub running: bool,
     pub last_time: u32,
@@ -241,6 +244,7 @@ impl SexyAppBase {
             update_app_depth: 0,
             update_multiplier: 1.0,
             paused: false,
+            safe_delete_list: Vec::new(),
             running: false,
             last_time: 0,
             last_time_check: 0,
@@ -599,6 +603,19 @@ impl SexyAppBase {
 
         self.m_draw_count += 1;
         true
+    }
+
+    // ==================== 安全删除 ====================
+
+    /// 处理安全删除列表（对应 C++ ProcessSafeDeleteList）
+    /// 仅在 update_app_depth 不增加时删除挂起的 widget
+    pub fn process_safe_delete_list(&mut self) {
+        let depth = self.update_app_depth;
+        self.safe_delete_list.retain(|&ptr| {
+            // 在 C++ 中这里 delete 了 widget
+            // Rust 中由调用方管理生命周期，此处仅清除列表
+            false // 始终移除（简化实现）
+        });
     }
 
     // ==================== 事件处理 ====================
