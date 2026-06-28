@@ -8,6 +8,7 @@ use crate::framework::widget::widget_manager::WidgetManager;
 use crate::framework::widget::widget::Widget;
 use crate::framework::key_codes::KeyCode;
 use crate::framework::widget::dialog_button::DialogButton;
+use crate::framework::color::Color;
 use crate::lawn::game_enums::*;
 use crate::lawn::widget::game_button::GameButton;
 use crate::todlib::reanimator::Reanimation;
@@ -139,3 +140,15 @@ impl CreditsOverlay {
 // --- 自由函数 ---
 pub fn draw_disco(_g: &mut Graphics, _center_x: f32, _center_y: f32, _time: f32) { /* TODO */ }
 pub fn draw_reanim_to_preload(_g: &mut Graphics, _reanim_type: ReanimationType) { /* TODO */ }
+
+/// 绘制制作人员名单内容（对应 C++ DrawCreditsContent）
+pub fn draw_credits_content(g: &mut Graphics, y_pos: i32, do_draw: bool) -> i32 {
+    let line_height = 20;
+    let mut a_y = y_pos;
+    if do_draw && a_y > -line_height && a_y < BOARD_HEIGHT + line_height {
+        g.set_color(&Color::WHITE);
+        g.draw_string("[CREDITS_GAMENAME]", BOARD_WIDTH / 2, a_y);
+    }
+    a_y += line_height + 20;
+    a_y
+}

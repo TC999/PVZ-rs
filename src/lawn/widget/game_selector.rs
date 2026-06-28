@@ -543,6 +543,23 @@ impl GameSelectorImpl {
             btn.disabled = true;
         }
     }
+
+    /// 更新工具提示（对应 C++ UpdateTooltip）
+    pub fn update_tooltip(&mut self) {
+        // TODO: 实现基于鼠标位置的提示更新
+    }
+
+    /// 跟踪按钮位置（对应 C++ TrackButton）
+    /// 根据动画轨道位置设置按钮位置
+    pub fn track_button(&self, _button: *mut crate::framework::widget::dialog_button::DialogButton, _track_name: &str, _offset_x: f32, _offset_y: f32) {
+        // TODO: 从 Reanimation 获取轨道变换并设置按钮位置
+    }
+
+    /// 添加预览配置文件（对应 C++ AddPreviewProfiles）
+    /// 创建内置预览存档（调试/预览用途）
+    pub fn add_preview_profiles(&mut self) {
+        // TODO: 使用 ProfileMgr 创建预览存档
+    }
 }
 
 impl GameSelectorImpl {

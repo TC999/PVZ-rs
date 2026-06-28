@@ -108,6 +108,18 @@ impl LawnStoneButton {
     pub fn set_label(&mut self, _label: &str) {}
 }
 
+/// 创建石头风格按钮（对应 C++ MakeButton）
+pub fn make_button(id: i32, listener: Option<Box<dyn crate::framework::widget::button_listener::ButtonListener>>, text: &str) -> LawnStoneButton {
+    let mut btn = LawnStoneButton {
+        dialog_button: DialogButton::new(std::ptr::null_mut(), id, listener),
+    };
+    btn.set_label(text);
+    btn.dialog_button.has_alpha = true;
+    btn.dialog_button.has_transparencies = true;
+    btn.dialog_button.height = 33;
+    btn
+}
+
 /// 新型按钮（对应 C++ NewLawnButton : DialogButton）
 pub struct NewLawnButton {
     pub dialog_button: DialogButton,
