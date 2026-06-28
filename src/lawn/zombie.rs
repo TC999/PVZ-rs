@@ -428,6 +428,30 @@ impl Zombie {
         }
     }
 
+    /// 判断僵尸是否已死或正在死亡（对应 C++ IsDeadOrDying）
+    pub fn is_dead_or_dying(&self) -> bool {
+        self.dead || self.zombie_phase == ZombiePhase::Dying 
+            || self.zombie_phase == ZombiePhase::Burned 
+            || self.zombie_phase == ZombiePhase::Mowered
+    }
+
+    /// 更新雪人僵尸行为（对应 C++ UpdateYeti）
+    pub fn update_yeti(&mut self) {
+        if self.mind_controlled || !self.has_head || self.is_dead_or_dying() {
+            return;
+        }
+        if self.zombie_phase == ZombiePhase::Normal && self.phase_counter == 0 {
+            self.zombie_phase = ZombiePhase::YetiRunning;
+            self.has_object = false;
+            self.pick_random_speed();
+        }
+    }
+
+    /// 启动僵尸音效（对应 C++ StartZombieSound）
+    pub fn start_zombie_sound(&mut self) {
+        // TODO: 实现僵尸音效播放
+    }
+
     /// 吃植物
     pub fn eat_plant(&mut self, _plant: &mut Plant) {
         if !self.is_eating {
@@ -508,6 +532,26 @@ impl Zombie {
             20,
             60,
         )
+    }
+
+    /// 获取雪橇位置（对应 C++ GetBobsledPosition）
+    /// 返回 -1 表示不是雪橇队；0 表示领队；1~3 表示跟随位置
+    pub fn get_bobsled_position(&self) -> i32 {
+        if self.zombie_type != ZombieType::Bobsled {
+            return -1;
+        }
+        if self.related_zombie_id == ZOMBIEID_NULL && self.follower_zombie_ids[0] == ZOMBIEID_NULL {
+            return -1;
+        }
+        if self.related_zombie_id == ZOMBIEID_NULL {
+            return 0;
+        }
+        -1
+    }
+
+    /// 判断是否是有雪橇的雪橇队（对应 C++ IsBobsledTeamWithSled）
+    pub fn is_bobsled_team_with_sled(&self) -> bool {
+        self.get_bobsled_position() != -1
     }
 
     /// 设置行

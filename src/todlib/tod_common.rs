@@ -315,3 +315,12 @@ pub fn tod_update_smooth_array_pick(arr: &mut [TodSmoothArray], pick_idx: usize)
     arr[pick_idx].second_last_picked = arr[pick_idx].last_picked;
     arr[pick_idx].last_picked = 0.0;
 }
+
+/// 获取闪烁颜色（对应 C++ GetFlashingColor）
+/// 根据计数器和闪烁时间产生周期性闪烁的灰度颜色
+pub fn get_flashing_color(counter: u32, flash_time: i32) -> Color {
+    let time_age = (counter % flash_time as u32) as i32;
+    let time_inf = flash_time / 2;
+    let grayness = clamp_int(200 * (time_inf - time_age).abs() / time_inf + 55, 0, 255) as u8;
+    Color::new(grayness, grayness, grayness, 255)
+}

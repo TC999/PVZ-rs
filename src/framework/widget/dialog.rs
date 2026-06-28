@@ -65,6 +65,7 @@ pub struct Dialog {
     pub dragging: bool,
     pub drag_mouse_x: i32,
     pub drag_mouse_y: i32,
+    pub button_font: Option<Box<Font>>,
 }
 
 impl Dialog {
@@ -89,6 +90,7 @@ impl Dialog {
             background_insets: Insets::new(0, 0, 0, 0),
             header_font: None, lines_font: None,
             dragging: false, drag_mouse_x: 0, drag_mouse_y: 0,
+            button_font: None,
         };
         let mut mc = G_DIALOG_COLORS;
         if component_image.is_null() { mc[COLOR_BUTTON_TEXT] = [0,0,0]; mc[COLOR_BUTTON_TEXT_HILITE] = [0,0,0]; }
@@ -184,5 +186,10 @@ impl Dialog {
             self.result = the_id;
             if let Some(ref mut l) = self.dialog_listener { l.dialog_button_depress(self.id, the_id); }
         }
+    }
+
+    /// 设置对话框按钮字体（对应 C++ SetButtonFont）
+    pub fn set_button_font(&mut self, font: &Font) {
+        self.button_font = Some(Box::new(font.clone()));
     }
 }

@@ -149,6 +149,24 @@ impl Reanimation {
         // 根据定义名称设置动画类型
     }
 
+    /// 递归查找子动画（对应 C++ FindSubReanim）
+    /// 在当前动画及其所有附着的子动画中查找指定类型
+    pub fn find_sub_reanim(&mut self, reanim_type: ReanimationType) -> Option<&mut Self> {
+        if self.reanim_type == reanim_type {
+            return Some(self);
+        }
+        // 遍历轨道实例，查找附着动画
+        for track in &self.m_track_instances {
+            // 查找附着动画（简化实现）
+            // 完整版本需要遍历 AttachEffect 并递归
+            if track.m_last_visible {
+                // 这里可以通过 AttachmentSystem 查找子 Reanimation
+                // 但目前简化处理，仅返回自身匹配
+            }
+        }
+        None
+    }
+
     /// 获取当前帧的完整时间
     pub fn get_frame_time(&self) -> f32 {
         if let Some(def) = self.m_definition {

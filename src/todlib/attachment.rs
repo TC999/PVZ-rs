@@ -213,3 +213,41 @@ pub fn find_first_attachment(_attachment_id: &mut AttachmentID) -> Option<*mut A
 pub fn find_reanim_attachment(_attachment_id: &mut AttachmentID) -> Option<*mut std::ffi::c_void> {
     None
 }
+
+/// 清理已死亡的效果（对应 C++ PruneDeadEffects）
+/// 遍历附着的所有效果，移除已死亡的效果；
+/// 如果所有效果都死亡，则标记附着物本身为死亡
+pub fn prune_dead_effects(attachment: &mut Attachment) {
+    let mut i = 0;
+    while i < attachment.num_effects {
+        let effect = &attachment.effect_array[i as usize];
+        let still_alive = match effect.effect_type {
+            EffectType::Particle
+            | EffectType::Trail
+            | EffectType::Reanim
+            | EffectType::Attachment => {
+                // 简化：当 effect_id != 0 时认为仍然存活
+                effect.effect_id != 0
+            }
+            EffectType::Other => true,
+        };
+
+        if !still_alive {
+            // 移除当前效果：将后续效果前移（使用 clone 代替 copy）
+            let remaining = (attachment.num_effects - i - 1) as usize;
+            if remaining > 0 {
+                for j in 0..remaining {
+                    attachment.effect_array[(i as usize) + j] = attachment.effect_array[(i as usize) + j + 1].clone();
+                }
+            }
+            attachment.num_effects -= 1;
+            // 不递增 i，继续检查新的当前位置
+        } else {
+            i += 1;
+        }
+    }
+
+    if attachment.num_effects == 0 {
+        attachment.dead = true;
+    }
+}

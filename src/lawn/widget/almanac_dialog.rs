@@ -80,3 +80,16 @@ impl AlmanacDialog {
 impl Default for AlmanacDialog {
     fn default() -> Self { AlmanacDialog::new() }
 }
+
+/// 全局僵尸击败标记数组（对应 C++ gZombieDefeated）
+pub static mut G_ZOMBIE_DEFEATED: [bool; NUM_ZOMBIE_TYPES as usize] = [false; NUM_ZOMBIE_TYPES as usize];
+
+/// 初始化玩家图鉴数据（对应 C++ AlmanacInitForPlayer）
+/// 重置所有僵尸的已击败标记
+pub fn almanac_init_for_player() {
+    unsafe {
+        for i in 0..NUM_ZOMBIE_TYPES as usize {
+            G_ZOMBIE_DEFEATED[i] = false;
+        }
+    }
+}

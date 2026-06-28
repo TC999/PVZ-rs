@@ -1806,10 +1806,10 @@ impl Board {
         80 + index * 70
     }
 
-    /// 统计向日葵数量（对应 C++ CountSunFlowers）
+    /// 统计产阳光的植物数量（对应 C++ CountSunFlowers）
+    /// 使用 MakesSun() 判断，包含向日葵、双胞向日葵、小喷菇、金盏花
     pub fn count_sunflowers(&self) -> i32 {
-        self.count_plant_by_type(SeedType::Sunflower) 
-            + self.count_plant_by_type(SeedType::Twinsunflower)
+        self.plants.iter().filter(|p| !p.dead && p.makes_sun()).count() as i32
     }
 
     /// 光标中是否有植物（对应 C++ IsPlantInCursor）

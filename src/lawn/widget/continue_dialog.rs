@@ -7,6 +7,8 @@ use crate::framework::graphics::graphics::Graphics;
 use crate::framework::widget::dialog_button::DialogButton;
 use crate::framework::widget::widget_manager::WidgetManager;
 use crate::lawn::lawn_app::LawnApp;
+use crate::lawn::game_enums::GameMode;
+use crate::todlib::tod_foley::FoleyType;
 
 pub const CONTINUE_DIALOG_CONTINUE: i32 = 0;
 pub const CONTINUE_DIALOG_NEW_GAME: i32 = 1;
@@ -52,4 +54,24 @@ impl ContinueDialog {
     pub fn removed_from_manager(&mut self, _manager: &mut WidgetManager) {}
     pub fn button_depress(&mut self, _id: i32) {}
     pub fn get_preferred_height(&self, _width: i32) -> i32 { 0 }
+
+    /// 重新启动循环音效（对应 C++ RestartLoopingSounds）
+    /// 在继续游戏时恢复雨声和僵尸音乐
+    pub fn restart_looping_sounds(&mut self) {
+        if let Some(app) = self.app {
+            unsafe {
+                let app = &mut *app;
+                if app.game_mode == GameMode::ChallengeRainingSeeds || app.is_stormy_night_level() {
+                    app.play_foley(FoleyType::Rain as i32);
+                }
+                if let Some(board) = app.board.as_mut() {
+                    for zombie in &mut (**board).zombies {
+                        if zombie.playing_song {
+                            zombie.start_zombie_sound();
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

@@ -165,3 +165,9 @@ macro_rules! tod_assert {
         }
     };
 }
+
+/// 断言崩溃（对应 C++ TodCrash）
+/// 用于不可恢复的错误场景
+pub fn tod_crash() {
+    tod_assert!(false, "Crash!!!!");
+}

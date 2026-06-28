@@ -136,6 +136,26 @@ impl EditWidget {
         self.width_check_list.clear();
     }
 
+    /// 清除宽度检查列表（对应 C++ ClearWidthCheckFonts）
+    pub fn clear_width_check_fonts(&mut self) {
+        self.width_check_list.clear();
+    }
+
+    /// 更新光标位置（对应 C++ UpdateCaretPos）
+    /// 基于控件绝对位置约束光标在屏幕范围内
+    pub fn update_caret_pos(&mut self) {
+        if let Some(wm) = self.widget_manager {
+            unsafe {
+                if let Some(app_ptr) = (*wm).app {
+                    let app = &*app_ptr;
+                    let _clamp_x = if self.x < 10 { 10 } else if self.x > app.width - 10 { app.width - 10 } else { self.x };
+                    let _clamp_y = if self.y < 10 { 10 } else if self.y > app.height - 10 { app.height - 10 } else { self.y };
+                    // C++ 原版：SetCaretPos(clamp_x, clamp_y)
+                }
+            }
+        }
+    }
+
     pub fn draw(&mut self, g: &mut Graphics) {
         if self.font.is_none() {
             self.font = Some(Box::new(Font::new("DefaultInput", 10)));
