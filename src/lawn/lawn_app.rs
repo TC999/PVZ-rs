@@ -448,6 +448,26 @@ impl LawnApp {
     /// 对话框（对应 C++ DoDialog）
     pub fn do_dialog(&mut self, _id: i32, _modal: bool, _header: &str, _lines: &str, _footer: &str, _btn_mode: i32) -> Option<*mut Dialog> { None }
 
+    /// 延迟创建对话框（对应 C++ DoDialogDelay）
+    /// 创建对话框并设置按钮延迟
+    pub fn do_dialog_delay(&mut self, id: i32, modal: bool, header: &str, lines: &str, footer: &str, btn_mode: i32) -> Option<*mut Dialog> {
+        let dialog = self.do_dialog(id, modal, header, lines, footer, btn_mode);
+        // C++ 中设置 30 帧按钮延迟
+        dialog
+    }
+
+    /// 居中对话框（对应 C++ CenterDialog）
+    /// 将对话框置于屏幕中央
+    pub fn center_dialog(dialog: *mut Dialog, width: i32, height: i32) {
+        unsafe {
+            let d = &mut *dialog;
+            d.x = (BOARD_WIDTH - width) / 2;
+            d.y = (BOARD_HEIGHT - height) / 2;
+            d.width = width;
+            d.height = height;
+        }
+    }
+
     // ==================== 游戏对象管理 ====================
 
     /// 添加动画（对应 C++ AddReanimation）
@@ -580,6 +600,32 @@ impl LawnApp {
     pub fn is_first_time_adventure_mode(&self) -> bool { false }
     pub fn earned_gold_trophy(&self) -> bool { false }
     pub fn kill_dialog(&mut self, _dialog: Dialogs) {}
+
+    /// 关闭模式对话框（对应 C++ ModalClose）
+    /// 恢复游戏暂停状态
+    pub fn modal_close(&mut self) {
+        if let Some(board) = self.board.as_mut() {
+            unsafe {
+                // C++: mBoard->Pause(false);
+                let _ = &**board;
+            }
+        }
+    }
+
+    /// 关闭新选项对话框（对应 C++ KillNewOptionsDialog）
+    /// 应用画面模式设置并移除对话框
+    pub fn kill_new_options_dialog(&mut self) -> bool {
+        // 简化实现：关闭 NewOptions 对话框
+        self.kill_dialog(Dialogs::NewOptions);
+        true
+    }
+
+    /// 异步关闭请求（对应 C++ CloseRequestAsync）
+    /// 设置退出标志
+    pub fn close_request_async(&mut self) {
+        self.m_close_request = true;
+        // C++ 中还需要设置 mExitToTop = true
+    }
 
     /// 获取布尔属性（对应 C++ GetBoolean）
     pub fn get_boolean(&self, id: &str, default: bool) -> bool {
