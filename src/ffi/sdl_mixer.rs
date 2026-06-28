@@ -70,6 +70,10 @@ pub fn play_music(m: *mut c_void, loops: c_int) -> c_int {
     unsafe { sdl2::sys::mixer::Mix_PlayMusic(m as *mut sdl2::sys::mixer::Mix_Music, loops) }
 }
 
+pub fn fade_in_music(m: *mut c_void, loops: c_int, ms: c_int) -> c_int {
+    unsafe { sdl2::sys::mixer::Mix_FadeInMusic(m as *mut sdl2::sys::mixer::Mix_Music, loops, ms) }
+}
+
 pub fn halt_music() -> c_int {
     unsafe { sdl2::sys::mixer::Mix_HaltMusic() }
 }

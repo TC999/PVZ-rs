@@ -159,7 +159,7 @@ impl Drop for SDLSoundManager {
 }
 
 /// 设置音乐放大（对应 C++ SetMusicAmplify）
-pub fn set_music_amplify(_amplify: f32) {}
+pub fn set_music_amplify(_music_id: i32, _amplify: f64) {}
 /// 重设音量（对应 C++ RehupVolume）
 pub fn rehup_volume() {}
 /// 加载 AU 音效（对应 C++ LoadAUSound）

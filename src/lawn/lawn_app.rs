@@ -639,13 +639,13 @@ impl LawnApp {
     /// 弹出高分对话框（对应 C++ DoHighScoreDialog）
     pub fn do_high_score_dialog(&mut self) {}
     /// 更改目录钩子（对应 C++ ChangeDirHook）
-    pub fn change_dir_hook(&self) {}
+    pub fn change_dir_hook(&self, _path: &str) -> bool { false }
     /// 更新完成关卡的玩家档案（对应 C++ UpdatePlayerProfileForFinishingLevel）
     pub fn update_player_profile_for_finishing_level(&mut self) {}
     /// URL 打开成功回调（对应 C++ URLOpenSucceeded）
-    pub fn url_open_succeeded(&self) {}
+    pub fn url_open_succeeded(&self, _url: &str) {}
     /// 打开 URL（对应 C++ OpenURL）
-    pub fn open_url(&self, _url: &str) {}
+    pub fn open_url(&self, _url: &str, _minimized: bool) -> bool { false }
     /// 获取布尔属性（对应 C++ GetBoolean）
     pub fn get_boolean(&self, id: &str, default: bool) -> bool {
         // C++ 中从 mBoolProperties 读取，Rust 简化版始终返回默认值

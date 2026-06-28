@@ -21,20 +21,20 @@ pub mod dialog_button;
 // ── 通用 Widget 辅助函数（对应 C++ Widget 相关函数） ──
 
 /// 设置选中状态（对应 C++ SetSelect）
-pub fn set_select() {}
+pub fn set_select(_sel: i32) {}
 /// 设置无滚动时不可见（对应 C++ SetInvisIfNoScroll）
-pub fn set_invis_if_no_scroll() {}
+pub fn set_invis_if_no_scroll(_invis: bool) {}
 /// 获取最后颜色（对应 C++ GetLastColor）
-pub fn get_last_color() {}
+pub fn get_last_color(_key: &str) {}
 /// 获取指定位置的文本索引（对应 C++ GetTextIndexAt）
-pub fn get_text_index_at() -> i32 { 0 }
+pub fn get_text_index_at(_x: i32, _y: i32, _index: *mut i32) {}
 /// 获取选中范围（对应 C++ GetSelection）
 pub fn get_selection() {}
 /// 移除所有控件（对应 C++ RemoveAllWidgets）
-pub fn remove_all_widgets() {}
+pub fn remove_all_widgets(_free_widgets: bool, _delete_widgets: bool) {}
 /// 释放资源（对应 C++ FreeResources）
 pub fn free_resources() {}
 /// 获取控件标志（对应 C++ GetWidgetFlags）
 pub fn get_widget_flags() -> i32 { 0 }
 /// 获取排序键（对应 C++ GetSortKey）
-pub fn get_sort_key() -> i32 { 0 }
+pub fn get_sort_key(_index: i32) -> i32 { 0 }

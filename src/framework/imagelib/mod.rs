@@ -219,15 +219,15 @@ pub fn write_tga_image(file_name: &str, image: &Image) -> bool {
 // ── JPEG 解码回调（对应 C++ jpeg_read_*） ──
 
 /// JPEG 错误退出（对应 C++ my_error_exit）
-pub fn my_error_exit() {}
+pub fn my_error_exit(_cinfo: *mut std::ffi::c_void) {}
 /// 初始化源（对应 C++ init_source）
-pub fn init_source() {}
+pub fn init_source(_cinfo: *mut std::ffi::c_void) {}
 /// 填充输入缓冲（对应 C++ fill_input_buffer）
-pub fn fill_input_buffer() -> i32 { 1 }
+pub fn fill_input_buffer(_cinfo: *mut std::ffi::c_void) -> i32 { 1 }
 /// 跳过输入数据（对应 C++ skip_input_data）
-pub fn skip_input_data(_num_bytes: i64) {}
+pub fn skip_input_data(_cinfo: *mut std::ffi::c_void, _num_bytes: i64) {}
 /// 终止源（对应 C++ term_source）
-pub fn term_source() {}
+pub fn term_source(_cinfo: *mut std::ffi::c_void) {}
 
 /// 从流读取字节（对应 C++ FGetC）
 pub fn f_get_c(_stream: *mut std::ffi::c_void) -> i32 { -1 }

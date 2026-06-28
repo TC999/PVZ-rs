@@ -105,7 +105,7 @@
   },
   {
     "name": "glad_gl_load_gl_es_version_2_0",
-    "signature": "fn glad_gl_load_gl_es_version_2_0() -> bool",
+    "signature": "fn glad_gl_load_gl_es_version_2_0(_load_func: Option<_>, _userptr: *mut c_void) -> bool",
     "file": "./src\\ffi\\opengl.rs",
     "line": 733,
     "kind": "free",
@@ -113,9 +113,9 @@
   },
   {
     "name": "glad_gl_get_extensions",
-    "signature": "fn glad_gl_get_extensions() -> *const i8",
+    "signature": "fn glad_gl_get_extensions(_out_exts: *mut *const i8, _out_exts_i: *mut *mut *mut i8) -> i32",
     "file": "./src\\ffi\\opengl.rs",
-    "line": 739,
+    "line": 742,
     "kind": "free",
     "parent": ""
   },
@@ -216,10 +216,18 @@
     "parent": ""
   },
   {
+    "name": "fade_in_music",
+    "signature": "fn fade_in_music(m: *mut c_void, loops: c_int, ms: c_int) -> c_int",
+    "file": "./src\\ffi\\sdl_mixer.rs",
+    "line": 73,
+    "kind": "free",
+    "parent": ""
+  },
+  {
     "name": "halt_music",
     "signature": "fn halt_music() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 73,
+    "line": 77,
     "kind": "free",
     "parent": ""
   },
@@ -227,7 +235,7 @@
     "name": "volume_music",
     "signature": "fn volume_music(v: c_int) -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 77,
+    "line": 81,
     "kind": "free",
     "parent": ""
   },
@@ -235,7 +243,7 @@
     "name": "pause_music",
     "signature": "fn pause_music()",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 81,
+    "line": 85,
     "kind": "free",
     "parent": ""
   },
@@ -243,7 +251,7 @@
     "name": "resume_music",
     "signature": "fn resume_music()",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 85,
+    "line": 89,
     "kind": "free",
     "parent": ""
   },
@@ -251,7 +259,7 @@
     "name": "rw_from_constmem",
     "signature": "fn rw_from_constmem(data: *const c_void, size: c_int) -> *mut c_void",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 90,
+    "line": 94,
     "kind": "free",
     "parent": ""
   },
@@ -259,7 +267,7 @@
     "name": "set_music_effect_position",
     "signature": "fn set_music_effect_position(music: *mut c_void, angle: i16, distance: u8) -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 193,
+    "line": 197,
     "kind": "free",
     "parent": ""
   },
@@ -267,7 +275,7 @@
     "name": "set_music_effect_distance",
     "signature": "fn set_music_effect_distance(music: *mut c_void, distance: u8) -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 197,
+    "line": 201,
     "kind": "free",
     "parent": ""
   },
@@ -275,7 +283,7 @@
     "name": "set_music_effect_reverse_stereo",
     "signature": "fn set_music_effect_reverse_stereo(music: *mut c_void, flip: c_int) -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 201,
+    "line": 205,
     "kind": "free",
     "parent": ""
   },
@@ -283,7 +291,7 @@
     "name": "reserve_channels",
     "signature": "fn reserve_channels(num: c_int) -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 205,
+    "line": 209,
     "kind": "free",
     "parent": ""
   },
@@ -291,7 +299,7 @@
     "name": "mod_music_set_channel_mute",
     "signature": "fn mod_music_set_channel_mute(channel: c_int, mute: c_int) -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 209,
+    "line": 213,
     "kind": "free",
     "parent": ""
   },
@@ -299,7 +307,7 @@
     "name": "mod_music_set_channel_volume",
     "signature": "fn mod_music_set_channel_volume(channel: c_int, volume: c_int) -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 213,
+    "line": 217,
     "kind": "free",
     "parent": ""
   },
@@ -307,7 +315,7 @@
     "name": "start_track",
     "signature": "fn start_track(music: *mut c_void, track: c_int) -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 217,
+    "line": 221,
     "kind": "free",
     "parent": ""
   },
@@ -315,7 +323,7 @@
     "name": "get_num_tracks",
     "signature": "fn get_num_tracks(music: *mut c_void) -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 221,
+    "line": 225,
     "kind": "free",
     "parent": ""
   },
@@ -323,7 +331,7 @@
     "name": "set_music_position_stream",
     "signature": "fn set_music_position_stream(music: *mut c_void, position: f64) -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 225,
+    "line": 229,
     "kind": "free",
     "parent": ""
   },
@@ -331,7 +339,7 @@
     "name": "set_music_tempo",
     "signature": "fn set_music_tempo(music: *mut c_void, tempo: f64) -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 229,
+    "line": 233,
     "kind": "free",
     "parent": ""
   },
@@ -339,7 +347,7 @@
     "name": "get_music_tempo",
     "signature": "fn get_music_tempo(music: *mut c_void) -> f64",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 233,
+    "line": 237,
     "kind": "free",
     "parent": ""
   },
@@ -347,7 +355,7 @@
     "name": "get_music_loop_start_time",
     "signature": "fn get_music_loop_start_time(music: *mut c_void) -> f64",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 237,
+    "line": 241,
     "kind": "free",
     "parent": ""
   },
@@ -355,7 +363,7 @@
     "name": "adlmidi_get_bank_names",
     "signature": "fn adlmidi_get_bank_names() -> *mut *const c_char",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 243,
+    "line": 247,
     "kind": "free",
     "parent": ""
   },
@@ -363,7 +371,7 @@
     "name": "adlmidi_get_bank_id",
     "signature": "fn adlmidi_get_bank_id() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 247,
+    "line": 251,
     "kind": "free",
     "parent": ""
   },
@@ -371,7 +379,7 @@
     "name": "adlmidi_set_bank_id",
     "signature": "fn adlmidi_set_bank_id(bnk: c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 251,
+    "line": 255,
     "kind": "free",
     "parent": ""
   },
@@ -379,7 +387,7 @@
     "name": "adlmidi_get_tremolo",
     "signature": "fn adlmidi_get_tremolo() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 255,
+    "line": 259,
     "kind": "free",
     "parent": ""
   },
@@ -387,7 +395,7 @@
     "name": "adlmidi_set_tremolo",
     "signature": "fn adlmidi_set_tremolo(tr: c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 259,
+    "line": 263,
     "kind": "free",
     "parent": ""
   },
@@ -395,7 +403,7 @@
     "name": "adlmidi_get_vibrato",
     "signature": "fn adlmidi_get_vibrato() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 263,
+    "line": 267,
     "kind": "free",
     "parent": ""
   },
@@ -403,7 +411,7 @@
     "name": "adlmidi_set_vibrato",
     "signature": "fn adlmidi_set_vibrato(vib: c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 267,
+    "line": 271,
     "kind": "free",
     "parent": ""
   },
@@ -411,7 +419,7 @@
     "name": "adlmidi_get_scale_mod",
     "signature": "fn adlmidi_get_scale_mod() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 271,
+    "line": 275,
     "kind": "free",
     "parent": ""
   },
@@ -419,7 +427,7 @@
     "name": "adlmidi_set_scale_mod",
     "signature": "fn adlmidi_set_scale_mod(sc: c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 275,
+    "line": 279,
     "kind": "free",
     "parent": ""
   },
@@ -427,7 +435,7 @@
     "name": "adlmidi_get_adlib_mode",
     "signature": "fn adlmidi_get_adlib_mode() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 279,
+    "line": 283,
     "kind": "free",
     "parent": ""
   },
@@ -435,7 +443,7 @@
     "name": "adlmidi_set_adlib_mode",
     "signature": "fn adlmidi_set_adlib_mode(mode: c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 283,
+    "line": 287,
     "kind": "free",
     "parent": ""
   },
@@ -443,7 +451,7 @@
     "name": "adlmidi_get_logarithmic_volumes",
     "signature": "fn adlmidi_get_logarithmic_volumes() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 287,
+    "line": 291,
     "kind": "free",
     "parent": ""
   },
@@ -451,7 +459,7 @@
     "name": "adlmidi_set_logarithmic_volumes",
     "signature": "fn adlmidi_set_logarithmic_volumes(lv: c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 291,
+    "line": 295,
     "kind": "free",
     "parent": ""
   },
@@ -459,7 +467,7 @@
     "name": "adlmidi_get_volume_model",
     "signature": "fn adlmidi_get_volume_model() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 295,
+    "line": 299,
     "kind": "free",
     "parent": ""
   },
@@ -467,7 +475,7 @@
     "name": "adlmidi_set_volume_model",
     "signature": "fn adlmidi_set_volume_model(vm: c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 299,
+    "line": 303,
     "kind": "free",
     "parent": ""
   },
@@ -475,7 +483,7 @@
     "name": "adlmidi_get_full_range_brightness",
     "signature": "fn adlmidi_get_full_range_brightness() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 303,
+    "line": 307,
     "kind": "free",
     "parent": ""
   },
@@ -483,7 +491,7 @@
     "name": "adlmidi_set_full_range_brightness",
     "signature": "fn adlmidi_set_full_range_brightness(frb: c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 307,
+    "line": 311,
     "kind": "free",
     "parent": ""
   },
@@ -491,7 +499,7 @@
     "name": "adlmidi_get_auto_arpeggio",
     "signature": "fn adlmidi_get_auto_arpeggio() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 311,
+    "line": 315,
     "kind": "free",
     "parent": ""
   },
@@ -499,7 +507,7 @@
     "name": "adlmidi_set_auto_arpeggio",
     "signature": "fn adlmidi_set_auto_arpeggio(aa_en: c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 315,
+    "line": 319,
     "kind": "free",
     "parent": ""
   },
@@ -507,7 +515,7 @@
     "name": "adlmidi_get_channel_alloc_mode",
     "signature": "fn adlmidi_get_channel_alloc_mode() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 319,
+    "line": 323,
     "kind": "free",
     "parent": ""
   },
@@ -515,7 +523,7 @@
     "name": "adlmidi_set_channel_alloc_mode",
     "signature": "fn adlmidi_set_channel_alloc_mode(ca: c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 323,
+    "line": 327,
     "kind": "free",
     "parent": ""
   },
@@ -523,7 +531,7 @@
     "name": "adlmidi_get_full_pan_stereo",
     "signature": "fn adlmidi_get_full_pan_stereo() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 327,
+    "line": 331,
     "kind": "free",
     "parent": ""
   },
@@ -531,7 +539,7 @@
     "name": "adlmidi_set_full_pan_stereo",
     "signature": "fn adlmidi_set_full_pan_stereo(fp: c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 331,
+    "line": 335,
     "kind": "free",
     "parent": ""
   },
@@ -539,7 +547,7 @@
     "name": "adlmidi_get_emulator",
     "signature": "fn adlmidi_get_emulator() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 335,
+    "line": 339,
     "kind": "free",
     "parent": ""
   },
@@ -547,7 +555,7 @@
     "name": "adlmidi_set_emulator",
     "signature": "fn adlmidi_set_emulator(emu: c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 339,
+    "line": 343,
     "kind": "free",
     "parent": ""
   },
@@ -555,7 +563,7 @@
     "name": "adlmidi_get_chips_count",
     "signature": "fn adlmidi_get_chips_count() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 343,
+    "line": 347,
     "kind": "free",
     "parent": ""
   },
@@ -563,7 +571,7 @@
     "name": "adlmidi_set_chips_count",
     "signature": "fn adlmidi_set_chips_count(chips: c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 347,
+    "line": 351,
     "kind": "free",
     "parent": ""
   },
@@ -571,7 +579,7 @@
     "name": "adlmidi_set_set_defaults",
     "signature": "fn adlmidi_set_set_defaults()",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 351,
+    "line": 355,
     "kind": "free",
     "parent": ""
   },
@@ -579,7 +587,7 @@
     "name": "adlmidi_set_custom_bank_file",
     "signature": "fn adlmidi_set_custom_bank_file(path: *const c_char)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 355,
+    "line": 359,
     "kind": "free",
     "parent": ""
   },
@@ -587,7 +595,7 @@
     "name": "opnmidi_set_set_defaults",
     "signature": "fn opnmidi_set_set_defaults()",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 361,
+    "line": 365,
     "kind": "free",
     "parent": ""
   },
@@ -595,7 +603,7 @@
     "name": "opnmidi_get_volume_model",
     "signature": "fn opnmidi_get_volume_model() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 365,
+    "line": 369,
     "kind": "free",
     "parent": ""
   },
@@ -603,7 +611,7 @@
     "name": "opnmidi_set_volume_model",
     "signature": "fn opnmidi_set_volume_model(vm: c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 369,
+    "line": 373,
     "kind": "free",
     "parent": ""
   },
@@ -611,7 +619,7 @@
     "name": "opnmidi_get_full_range_brightness",
     "signature": "fn opnmidi_get_full_range_brightness() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 373,
+    "line": 377,
     "kind": "free",
     "parent": ""
   },
@@ -619,7 +627,7 @@
     "name": "opnmidi_set_full_range_brightness",
     "signature": "fn opnmidi_set_full_range_brightness(frb: c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 377,
+    "line": 381,
     "kind": "free",
     "parent": ""
   },
@@ -627,7 +635,7 @@
     "name": "opnmidi_get_auto_arpeggio",
     "signature": "fn opnmidi_get_auto_arpeggio() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 381,
+    "line": 385,
     "kind": "free",
     "parent": ""
   },
@@ -635,7 +643,7 @@
     "name": "opnmidi_set_auto_arpeggio",
     "signature": "fn opnmidi_set_auto_arpeggio(aa_en: c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 385,
+    "line": 389,
     "kind": "free",
     "parent": ""
   },
@@ -643,7 +651,7 @@
     "name": "opnmidi_get_channel_alloc_mode",
     "signature": "fn opnmidi_get_channel_alloc_mode() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 389,
+    "line": 393,
     "kind": "free",
     "parent": ""
   },
@@ -651,7 +659,7 @@
     "name": "opnmidi_set_channel_alloc_mode",
     "signature": "fn opnmidi_set_channel_alloc_mode(ca: c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 393,
+    "line": 397,
     "kind": "free",
     "parent": ""
   },
@@ -659,7 +667,7 @@
     "name": "opnmidi_get_full_pan_stereo",
     "signature": "fn opnmidi_get_full_pan_stereo() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 397,
+    "line": 401,
     "kind": "free",
     "parent": ""
   },
@@ -667,7 +675,7 @@
     "name": "opnmidi_set_full_pan_stereo",
     "signature": "fn opnmidi_set_full_pan_stereo(fp: c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 401,
+    "line": 405,
     "kind": "free",
     "parent": ""
   },
@@ -675,7 +683,7 @@
     "name": "opnmidi_get_emulator",
     "signature": "fn opnmidi_get_emulator() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 405,
+    "line": 409,
     "kind": "free",
     "parent": ""
   },
@@ -683,7 +691,7 @@
     "name": "opnmidi_set_emulator",
     "signature": "fn opnmidi_set_emulator(emu: c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 409,
+    "line": 413,
     "kind": "free",
     "parent": ""
   },
@@ -691,7 +699,7 @@
     "name": "opnmidi_get_chips_count",
     "signature": "fn opnmidi_get_chips_count() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 413,
+    "line": 417,
     "kind": "free",
     "parent": ""
   },
@@ -699,7 +707,7 @@
     "name": "opnmidi_set_chips_count",
     "signature": "fn opnmidi_set_chips_count(chips: c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 417,
+    "line": 421,
     "kind": "free",
     "parent": ""
   },
@@ -707,7 +715,7 @@
     "name": "opnmidi_set_custom_bank_file",
     "signature": "fn opnmidi_set_custom_bank_file(path: *const c_char)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 421,
+    "line": 425,
     "kind": "free",
     "parent": ""
   },
@@ -715,7 +723,7 @@
     "name": "gme_set_spc_echo_disabled",
     "signature": "fn gme_set_spc_echo_disabled(music: *mut c_void, disabled: &mut c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 427,
+    "line": 431,
     "kind": "free",
     "parent": ""
   },
@@ -723,7 +731,7 @@
     "name": "gme_get_spc_echo_disabled",
     "signature": "fn gme_get_spc_echo_disabled(music: *mut c_void) -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 431,
+    "line": 435,
     "kind": "free",
     "parent": ""
   },
@@ -731,7 +739,7 @@
     "name": "get_midi_player",
     "signature": "fn get_midi_player() -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 437,
+    "line": 441,
     "kind": "free",
     "parent": ""
   },
@@ -739,7 +747,7 @@
     "name": "get_next_midi_player",
     "signature": "fn get_next_midi_player(player: c_int) -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 441,
+    "line": 445,
     "kind": "free",
     "parent": ""
   },
@@ -747,7 +755,7 @@
     "name": "set_midi_player",
     "signature": "fn set_midi_player(player: c_int) -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 445,
+    "line": 449,
     "kind": "free",
     "parent": ""
   },
@@ -755,7 +763,7 @@
     "name": "set_lock_midi_args",
     "signature": "fn set_lock_midi_args(lock: c_int)",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 449,
+    "line": 453,
     "kind": "free",
     "parent": ""
   },
@@ -763,7 +771,7 @@
     "name": "get_midi_device",
     "signature": "fn get_midi_device() -> *const c_char",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 453,
+    "line": 457,
     "kind": "free",
     "parent": ""
   },
@@ -771,7 +779,7 @@
     "name": "get_next_midi_device",
     "signature": "fn get_next_midi_device(device: *const c_char) -> *const c_char",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 457,
+    "line": 461,
     "kind": "free",
     "parent": ""
   },
@@ -779,7 +787,7 @@
     "name": "set_midi_device",
     "signature": "fn set_midi_device(device: *const c_char) -> c_int",
     "file": "./src\\ffi\\sdl_mixer.rs",
-    "line": 461,
+    "line": 465,
     "kind": "free",
     "parent": ""
   },
@@ -4473,7 +4481,7 @@
   },
   {
     "name": "my_error_exit",
-    "signature": "fn my_error_exit()",
+    "signature": "fn my_error_exit(_cinfo: *mut c_void)",
     "file": "./src\\framework\\imagelib\\mod.rs",
     "line": 222,
     "kind": "free",
@@ -4481,7 +4489,7 @@
   },
   {
     "name": "init_source",
-    "signature": "fn init_source()",
+    "signature": "fn init_source(_cinfo: *mut c_void)",
     "file": "./src\\framework\\imagelib\\mod.rs",
     "line": 224,
     "kind": "free",
@@ -4489,7 +4497,7 @@
   },
   {
     "name": "fill_input_buffer",
-    "signature": "fn fill_input_buffer() -> i32",
+    "signature": "fn fill_input_buffer(_cinfo: *mut c_void) -> i32",
     "file": "./src\\framework\\imagelib\\mod.rs",
     "line": 226,
     "kind": "free",
@@ -4497,7 +4505,7 @@
   },
   {
     "name": "skip_input_data",
-    "signature": "fn skip_input_data(_num_bytes: i64)",
+    "signature": "fn skip_input_data(_cinfo: *mut c_void, _num_bytes: i64)",
     "file": "./src\\framework\\imagelib\\mod.rs",
     "line": 228,
     "kind": "free",
@@ -4505,7 +4513,7 @@
   },
   {
     "name": "term_source",
-    "signature": "fn term_source()",
+    "signature": "fn term_source(_cinfo: *mut c_void)",
     "file": "./src\\framework\\imagelib\\mod.rs",
     "line": 230,
     "kind": "free",
@@ -6753,7 +6761,7 @@
   },
   {
     "name": "set_music_amplify",
-    "signature": "fn set_music_amplify(_amplify: f32)",
+    "signature": "fn set_music_amplify(_music_id: i32, _amplify: f64)",
     "file": "./src\\framework\\sound\\sdl_sound_manager.rs",
     "line": 162,
     "kind": "free",
@@ -7473,7 +7481,7 @@
   },
   {
     "name": "set_select",
-    "signature": "fn set_select()",
+    "signature": "fn set_select(_sel: i32)",
     "file": "./src\\framework\\widget\\mod.rs",
     "line": 24,
     "kind": "free",
@@ -7481,7 +7489,7 @@
   },
   {
     "name": "set_invis_if_no_scroll",
-    "signature": "fn set_invis_if_no_scroll()",
+    "signature": "fn set_invis_if_no_scroll(_invis: bool)",
     "file": "./src\\framework\\widget\\mod.rs",
     "line": 26,
     "kind": "free",
@@ -7489,7 +7497,7 @@
   },
   {
     "name": "get_last_color",
-    "signature": "fn get_last_color()",
+    "signature": "fn get_last_color(_key: &str)",
     "file": "./src\\framework\\widget\\mod.rs",
     "line": 28,
     "kind": "free",
@@ -7497,7 +7505,7 @@
   },
   {
     "name": "get_text_index_at",
-    "signature": "fn get_text_index_at() -> i32",
+    "signature": "fn get_text_index_at(_x: i32, _y: i32, _index: *mut i32)",
     "file": "./src\\framework\\widget\\mod.rs",
     "line": 30,
     "kind": "free",
@@ -7513,7 +7521,7 @@
   },
   {
     "name": "remove_all_widgets",
-    "signature": "fn remove_all_widgets()",
+    "signature": "fn remove_all_widgets(_free_widgets: bool, _delete_widgets: bool)",
     "file": "./src\\framework\\widget\\mod.rs",
     "line": 34,
     "kind": "free",
@@ -7537,7 +7545,7 @@
   },
   {
     "name": "get_sort_key",
-    "signature": "fn get_sort_key() -> i32",
+    "signature": "fn get_sort_key(_index: i32) -> i32",
     "file": "./src\\framework\\widget\\mod.rs",
     "line": 40,
     "kind": "free",
@@ -13601,7 +13609,7 @@
   },
   {
     "name": "change_dir_hook",
-    "signature": "fn change_dir_hook(self: &Self)",
+    "signature": "fn change_dir_hook(self: &Self, _path: &str) -> bool",
     "file": "./src\\lawn\\lawn_app.rs",
     "line": 642,
     "kind": "method",
@@ -13617,7 +13625,7 @@
   },
   {
     "name": "url_open_succeeded",
-    "signature": "fn url_open_succeeded(self: &Self)",
+    "signature": "fn url_open_succeeded(self: &Self, _url: &str)",
     "file": "./src\\lawn\\lawn_app.rs",
     "line": 646,
     "kind": "method",
@@ -13625,7 +13633,7 @@
   },
   {
     "name": "open_url",
-    "signature": "fn open_url(self: &Self, _url: &str)",
+    "signature": "fn open_url(self: &Self, _url: &str, _minimized: bool) -> bool",
     "file": "./src\\lawn\\lawn_app.rs",
     "line": 648,
     "kind": "method",

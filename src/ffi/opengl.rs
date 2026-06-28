@@ -730,13 +730,19 @@ gl_wrapper!(glViewport, (x: GLint, y: GLint, width: GLsizei, height: GLsizei));
 
 
 /// glad: 加载 GL ES 2.0（对应 C++ glad_gl_load_GL_ES_VERSION_2_0）
-pub fn glad_gl_load_gl_es_version_2_0() -> bool {
+pub fn glad_gl_load_gl_es_version_2_0(
+    _load_func: Option<unsafe extern "C" fn(*const i8) -> *mut std::ffi::c_void>,
+    _userptr: *mut std::ffi::c_void,
+) -> bool {
     // GL 函数已通过 SDL_GL_GetProcAddress 加载，始终返回 true
     true
 }
 
 /// glad: 获取扩展列表（对应 C++ glad_gl_get_extensions）
-pub fn glad_gl_get_extensions() -> *const i8 {
-    // 返回静态空字符串
-    std::ptr::null()
+pub fn glad_gl_get_extensions(
+    _out_exts: *mut *const i8,
+    _out_exts_i: *mut *mut *mut i8,
+) -> i32 {
+    // 返回 0（无扩展）
+    0
 }
