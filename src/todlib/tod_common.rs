@@ -116,16 +116,10 @@ pub fn tod_animate_curve_float(
     time_start: i32, time_end: i32, time_age: i32,
     pos_start: f32, pos_end: f32, curve: TodCurves,
 ) -> f32 {
-    if time_start == time_end {
-        return pos_start;
-    }
-    let t = if time_age < time_start {
-        0.0
-    } else if time_age > time_end {
-        1.0
-    } else {
-        (time_age - time_start) as f32 / (time_end - time_start) as f32
-    };
+    // src/todlib/tod_common.rs 第 115-127 行
+    // 改为：先计算 t，再 clamp
+    let raw_t = (time_age - time_start) as f32 / (time_end - time_start) as f32;
+    let t = raw_t.clamp(0.0, 1.0);
     evaluate_curve(curve, pos_start, pos_end, t)
 }
 
