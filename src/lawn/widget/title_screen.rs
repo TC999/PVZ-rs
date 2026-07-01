@@ -54,7 +54,8 @@ pub struct TitleScreenImpl {
 
     // ---- 启动按钮 ----
     pub start_button_label: String,
-    pub start_button_font: Option<Box<Font>>,
+    pub start_button_font: Option<*mut Font>,
+    pub start_button_font_fallback: Option<Box<Font>>,
     pub start_button_visible: bool,
     pub start_button_disabled: bool,
     pub start_button_x: i32,
@@ -95,6 +96,7 @@ impl TitleScreenImpl {
             start_button_y: 0,
             start_button_label: String::new(),
             start_button_font: None,
+            start_button_font_fallback: None,
         }
     }
 
@@ -387,17 +389,33 @@ impl WidgetImpl for TitleScreenImpl {
                 // 启动按钮文字
                 if !self.start_button_label.is_empty() && self.start_button_visible {
                     if self.start_button_font.is_none() {
-                        let mut f = Font::new("Briannetod", 16);
-                        f.ascent = 13;
-                        f.font_height = 16;
-                        self.start_button_font = Some(Box::new(f));
+                        // 尝试从 ResourceManager 加载字体
+                        let app = unsafe { &mut *self.app };
+                        let loaded = if let Some(rm_ptr) = app.base.resource_manager {
+                            unsafe {
+                                let rm = &mut *rm_ptr;
+                                rm.load_font("BRIANNETOD16")
+                            }
+                        } else { None };
+                        if let Some(font_ptr) = loaded {
+                            self.start_button_font = Some(font_ptr);
+                        } else {
+                            // 回退：手动构造字体
+                            let mut f = Font::new("Briannetod", 16);
+                            f.ascent = 13;
+                            f.font_height = 16;
+                            let fp = Box::into_raw(Box::new(f));
+                            self.start_button_font = Some(fp);
+                            self.start_button_font_fallback = None; // 不使用 fallback
+                        }
                     }
-                    if let Some(ref font) = self.start_button_font {
+                    if let Some(font_ptr) = self.start_button_font {
+                        let font = unsafe { &*font_ptr };
                         let text_width = font.string_width(&self.start_button_label);
                         let text_x = self.start_button_x + (314 - text_width) / 2;
                         let text_y = self.start_button_y + (50 + font.get_ascent()) / 2 - 1;
                         g.set_color(&Color::new(218, 184, 33, 255));
-                        let fptr = &**font as *const Font as *mut Font;
+                        let fptr = font as *const Font as *mut Font;
                         g.set_font(fptr);
                         g.draw_string(&self.start_button_label, text_x, text_y);
                     }

@@ -3,8 +3,43 @@
 
 #![allow(dead_code)]
 
+use std::sync::{Mutex, OnceLock};
+
 use crate::framework::color::Color;
 use crate::framework::rect::Rect;
+
+use crate::framework::graphics::graphics::Graphics;
+
+/// 包装指针类型，实现 Send + Sync + Eq + Hash
+#[derive(Clone, Copy)]
+struct SendPtr<T>(*const T);
+unsafe impl<T> Send for SendPtr<T> {}
+unsafe impl<T> Sync for SendPtr<T> {}
+impl<T> PartialEq for SendPtr<T> { fn eq(&self, other: &Self) -> bool { self.0 == other.0 } }
+impl<T> Eq for SendPtr<T> {}
+impl<T> std::hash::Hash for SendPtr<T> { fn hash<H: std::hash::Hasher>(&self, state: &mut H) { self.0.hash(state); } }
+
+/// 全局表：Font 指针 -> ImageFont 指针
+/// 用于 Font::draw_string 分派到 ImageFont::draw_string
+pub fn register_imagefont(font_ptr: *const Font, imf_ptr: *const std::ffi::c_void) {
+    let mut table = get_table().lock().unwrap();
+    table.insert(SendPtr(font_ptr), SendPtr(imf_ptr));
+}
+
+pub fn unregister_imagefont(font_ptr: *const Font) {
+    let mut table = get_table().lock().unwrap();
+    table.remove(&SendPtr(font_ptr));
+}
+
+fn lookup_imagefont(font_ptr: *const Font) -> Option<*const std::ffi::c_void> {
+    let table = get_table().lock().unwrap();
+    table.get(&SendPtr(font_ptr)).map(|p| p.0)
+}
+
+fn get_table() -> &'static Mutex<std::collections::HashMap<SendPtr<Font>, SendPtr<std::ffi::c_void>>> {
+    static TABLE: OnceLock<Mutex<std::collections::HashMap<SendPtr<Font>, SendPtr<std::ffi::c_void>>>> = OnceLock::new();
+    TABLE.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+}
 
 /// 字体基类（对应 C++ _Font）
 /// 在 C++ 中 Font 是基类，由 SysFont 和 ImageFont 继承。
@@ -126,6 +161,18 @@ impl Font {
         color: &Color,
         _clip_rect: &Rect,
     ) {
+        // 检查是否注册了 ImageFont，如有则分派
+        let self_ptr = self as *const Font;
+        if let Some(imf_ptr) = lookup_imagefont(self_ptr) {
+            let imf = imf_ptr as *mut crate::framework::graphics::image_font::ImageFont;
+            if !imf.is_null() {
+                unsafe {
+                    (*imf).draw_string(g, x, y, text, color, _clip_rect);
+                }
+                return;
+            }
+        }
+
         // 默认实现：使用 Graphics 填充像素模拟文字
         // 实际渲染由子类型（SysFont/ImageFont）覆盖
         let orig_color = g.color;

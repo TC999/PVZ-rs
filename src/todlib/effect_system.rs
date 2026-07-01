@@ -22,7 +22,8 @@ pub enum EffectType {
 
 /// 特效系统 — 管理所有粒子、动画、轨迹、附着物
 pub struct EffectSystem {
-    pub reanimations: Vec<Reanimation>,
+    /// 使用 Box<Reanimation> 确保指针稳定，外部代码可通过 raw pointer 直接修改动画属性
+    pub reanimations: Vec<Box<Reanimation>>,
     pub particle_systems: Vec<ParticleSystem>,
     pub attachments: Vec<Attachment>,
 }
@@ -59,10 +60,10 @@ impl EffectSystem {
         }
     }
 
-    /// 添加动画
+    /// 添加动画（index-based ID 版本）
     pub fn add_reanimation(&mut self, reanim: Reanimation) -> ReanimationID {
         let id = self.reanimations.len() as ReanimationID;
-        self.reanimations.push(reanim);
+        self.reanimations.push(Box::new(reanim));
         id
     }
 

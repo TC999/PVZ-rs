@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use crate::framework::color::Color;
 use crate::framework::common::{string_to_int, string_to_upper, utf8_decode_next_str};
 use crate::framework::desc_parser::{DataElement, DataElementMap, DescParser, CMDSEP_SEMICOLON};
-use crate::framework::graphics::font::Font;
+use crate::framework::graphics::font::{Font, register_imagefont};
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
 use crate::framework::graphics::memory_image::MemoryImage;
@@ -507,8 +507,6 @@ impl DescParser for FontData {
                         let mut image_name = String::new();
                         if self.data_to_string(&list[2], &mut image_name) {
                             if let Some(layer) = self.font_layer_list.get_mut(idx) {
-                                // 尝试从 ResourceManager 获取图像
-                                // 由于 FontData::app 提供 SexyAppBase*，可以通过它访问 ResourceManager
                                 if !self.app.is_null() {
                                     let app_ptr = self.app as *mut crate::framework::sexy_app_base::SexyAppBase;
                                     unsafe {
@@ -521,9 +519,80 @@ impl DescParser for FontData {
                                         }
                                     }
                                 }
-                                // 如果找不到图像，创建一个空的 SharedImageRef
                                 layer.image = SharedImageRef::new();
                                 eprintln!("[FontData] LAYERIMAG: 找不到图像 '{}'", image_name);
+                                return true;
+                            }
+                        }
+                    }
+                }
+                false
+            }
+            "LAYERIMAGEMAP" | "LAYERSETIMAGEMAP" => {
+                if list.len() == 4 {
+                    if let Some(idx) = self.data_to_layer(&list[1]) {
+                        let mut chars_vec = Vec::new();
+                        let mut rect_list_raw = Vec::new();
+                        let ok = self.data_to_string_vector(&list[2], &mut chars_vec)
+                            && self.data_to_list(&list[3], &mut rect_list_raw)
+                            && chars_vec.len() == rect_list_raw.len();
+                        if ok {
+                            // 先收集所有矩形数据，避免可变借用冲突
+                            let mut parsed_rects: Vec<(char, Rect)> = Vec::new();
+                            for (i, ch_str) in chars_vec.iter().enumerate() {
+                                if let Some(ch) = ch_str.chars().next() {
+                                    if let Some(rect_elem) = rect_list_raw.get(i) {
+                                        let mut rect_ints = Vec::new();
+                                        if self.data_to_int_vector(rect_elem, &mut rect_ints)
+                                            && rect_ints.len() == 4
+                                        {
+                                            let img_downscale = 2;
+                                            parsed_rects.push((ch, Rect::new(
+                                                rect_ints[0] / img_downscale,
+                                                rect_ints[1] / img_downscale,
+                                                rect_ints[2] / img_downscale,
+                                                rect_ints[3] / img_downscale,
+                                            )));
+                                        }
+                                    }
+                                }
+                            }
+                            if let Some(layer) = self.font_layer_list.get_mut(idx) {
+                                for (ch, rect) in &parsed_rects {
+                                    let char_data = layer.get_char_data(*ch);
+                                    char_data.image_rect = *rect;
+                                }
+                                layer.default_height = 0;
+                                for (_, char_data) in &layer.char_data_map {
+                                    let h = char_data.image_rect.height + char_data.offset.y;
+                                    if h > layer.default_height {
+                                        layer.default_height = h;
+                                    }
+                                }
+                                return true;
+                            }
+                        }
+                    }
+                }
+                false
+            }
+            "LAYERCHARWIDTHE" | "LAYERSETCHARWIDTHS" => {
+                // LayerSetCharWidths(layer, chars, widths)
+                if list.len() == 4 {
+                    if let Some(idx) = self.data_to_layer(&list[1]) {
+                        let mut chars_vec = Vec::new();
+                        let mut widths_vec = Vec::new();
+                        if self.data_to_string_vector(&list[2], &mut chars_vec)
+                            && self.data_to_int_vector(&list[3], &mut widths_vec)
+                            && chars_vec.len() == widths_vec.len()
+                        {
+                            if let Some(layer) = self.font_layer_list.get_mut(idx) {
+                                for (ch_str, &w) in chars_vec.iter().zip(widths_vec.iter()) {
+                                    if let Some(ch) = ch_str.chars().next() {
+                                        let char_data = layer.get_char_data(ch);
+                                        char_data.width = w;
+                                    }
+                                }
                                 return true;
                             }
                         }
@@ -888,6 +957,7 @@ pub struct ImageFont {
 
 impl ImageFont {
     /// 从字体文件创建 ImageFont（对应 C++ ImageFont(SexyAppBase*, string)）
+    /// 注意：不在此处注册到全局表，由调用方在 Box::into_raw 之后用稳定堆地址注册
     pub fn from_file(font_data: *mut FontData, point_size: i32) -> Self {
         ImageFont {
             base: Font::new("ImageFont", point_size),
@@ -906,6 +976,7 @@ impl ImageFont {
     }
 
     /// 从图像创建 ImageFont（简化构造，对应 C++ ImageFont(Image*)）
+    /// 注意：不在此处注册到全局表，由调用方在 Box::into_raw 之后用稳定堆地址注册
     pub fn from_image(_image: *mut Image) -> Self {
         ImageFont {
             base: Font::new("ImageFont", 12),

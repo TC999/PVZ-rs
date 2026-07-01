@@ -104,6 +104,10 @@ pub struct SexyAppBase {
     // 安全删除列表（对应 C++ mSafeDeleteList）
     pub safe_delete_list: Vec<*mut std::ffi::c_void>,
 
+    // 延迟删除回调：每次 update_app 结束后调用
+    pub post_update_callback: Option<fn(*mut std::ffi::c_void)>,
+    pub post_update_data: Option<*mut std::ffi::c_void>,
+
     // 主循环控制（对应 C++ mRunning, mLastTime 等）
     pub running: bool,
     pub last_time: u32,
@@ -245,6 +249,8 @@ impl SexyAppBase {
             update_multiplier: 1.0,
             paused: false,
             safe_delete_list: Vec::new(),
+            post_update_callback: None,
+            post_update_data: None,
             running: false,
             last_time: 0,
             last_time_check: 0,
@@ -452,6 +458,13 @@ impl SexyAppBase {
 
         // 4. 交换缓冲区（对应 C++ Redraw → GLInterface 的 SwapBuffers）
         self.swap_buffers();
+
+        // 5. 延迟删除回调（对应 C++ ProcessSafeDeleteList）
+        if let Some(callback) = self.post_update_callback {
+            if let Some(data) = self.post_update_data {
+                callback(data);
+            }
+        }
 
         true
     }

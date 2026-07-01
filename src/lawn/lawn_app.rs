@@ -165,6 +165,9 @@ pub struct LawnApp {
     pub m_loading_thread_completed: bool,
     pub m_loading_thread_tasks_completed: i32,
     pub m_loading_thread_tasks_total: i32,
+
+    // ---- 延迟删除 ----
+    pub widget_safe_delete_list: Vec<*mut Widget>,
 }
 
 /// 全局游戏实例
@@ -221,6 +224,7 @@ impl LawnApp {
             m_loading_thread_completed: false,
             m_loading_thread_tasks_completed: 0,
             m_loading_thread_tasks_total: 0,
+            widget_safe_delete_list: Vec::new(),
         }
     }
 
@@ -288,6 +292,10 @@ impl LawnApp {
     /// 启动（对应 C++ Start）
     pub fn start(&mut self) {
         if self.base.is_shutdown() { return; }
+        // 注册延迟删除回调，确保 widget 在事件回调结束后才被释放
+        let app_ptr = self as *mut LawnApp as *mut std::ffi::c_void;
+        self.base.post_update_callback = Some(lawn_app_post_update_callback);
+        self.base.post_update_data = Some(app_ptr);
         self.base.start();
     }
 
@@ -324,11 +332,22 @@ impl LawnApp {
     /// 开始新游戏（对应 C++ NewGame）
     pub fn new_game(&mut self) {
         self.m_level = 1;
-        self.pre_new_game(self.game_mode, true);
+        self.make_new_board();
+        // TODO: mBoard->InitLevel()
+        self.board_result = BoardResult::None;
+        self.game_scene = GameScenes::Playing;
     }
 
     /// 预新建游戏（对应 C++ PreNewGame）
-    pub fn pre_new_game(&mut self, _mode: GameMode, _look_for_saved: bool) {}
+    pub fn pre_new_game(&mut self, mode: GameMode, look_for_saved: bool) {
+        self.game_mode = mode;
+        if look_for_saved && self.try_load_game() {
+            return;
+        }
+        // 删除旧存档
+        // TODO: GetSavedGameName + EraseFile
+        self.new_game();
+    }
 
     /// 开始关卡
     pub fn start_level(&mut self, level: i32) {
@@ -471,7 +490,23 @@ impl LawnApp {
     // ==================== 游戏对象管理 ====================
 
     /// 添加动画（对应 C++ AddReanimation）
-    pub fn add_reanimation(&mut self, _x: f32, _y: f32, _render_order: i32, _type: i32) -> Option<*mut Reanimation> { None }
+    pub fn add_reanimation(&mut self, x: f32, y: f32, render_order: i32, reanim_type: i32) -> Option<*mut Reanimation> {
+        if let Some(ref mut es) = self.effect_system {
+            let mut reanim = Reanimation::new();
+            reanim.m_x = x;
+            reanim.m_y = y;
+            reanim.reanim_type = reanim_type;
+            reanim.m_anim_time = 0.0;
+            // 推入 Vec<Box<Reanimation>>，Box 保证指针稳定
+            es.reanimations.push(Box::new(reanim));
+            // 返回最后元素的指针
+            if let Some(last) = es.reanimations.last() {
+                let ptr = &**last as *const Reanimation as *mut Reanimation;
+                return Some(ptr);
+            }
+        }
+        None
+    }
 
     /// 添加粒子（对应 C++ AddTodParticle）
     pub fn add_tod_particle(&mut self, _x: f32, _y: f32, _render_order: i32, _effect: i32) -> Option<*mut TodParticleSystem> { None }
@@ -674,17 +709,17 @@ impl LawnApp {
     }
 
     /// 加载完成回调（对应 C++ LoadingCompleted）
+    /// 使用延迟删除避免在 widget 回调中直接释放自身导致 use-after-free
     pub fn loading_completed(&mut self) {
         eprintln!("[LawnApp] LoadingCompleted — 移除 TitleScreen，显示 GameSelector");
 
-        // 移除并销毁 TitleScreen widget
+        // 从 title_screen 取出指针，标记为待删除（不在这里释放）
         if let Some(ts) = self.title_screen.take() {
             if let Some(wm) = self.base.widget_manager {
                 unsafe {
                     (*wm).remove_widget(ts);
-                    // 释放 TitleScreenImpl 和 Widget
-                    let _ = Box::from_raw(ts);
                 }
+                self.widget_safe_delete_list.push(ts);
             }
         }
 
@@ -697,6 +732,17 @@ impl LawnApp {
 
         // 显示游戏选择器
         self.show_game_selector();
+    }
+
+    /// 处理延迟删除列表（对应 C++ ProcessSafeDeleteList）
+    /// 必须在所有 widget 回调完成后调用
+    pub fn process_pending_deletions(&mut self) {
+        let ptrs: Vec<*mut Widget> = self.widget_safe_delete_list.drain(..).collect();
+        for ptr in ptrs {
+            unsafe {
+                let _ = Box::from_raw(ptr);
+            }
+        }
     }
 
     /// 启动加载线程（对应 C++ StartLoadingThread）
@@ -771,18 +817,28 @@ impl LawnApp {
         if let Some(board_ptr) = self.board {
             unsafe { (*board_ptr).mouse_down(x, y, 1); }
         }
+        self.process_pending_deletions();
     }
 
     pub fn key_down(&mut self, key: i32) {
         if let Some(board_ptr) = self.board {
             unsafe { (*board_ptr).key_down(key); }
         }
+        self.process_pending_deletions();
     }
 
     // ==================== 调试 ====================
 
     pub fn debug_key_down(&mut self, _key: i32) -> bool { false }
     pub fn show_resource_error(&mut self, _exit: bool) {}
+}
+
+/// SexyAppBase post-update 回调：处理 LawnApp 的延迟删除
+fn lawn_app_post_update_callback(data: *mut std::ffi::c_void) {
+    unsafe {
+        let app = &mut *(data as *mut LawnApp);
+        app.process_pending_deletions();
+    }
 }
 
 // 全局辅助函数

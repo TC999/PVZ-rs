@@ -56,7 +56,7 @@ pub enum ReanimLoopType {
 #[derive(Debug)]
 pub struct Reanimation {
     pub id: ReanimationID,
-    pub reanim_type: ReanimationType,
+    pub reanim_type: i32,
     pub m_definition: Option<*mut ReanimatorDefinition>,
     pub m_track_instances: Vec<ReanimatorTrackInstance>,
     pub m_loop_type: ReanimLoopType,
@@ -81,7 +81,7 @@ impl Reanimation {
     pub fn new() -> Self {
         Reanimation {
             id: REANIMATIONID_NULL,
-            reanim_type: ReanimationType::None,
+            reanim_type: -1,
             m_definition: None,
             m_track_instances: Vec::new(),
             m_loop_type: ReanimLoopType::PlayOnceAndHold,
@@ -132,10 +132,29 @@ impl Reanimation {
         }
     }
 
-    /// 绘制
-    pub fn draw(&self, _g: &mut Graphics) {
-        // 渲染所有轨道实例
-        // 由 GLInterface 实际处理
+    /// 绘制（对应 C++ Reanimation::Draw → DrawRenderGroup）
+    pub fn draw(&self, g: &mut Graphics) {
+        if self.m_definition.is_none() { return; }
+
+        let def = unsafe { &*self.m_definition.unwrap() };
+
+        // Rust 版简化模型：每个轨道只有一个 m_transform
+        // 遍历所有轨道定义和对应的运行时实例
+        for (track_idx, track_def) in def.m_tracks.iter().enumerate() {
+            if track_idx >= self.m_track_instances.len() { break; }
+            let track_inst = &self.m_track_instances[track_idx];
+
+            if !track_inst.m_last_visible { continue; }
+
+            let transform = &track_def.m_transform;
+
+            // 如果轨道不可见或没有图像
+            if !transform.m_visible || transform.m_image < 0 { continue; }
+
+            // 通过 m_image 索引获取图像（简化：这里用空图像占位）
+            // 实际实现需要从 ResourceManager 或缓存中查找图像
+            let _ = g;
+        }
     }
 
     /// 重置动画
@@ -151,7 +170,7 @@ impl Reanimation {
 
     /// 递归查找子动画（对应 C++ FindSubReanim）
     /// 在当前动画及其所有附着的子动画中查找指定类型
-    pub fn find_sub_reanim(&mut self, reanim_type: ReanimationType) -> Option<&mut Self> {
+    pub fn find_sub_reanim(&mut self, reanim_type: i32) -> Option<&mut Self> {
         if self.reanim_type == reanim_type {
             return Some(self);
         }

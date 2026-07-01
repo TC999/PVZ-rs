@@ -199,7 +199,7 @@ pub struct GameSelectorImpl {
 
     // ---- 字体 ----
     pub fonts_init: bool,
-    pub briannetod16: Option<Box<Font>>,
+    pub briannetod16: Option<*mut Font>,
 
     // ---- 鼠标位置 ----
     pub mouse_x: i32,
@@ -327,10 +327,22 @@ impl GameSelectorImpl {
 
     fn ensure_fonts(&mut self) {
         if !self.fonts_init {
-            let mut f = Font::new("Briannetod", 16);
-            f.ascent = 13;
-            f.font_height = 16;
-            self.briannetod16 = Some(Box::new(f));
+            // 尝试从 ResourceManager 加载字体
+            let loaded = unsafe {
+                let app = &mut *self.app;
+                if let Some(rm_ptr) = app.base.resource_manager {
+                    (*rm_ptr).load_font("BRIANNETOD16")
+                } else { None }
+            };
+            if let Some(font_ptr) = loaded {
+                self.briannetod16 = Some(font_ptr);
+            } else {
+                // 回退：手动构造字体
+                let mut f = Font::new("Briannetod", 16);
+                f.ascent = 13;
+                f.font_height = 16;
+                self.briannetod16 = Some(Box::into_raw(Box::new(f)));
+            }
             self.fonts_init = true;
         }
     }
@@ -674,13 +686,14 @@ impl WidgetImpl for GameSelectorImpl {
                 && self.selector_state != SelectorAnimState::NewUser
             {
                 self.ensure_fonts();
-                if let Some(ref font) = self.briannetod16 {
+                if let Some(font_ptr) = self.briannetod16 {
+                    let font = unsafe { &*font_ptr };
                     let welcome_str = format!("{}!", player_info.name);
                     let string_w = font.string_width(&welcome_str);
                     let text_x = 170 + self.offset_x - (string_w / 2);
                     let text_y = 102 + self.offset_y + font.get_ascent();
                     g.set_color(&Color::new(255, 245, 200, 255));
-                    let fptr = &**font as *const Font as *mut Font;
+                    let fptr = font as *const Font as *mut Font;
                     g.set_font(fptr);
                     g.draw_string(&welcome_str, text_x, text_y);
                 }

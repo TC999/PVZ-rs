@@ -70,7 +70,10 @@ pub struct SoundRes {
 #[derive(Debug)]
 pub struct FontRes {
     pub base: BaseRes,
-    pub font: Option<Box<Font>>,
+    /// 字体基类指针（指向泄露的 ImageFont::base）
+    pub font_ptr: Option<*mut Font>,
+    /// 泄露的 ImageFont 所有者指针（用于 Drop 清理）
+    pub imagefont_owner: Option<*mut std::ffi::c_void>,
     pub image: *mut Image,
     pub image_path: String,
     pub tags: String,
@@ -250,7 +253,8 @@ impl ResourceManager {
 
                 let mut res = Box::new(FontRes {
                     base: BaseRes::new(ResType::Font),
-                    font: None,
+                    font_ptr: None,
+                    imagefont_owner: None,
                     image: std::ptr::null_mut(),
                     image_path: element.attributes.get("image").cloned().unwrap_or_default(),
                     tags: element.attributes.get("tags").cloned().unwrap_or_default(),
@@ -577,7 +581,71 @@ impl ResourceManager {
     pub fn delete_font(&mut self, _name: &str) {}
 
     /// 加载字体
-    pub fn load_font(&mut self, _name: &str) -> Option<*mut Font> { None }
+    pub fn load_font(&mut self, name: &str) -> Option<*mut Font> {
+        use crate::framework::desc_parser::DescParser;
+        use crate::framework::graphics::image_font::{FontData, ImageFont};
+
+        let lower = string_to_lower(name);
+        if let Some(&res_ptr) = self.font_map.get(&lower) {
+            unsafe {
+                let res = &mut *(res_ptr as *mut FontRes);
+                // 已加载则直接返回
+                if let Some(fp) = res.font_ptr {
+                    return Some(fp);
+                }
+
+                let path = &res.base.path;
+                eprintln!("    load_font: id='{}' path='{}'", name, path);
+
+                // 从 PAK 加载字体描述文件
+                let desc_content = crate::framework::paklib::with_pak_interface(|pak| {
+                    let try_paths = [
+                        path.clone(),
+                        format!("{}.txt", path),
+                        format!("{}.font", path),
+                    ];
+                    for p in &try_paths {
+                        if let Some(data) = pak.load_file(p) {
+                            if let Ok(s) = String::from_utf8(data) {
+                                return Some(s);
+                            }
+                        }
+                    }
+                    None
+                });
+
+                if let Some(content) = desc_content {
+                    // 解析 FontData
+                    let mut font_data = Box::new(FontData::new());
+                    font_data.load_descriptor(&content);
+                    let fd_ptr = Box::into_raw(font_data);
+
+                    // 创建 ImageFont 并泄露（由 imagefont_owner 管理生命周期）
+                    let imf = Box::new(ImageFont::from_file(fd_ptr, res.size));
+                    let owner_ptr = Box::into_raw(imf) as *mut std::ffi::c_void;
+                    // 用 Box::into_raw 后的稳定堆地址注册到全局表
+                    // 这样 Font::draw_string 才能正确分派到 ImageFont::draw_string
+                    unsafe {
+                        let imf_ref = &*(owner_ptr as *mut ImageFont);
+                        let font_ptr: *const Font = &imf_ref.base;
+                        let imf_vptr: *const std::ffi::c_void = owner_ptr as *const std::ffi::c_void;
+                        crate::framework::graphics::font::register_imagefont(font_ptr, imf_vptr);
+                    }
+                    let base_ptr: *mut Font = unsafe { &mut (*(owner_ptr as *mut ImageFont)).base };
+
+                    // 存入 FontRes
+                    res.font_ptr = Some(base_ptr);
+                    res.imagefont_owner = Some(owner_ptr);
+
+                    eprintln!("    load_font: '{}' 加载成功", name);
+                    return Some(base_ptr);
+                } else {
+                    eprintln!("    load_font: '{}' 描述文件未找到", name);
+                }
+            }
+        }
+        None
+    }
 
     /// 获取图像（对应 C++ GetImage）
     pub fn get_image(&self, the_id: &str) -> SharedImageRef {
@@ -595,7 +663,16 @@ impl ResourceManager {
     pub fn get_sound(&self, _id: &str) -> isize { 0 }
 
     /// 获取字体
-    pub fn get_font(&self, _id: &str) -> Option<*mut Font> { None }
+    pub fn get_font(&self, id: &str) -> Option<*mut Font> {
+        let lower = string_to_lower(id);
+        if let Some(&res_ptr) = self.font_map.get(&lower) {
+            unsafe {
+                let res = &*(res_ptr as *const FontRes);
+                return res.font_ptr;
+            }
+        }
+        None
+    }
 
     /// 获取图像（抛出异常版本）
     pub fn get_image_throw(&self, the_id: &str) -> SharedImageRef {
@@ -607,7 +684,9 @@ impl ResourceManager {
     pub fn get_sound_throw(&self, _id: &str) -> isize { 0 }
 
     /// 获取字体（抛出异常版本）
-    pub fn get_font_throw(&self, _id: &str) -> Option<*mut Font> { None }
+    pub fn get_font_throw(&self, id: &str) -> Option<*mut Font> {
+        self.get_font(id)
+    }
 
     /// 删除资源组（对应 C++ DeleteResources）
     pub fn delete_resources(&mut self, _group: &str) {}
@@ -640,7 +719,14 @@ impl Drop for ResourceManager {
             unsafe { let _ = Box::from_raw(ptr); }
         }
         for (_, ptr) in self.font_map.drain() {
-            unsafe { let _ = Box::from_raw(ptr); }
+            unsafe {
+                // 先释放 imagefont_owner（如果有）
+                let font_res = &mut *(ptr as *mut FontRes);
+                if let Some(owner) = font_res.imagefont_owner.take() {
+                    let _ = Box::from_raw(owner);
+                }
+                let _ = Box::from_raw(ptr);
+            }
         }
     }
 }
