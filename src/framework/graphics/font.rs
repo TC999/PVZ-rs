@@ -173,23 +173,27 @@ impl Font {
             }
         }
 
-        // 默认实现：使用 Graphics 填充像素模拟文字
-        // 实际渲染由子类型（SysFont/ImageFont）覆盖
+        // 回退实现：使用简单的竖线绘制，而非实心矩形块
+        // 这比方块美观得多，且能看到文字的大致形状
+        // 正常路径应通过 ImageFont 注册实现完整字体渲染
         let orig_color = g.color;
         g.set_color(color);
 
         let mut cur_x = x;
-        let ch_width = (self.size * 6 / 10).max(4);
+        let ch_width = (self.size * 6 / 10).max(5);
         let ch_height = self.font_height.max(8);
-        let spacing = 1;
+        let ascent = self.ascent.max(ch_height / 2);
 
         for ch in text.chars() {
             if ch == ' ' {
                 cur_x += ch_width;
                 continue;
             }
-            // 为每个可见字符绘制一个小矩形块
-            g.fill_rect_xywh(cur_x, y - self.ascent, ch_width - spacing, ch_height);
+            // 用细竖线代替字符（2px 宽），比实心方块好得多
+            let line_x = cur_x;
+            let line_top = y - ascent;
+            let line_h = ch_height;
+            g.fill_rect_xywh(line_x, line_top, 2.max(ch_width / 4), line_h);
             cur_x += ch_width;
         }
 

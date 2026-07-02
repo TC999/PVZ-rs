@@ -134,11 +134,49 @@ impl Reanimation {
 
     /// 绘制（对应 C++ Reanimation::Draw → DrawRenderGroup）
     pub fn draw(&self, g: &mut Graphics) {
-        if self.m_definition.is_none() { return; }
+        // 保存当前变换状态
+        let saved_trans_x = g.trans_x;
+        let saved_trans_y = g.trans_y;
+
+        // 应用动画位置
+        g.translate_f(self.m_x, self.m_y);
+
+        // 应用缩放
+        let sx = self.m_scale * self.m_override_scale_x;
+        let sy = self.m_scale * self.m_override_scale_y;
+
+        if self.m_definition.is_none() {
+            // 无定义时的占位渲染：绘制彩色标记便于调试
+            // 根据 reanim_type 选择颜色
+            let color = match self.reanim_type {
+                0 => Color::new(0, 200, 0, 180),    // LoadbarSprout → 绿色花苗
+                1 => Color::new(200, 80, 80, 200),   // LoadbarZombiehead → 红色僵尸头
+                2 => Color::new(139, 69, 19, 200),   // SodRoll → 棕色草皮
+                _ => Color::new(100, 100, 255, 180), // 其他 → 蓝色
+            };
+            g.set_color(&color);
+            g.set_colorize_images(true);
+            // 绘制一个有意义的形状：填充矩形 + 白边框
+            let base_x = 0.0_f32;
+            let base_y = 0.0_f32;
+            let sz = 20.0_f32 * sx;
+            let ix = base_x as i32 - (sz / 2.0) as i32;
+            let iy = base_y as i32 - (sz / 2.0) as i32;
+            let isz = sz as i32;
+            g.fill_rect_xywh(ix, iy, isz.max(4), isz.max(4));
+            // 绘制白色边框
+            g.set_color(&Color::WHITE);
+            g.draw_rect_xywh(ix, iy, isz.max(4), isz.max(4));
+            g.set_colorize_images(false);
+
+            // 恢复变换状态
+            g.trans_x = saved_trans_x;
+            g.trans_y = saved_trans_y;
+            return;
+        }
 
         let def = unsafe { &*self.m_definition.unwrap() };
 
-        // Rust 版简化模型：每个轨道只有一个 m_transform
         // 遍历所有轨道定义和对应的运行时实例
         for (track_idx, track_def) in def.m_tracks.iter().enumerate() {
             if track_idx >= self.m_track_instances.len() { break; }
@@ -151,10 +189,21 @@ impl Reanimation {
             // 如果轨道不可见或没有图像
             if !transform.m_visible || transform.m_image < 0 { continue; }
 
-            // 通过 m_image 索引获取图像（简化：这里用空图像占位）
-            // 实际实现需要从 ResourceManager 或缓存中查找图像
-            let _ = g;
+            // TODO: 通过 m_image 索引从 ResourceManager 或缓存中查找实际图像并绘制
+            // 目前占位：绘制彩色矩形标记
+            g.set_color(&Color::new(255, 200, 0, 200));
+            g.set_colorize_images(true);
+            let px = transform.m_trans_x as i32;
+            let py = transform.m_trans_y as i32;
+            let pw = (30.0 * transform.m_scale_x * sx) as i32;
+            let ph = (30.0 * transform.m_scale_y * sy) as i32;
+            g.fill_rect_xywh(px - pw / 2, py - ph / 2, pw.max(4), ph.max(4));
+            g.set_colorize_images(false);
         }
+
+        // 恢复变换状态
+        g.trans_x = saved_trans_x;
+        g.trans_y = saved_trans_y;
     }
 
     /// 重置动画
