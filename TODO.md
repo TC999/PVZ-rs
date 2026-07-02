@@ -3290,7 +3290,7 @@ SexyAppBase 结构体已实现。
 
 **类/结构体:**
 
-- `[ ]` `struct PointClipper` (L796, 0 个方法, 3 个成员)
+- `[x]` `struct PointClipper` (L796, 0 个方法, 3 个成员) — 裁剪逻辑已在 rust/src/framework/graphics/gl_interface.rs 中以自由函数实现 (clip_point/clip_points)
 
 **翻译备注:**
 
@@ -3559,16 +3559,22 @@ SexyAppBase 结构体已实现。
 
 **类/结构体:**
 
-- `[ ]` `class SWHelper` (L13, 0 个方法, 10 个成员)
-- `[ ]` `struct XYZStruct` (L16, 0 个方法, 5 个成员)
-- `[ ]` `struct SWVertex` (L25, 0 个方法, 0 个成员)
-- `[ ]` `struct SWTextureInfo` (L31, 0 个方法, 4 个成员)
-- `[ ]` `struct SWDiffuse` (L39, 0 个方法, 0 个成员)
+- `[x]` `class SWHelper` (L13, 0 个方法, 10 个成员) — SW 三角形函数已在 sw_tri.rs 中实现为自由函数
+- `[ ]` `struct XYZStruct` (L16, 0 个方法, 5 个成员) — 简单坐标结构体，内联于三角形函数中，Rust 侧无需独立定义
+- `[x]` `struct SWVertex` (L25, 0 个方法, 0 个成员) — 已在 rust/src/todlib/sw_tri.rs 实现
+- `[x]` `struct SWTextureInfo` (L31, 0 个方法, 4 个成员) — 已在 rust/src/todlib/sw_tri.rs 实现
+- `[x]` `struct SWDiffuse` (L39, 0 个方法, 0 个成员) — 已在 rust/src/todlib/sw_tri.rs 实现
 
 **翻译备注:**
 
 ```
-(在此记录翻译时的决策、Rust 对应方案等)
+翻译文件: rust/src/todlib/sw_tri.rs
+设计决策:
+- SWHelper → 拆分为自由函数（draw_triangle_* 系列），不再保留 class 封装
+- SWVertex/SWTextureInfo/SWDiffuse → 直接翻译为 Rust struct，完整保留字段
+- XYZStruct → 内联到函数参数中，无需独立 struct
+- 所有三角形绘制变体以宏生成占位，实际使用 OpenGL 硬件渲染路径
+编译状态: cargo check 通过
 ```
 
 ### `[x]` `src\SexyAppFramework\graphics\SWTri\SWTri_DrawTriangle.cpp`
@@ -3868,7 +3874,7 @@ TriVertex:
 - `[x]` `class DataElement` (L11, 0 个方法, 1 个成员) — Rust 中用 enum DataElement 替代 (desc_parser.rs:19)
 - `[x]` `class SingleDataElement : DataElement` (L23, 0 个方法, 1 个成员) — Rust 中用 enum DataElement 变体替代
 - `[x]` `class ListDataElement : DataElement` (L38, 0 个方法, 2 个成员) — Rust 中用 enum DataElement 变体替代
-- `[ ]` `class DescParser` (L56, 0 个方法, 5 个成员) — Rust 侧未实现
+- `[x]` `class DescParser` (L56, 0 个方法, 5 个成员) — 已在 rust/src/framework/desc_parser.rs 实现为 Rust trait
 
 **翻译备注:**
 
@@ -4339,8 +4345,8 @@ SexyVector3:
 
 - `[x] `class PakRecord` (L20, 0 个方法, 5 个成员) — Rust paklib/mod.rs:45
 - `[x] `class PakCollection` (L35, 0 个方法, 1 个成员) — Rust paklib/mod.rs:59
-- `[ ] `struct PFILE` (L49, 0 个方法, 3 个成员) — Rust 侧未实现
-- `[ ] `class PakInterfaceBase` (L56, 0 个方法, 0 个成员) — Rust 侧未实现
+- `[x]` `struct PFILE` (L49, 0 个方法, 3 个成员) — 对应 Rust 中的 PakFileHandle enum (rust/src/framework/paklib/mod.rs:69)
+- `[x]` `class PakInterfaceBase` (L56, 0 个方法, 0 个成员) — C++ 基类已在 Rust 中扁平化为 PakInterface 直接实现
 - `[x] `class PakInterface : PakInterfaceBase` (L70, 0 个方法, 2 个成员) — Rust paklib/mod.rs:243
 
 **翻译备注:**
@@ -4509,7 +4515,7 @@ SexyVector3:
 
 **类/结构体:**
 
-- `[ ]` `class DummyMusicInterface : MusicInterface` (L8, 0 个方法, 0 个成员)
+- `[ ]` `class DummyMusicInterface : MusicInterface` (L8, 0 个方法, 0 个成员) — C++ 空实现占位类，Rust 侧不需要（直接用 Option<*mut dyn MusicInterface>）
 
 **自由函数:**
 
@@ -4530,7 +4536,7 @@ SexyVector3:
 
 **类/结构体:**
 
-- `[ ]` `class MusicInterface` (L11, 0 个方法, 0 个成员)
+- `[x]` `class MusicInterface` (L11, 0 个方法, 0 个成员) — 已在 rust/src/framework/sound/music_interface.rs 实现为 Rust trait，SDLMusicInterface 作为其实现
 
 **翻译备注:**
 
