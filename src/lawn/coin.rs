@@ -175,9 +175,43 @@ impl Coin {
     /// 绘制
     pub fn draw(&self, _g: &mut Graphics) {}
 
-    /// 收集硬币（增加玩家金钱/阳光）
+    /// 收集硬币（对应 C++ Coin::Collect 简化版）
     pub fn collect(&mut self) {
-        self.dead = true;
+        if self.dead { return; }
+
+        self.is_being_collected = true;
+
+        // 阳光/金钱计分
+        if self.is_sun {
+            if let Some(board) = self.base.get_board_mut() {
+                board.add_sun_money(self.value);
+            }
+        } else if self.is_money() {
+            if let Some(board) = self.base.get_board_mut() {
+                board.add_sun_money(self.value);
+            }
+        }
+
+        // [TRANSLATION_NOTE]: 特殊硬币类型（礼物/巧克力/种子/关卡奖励）
+        // 的处理逻辑暂未实现
+
+        self.fade_count = 0;
+        // [TRANSLATION_NOTE]: AttachmentDetachCrossFade 暂未实现
+    }
+
+    /// 扇形散开硬币（对应 C++ FanOutCoins）
+    pub fn fan_out_coins(&mut self, coin_type: CoinType, num_coins: i32) {
+        use std::f32::consts::PI;
+        for i in 0..num_coins {
+            let a_angle = PI / 2.0 + PI * (i + 1) as f32 / (num_coins + 1) as f32;
+            let a_pos_x = self.pos_x + 20.0;
+            let a_pos_y = self.pos_y;
+            if let Some(board) = self.base.get_board_mut() {
+                board.add_coin(a_pos_x, a_pos_y, coin_type, CoinMotion::FromSky);
+                // [TRANSLATION_NOTE]: 设置散出硬币的初速度需在 add_coin 后修改
+                // 暂不实现
+            }
+        }
     }
 
     /// 命中检测（对应 C++ Coin::MouseHitTest L1428）
