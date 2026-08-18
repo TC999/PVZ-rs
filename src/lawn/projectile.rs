@@ -213,6 +213,9 @@ impl Projectile {
         // 运动类型分发
         self.update_normal_motion();
 
+        // 碰撞检测
+        self.check_for_collision();
+
         // 坡度高度变化
         // [TRANSLATION_NOTE]: 坡度高度变化暂简化处理
         self.base.x = self.pos_x as i32;
@@ -256,6 +259,74 @@ impl Projectile {
     pub fn die(&mut self) {
         self.dead = true;
         // [TRANSLATION_NOTE]: AttachmentCrossFade/AttachmentDie 暂未实现
+    }
+
+    /// 检查碰撞（对应 C++ Projectile::CheckForCollision 简化版）
+    pub fn check_for_collision(&mut self) {
+        let my_pos_x = self.pos_x;
+        let my_pos_y = self.pos_y;
+        let my_width = self.base.width;
+        let proj_type = self.projectile_type;
+        let motion = self.motion;
+        let proj_age = self.projectile_age;
+        let my_row = self.base.row;
+
+        // 生命周期检查：Puff 75帧
+        if motion == ProjectileMotion::Floating && proj_age >= 75 {
+            self.die();
+            return;
+        }
+
+        // 飞出屏幕
+        if my_pos_x > 900.0 || (my_pos_x + my_width as f32) < 0.0 {
+            self.die();
+            return;
+        }
+
+        // 星星飞出垂直范围
+        if proj_type == ProjectileType::Star && (my_pos_y > 600.0 || my_pos_y < 40.0) {
+            self.die();
+            return;
+        }
+
+        // 查找碰撞僵尸（在 board 借用中查找索引，退出借用后处理）
+        let hit_zombie_idx = {
+            if let Some(board) = self.base.get_board() {
+                let proj_rect = Rect::new(my_pos_x as i32 - 5, my_pos_y as i32 - 5, 10, 10);
+                let mut found = None;
+                for (idx, zombie) in board.zombies.iter().enumerate() {
+                    if zombie.dead { continue; }
+                    if zombie.zombie_type == ZombieType::Boss || zombie.base.row == my_row {
+                        if zombie.is_dead_or_dying() { continue; }
+                        let z_rect = zombie.get_zombie_rect();
+                        if crate::lawn::board::get_rect_overlap(&proj_rect, &z_rect) >= 0 {
+                            found = Some(idx);
+                            break;
+                        }
+                    }
+                }
+                found
+            } else {
+                None
+            }
+        };
+
+        if let Some(zombie_idx) = hit_zombie_idx {
+            self.do_impact_by_index(zombie_idx);
+        }
+    }
+
+    /// 通过索引对僵尸造成碰撞效果（对应 C++ DoImpact 主体）
+    pub fn do_impact_by_index(&mut self, zombie_idx: usize) {
+        if let Some(board) = self.base.get_board_mut() {
+            if let Some(zombie) = board.zombies.get_mut(zombie_idx) {
+                let a_damage = self.damage;
+                let a_damage_flags = self.damage_flags;
+                zombie.take_damage(a_damage, a_damage_flags);
+            }
+        }
+        // [TRANSLATION_NOTE]: 溅射伤害/粒子效果暂略
+        self.die();
     }
 
     /// 绘制子弹
