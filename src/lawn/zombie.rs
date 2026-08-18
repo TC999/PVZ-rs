@@ -22,6 +22,7 @@ pub const BUNGEE_ZOMBIE_HEIGHT: i32 = 3000;
 pub const ZOMBIE_LIMP_SPEED_FACTOR: i32 = 2;
 pub const POGO_BOUNCE_TIME: i32 = 80;
 pub const DOLPHIN_JUMP_TIME: i32 = 120;
+pub const BOBSLED_CRASH_TIME: i32 = 150;
 pub const CHILLED_SPEED_FACTOR: f32 = 0.4;
 pub const THOWN_ZOMBIE_GRAVITY: f32 = 0.05;
 
@@ -1296,8 +1297,22 @@ impl Zombie {
     /// 更新气球僵尸（对应 C++ UpdateZombieFlyer，stub）
     pub fn update_zombie_flyer(&mut self) {}
 
-    /// 更新报纸僵尸（对应 C++ UpdateZombieNewspaper，stub）
-    pub fn update_zombie_newspaper(&mut self) {}
+    /// 更新报纸僵尸（对应 C++ UpdateZombieNewspaper）
+    pub fn update_zombie_newspaper(&mut self) {
+        if self.zombie_phase == ZombiePhase::NewspaperMaddening {
+            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统，简化处理
+            self.zombie_phase = ZombiePhase::NewspaperMad;
+            if let Some(board) = self.base.get_board() {
+                if board.count_zombies_on_screen() <= 10 && self.has_head {
+                    if let Some(app) = self.base.get_app() {
+                        app.play_foley(crate::todlib::tod_foley::FoleyType::NewspaperRarrgh as i32);
+                    }
+                }
+            }
+            self.start_walk_anim(20);
+            // [TRANSLATION_NOTE]: SetImageOverride("anim_head1", ...) 依赖 Reanimation 系统
+        }
+    }
 
     /// 更新矿工僵尸（对应 C++ UpdateZombieDigger，stub）
     pub fn update_zombie_digger(&mut self) {}
@@ -1435,8 +1450,66 @@ impl Zombie {
         }
     }
 
-    /// 更新雪橇僵尸（对应 C++ UpdateZombieBobsled，stub）
-    pub fn update_zombie_bobsled(&mut self) {}
+    /// 更新雪橇僵尸（对应 C++ BobsledCrash）
+    pub fn bobsled_crash(&mut self) {
+        self.altitude = 0.0;
+        self.zombie_rect = Rect::new(36, 0, 42, 115);
+        self.zombie_phase = ZombiePhase::BobsledCrashing;
+        self.phase_counter = BOBSLED_CRASH_TIME;
+        self.start_walk_anim(0);
+
+        // [TRANSLATION_NOTE]: 设置跟随者崩溃状态依赖 ZombieGet 方法，暂未实现
+    }
+
+    /// 更新雪橇僵尸（对应 C++ UpdateZombieBobsled）
+    pub fn update_zombie_bobsled(&mut self) {
+        if self.zombie_phase == ZombiePhase::BobsledCrashing {
+            if self.phase_counter == 0 {
+                self.zombie_phase = ZombiePhase::Normal;
+                if self.get_bobsled_position() == 0 {
+                    // [TRANSLATION_NOTE]: 清除跟随者关系依赖 ZombieGet 方法
+                    self.pick_random_speed();
+                }
+            }
+            return;
+        }
+
+        if self.zombie_phase == ZombiePhase::BobsledSliding {
+            if self.phase_counter == 0 {
+                self.zombie_phase = ZombiePhase::BobsledBoarding;
+                self.play_zombie_reanim("anim_jump", ReanimLoopType::PlayOnceAndHold, 0, 20.0);
+            }
+        } else {
+            if self.zombie_phase != ZombiePhase::BobsledBoarding {
+                return;
+            }
+
+            // [TRANSLATION_NOTE]: 跳上雪橇的高度动画依赖 Reanimation AnimTime
+            let a_position = self.get_bobsled_position();
+            if a_position == 1 || a_position == 3 {
+                self.altitude = 8.0;
+            } else {
+                self.altitude = -9.0;
+            }
+        }
+
+        // 冰面维持
+        let my_pos_x = self.pos_x;
+        let my_row = self.base.row;
+        let bobsled_pos = self.get_bobsled_position();
+        let (ice_timer_set, need_damage) = if let Some(board) = self.base.get_board_mut() {
+            let row = my_row as usize;
+            board.m_ice_timer[row] = board.m_ice_timer[row].max(500);
+            let edge = board.m_ice_min_x[row];
+            let behind_edge = my_pos_x + 10.0 < edge as f32 && bobsled_pos == 0;
+            (true, behind_edge)
+        } else {
+            (false, false)
+        };
+        if ice_timer_set && need_damage {
+            self.take_damage(6, 8);
+        }
+    }
 
     /// 更新冰车僵尸（对应 C++ UpdateZamboni，stub）
     pub fn update_zamboni(&mut self) {}
