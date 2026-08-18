@@ -389,8 +389,21 @@ impl Projectile {
         self.die();
     }
 
-    /// 绘制子弹
-    pub fn draw(&self, _g: &mut Graphics) {}
+    /// 绘制子弹（对应 C++ Projectile::Draw 简化版）
+    pub fn draw(&self, _g: &mut Graphics) {
+        // [TRANSLATION_NOTE]: 图片资源引用在 Rust 中暂未实现，简化选择逻辑
+        // C++ 中根据 mProjectileType 选择不同图片 (IMAGE_PROJECTILEPEA 等)
+        // 并处理缩放、旋转、镜像和 Attachment 渲染
+        let _projectile_def = self.get_projectile_def();
+        let _mirror = false; // 对应 MOTION_BEE_BACKWARDS
+        // 渲染逻辑：选择图片 → 计算源/目标矩形 → 应用旋转/缩放 → 绘制
+    }
+
+    /// 绘制子弹阴影（对应 C++ Projectile::DrawShadow 简化版）
+    pub fn draw_shadow(&self, _g: &mut Graphics) {
+        // [TRANSLATION_NOTE]: 阴影绘制依赖 IMAGE_PEA_SHADOWS 图片资源
+        // 逻辑：选择偏移/缩放/拉伸 → 高台高度调整 → 夜间颜色 → 抛物线高度缩放 → 绘制
+    }
 
     /// 获取子弹矩形
     pub fn get_projectile_rect(&self) -> Rect {
