@@ -342,9 +342,92 @@ impl Projectile {
         )
     }
 
-    /// 产生溅射伤害（西瓜/冰瓜）
-    pub fn do_splash_damage(&self) {
-        // 查找范围内的僵尸并造成范围伤害
+    /// 产生溅射伤害（对应 C++ DoSplashDamage）
+    pub fn do_splash_damage(&mut self, the_zombie_idx: Option<usize>) {
+        // [TRANSLATION_NOTE]: 溅射伤害完整实现依赖遍历 board.zombies + 伤害计算
+        // 简化版：直接对目标僵尸造成全额伤害，对其他僵尸造成 1/3 伤害
+        let a_original_damage = self.damage;
+        let a_splash_damage = (a_original_damage / 3).max(1);
+        let a_damage_flags = self.damage_flags;
+        let my_pos_x = self.pos_x as i32;
+        let my_pos_y = self.pos_y as i32;
+        let my_row = self.base.row;
+        let proj_type = self.projectile_type;
+
+        if let Some(board) = self.base.get_board_mut() {
+            for (idx, zombie) in board.zombies.iter_mut().enumerate() {
+                if zombie.dead { continue; }
+                let a_row_deviation = zombie.base.row - my_row;
+                if proj_type == ProjectileType::Melon {
+                    if a_row_deviation > 1 || a_row_deviation < -1 {
+                        continue;
+                    }
+                }
+                let z_rect = zombie.get_zombie_rect();
+                let splash_rect = Rect::new(my_pos_x - 5, my_pos_y - 5, 10, 10);
+                if crate::lawn::board::get_rect_overlap(&splash_rect, &z_rect) >= 0 {
+                    if Some(idx) == the_zombie_idx {
+                        zombie.take_damage(a_original_damage, a_damage_flags);
+                    } else {
+                        zombie.take_damage(a_splash_damage, a_damage_flags);
+                    }
+                }
+            }
+        }
+    }
+
+    /// 是否是溅射伤害类型（对应 C++ IsSplashDamage）
+    pub fn is_splash_damage(&self) -> bool {
+        // [TRANSLATION_NOTE]: Fireball 类型在 Rust 中尚不存在 PROJECTILE_FIREBALL
+        self.projectile_type == ProjectileType::Melon
+    }
+
+    /// 僵尸是否被溅射击中（对应 C++ IsZombieHitBySplash）
+    pub fn is_zombie_hit_by_splash(&self, zombie_idx: usize) -> bool {
+        if let Some(board) = self.base.get_board() {
+            if let Some(zombie) = board.zombies.get(zombie_idx) {
+                let my_pos_x = self.pos_x as i32;
+                let my_pos_y = self.pos_y as i32;
+                let my_width = self.base.width;
+                let mut splash_rect = Rect::new(my_pos_x - 5, my_pos_y - 5, 10, 10);
+                // [TRANSLATION_NOTE]: Fireball 溅射半径 100
+                let a_row_deviation = zombie.base.row - self.base.row;
+                if self.projectile_type == ProjectileType::Melon {
+                    if a_row_deviation > 1 || a_row_deviation < -1 {
+                        return false;
+                    }
+                }
+                let z_rect = zombie.get_zombie_rect();
+                return crate::lawn::board::get_rect_overlap(&splash_rect, &z_rect) >= 0;
+            }
+        }
+        false
+    }
+
+    /// 豌豆是否即将击中火炬树桩（对应 C++ PeaAboutToHitTorchwood 简化版）
+    pub fn pea_about_to_hit_torchwood(&self) -> bool {
+        // [TRANSLATION_NOTE]: 火炬树桩碰撞检测依赖植物遍历，暂未实现
+        false
+    }
+
+    /// 转换为火球（对应 C++ ConvertToFireball）
+    pub fn convert_to_fireball(&mut self, grid_x: i32) {
+        if self.hit_torchwood_grid_x == grid_x {
+            return;
+        }
+        self.hit_torchwood_grid_x = grid_x;
+        // [TRANSLATION_NOTE]: 火球类型在 Rust 的 ProjectileType 中尚不存在
+        // 音效 + 火球动画 Reanimation 暂未实现
+    }
+
+    /// 转换回豌豆（对应 C++ ConvertToPea）
+    pub fn convert_to_pea(&mut self, grid_x: i32) {
+        if self.hit_torchwood_grid_x == grid_x {
+            return;
+        }
+        // [TRANSLATION_NOTE]: AttachmentDie 暂未实现
+        self.projectile_type = ProjectileType::Pea;
+        self.hit_torchwood_grid_x = grid_x;
     }
 }
 
