@@ -34,3 +34,6 @@ SDL2*
 *.lib
 *.exp
 *.zip
+
+# AI 终端
+.reasonix
