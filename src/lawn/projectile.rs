@@ -405,6 +405,28 @@ impl Projectile {
         // 逻辑：选择偏移/缩放/拉伸 → 高台高度调整 → 夜间颜色 → 抛物线高度缩放 → 绘制
     }
 
+    /// 查找碰撞植物（对应 C++ FindCollisionTargetPlant）
+    pub fn find_collision_target_plant(&self) -> Option<usize> {
+        let proj_rect = self.get_projectile_rect();
+        let my_row = self.base.row;
+        let proj_type = self.projectile_type;
+
+        if let Some(board) = self.base.get_board() {
+            for (idx, plant) in board.plants.iter().enumerate() {
+                if plant.dead { continue; }
+                if plant.base.row != my_row { continue; }
+
+                // 僵尸豌豆不能打低矮植物（Puffshroom/Sunshroom/PotatoMine/Spikeweed/Spikerock/Lilypad）
+                // [TRANSLATION_NOTE]: 低矮植物检查暂未实现
+                let plant_rect = plant.plant_rect;
+                if crate::lawn::board::get_rect_overlap(&proj_rect, &plant_rect) > 8 {
+                    return Some(idx);
+                }
+            }
+        }
+        None
+    }
+
     /// 获取子弹矩形
     pub fn get_projectile_rect(&self) -> Rect {
         Rect::new(
