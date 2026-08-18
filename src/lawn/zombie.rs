@@ -1574,8 +1574,51 @@ impl Zombie {
         }
     }
 
-    /// 更新小丑僵尸（对应 C++ UpdateZombieJackInTheBox，stub）
-    pub fn update_zombie_jack_in_the_box(&mut self) {}
+    /// 更新小丑僵尸（对应 C++ UpdateZombieJackInTheBox）
+    pub fn update_zombie_jack_in_the_box(&mut self) {
+        if self.zombie_phase == ZombiePhase::JackInTheBoxRunning {
+            if self.phase_counter <= 0 && self.has_head {
+                self.phase_counter = 110;
+                self.zombie_phase = ZombiePhase::JackInTheBoxPopping;
+                self.stop_zombie_sound();
+                // [TRANSLATION_NOTE]: PlaySample(SOUND_BOING) 暂未实现
+                self.play_zombie_reanim("anim_pop", ReanimLoopType::PlayOnceAndHold, 20, 28.0);
+            }
+        } else if self.zombie_phase == ZombiePhase::JackInTheBoxPopping {
+            if self.phase_counter == 80 {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::JackSurprise as i32);
+                }
+            }
+
+            if self.phase_counter <= 0 {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Explosion as i32);
+                }
+                // [TRANSLATION_NOTE]:
+                // KillAllZombiesInRadius / KillAllPlantsInRadius / Particle 均在 Board 中未实现
+                // ScaryPotterJackExplode 在 Challenge 中已存在
+                let a_pos_x = self.base.x + self.base.width / 2;
+                let a_pos_y = self.base.y + self.base.height / 2;
+                if !self.mind_controlled {
+                    // 非精神控制：炸死植物
+                    // [TRANSLATION_NOTE]: KillAllPlantsInRadius 暂未实现
+                }
+                // [TRANSLATION_NOTE]: ShakeBoard 暂未实现（需可变引用）
+                self.die_no_loot();
+
+                if let Some(app) = self.base.get_app() {
+                    if app.is_scary_potter_level() {
+                        // [TRANSLATION_NOTE]: ScaryPotterJackExplode 需要 Board 的 mChallenge 字段
+                        // 通过 board 访问
+                        // if let Some(board) = self.base.get_board() {
+                        //     board.mChallenge.scary_potter_jack_explode(a_pos_x, a_pos_y);
+                        // }
+                    }
+                }
+            }
+        }
+    }
 
     /// 更新伽刚特尔（对应 C++ UpdateZombieGargantuar）
     pub fn update_zombie_gargantuar(&mut self) {
@@ -1811,8 +1854,33 @@ impl Zombie {
         }
     }
 
-    /// 更新梯子僵尸（对应 C++ UpdateLadder，stub）
-    pub fn update_ladder(&mut self) {}
+    /// 更新梯子僵尸（对应 C++ UpdateLadder）
+    pub fn update_ladder(&mut self) {
+        if self.mind_controlled || !self.has_head || self.is_dead_or_dying() {
+            return;
+        }
+
+        if self.zombie_phase == ZombiePhase::LadderCarrying && self.zombie_height == ZombieHeight::Normal {
+            // [TRANSLATION_NOTE]: FindPlantTarget(ATTACKTYPE_LADDER) 暂未实现，简化处理
+            let has_plant_ahead = self.base.x > 50 && self.base.x < 700;
+            if has_plant_ahead {
+                self.stop_eating();
+                self.zombie_phase = ZombiePhase::LadderPlacing;
+                self.play_zombie_reanim("anim_placeladder", ReanimLoopType::PlayOnceAndHold, 10, 24.0);
+            }
+        } else if self.zombie_phase == ZombiePhase::LadderPlacing {
+            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统，简化处理
+            // 放梯子
+            let plant_col = self.target_col;
+            let plant_row = self.base.row;
+            if let Some(board) = self.base.get_board_mut() {
+                board.add_ladder(plant_col, plant_row);
+            }
+            self.zombie_height = ZombieHeight::UpLadder;
+            self.use_ladder_col = self.target_col;
+            // [TRANSLATION_NOTE]: DetachShield 未实现
+        }
+    }
 
     /// 召唤伴舞（对应 C++ SummonBackupDancer）
     pub fn summon_backup_dancer(&mut self, row: i32, pos_x: i32) -> ZombieID {
