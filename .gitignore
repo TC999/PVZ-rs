@@ -35,5 +35,8 @@ SDL2*
 *.exp
 *.zip
 
+# 原始 C++ 代码
+cpp
+
 # AI 终端
 .reasonix
