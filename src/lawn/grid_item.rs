@@ -3,6 +3,7 @@
 
 use crate::lawn::game_enums::*;
 use crate::framework::graphics::graphics::Graphics;
+use crate::framework::rect::Rect;
 
 /// 运动轨迹帧数（对应 C++ #define NUM_MOTION_TRAIL_FRAMES 12）
 pub const NUM_MOTION_TRAIL_FRAMES: usize = 12;
@@ -121,11 +122,83 @@ impl GridItem {
         self.pos_y = (80 + grid_y * 100) as f32;
     }
 
-    /// 更新
+    /// 更新（对应 C++ GridItem::Update）
     pub fn update(&mut self) {
         if self.dead { return; }
-        self.counter += 1;
+
+        // [TRANSLATION_NOTE]: Reanimation/Particle 更新暂未实现
+
+        match self.grid_item_type {
+            GridItemType::PortalCrystalBall | GridItemType::PortalSquare => {
+                self.update_portal();
+            }
+            GridItemType::ScaryPot => {
+                self.update_scary_pot();
+            }
+            GridItemType::Rake => {
+                self.update_rake();
+            }
+            GridItemType::DanceEggplant => {
+                if self.grid_item_state == GridItemState::BrainSquished {
+                    self.counter -= 1;
+                    if self.counter <= 0 {
+                        self.grid_item_die();
+                    }
+                }
+                if self.transparent_counter > 0 {
+                    self.transparent_counter -= 1;
+                }
+            }
+            _ => {}
+        }
     }
+
+    /// 更新恐怖罐子（对应 C++ UpdateScaryPot）
+    pub fn update_scary_pot(&mut self) {
+        // [TRANSLATION_NOTE]: 灯笼靠近透明状态暂未实现
+        if self.transparent_counter > 0 {
+            self.transparent_counter -= 1;
+        }
+    }
+
+    /// 更新耙子（对应 C++ UpdateRake）
+    pub fn update_rake(&mut self) {
+        if self.grid_item_state == GridItemState::RakeAttracting || self.grid_item_state == GridItemState::RakeWaiting {
+            if self.rake_find_zombie().is_some() {
+                self.counter = 200;
+                self.grid_item_state = GridItemState::RakeTriggered;
+            }
+        } else if self.grid_item_state == GridItemState::RakeTriggered {
+            // [TRANSLATION_NOTE]: ShouldTriggerTimedEvent(0.8f) 暂未实现
+            if let Some(zombie) = self.rake_find_zombie() {
+                // [TRANSLATION_NOTE]: TakeDamage(1800, 0) 所需引用暂未实现
+            }
+            self.counter -= 1;
+            if self.counter == 0 {
+                self.grid_item_die();
+            }
+        }
+    }
+
+    /// 耙子找僵尸（对应 C++ RakeFindZombie）
+    pub fn rake_find_zombie(&self) -> Option<usize> {
+        let rake_rect = Rect::new(self.pos_x as i32, self.pos_y as i32, 63, 80);
+        if let Some(board) = self.board {
+            let board = unsafe { &*board };
+            for (idx, zombie) in board.zombies.iter().enumerate() {
+                if zombie.dead { continue; }
+                if zombie.base.row != self.grid_y { continue; }
+                let z_rect = zombie.get_zombie_rect();
+                if crate::lawn::board::get_rect_overlap(&rake_rect, &z_rect) >= 0 {
+                    return Some(idx);
+                }
+            }
+        }
+        None
+    }
+
+    /// 更新传送门（对应 C++ UpdatePortal，stub）
+    pub fn update_portal(&mut self) {}
 
     /// 绘制
     pub fn draw(&self, _g: &mut Graphics) {}
@@ -147,13 +220,8 @@ impl GridItem {
     pub fn open_portal(&mut self) {}
     pub fn close_portal(&mut self) {}
     pub fn draw_scary_pot(&self, g: &mut Graphics) {}
-    pub fn update_scary_pot(&mut self) {}
-    pub fn update_portal(&mut self) {}
     pub fn draw_squirrel(&self, g: &mut Graphics) {}
-    pub fn update_rake(&mut self) {}
-    pub fn rake_find_zombie(&self) -> Option<*mut crate::lawn::zombie::Zombie> { None }
     pub fn draw_i_zombie_brain(&self, g: &mut Graphics) {}
-    pub fn update_brain(&mut self) {}
     pub fn draw_stinky(&self, g: &mut Graphics) {}
     pub fn is_open_portal(&self) -> bool { false }
     */
