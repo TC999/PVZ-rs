@@ -785,7 +785,6 @@ impl Plant {
     pub fn plant_draw_height_offset(_board: Option<&Board>, _plant: &Plant, _seed_type: SeedType, _grid_x: i32, _grid_y: i32) -> f32 { 0.0 }
 
     // ========== 特殊植物更新 stub ==========
-    pub fn update_squash(&mut self) {}
     pub fn update_doom_shroom(&mut self) {}
     pub fn update_ice_shroom(&mut self) {}
     pub fn update_chomper(&mut self) {}
@@ -802,7 +801,56 @@ impl Plant {
     pub fn update_sun_shroom(&mut self) {}
     pub fn update_grave_buster(&mut self) {}
     pub fn update_torchwood(&mut self) {}
-    pub fn update_potato(&mut self) {}
+    pub fn update_potato(&mut self) {
+        if self.state == PlantState::NotReady {
+            if self.state_countdown == 0 {
+                self.state = PlantState::PotatoRising;
+                // [TRANSLATION_NOTE]: 上升粒子/音效/动画暂未实现
+            }
+        } else if self.state == PlantState::PotatoRising {
+            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统
+            self.state = PlantState::PotatoArmed;
+            self.blink_countdown = 400 + RandRange(4000);
+        } else if self.state == PlantState::PotatoArmed {
+            // [TRANSLATION_NOTE]: FindTargetZombie 暂未实现
+            // 若有僵尸接近 → DoSpecial()
+        }
+    }
+
+    pub fn update_squash(&mut self) {
+        if self.state == PlantState::NotReady {
+            // [TRANSLATION_NOTE]: FindSquashTarget 暂未实现
+            self.state = PlantState::SquashLook;
+            self.state_countdown = 80;
+        } else if self.state == PlantState::SquashLook {
+            if self.state_countdown <= 0 {
+                self.state = PlantState::SquashPreLaunch;
+                self.state_countdown = 45;
+            }
+        } else if self.state == PlantState::SquashPreLaunch {
+            if self.state_countdown <= 0 {
+                self.state = PlantState::SquashRising;
+                self.state_countdown = 50;
+            }
+        } else if self.state == PlantState::SquashRising {
+            if self.state_countdown == 0 {
+                self.state = PlantState::SquashFalling;
+                self.state_countdown = 10;
+            }
+        } else if self.state == PlantState::SquashFalling {
+            if self.state_countdown == 5 {
+                // [TRANSLATION_NOTE]: DoSquashDamage 暂未实现
+            }
+            if self.state_countdown == 0 {
+                self.state = PlantState::SquashDoneFalling;
+                self.state_countdown = 100;
+            }
+        } else if self.state == PlantState::SquashDoneFalling {
+            if self.state_countdown == 0 {
+                self.die();
+            }
+        }
+    }
     pub fn update_spikeweed(&mut self) {}
     pub fn update_tanglekelp(&mut self) {}
     pub fn update_scaredy_shroom(&mut self) {}
