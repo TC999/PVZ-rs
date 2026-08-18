@@ -489,6 +489,56 @@ impl Projectile {
         self.projectile_type = ProjectileType::Pea;
         self.hit_torchwood_grid_x = grid_x;
     }
+
+    /// 获取子弹定义（对应 C++ GetProjectileDef）
+    pub fn get_projectile_def(&self) -> ProjectileDefinition {
+        match self.projectile_type {
+            ProjectileType::Pea | ProjectileType::Snowpea | ProjectileType::Star | ProjectileType::Spike => {
+                ProjectileDefinition { projectile_type: self.projectile_type, image_row: 0, damage: 20 }
+            }
+            ProjectileType::Cabbage | ProjectileType::Butter => {
+                ProjectileDefinition { projectile_type: self.projectile_type, image_row: 0, damage: 40 }
+            }
+            ProjectileType::Melon => {
+                ProjectileDefinition { projectile_type: self.projectile_type, image_row: 0, damage: 80 }
+            }
+            ProjectileType::Kernel => {
+                ProjectileDefinition { projectile_type: self.projectile_type, image_row: 0, damage: 20 }
+            }
+            ProjectileType::Cobcannon => {
+                ProjectileDefinition { projectile_type: self.projectile_type, image_row: 0, damage: 300 }
+            }
+            _ => {
+                ProjectileDefinition { projectile_type: self.projectile_type, image_row: 0, damage: 20 }
+            }
+        }
+    }
+
+    /// 获取伤害标志（对应 C++ GetDamageFlags）
+    pub fn get_damage_flags(&self) -> u32 {
+        let mut flags = 0u32;
+        // [TRANSLATION_NOTE]: 溅射/抛物线/倒走/星星+倒走 的盾牌穿越标志暂未实现
+        if self.projectile_type == ProjectileType::Snowpea {
+            flags |= 1 << 2; // DAMAGE_FREEZE = 2
+        }
+        flags
+    }
+
+    /// 无法击中高台（对应 C++ CantHitHighGround）
+    pub fn cant_hit_high_ground(&self) -> bool {
+        self.projectile_type == ProjectileType::Pea
+            || self.projectile_type == ProjectileType::Snowpea
+            || self.projectile_type == ProjectileType::Cactus
+            || self.projectile_type == ProjectileType::Spike
+            || self.projectile_type == ProjectileType::Kernel
+    }
+
+    /// 检查高台（对应 C++ CheckForHighGround）
+    pub fn check_for_high_ground(&mut self) {
+        if self.on_high_ground && self.cant_hit_high_ground() {
+            // [TRANSLATION_NOTE]: 高台碰撞检测暂未实现
+        }
+    }
 }
 
 impl Default for Projectile {
