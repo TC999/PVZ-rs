@@ -1199,8 +1199,27 @@ impl Zombie {
     /// 更新烟囱僵尸（对应 C++ UpdateZombieChimney，stub）
     pub fn update_zombie_chimney(&mut self) {}
 
-    /// 更新僵尸撑杆跳（对应 C++ UpdateZombiePolevaulter，stub）
-    pub fn update_zombie_polevaulter(&mut self) {}
+    /// 更新僵尸撑杆跳（对应 C++ UpdateZombiePolevaulter）
+    pub fn update_zombie_polevaulter(&mut self) {
+        if self.zombie_phase == ZombiePhase::PolevaulterPreVault && self.has_head && self.zombie_height == ZombieHeight::Normal {
+            // [TRANSLATION_NOTE]: FindPlantTarget(VAULT) + GetLadderAt 暂未实现，简化处理
+            // 有植物在前方 → 跳越
+            let has_plant_ahead = self.base.x > 50 && self.base.x < 750;
+            if has_plant_ahead {
+                self.zombie_phase = ZombiePhase::PolevaulterInVault;
+                self.play_zombie_reanim("anim_jump", ReanimLoopType::PlayOnceAndHold, 20, 24.0);
+                self.has_object = false;
+            }
+        } else if self.zombie_phase == ZombiePhase::PolevaulterInVault {
+            // [TRANSLATION_NOTE]: ShouldTriggerTimedEvent + mLoopCount 依赖 Reanimation 系统
+            // 简化处理：直接结束跳跃
+            self.pos_x -= 150.0;
+            self.base.x = self.pos_x as i32;
+            self.zombie_phase = ZombiePhase::PolevaulterPostVault;
+            self.zombie_attack_rect = Rect::new(50, 0, 20, 115);
+            self.start_walk_anim(0);
+        }
+    }
 
     /// 投石车僵尸射击（对应 C++ ZombieCatapultFire）
     pub fn zombie_catapult_fire(&mut self, target_x: Option<i32>, target_y: Option<i32>) {
@@ -1357,8 +1376,64 @@ impl Zombie {
         }
     }
 
-    /// 更新潜水僵尸（对应 C++ UpdateZombieSnorkel，stub）
-    pub fn update_zombie_snorkel(&mut self) {}
+    /// 更新潜水僵尸（对应 C++ UpdateZombieSnorkel）
+    pub fn update_zombie_snorkel(&mut self) {
+        let a_backwards = self.is_walking_backwards();
+
+        if self.zombie_phase == ZombiePhase::SnorkelWalking && !a_backwards {
+            if self.base.x > 700 && self.base.x <= 720 {
+                self.vel_x = 0.2;
+                self.zombie_phase = ZombiePhase::SnorkelIntoPool;
+                self.play_zombie_reanim("anim_jumpinpool", ReanimLoopType::PlayOnceAndHold, 20, 16.0);
+            }
+        } else if self.zombie_phase == ZombiePhase::SnorkelIntoPool {
+            // [TRANSLATION_NOTE]: ShouldTriggerTimedEvent + mLoopCount 依赖 Reanimation 系统
+            // 简化处理
+            self.zombie_phase = ZombiePhase::SnorkelWalkingInPool;
+            self.in_pool = true;
+            self.play_zombie_reanim("anim_swim", ReanimLoopType::LoopFullOffset, 0, 12.0);
+        } else if self.zombie_phase == ZombiePhase::SnorkelWalkingInPool {
+            if !self.has_head {
+                self.take_damage(1800, 9);
+            } else if self.base.x <= 25 && !a_backwards {
+                self.altitude = -90.0;
+                self.pos_x -= 15.0;
+                self.zombie_phase = ZombiePhase::SnorkelWalking;
+                self.zombie_height = ZombieHeight::OutOfPool;
+                // [TRANSLATION_NOTE]: PoolSplash 暂未实现
+                self.start_walk_anim(0);
+            } else if self.base.x > 640 && a_backwards {
+                self.altitude = -90.0;
+                self.pos_x += 15.0;
+                self.zombie_phase = ZombiePhase::SnorkelWalking;
+                self.zombie_height = ZombieHeight::OutOfPool;
+                // [TRANSLATION_NOTE]: PoolSplash 暂未实现
+                self.start_walk_anim(0);
+            } else if self.is_eating {
+                self.zombie_phase = ZombiePhase::SnorkelUpToEat;
+                self.play_zombie_reanim("anim_uptoeat", ReanimLoopType::PlayOnceAndHold, 0, 24.0);
+            }
+        } else if self.zombie_phase == ZombiePhase::SnorkelUpToEat {
+            if !self.is_eating {
+                self.zombie_phase = ZombiePhase::SnorkelDownFromEat;
+                self.play_zombie_reanim("anim_uptoeat", ReanimLoopType::PlayOnceAndHold, 0, -24.0);
+            } else {
+                // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统，简化处理
+                self.zombie_phase = ZombiePhase::SnorkelEatingInPool;
+                self.play_zombie_reanim("anim_eat", ReanimLoopType::Loop, 0, 0.0);
+            }
+        } else if self.zombie_phase == ZombiePhase::SnorkelEatingInPool {
+            if !self.is_eating {
+                self.zombie_phase = ZombiePhase::SnorkelDownFromEat;
+                self.play_zombie_reanim("anim_uptoeat", ReanimLoopType::PlayOnceAndHold, 0, -24.0);
+            }
+        } else if self.zombie_phase == ZombiePhase::SnorkelDownFromEat {
+            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统，简化处理
+            self.zombie_phase = ZombiePhase::SnorkelWalkingInPool;
+            self.play_zombie_reanim("anim_swim", ReanimLoopType::LoopFullOffset, 0, 0.0);
+            self.pick_random_speed();
+        }
+    }
 
     /// 更新气球僵尸（对应 C++ UpdateZombieFlyer）
     pub fn update_zombie_flyer(&mut self) {
