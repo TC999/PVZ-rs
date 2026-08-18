@@ -562,8 +562,89 @@ impl Plant {
     /// 绘制影子
     pub fn draw_shadow(&self, _g: &mut Graphics, _offset_x: f32, _offset_y: f32) {}
 
-    /// 更新特殊能力（默认空实现）
-    pub fn update_abilities(&mut self) {}
+    /// 更新特殊能力（对应 C++ UpdateAbilities）
+    pub fn update_abilities(&mut self) {
+        if !self.is_in_play() {
+            return;
+        }
+
+        // 正在消失或被压碎
+        if self.state == PlantState::DoingSpecial || self.squished {
+            self.disappear_countdown -= 1;
+            if self.disappear_countdown < 0 {
+                self.die();
+                return;
+            }
+        }
+
+        // 唤醒倒计时
+        if self.wake_up_counter > 0 {
+            self.wake_up_counter -= 1;
+            if self.wake_up_counter == 0 {
+                self.set_sleeping(false);
+            }
+        }
+
+        if self.is_asleep || self.squished || self.on_bungee_state != PlantOnBungeeState::NotOnBungee {
+            return;
+        }
+
+        // 更新射击
+        self.update_shooting();
+
+        // 状态计数
+        if self.state_countdown > 0 {
+            self.state_countdown -= 1;
+        }
+
+        // 特殊植物更新分发
+        match self.seed_type {
+            SeedType::Squash => self.update_squash(),
+            SeedType::Doomshroom => self.update_doom_shroom(),
+            SeedType::Iceshroom => self.update_ice_shroom(),
+            SeedType::Chomper => self.update_chomper(),
+            SeedType::Blover => self.update_blover(),
+            SeedType::Flowerpot => self.update_flower_pot(),
+            SeedType::Lilypad => self.update_lilypad(),
+            SeedType::Imitater => self.update_imitater(),
+            SeedType::InstantCoffee => self.update_coffee_bean(),
+            SeedType::Umbrella => self.update_umbrella(),
+            SeedType::Cobcannon => self.update_cob_cannon(),
+            SeedType::Cactus => self.update_cactus(),
+            SeedType::Magnetshroom => self.update_magnet_shroom(),
+            SeedType::GoldMagnet => self.update_gold_magnet_shroom(),
+            SeedType::Sunshroom => self.update_sun_shroom(),
+            SeedType::Gravebuster => self.update_grave_buster(),
+            SeedType::Torchwood => self.update_torchwood(),
+            SeedType::PotatoMine => self.update_potato(),
+            SeedType::Spikeweed | SeedType::Spikerock => self.update_spikeweed(),
+            SeedType::Tanglekelp => self.update_tanglekelp(),
+            SeedType::Scaredyshroom => self.update_scaredy_shroom(),
+            _ => {}
+        }
+
+        // 射手类更新
+        if self.subclass == PlantSubClass::Shooter as i32 {
+            self.update_shooter();
+        }
+
+        // 特殊倒计时
+        if self.do_special_countdown > 0 {
+            self.do_special_countdown -= 1;
+            if self.do_special_countdown == 0 {
+                self.do_special();
+            }
+        }
+    }
+
+    /// 更新射击（对应 C++ UpdateShooting）
+    pub fn update_shooting(&mut self) {
+        self.launch_counter -= 1;
+        if self.launch_counter <= 0 {
+            self.launch_counter = self.launch_rate - 15 + RandRange(15);
+            self.find_target_and_fire(self.base.row, PlantWeapon::Primary);
+        }
+    }
 
     /// 静态辅助函数
     pub fn get_cost(seed_type: SeedType, _imitater_type: SeedType) -> i32 {
@@ -702,6 +783,30 @@ impl Plant {
 
     /// 绘制高度偏移（对应 C++ PlantDrawHeightOffset，静态函数）
     pub fn plant_draw_height_offset(_board: Option<&Board>, _plant: &Plant, _seed_type: SeedType, _grid_x: i32, _grid_y: i32) -> f32 { 0.0 }
+
+    // ========== 特殊植物更新 stub ==========
+    pub fn update_squash(&mut self) {}
+    pub fn update_doom_shroom(&mut self) {}
+    pub fn update_ice_shroom(&mut self) {}
+    pub fn update_chomper(&mut self) {}
+    pub fn update_blover(&mut self) {}
+    pub fn update_flower_pot(&mut self) {}
+    pub fn update_lilypad(&mut self) {}
+    pub fn update_imitater(&mut self) {}
+    pub fn update_coffee_bean(&mut self) {}
+    pub fn update_umbrella(&mut self) {}
+    pub fn update_cob_cannon(&mut self) {}
+    pub fn update_cactus(&mut self) {}
+    pub fn update_magnet_shroom(&mut self) {}
+    pub fn update_gold_magnet_shroom(&mut self) {}
+    pub fn update_sun_shroom(&mut self) {}
+    pub fn update_grave_buster(&mut self) {}
+    pub fn update_torchwood(&mut self) {}
+    pub fn update_potato(&mut self) {}
+    pub fn update_spikeweed(&mut self) {}
+    pub fn update_tanglekelp(&mut self) {}
+    pub fn update_scaredy_shroom(&mut self) {}
+    pub fn do_special(&mut self) {}
 }
 
 impl Default for Plant {
