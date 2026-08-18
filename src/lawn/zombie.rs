@@ -1288,14 +1288,104 @@ impl Zombie {
         }
     }
 
-    /// 更新海豚骑士（对应 C++ UpdateZombieDolphinRider，stub）
-    pub fn update_zombie_dolphin_rider(&mut self) {}
+    /// 更新海豚骑士（对应 C++ UpdateZombieDolphinRider）
+    pub fn update_zombie_dolphin_rider(&mut self) {
+        // [TRANSLATION_NOTE]: IsTangleKelpTarget 依赖，暂不实现
+        let a_backwards = self.is_walking_backwards();
+
+        if self.zombie_phase == ZombiePhase::DolphinWalking && !a_backwards {
+            if self.base.x > 700 && self.base.x <= 720 {
+                self.zombie_phase = ZombiePhase::DolphinIntoPool;
+                self.play_zombie_reanim("anim_jumpinpool", ReanimLoopType::PlayOnceAndHold, 20, 16.0);
+            }
+        } else if self.zombie_phase == ZombiePhase::DolphinIntoPool {
+            // [TRANSLATION_NOTE]: ShouldTriggerTimedEvent(0.56f) + AddReanimation(SPLASH) 暂未实现
+            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统，简化处理
+            self.pos_x -= 70.0;
+            self.zombie_phase = ZombiePhase::DolphinRiding;
+            self.in_pool = true;
+            self.zombie_attack_rect = Rect::new(-29, 0, 70, 115);
+            self.play_zombie_reanim("anim_ride", ReanimLoopType::LoopFullOffset, 0, 12.0);
+        } else if self.zombie_phase == ZombiePhase::DolphinRiding {
+            if self.base.x <= 10 {
+                self.altitude = -40.0;
+                self.zombie_height = ZombieHeight::OutOfPool;
+                self.zombie_phase = ZombiePhase::DolphinWalking;
+                // [TRANSLATION_NOTE]: PoolSplash 暂未实现
+                self.play_zombie_reanim("anim_walkdolphin", ReanimLoopType::Loop, 0, 0.0);
+                self.pick_random_speed();
+                return;
+            }
+
+            if self.has_head {
+                // [TRANSLATION_NOTE]: FindPlantTarget(VAULT) 暂未实现，简化检测
+                // 若有植物在前方，触发跳跃
+                let has_plant_ahead = self.base.x > 50 && self.base.x < 700;
+                if has_plant_ahead {
+                    if let Some(app) = self.base.get_app() {
+                        app.play_foley(crate::todlib::tod_foley::FoleyType::DolphinBeforeJumping as i32);
+                    }
+                    self.vel_x = 0.5;
+                    self.zombie_phase = ZombiePhase::DolphinInJump;
+                    self.phase_counter = DOLPHIN_JUMP_TIME;
+                    self.play_zombie_reanim("anim_dolphinjump", ReanimLoopType::PlayOnceAndHold, 0, 10.0);
+                }
+            }
+        } else if self.zombie_phase == ZombiePhase::DolphinInJump {
+            // 跳跃高度曲线
+            self.altitude = crate::todlib::tod_common::tod_animate_curve_float(
+                DOLPHIN_JUMP_TIME, 0, self.phase_counter, 0.0, 10.0, TodCurves::Linear,
+            );
+
+            // [TRANSLATION_NOTE]: ShouldTriggerTimedEvent + mLoopCount 依赖 Reanimation 系统
+            // 简化：phase_counter 为 0 时结束跳跃
+            if self.phase_counter == 0 {
+                self.zombie_attack_rect = Rect::new(30, 0, 30, 115);
+                self.zombie_rect = Rect::new(20, 0, 42, 115);
+                self.zombie_phase = ZombiePhase::DolphinWalkingInPool;
+                self.start_walk_anim(0);
+            }
+        } else if self.zombie_phase == ZombiePhase::DolphinWalkingInPool {
+            if (self.base.x <= 10 && !a_backwards) || (self.base.x > 680 && a_backwards) {
+                self.altitude = -40.0;
+                self.zombie_height = ZombieHeight::OutOfPool;
+                self.zombie_phase = ZombiePhase::DolphinWalkingWithoutDolphin;
+                // [TRANSLATION_NOTE]: PoolSplash 暂未实现
+                self.play_zombie_reanim("anim_walk", ReanimLoopType::Loop, 0, 0.0);
+                self.pick_random_speed();
+            }
+        }
+    }
 
     /// 更新潜水僵尸（对应 C++ UpdateZombieSnorkel，stub）
     pub fn update_zombie_snorkel(&mut self) {}
 
-    /// 更新气球僵尸（对应 C++ UpdateZombieFlyer，stub）
-    pub fn update_zombie_flyer(&mut self) {}
+    /// 更新气球僵尸（对应 C++ UpdateZombieFlyer）
+    pub fn update_zombie_flyer(&mut self) {
+        // [TRANSLATION_NOTE]: GAMEMODE_CHALLENGE_HIGH_GRAVITY 在 Rust 的 GameMode 枚举中尚未定义
+        //if let Some(app) = self.base.get_app() {
+        //    if app.game_mode == GameMode::ChallengeHighGravity && self.pos_x < 720.0 {
+        //        self.altitude -= 0.1;
+        //        if self.altitude < -35.0 {
+        //            self.land_flyer(0);
+        //        }
+        //    }
+        //}
+
+        if self.zombie_phase == ZombiePhase::BalloonPopping {
+            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统，简化处理
+            self.zombie_phase = ZombiePhase::BalloonWalking;
+            self.start_walk_anim(0);
+        }
+
+        // IZombie 模式目标检测
+        if let Some(app) = self.base.get_app() {
+            if app.is_izombie_level() && self.zombie_phase == ZombiePhase::BalloonFlying {
+                // [TRANSLATION_NOTE]: IZombieGetBrainTarget 暂未实现
+                self.land_flyer(0);
+            }
+        }
+    }
 
     /// 更新报纸僵尸（对应 C++ UpdateZombieNewspaper）
     pub fn update_zombie_newspaper(&mut self) {
@@ -2341,7 +2431,19 @@ impl Zombie {
 
     /// 气球僵尸落地（对应 C++ LandFlyer）
     pub fn land_flyer(&mut self, damage_flags: u32) {
-        let _ = damage_flags;
+        if !test_bit(damage_flags, DAMAGE_DOESNT_LEAVE_BODY) && self.zombie_phase == ZombiePhase::BalloonFlying {
+            // [TRANSLATION_NOTE]: PlaySample(SOUND_BALLOON_POP) 暂未实现
+            self.zombie_phase = ZombiePhase::BalloonPopping;
+            self.play_zombie_reanim("anim_pop", ReanimLoopType::PlayOnceAndHold, 20, 24.0);
+        }
+
+        if let Some(board) = self.base.get_board() {
+            if board.m_plant_row[self.base.row as usize] == PlantRowType::Pool {
+                self.die_with_loot();
+                return;
+            }
+        }
+        self.zombie_height = ZombieHeight::Falling;
     }
 
     /// 播放死亡动画（对应 C++ PlayDeathAnim）
