@@ -17,8 +17,15 @@ pub struct SeedPacket {
     pub width: i32,
     pub height: i32,
     pub countdown: i32,  // 冷却时间
+    pub refresh_time: i32,
+    pub refreshing: bool,
     pub active: bool,
     pub can_afford: bool,
+    pub slot_machine_countdown: i32,
+    pub slot_machine_position: f32,
+    pub slot_machine_next_seed: SeedType,
+    pub app: Option<*mut crate::lawn::lawn_app::LawnApp>,
+    pub board: Option<*mut crate::lawn::board::Board>,
 }
 
 impl SeedPacket {
@@ -32,20 +39,105 @@ impl SeedPacket {
             width: SEED_PACKET_WIDTH,
             height: SEED_PACKET_HEIGHT,
             countdown: 0,
+            refresh_time: 0,
+            refreshing: false,
             active: true,
             can_afford: false,
+            slot_machine_countdown: 0,
+            slot_machine_position: 0.0,
+            slot_machine_next_seed: SeedType::None,
+            app: None,
+            board: None,
         }
     }
 
     /// 初始化种子槽
-    pub fn seed_packet_initialize(&mut self, _index: i32) {}
+    pub fn seed_packet_initialize(&mut self, _index: i32) {
+        self.packet_index = _index;
+    }
 
-    /// 更新冷却
+    /// 设置种子类型（对应 C++ SetPacketType）
+    pub fn set_packet_type(&mut self, seed_type: SeedType, imitater_type: SeedType) {
+        self.seed_type = seed_type;
+        self.imitater_type = imitater_type;
+        self.refreshing = false;
+        self.countdown = 0;
+        self.refresh_time = 0;
+        self.active = true;
+    }
+
+    /// 激活（对应 C++ Activate）
+    pub fn activate(&mut self) {
+        self.active = true;
+        self.refreshing = false;
+        self.countdown = 0;
+        self.slot_machine_countdown = 0;
+    }
+
+    /// 停用（对应 C++ Deactivate）
+    pub fn deactivate(&mut self) {
+        self.active = false;
+    }
+
+    /// 设置激活状态（对应 C++ SetActivate）
+    pub fn set_activate(&mut self, active: bool) {
+        self.active = active;
+    }
+
+    /// 能否拾取（对应 C++ CanPickUp）
+    pub fn can_pick_up(&self) -> bool {
+        self.active && self.countdown <= 0 && self.seed_type != SeedType::None
+    }
+
+    /// 准备就绪闪烁（对应 C++ FlashIfReady 简化版）
+    pub fn flash_if_ready(&mut self) {
+        // [TRANSLATION_NOTE]: 闪烁粒子效果暂未实现
+    }
+
+    /// 老虎机选种子（对应 C++ PickNextSlotMachineSeed 简化版）
+    pub fn pick_next_slot_machine_seed(&mut self) {
+        // [TRANSLATION_NOTE]: 老虎机选种子逻辑暂未实现
+    }
+
+    /// 老虎机启动（对应 C++ SlotMachineStart）
+    pub fn slot_machine_start(&mut self) {
+        self.slot_machine_countdown = 300;
+        self.slot_machine_position = 0.0;
+        self.pick_next_slot_machine_seed();
+    }
+
+    /// 更新冷却（对应 C++ SeedPacket::Update 简化版）
     pub fn update(&mut self) {
-        if self.countdown > 0 {
-            self.countdown -= 1;
+        if self.seed_type == SeedType::None {
+            return;
         }
-        self.active = self.countdown <= 0;
+
+        // 冷却刷新
+        if !self.active && self.refreshing {
+            self.countdown += 1;
+            if self.countdown > self.refresh_time {
+                self.countdown = 0;
+                self.refreshing = false;
+                self.activate();
+                self.flash_if_ready();
+            }
+        }
+
+        // 老虎机滚动
+        if self.slot_machine_countdown > 0 {
+            self.slot_machine_countdown -= 1;
+            self.slot_machine_position += 0.06; // 简化
+            if self.slot_machine_position >= 1.0 {
+                self.seed_type = self.slot_machine_next_seed;
+                if self.slot_machine_countdown == 0 {
+                    self.activate();
+                    self.slot_machine_position = 0.0;
+                } else {
+                    self.slot_machine_position -= 1.0;
+                    self.pick_next_slot_machine_seed();
+                }
+            }
+        }
     }
 
     /// 绘制
