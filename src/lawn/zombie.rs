@@ -21,6 +21,7 @@ pub const ZOMBIE_LIMP_SPEED_FACTOR: i32 = 2;
 pub const POGO_BOUNCE_TIME: i32 = 80;
 pub const DOLPHIN_JUMP_TIME: i32 = 120;
 pub const CHILLED_SPEED_FACTOR: f32 = 0.4;
+pub const THOWN_ZOMBIE_GRAVITY: f32 = 0.05;
 
 // C++ DamageFlags 位索引（对应 ConstEnums.h DamageFlags）
 const DAMAGE_BYPASSES_SHIELD: u32 = 0;
@@ -1219,8 +1220,135 @@ impl Zombie {
     /// 更新小丑僵尸（对应 C++ UpdateZombieJackInTheBox，stub）
     pub fn update_zombie_jack_in_the_box(&mut self) {}
 
-    /// 更新伽刚特尔（对应 C++ UpdateZombieGargantuar，stub）
-    pub fn update_zombie_gargantuar(&mut self) {}
+    /// 更新伽刚特尔（对应 C++ UpdateZombieGargantuar）
+    pub fn update_zombie_gargantuar(&mut self) {
+        if self.zombie_phase == ZombiePhase::GargantuarSmashing {
+            // 触发砸击事件
+            // [TRANSLATION_NOTE]: ShouldTriggerTimedEvent(0.64f) 依赖 Reanimation 系统，暂用简化触发
+            if self.anim_counter % 40 == 0 {
+                // 寻找并碾压植物（先取值，退出 board 借用后再修改 self）
+                let (has_target, plant_col, plant_row) = if let Some(board) = self.base.get_board() {
+                    let plant_col = self.plant_col_below();
+                    (plant_col != -1, plant_col, self.base.row)
+                } else {
+                    (false, -1, 0)
+                };
+                if has_target {
+                    self.squish_all_in_square(plant_col, plant_row, ZombieAttackType::Chew);
+                }
+                // 音效与震动
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Thump as i32);
+                }
+            }
+
+            // 动画循环结束后回 Normal
+            if self.anim_counter % 120 == 0 {
+                self.zombie_phase = ZombiePhase::Normal;
+                self.start_walk_anim(20);
+            }
+            return;
+        }
+
+        let a_throwing_distance = self.pos_x - 360.0;
+
+        if self.zombie_phase == ZombiePhase::GargantuarThrowing {
+            // 触发扔小鬼事件
+            if self.anim_counter % 40 == 0 {
+                self.has_object = false;
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Swing as i32);
+                }
+
+                let mut a_throwing_distance = a_throwing_distance;
+                let mut a_min_throw_distance = 40.0;
+                let mut stage_has_roof = false;
+                if let Some(board) = self.base.get_board() {
+                    stage_has_roof = board.stage_has_roof();
+                }
+                if stage_has_roof {
+                    a_throwing_distance -= 180.0;
+                    a_min_throw_distance = -140.0;
+                }
+                if a_throwing_distance < a_min_throw_distance {
+                    a_throwing_distance = a_min_throw_distance;
+                } else if a_throwing_distance > 140.0 {
+                    a_throwing_distance -= RandFloat(100.0);
+                }
+
+                // 生成小鬼僵尸
+                let from_wave = self.from_wave;
+                let row = self.base.row;
+                let render_order = self.base.render_order;
+                let pos_y = self.get_pos_y_based_on_row(row);
+                let vel_z = 0.5 * (a_throwing_distance / 3.0) * crate::lawn::zombie::THOWN_ZOMBIE_GRAVITY;
+                if let Some(board) = self.base.get_board_mut() {
+                    board.add_zombie(ZombieType::Imp, from_wave);
+                    // [TRANSLATION_NOTE]: AddZombie 返回 Option<&mut Zombie> 但当前绑定到 from_wave，
+                    // 无法直接设置小鬼属性，简化处理
+                }
+                let _ = (row, render_order, pos_y, vel_z);
+            }
+
+            // 动画循环结束后回 Normal
+            if self.anim_counter % 120 == 0 {
+                self.zombie_phase = ZombiePhase::Normal;
+                self.start_walk_anim(20);
+            }
+            return;
+        }
+
+        if self.is_immobilized() || !self.has_head {
+            return;
+        }
+
+        // 血量少于一半且有物体 → 扔小鬼
+        if self.has_object && self.body_health < self.body_max_health / 2 && a_throwing_distance > 40.0 {
+            self.zombie_phase = ZombiePhase::GargantuarThrowing;
+            self.play_zombie_reanim("anim_throw", ReanimLoopType::PlayOnceAndHold, 20, 24.0);
+            return;
+        }
+
+        // 有植物目标 → 砸击
+        // [TRANSLATION_NOTE]: FindPlantTarget 暂未实现，用简化判断
+        let plant_target = self.plant_col_below();
+        if plant_target != -1 {
+            self.zombie_phase = ZombiePhase::GargantuarSmashing;
+            if let Some(app) = self.base.get_app() {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::LowGroan as i32);
+            }
+            self.play_zombie_reanim("anim_smash", ReanimLoopType::PlayOnceAndHold, 20, 16.0);
+        }
+    }
+
+    /// 获取伽刚特尔下方植物的列（对应 C++ FindPlantTarget 简化）
+    pub fn plant_col_below(&self) -> i32 { -1 }
+
+    /// 碾压某格子内的所有僵尸/植物（对应 C++ SquishAllInSquare，stub）
+    pub fn squish_all_in_square(&mut self, _x: i32, _y: i32, _attack_type: ZombieAttackType) {}
+
+    /// 更新小鬼僵尸（对应 C++ UpdateZombieImp）
+    pub fn update_zombie_imp(&mut self) {
+        if self.zombie_phase == ZombiePhase::ImpGettingThrown {
+            self.vel_z -= crate::lawn::zombie::THOWN_ZOMBIE_GRAVITY;
+            self.altitude += self.vel_z;
+            self.pos_x -= self.vel_x;
+
+            let a_diff_y = self.get_pos_y_based_on_row(self.base.row) - self.pos_y;
+            self.pos_y += a_diff_y;
+            self.altitude += a_diff_y;
+            if self.altitude <= 0.0 {
+                self.altitude = 0.0;
+                self.zombie_phase = ZombiePhase::ImpLanding;
+                self.play_zombie_reanim("anim_land", ReanimLoopType::PlayOnceAndHold, 0, 24.0);
+            }
+        } else if self.zombie_phase == ZombiePhase::ImpLanding {
+            // [TRANSLATION_NOTE]: mLoopCount > 0 检查依赖 Reanimation 系统
+            // 简化：直接回 Normal
+            self.zombie_phase = ZombiePhase::Normal;
+            self.start_walk_anim(0);
+        }
+    }
 
     /// 更新雪橇僵尸（对应 C++ UpdateZombieBobsled，stub）
     pub fn update_zombie_bobsled(&mut self) {}
@@ -1236,9 +1364,6 @@ impl Zombie {
 
     /// 更新伴舞僵尸（对应 C++ UpdateZombieBackupDancer，stub）
     pub fn update_zombie_backup_dancer(&mut self) {}
-
-    /// 更新小鬼僵尸（对应 C++ UpdateZombieImp，stub）
-    pub fn update_zombie_imp(&mut self) {}
 
     /// 更新 Boss（对应 C++ UpdateBoss，stub）
     pub fn update_boss(&mut self) {}
