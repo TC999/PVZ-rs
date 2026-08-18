@@ -73,18 +73,106 @@ impl LawnMower {
         self.start_mower();
     }
 
-    /// 更新割草机状态
+    /// 更新割草机（对应 C++ LawnMower::Update）
     pub fn update(&mut self) {
         if self.dead { return; }
-        // TODO: 完整更新逻辑（来自 LawnMower.cpp）
+
+        // 被压碎状态
+        if self.mower_state == LawnMowerState::Squished {
+            self.squished_counter -= 1;
+            if self.squished_counter <= 0 {
+                self.die();
+            }
+            return;
+        }
+
+        // 滚入状态
+        if self.mower_state == LawnMowerState::RollingIn {
+            self.rolling_in_counter += 1;
+            // PvzpAnimateCurveFloat(0, 100, rollingInCounter, -160, -21, EASE_IN_OUT)
+            if self.rolling_in_counter == 100 {
+                self.mower_state = LawnMowerState::Ready;
+            }
+            return;
+        }
+
+        // 游戏场景检查
+        // [TRANSLATION_NOTE]: 场景检查暂略
+
+        // 碰撞检测：遍历僵尸
+        if let Some(board) = self.base.get_board() {
+            let attack_rect = self.get_lawn_mower_attack_rect();
+            for (_idx, zombie) in board.zombies.iter().enumerate() {
+                if zombie.dead { continue; }
+                if zombie.zombie_type == ZombieType::Boss { continue; }
+                if zombie.base.row != self.base.row { continue; }
+                if zombie.zombie_phase == ZombiePhase::Mowered { continue; }
+
+                let z_rect = zombie.get_zombie_rect();
+                let overlap = crate::lawn::board::get_rect_overlap(&attack_rect, &z_rect);
+                if overlap > 0 {
+                    if self.mower_state != LawnMowerState::Ready || (zombie.zombie_type != ZombieType::Bungee && zombie.has_head) {
+                        // [TRANSLATION_NOTE]: MowZombie 需要可变引用，先退出 board 借用
+                    }
+                }
+            }
+        }
+
+        // 触发/碾压状态
+        if self.mower_state == LawnMowerState::Triggered || self.mower_state == LawnMowerState::Squished {
+            let mut a_speed = if self.mower_type == LawnMowerType::Pool { 2.5 } else { 3.33 };
+            if self.chomp_counter > 0 {
+                self.chomp_counter -= 1;
+                // PvzpAnimateCurveFloat(50, 0, chompCounter, aSpeed, 1.0, BOUNCE_SLOW_MIDDLE)
+            }
+            self.pos_x += a_speed;
+
+            // 泳池割草机落水
+            if self.mower_type == LawnMowerType::Pool {
+                self.update_pool();
+            }
+
+            // 陆地割草机进入泳池行
+            if self.mower_type == LawnMowerType::Lawn {
+                if let Some(board) = self.base.get_board() {
+                    if board.m_plant_row[self.base.row as usize] == PlantRowType::Pool && self.pos_x > 50.0 {
+                        // [TRANSLATION_NOTE]: 水花动画+音效暂未实现
+                        self.die();
+                    }
+                }
+            }
+
+            // 飞出棋盘
+            if self.pos_x > 900.0 {
+                self.die();
+            }
+        }
     }
 
-    /// 绘制割草机
-    pub fn draw(&self, _g: &mut Graphics) {
-        // TODO: 根据 mower_state 和 mower_type 绘制
+    /// 碾压僵尸（对应 C++ LawnMower::MowZombie）
+    pub fn mow_zombie(&mut self, zombie: &mut crate::lawn::zombie::Zombie) {
+        if self.mower_state == LawnMowerState::Ready {
+            self.start_mower();
+            self.chomp_counter = 25;
+        } else if self.mower_state == LawnMowerState::Triggered {
+            self.chomp_counter = 50;
+        }
+
+        if self.mower_type == LawnMowerType::Pool {
+            // [TRANSLATION_NOTE]: 泳池音效+动画暂未实现
+            zombie.die_with_loot();
+        } else {
+            // [TRANSLATION_NOTE]: Splat 音效+mow_down 暂未实现
+            zombie.die_with_loot();
+        }
     }
 
-    /// 获取割草机攻击碰撞矩形
+    /// 获取割草机攻击碰撞矩形（对应 C++ GetLawnMowerAttackRect）
+    pub fn get_lawn_mower_attack_rect(&self) -> Rect {
+        Rect::new(self.pos_x as i32, self.pos_y as i32, 80, 80)
+    }
+
+    /// 获取割草机碰撞矩形
     pub fn get_mower_rect(&self) -> Rect {
         Rect::new(self.pos_x as i32, self.pos_y as i32, 80, 80)
     }
@@ -101,19 +189,13 @@ impl LawnMower {
     }
 
     /// 启用超级割草机
-    pub fn enable_super_mower(&mut self, _enable: bool) {
-        // TODO: 设置 mowerType = SuperMower
-    }
+    pub fn enable_super_mower(&mut self, _enable: bool) {}
 
     /// 水池高度更新
-    pub fn update_pool(&mut self) {
-        // TODO: 泳池模式高度更新逻辑
-    }
+    pub fn update_pool(&mut self) {}
 
-    /// 碾压僵尸
-    pub fn mow_zombie(&mut self, _zombie: *mut crate::lawn::zombie::Zombie) {
-        // TODO: 僵尸碾压逻辑
-    }
+    /// 绘制割草机
+    pub fn draw(&self, _g: &mut Graphics) {}
 }
 
 impl Default for LawnMower {
