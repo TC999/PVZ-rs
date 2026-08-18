@@ -845,101 +845,479 @@ impl Zombie {
 
     /// 更新僵尸（对应 C++ Zombie::Update）
     pub fn update(&mut self) {
-        if self.dead {
-            self.update_death();
-            return;
-        }
-
-        self.anim_counter += 1;
         self.zombie_age += 1;
-
-        // 根据当前相位分发更新逻辑
-        if self.zombie_phase == ZombiePhase::Burned {
-            self.update_burn();
-        } else if self.zombie_phase == ZombiePhase::Mowered {
-            self.update_mowered();
-        } else if self.zombie_phase == ZombiePhase::Dying {
-            self.update_death();
-            self.update_zombie_walking();
-        } else {
-            if self.phase_counter > 0 {
-                self.phase_counter -= 1;
+        let mut do_update = false;
+        // [TRANSLATION_NOTE]: lawn_app::GameScenes 尚无 LevelIntro 变体，暂时跳过
+        // if app.game_scene == GameScenes::LevelIntro && self.zombie_type == ZombieType::Boss { do_update = true; }
+        if self.is_on_board() {
+            if let Some(board) = self.base.get_board() {
+                if board.m_cut_scene.map_or(false, |c| unsafe { (*c).should_run_upsell_board() }) {
+                    do_update = true;
+                }
             }
-
-            // 常规移动和行为更新
-            self.update_playing();
-
-            // 特殊僵尸类型的行为更新
-            if self.zombie_type == ZombieType::Bungee {
-                self.update_zombie_bungee();
-            }
-            if self.zombie_type == ZombieType::Pogo {
-                self.update_zombie_pogo();
+        }
+        if let Some(app) = self.base.get_app() {
+            if app.game_scene == crate::lawn::lawn_app::GameScenes::Playing || !self.is_on_board() || self.from_wave == Zombie::ZOMBIE_WAVE_WINNER {
+                do_update = true;
             }
         }
 
-        // 计数器递减
-        self.just_got_shot_counter -= 1;
-        if self.shield_just_got_shot_counter > 0 {
-            self.shield_just_got_shot_counter -= 1;
-        }
-        if self.shield_recoil_counter > 0 {
-            self.shield_recoil_counter -= 1;
-        }
-        if self.zombie_fade > 0 {
-            self.zombie_fade -= 1;
-            if self.zombie_fade == 0 {
-                self.die_no_loot();
-            }
-        }
+        if do_update {
+            if self.zombie_phase == ZombiePhase::Burned {
+                self.update_burn();
+            } else if self.zombie_phase == ZombiePhase::Mowered {
+                self.update_mowered();
+            } else if self.zombie_phase == ZombiePhase::Dying {
+                self.update_death();
+                self.update_zombie_walking();
+            } else {
+                if self.phase_counter > 0 && !self.is_immobilized() {
+                    self.phase_counter -= 1;
+                }
 
-        self.base.x = self.pos_x as i32;
-        self.base.y = self.pos_y as i32;
+                // [TRANSLATION_NOTE]: lawn_app::GameScenes 尚无 ZombiesWon 变体，暂时跳过
+                if self.is_on_board() {
+                    self.update_playing();
+                }
+
+                if self.zombie_type == ZombieType::Bungee {
+                    self.update_zombie_bungee();
+                }
+                if self.zombie_type == ZombieType::Pogo {
+                    self.update_zombie_pogo();
+                }
+
+                self.animate();
+            }
+
+            self.just_got_shot_counter -= 1;
+            if self.shield_just_got_shot_counter > 0 {
+                self.shield_just_got_shot_counter -= 1;
+            }
+            if self.shield_recoil_counter > 0 {
+                self.shield_recoil_counter -= 1;
+            }
+            if self.zombie_fade > 0 {
+                self.zombie_fade -= 1;
+                if self.zombie_fade == 0 {
+                    self.die_no_loot();
+                }
+            }
+
+            self.base.x = self.pos_x as i32;
+            self.base.y = self.pos_y as i32;
+
+            self.update_reanim();
+        }
     }
 
     /// 更新燃烧效果（对应 C++ Zombie::UpdateBurn）
-    fn update_burn(&mut self) {}
+    fn update_burn(&mut self) {
+        self.phase_counter -= 1;
+        if self.phase_counter == 0 {
+            self.die_with_loot();
+        }
+    }
 
     /// 更新被碾压效果（对应 C++ Zombie::UpdateMowered）
     fn update_mowered(&mut self) {}
 
     /// 更新僵尸的 Playing 阶段行为（对应 C++ Zombie::UpdatePlaying）
     fn update_playing(&mut self) {
-        // 减速效果
+        self.groan_counter -= 1;
+
+        // 冰陷阱递减
+        if self.ice_trap_counter > 0 {
+            self.ice_trap_counter -= 1;
+            if self.ice_trap_counter == 0 {
+                self.remove_ice_trap();
+                self.add_attached_particle(75, 106, ParticleEffect::IceTrapRelease);
+            }
+        }
+        // 冻结递减
         if self.chilled_counter > 0 {
             self.chilled_counter -= 1;
+            if self.chilled_counter == 0 {
+                self.update_anim_speed();
+            }
         }
+        // 黄油递减
         if self.buttered_counter > 0 {
             self.buttered_counter -= 1;
+            if self.buttered_counter == 0 {
+                self.remove_butter();
+            }
         }
 
-        // 移动
-        if !self.is_eating {
-            let speed_mult = if self.chilled_counter > 0 { CHILLED_SPEED_FACTOR } else { 1.0 };
-            self.pos_x -= self.vel_x * speed_mult;
+        // 从墓碑升起
+        if self.zombie_phase == ZombiePhase::RisingFromGrave {
+            self.update_zombie_rise_from_grave();
+            return;
         }
 
-        // 更新攻击矩形
-        self.zombie_rect = self.get_zombie_rect();
-        self.zombie_attack_rect = self.get_zombie_attack_rect();
+        if !self.is_immobilized() {
+            self.update_actions();
+            self.update_zombie_position();
+            self.check_for_pool();
+            self.check_for_high_ground();
+            self.check_for_board_edge();
+        }
 
-        self.update_zombie_walking();
+        if self.zombie_type == ZombieType::Boss {
+            self.update_boss();
+        }
+
+        if !self.is_dead_or_dying() && self.from_wave != Zombie::ZOMBIE_WAVE_WINNER {
+            let is_dying = if !self.has_head {
+                true
+            } else if self.zombie_type == ZombieType::Zamboni || self.zombie_type == ZombieType::Catapult {
+                self.body_health < 200
+            } else {
+                false
+            };
+
+            if is_dying {
+                let mut a_damage = 1;
+                if self.zombie_type == ZombieType::Yeti {
+                    a_damage = 10;
+                }
+                if self.body_max_health >= 500 {
+                    a_damage = 3;
+                }
+                if RandRange(5) == 0 {
+                    self.take_damage(a_damage, 9);
+                }
+            }
+        }
     }
 
-    /// 更新蹦极僵尸（对应 C++ Zombie::UpdateZombieBungee）
+    /// 更新僵尸行为（对应 C++ Zombie::UpdateActions）
+    pub fn update_actions(&mut self) {
+        if self.zombie_height == ZombieHeight::UpLadder {
+            self.update_climbing_ladder();
+        }
+        if self.zombie_height == ZombieHeight::OutOfPool || self.zombie_height == ZombieHeight::InToPool || self.in_pool {
+            self.update_zombie_pool();
+        }
+        if self.zombie_height == ZombieHeight::UpToHighGround || self.zombie_height == ZombieHeight::DownOffHighGround {
+            self.update_zombie_high_ground();
+        }
+        if self.zombie_height == ZombieHeight::Falling {
+            self.update_zombie_falling();
+        }
+        if self.zombie_height == ZombieHeight::InToChimney {
+            self.update_zombie_chimney();
+        }
+
+        if self.zombie_type == ZombieType::Polevaulter {
+            self.update_zombie_polevaulter();
+        }
+        if self.zombie_type == ZombieType::Catapult {
+            self.update_zombie_catapult();
+        }
+        if self.zombie_type == ZombieType::DolphinRider {
+            self.update_zombie_dolphin_rider();
+        }
+        if self.zombie_type == ZombieType::Snorkel {
+            self.update_zombie_snorkel();
+        }
+        if self.zombie_type == ZombieType::Balloon {
+            self.update_zombie_flyer();
+        }
+        if self.zombie_type == ZombieType::Newspaper {
+            self.update_zombie_newspaper();
+        }
+        if self.zombie_type == ZombieType::Digger {
+            self.update_zombie_digger();
+        }
+        if self.zombie_type == ZombieType::JackInTheBox {
+            self.update_zombie_jack_in_the_box();
+        }
+        if self.zombie_type == ZombieType::Gargantuar || self.zombie_type == ZombieType::RedeEyeGargantuar {
+            self.update_zombie_gargantuar();
+        }
+        if self.zombie_type == ZombieType::Bobsled {
+            self.update_zombie_bobsled();
+        }
+        if self.zombie_type == ZombieType::Zamboni {
+            self.update_zamboni();
+        }
+        if self.zombie_type == ZombieType::Ladder {
+            self.update_ladder();
+        }
+        if self.zombie_type == ZombieType::Yeti {
+            self.update_yeti();
+        }
+        if self.zombie_type == ZombieType::Dancer {
+            self.update_zombie_dancer();
+        }
+        if self.zombie_type == ZombieType::BackupDancer {
+            self.update_zombie_backup_dancer();
+        }
+        if self.zombie_type == ZombieType::Imp {
+            self.update_zombie_imp();
+        }
+    }
+
+    /// 更新爬梯子（对应 C++ UpdateClimbingLadder）
+    pub fn update_climbing_ladder(&mut self) {
+        let mut a_dist_off_ground = self.altitude;
+        if self.on_high_ground {
+            a_dist_off_ground -= 100.0; // HIGH_GROUND_HEIGHT
+        }
+        let a_ladder_origin_x = self.base.x + (5.0 + a_dist_off_ground * 0.5) as i32;
+        if let Some(board) = self.base.get_board() {
+            if board.get_ladder_at(a_ladder_origin_x, self.base.row).is_none() {
+                self.zombie_height = ZombieHeight::Falling;
+                return;
+            }
+        }
+        self.altitude += 0.8;
+        if self.vel_x < 0.5 {
+            self.pos_x -= 0.5;
+        }
+        let mut a_target_height = 90.0;
+        if self.on_high_ground {
+            a_target_height += 100.0; // HIGH_GROUND_HEIGHT
+        }
+        if self.altitude >= a_target_height {
+            self.zombie_height = ZombieHeight::Falling;
+        }
+    }
+
+    /// 检查棋盘边缘（对应 C++ CheckForBoardEdge）
+    pub fn check_for_board_edge(&mut self) {
+        if self.is_walking_backwards() && self.pos_x > 850.0 {
+            self.die_no_loot();
+            return;
+        }
+
+        let mut a_edge_x = -100; // BOARD_EDGE
+        if self.zombie_type == ZombieType::Gargantuar || self.zombie_type == ZombieType::RedeEyeGargantuar || self.zombie_type == ZombieType::Polevaulter {
+            a_edge_x = -150;
+        } else if self.zombie_type == ZombieType::Catapult || self.zombie_type == ZombieType::Football || self.zombie_type == ZombieType::Zamboni {
+            a_edge_x = -175;
+        } else if self.zombie_type == ZombieType::BackupDancer || self.zombie_type == ZombieType::Dancer || self.zombie_type == ZombieType::Snorkel {
+            a_edge_x = -130;
+        }
+
+        if self.base.x <= a_edge_x && self.has_head {
+            if let Some(app) = self.base.get_app() {
+                if app.is_izombie_level() {
+                    self.die_no_loot();
+                } else {
+                    if let Some(board) = self.base.get_board_mut() {
+                        board.zombies_won();
+                    }
+                }
+            }
+        }
+        if self.base.x <= a_edge_x + 70 && !self.has_head {
+            self.take_damage(1800, 9);
+        }
+    }
+
+    /// 检查僵尸脚步声（对应 C++ CheckForZombieStep）
+    pub fn check_for_zombie_step(&mut self) {
+        if (self.zombie_type == ZombieType::Zamboni || self.zombie_type == ZombieType::Catapult) && !self.flat_tires {
+            // CheckSquish(ATTACKTYPE_DRIVE_OVER) — stub
+        }
+    }
+
+    /// 更新僵尸位置（对应 C++ UpdateZombiePosition）
+    pub fn update_zombie_position(&mut self) {
+        if self.zombie_type == ZombieType::Bungee || self.zombie_type == ZombieType::Boss
+            || self.zombie_phase == ZombiePhase::RisingFromGrave || self.zombie_height == ZombieHeight::Zombiquarium
+        {
+            return;
+        }
+
+        self.update_zombie_walking();
+        self.check_for_zombie_step();
+
+        if self.blowing_away {
+            self.pos_x += 10.0;
+            if self.base.x > 850 {
+                self.die_with_loot();
+                return;
+            }
+        }
+
+        if self.zombie_height == ZombieHeight::Normal {
+            let a_desired_y = self.get_pos_y_based_on_row(self.base.row);
+            if self.pos_y < a_desired_y {
+                let diff = a_desired_y - self.pos_y;
+                self.pos_y += diff.min(1.0);
+            } else if self.pos_y > a_desired_y {
+                let diff = self.pos_y - a_desired_y;
+                self.pos_y -= diff.min(1.0);
+            }
+        }
+    }
+
+    /// 移除冰陷阱（对应 C++ RemoveIceTrap，stub）
+    pub fn remove_ice_trap(&mut self) {}
+
+    /// 移除黄油（对应 C++ RemoveButter，stub）
+    pub fn remove_butter(&mut self) {}
+
+    /// 检查进入泳池（对应 C++ CheckForPool，stub）
+    pub fn check_for_pool(&mut self) {}
+
+    /// 检查屋顶高台（对应 C++ CheckForHighGround，stub）
+    pub fn check_for_high_ground(&mut self) {}
+
+    /// 更新从墓碑升起（对应 C++ UpdateZombieRiseFromGrave，stub）
+    pub fn update_zombie_rise_from_grave(&mut self) {}
+
+    /// 更新泳池僵尸（对应 C++ UpdateZombiePool，stub）
+    pub fn update_zombie_pool(&mut self) {}
+
+    /// 更新屋顶高台僵尸（对应 C++ UpdateZombieHighGround，stub）
+    pub fn update_zombie_high_ground(&mut self) {}
+
+    /// 更新掉落僵尸（对应 C++ UpdateZombieFalling，stub）
+    pub fn update_zombie_falling(&mut self) {}
+
+    /// 更新烟囱僵尸（对应 C++ UpdateZombieChimney，stub）
+    pub fn update_zombie_chimney(&mut self) {}
+
+    /// 更新僵尸撑杆跳（对应 C++ UpdateZombiePolevaulter，stub）
+    pub fn update_zombie_polevaulter(&mut self) {}
+
+    /// 更新投石车僵尸（对应 C++ UpdateZombieCatapult，stub）
+    pub fn update_zombie_catapult(&mut self) {}
+
+    /// 更新海豚骑士（对应 C++ UpdateZombieDolphinRider，stub）
+    pub fn update_zombie_dolphin_rider(&mut self) {}
+
+    /// 更新潜水僵尸（对应 C++ UpdateZombieSnorkel，stub）
+    pub fn update_zombie_snorkel(&mut self) {}
+
+    /// 更新气球僵尸（对应 C++ UpdateZombieFlyer，stub）
+    pub fn update_zombie_flyer(&mut self) {}
+
+    /// 更新报纸僵尸（对应 C++ UpdateZombieNewspaper，stub）
+    pub fn update_zombie_newspaper(&mut self) {}
+
+    /// 更新矿工僵尸（对应 C++ UpdateZombieDigger，stub）
+    pub fn update_zombie_digger(&mut self) {}
+
+    /// 更新小丑僵尸（对应 C++ UpdateZombieJackInTheBox，stub）
+    pub fn update_zombie_jack_in_the_box(&mut self) {}
+
+    /// 更新伽刚特尔（对应 C++ UpdateZombieGargantuar，stub）
+    pub fn update_zombie_gargantuar(&mut self) {}
+
+    /// 更新雪橇僵尸（对应 C++ UpdateZombieBobsled，stub）
+    pub fn update_zombie_bobsled(&mut self) {}
+
+    /// 更新冰车僵尸（对应 C++ UpdateZamboni，stub）
+    pub fn update_zamboni(&mut self) {}
+
+    /// 更新梯子僵尸（对应 C++ UpdateLadder，stub）
+    pub fn update_ladder(&mut self) {}
+
+    /// 更新舞王僵尸（对应 C++ UpdateZombieDancer，stub）
+    pub fn update_zombie_dancer(&mut self) {}
+
+    /// 更新伴舞僵尸（对应 C++ UpdateZombieBackupDancer，stub）
+    pub fn update_zombie_backup_dancer(&mut self) {}
+
+    /// 更新小鬼僵尸（对应 C++ UpdateZombieImp，stub）
+    pub fn update_zombie_imp(&mut self) {}
+
+    /// 更新 Boss（对应 C++ UpdateBoss，stub）
+    pub fn update_boss(&mut self) {}
+
+    /// 更新蹦极僵尸（对应 C++ UpdateZombieBungee）
     fn update_zombie_bungee(&mut self) {}
 
-    /// 更新弹簧僵尸（对应 C++ Zombie::UpdateZombiePogo）
+    /// 更新弹簧僵尸（对应 C++ UpdateZombiePogo）
     fn update_zombie_pogo(&mut self) {}
 
-    /// 更新僵尸行走
+    /// 更新僵尸行走（对应 C++ Zombie::Animate）
+    pub fn animate(&mut self) {
+        self.prev_frame = self.frame;
+        // 某些相位下不播放动画
+        if self.zombie_phase == ZombiePhase::JackInTheBoxPopping
+            || self.zombie_phase == ZombiePhase::NewspaperMaddening
+            || self.zombie_phase == ZombiePhase::DiggerRising
+            || self.zombie_phase == ZombiePhase::DiggerTunnelingPauseWithoutAxe
+            || self.zombie_phase == ZombiePhase::DiggerRiseWithoutAxe
+            || self.zombie_phase == ZombiePhase::DiggerStunned
+            || self.is_immobilized()
+        {
+            return;
+        }
+
+        self.anim_counter += 1;
+        if self.yucky_face {
+            self.update_yucky_face();
+        }
+
+        if self.is_eating && self.has_head {
+            // 进食动画帧速率为 6
+            let a_frame_length = 6;
+            if self.anim_counter >= a_frame_length {
+                self.anim_counter = 0;
+                self.frame = (self.frame + 1) % 2;
+            }
+        } else {
+            if self.anim_counter >= self.anim_ticks_per_frame {
+                self.anim_counter = 0;
+                self.frame = (self.frame + 1) % self.anim_frames;
+            }
+        }
+    }
+
+    /// 是否被冻结/黄油（对应 C++ IsImmobilizied）
+    pub fn is_immobilized(&self) -> bool {
+        self.ice_trap_counter > 0 || self.buttered_counter > 0
+    }
+
+    /// 更新恶心表情（对应 C++ UpdateYuckyFace）
+    pub fn update_yucky_face(&mut self) {
+        self.yucky_face_counter += 1;
+        if self.yucky_face_counter > 270 {
+            self.yucky_face = false;
+            self.yucky_face_counter = 0;
+        }
+    }
+
+    /// 更新僵尸行走（对应 C++ UpdateZombieWalking）
     pub fn update_zombie_walking(&mut self) {
+        if self.zombie_not_walking() {
+            return;
+        }
+
         self.base.x = self.pos_x as i32;
         self.base.y = self.pos_y as i32;
-        if self.anim_counter % self.anim_ticks_per_frame == 0 {
-            self.prev_frame = self.frame;
-            self.frame = (self.frame + 1) % self.anim_frames;
+
+        // 计算速度
+        let a_speed = self.vel_x;
+        let a_speed = if self.is_moving_at_chilled_speed() { a_speed * CHILLED_SPEED_FACTOR } else { a_speed };
+
+        if self.is_walking_backwards() || self.zombie_phase == ZombiePhase::DancerDancingIn {
+            self.pos_x += a_speed;
+        } else {
+            self.pos_x -= a_speed;
         }
+    }
+
+    /// 是否正在以冻结速度移动（对应 C++ IsMovingAtChilledSpeed）
+    pub fn is_moving_at_chilled_speed(&self) -> bool {
+        self.chilled_counter > 0
+    }
+
+    /// 是否在倒走（对应 C++ IsWalkingBackwards）
+    pub fn is_walking_backwards(&self) -> bool {
+        false
+    }
+
+    /// 僵尸是否不该走动（对应 C++ ZombieNotWalking）
+    pub fn zombie_not_walking(&self) -> bool {
+        false
     }
 
     /// 判断僵尸是否已死或正在死亡（对应 C++ IsDeadOrDying）
@@ -1103,7 +1481,12 @@ impl Zombie {
     pub fn reanim_show_track(&mut self, _track_name: &str, _render_group: i32) {}
 
     /// 是否在棋盘上（对应 C++ IsOnBoard）
-    pub fn is_on_board(&self) -> bool { false }
+    pub fn is_on_board(&self) -> bool {
+        if self.from_wave == Zombie::ZOMBIE_WAVE_CUTSCENE || self.from_wave == Zombie::ZOMBIE_WAVE_UI {
+            return false;
+        }
+        true
+    }
 
     /// 装备盾牌（对应 C++ AttachShield）
     pub fn attach_shield(&mut self) {}
