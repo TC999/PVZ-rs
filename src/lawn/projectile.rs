@@ -211,10 +211,16 @@ impl Projectile {
         let a_old_y = self.pos_y; // 简化：GetPosYBasedOnRow
 
         // 运动类型分发
-        self.update_normal_motion();
+        if self.motion == ProjectileMotion::Lobbed {
+            self.update_lob_motion();
+        } else {
+            self.update_normal_motion();
+        }
 
-        // 碰撞检测
-        self.check_for_collision();
+        // 碰撞检测（非 Lobbed 运动走正常碰撞检测，Lobbed 在内部处理）
+        if self.motion != ProjectileMotion::Lobbed {
+            self.check_for_collision();
+        }
 
         // 坡度高度变化
         // [TRANSLATION_NOTE]: 坡度高度变化暂简化处理
@@ -225,10 +231,6 @@ impl Projectile {
     /// 更新正常运动（对应 C++ Projectile::UpdateNormalMotion）
     pub fn update_normal_motion(&mut self) {
         match self.motion {
-            ProjectileMotion::Lobbed => {
-                // [TRANSLATION_NOTE]: 抛物线运动暂简化，后续实现 UpdateLobMotion
-                self.pos_x += 3.33;
-            }
             ProjectileMotion::Floating => {
                 self.pos_x += 0.4;
             }
@@ -253,6 +255,64 @@ impl Projectile {
 
         // [TRANSLATION_NOTE]: HighGravity 模式暂略
         // [TRANSLATION_NOTE]: CheckForCollision + CheckForHighGround 暂略
+    }
+
+    /// 更新抛物线运动（对应 C++ Projectile::UpdateLobMotion）
+    pub fn update_lob_motion(&mut self) {
+        // [TRANSLATION_NOTE]: 玉米加农炮 Cobbig 终点重定位暂未实现
+        // 重力加速度
+        self.vel_z += self.acc_z;
+        // 位置更新
+        self.pos_x += self.vel_x;
+        self.pos_y += self.vel_y;
+        self.pos_z += self.vel_z;
+
+        // 上升阶段不处理碰撞
+        let is_rising = self.vel_z < 0.0;
+        if is_rising {
+            return;
+        }
+
+        // 碰撞高度检测
+        if self.projectile_age > 20 {
+            let mut a_min_collision_z = 0.0;
+            // [TRANSLATION_NOTE]: 各种 ProjectileType 的碰撞高度值暂简化
+            if self.pos_z <= a_min_collision_z {
+                return;
+            }
+        }
+
+        // 碰撞检测（简化版：检查僵尸）
+        let my_pos_x = self.pos_x as i32;
+        let my_pos_y = (self.pos_y + self.pos_z) as i32;
+        let my_row = self.base.row;
+        let a_damage = self.damage;
+        let a_damage_flags = self.damage_flags;
+
+        let mut hit_zombie_idx: Option<usize> = None;
+        if let Some(board) = self.base.get_board() {
+            let proj_rect = Rect::new(my_pos_x - 5, my_pos_y - 5, 10, 10);
+            for (idx, zombie) in board.zombies.iter().enumerate() {
+                if zombie.dead { continue; }
+                if zombie.zombie_type == ZombieType::Boss || zombie.base.row == my_row {
+                    if zombie.is_dead_or_dying() { continue; }
+                    let z_rect = zombie.get_zombie_rect();
+                    if crate::lawn::board::get_rect_overlap(&proj_rect, &z_rect) >= 0 {
+                        hit_zombie_idx = Some(idx);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if let Some(zombie_idx) = hit_zombie_idx {
+            if let Some(board) = self.base.get_board_mut() {
+                if let Some(zombie) = board.zombies.get_mut(zombie_idx) {
+                    zombie.take_damage(a_damage, a_damage_flags);
+                }
+            }
+            self.die();
+        }
     }
 
     /// 子弹死亡（对应 C++ Projectile::Die）
