@@ -186,24 +186,76 @@ impl Projectile {
         self.base.y = self.pos_y as i32;
     }
 
-    /// 更新子弹
+    /// 更新子弹（对应 C++ Projectile::Update）
     pub fn update(&mut self) {
         if self.dead { return; }
 
-        self.pos_x += self.vel_x;
-        self.pos_y += self.vel_y;
+        self.projectile_age += 1;
+        // [TRANSLATION_NOTE]: Scene/UpdateBoard 游戏场景检查暂略
 
-        // 更新动画帧
-        self.anim_counter += 1;
-        if self.num_frames > 1 && self.anim_counter >= 4 {
-            self.frame = (self.frame + 1) % self.num_frames;
-            self.anim_counter = 0;
+        self.rotation += self.rotation_speed;
+
+        self.update_motion();
+        // [TRANSLATION_NOTE]: AttachmentUpdateAndMove 暂未实现
+    }
+
+    /// 更新子弹运动（对应 C++ Projectile::UpdateMotion）
+    pub fn update_motion(&mut self) {
+        // 动画帧更新
+        if self.anim_ticks_per_frame > 0 {
+            self.anim_counter = (self.anim_counter + 1) % (self.num_frames * self.anim_ticks_per_frame);
+            self.frame = self.anim_counter / self.anim_ticks_per_frame;
         }
 
-        // 如果飞出屏幕则标记死亡
-        if self.pos_x > 900.0 || self.pos_x < -50.0 || self.pos_y < -50.0 || self.pos_y > 650.0 {
-            self.dead = true;
+        let a_old_row = self.base.row;
+        let a_old_y = self.pos_y; // 简化：GetPosYBasedOnRow
+
+        // 运动类型分发
+        self.update_normal_motion();
+
+        // 坡度高度变化
+        // [TRANSLATION_NOTE]: 坡度高度变化暂简化处理
+        self.base.x = self.pos_x as i32;
+        self.base.y = (self.pos_y + self.pos_z) as i32;
+    }
+
+    /// 更新正常运动（对应 C++ Projectile::UpdateNormalMotion）
+    pub fn update_normal_motion(&mut self) {
+        match self.motion {
+            ProjectileMotion::Lobbed => {
+                // [TRANSLATION_NOTE]: 抛物线运动暂简化，后续实现 UpdateLobMotion
+                self.pos_x += 3.33;
+            }
+            ProjectileMotion::Floating => {
+                self.pos_x += 0.4;
+            }
+            ProjectileMotion::Threepeater => {
+                self.pos_x += 3.33;
+                self.pos_y += self.vel_y;
+                self.vel_y *= 0.97;
+                self.shadow_y += self.vel_y;
+            }
+            ProjectileMotion::Star => {
+                self.pos_x += self.vel_x;
+                self.pos_y += self.vel_y;
+                self.shadow_y += self.vel_y;
+                if self.vel_y != 0.0 {
+                    // [TRANSLATION_NOTE]: PixelToGridYKeepOnBoard 暂未实现
+                }
+            }
+            _ => {
+                self.pos_x += 3.33;
+            }
         }
+
+        // [TRANSLATION_NOTE]: HighGravity 模式暂略
+        // [TRANSLATION_NOTE]: CheckForCollision + CheckForHighGround 暂略
+    }
+
+    /// 子弹死亡（对应 C++ Projectile::Die）
+    pub fn die(&mut self) {
+        self.dead = true;
+        // [TRANSLATION_NOTE]: AttachmentCrossFade/AttachmentDie 暂未实现
     }
 
     /// 绘制子弹
