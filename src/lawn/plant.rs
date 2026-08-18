@@ -5,12 +5,13 @@ use crate::lawn::game_object::GameObject;
 use crate::lawn::game_enums::*;
 use crate::lawn::board::Board;
 use crate::lawn::zombie::Zombie;
-use crate::todlib::reanimator::{Reanimation, ReanimLoopType};
+use crate::todlib::reanimator::{Reanimation, ReanimationType, ReanimLoopType};
 use crate::todlib::tod_particle::ParticleSystem;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
 use crate::framework::rect::Rect;
 use crate::framework::color::Color;
+use crate::framework::common::{Rand, RandRange, RandFloat};
 
 pub const MAX_MAGNET_ITEMS: usize = 5;
 
@@ -149,23 +150,275 @@ impl Plant {
         }
     }
 
-    /// 初始化植物
+    /// 初始化植物（对应 C++ Plant::PlantInitialize）
     pub fn plant_initialize(&mut self, grid_x: i32, grid_y: i32, seed_type: SeedType, imitater_type: SeedType) {
-        self.seed_type = seed_type;
         self.plant_col = grid_x;
         self.base.row = grid_y;
+
+        // 从 Board 获取像素坐标
+        let (pixel_x, pixel_y) = if let Some(board) = self.base.get_board() {
+            (board.grid_to_pixel_x(grid_x, grid_y), board.grid_to_pixel_y(grid_x, grid_y))
+        } else {
+            (0, 0)
+        };
+        self.base.x = pixel_x;
+        self.base.y = pixel_y;
+        self.pos_x = self.base.x as f32;
+        self.pos_y = self.base.y as f32;
+
+        self.anim_counter = 0;
+        self.anim_ping = true;
+        self.frame = 0;
+        self.shooting_counter = 0;
+        self.shake_offset_x = 0.0;
+        self.shake_offset_y = 0.0;
+        self.frame_length = RandRange(6) + 12; // RandRangeInt(12, 18)
+        self.target_x = -1;
+        self.target_y = -1;
+        self.start_row = self.base.row;
+        self.num_frames = 5;
+        self.state = PlantState::NotReady;
+        self.dead = false;
+        self.squished = false;
+        self.seed_type = seed_type;
         self.imitater_type = imitater_type;
-        self.is_on_board = true;
+        self.plant_health = 300;
+        self.do_special_countdown = 0;
+        self.disappear_countdown = 200;
+        self.state_countdown = 0;
+        self.particle_id = PARTICLESYSTEMID_NULL;
+        self.body_reanim_id = REANIMATIONID_NULL;
+        self.head_reanim_id = REANIMATIONID_NULL;
+        self.head_reanim_id2 = REANIMATIONID_NULL;
+        self.head_reanim_id3 = REANIMATIONID_NULL;
+        self.blink_reanim_id = REANIMATIONID_NULL;
+        self.light_reanim_id = REANIMATIONID_NULL;
+        self.sleeping_reanim_id = REANIMATIONID_NULL;
+        self.blink_countdown = 0;
+        self.recently_eaten_countdown = 0;
+        self.eaten_flash_countdown = 0;
+        self.beghouled_flash_countdown = 0;
+        self.base.width = 80;
+        self.base.height = 80;
+        // memset(mMagnetItems, 0, sizeof(mMagnetItems)) — 已通过初始化默认值处理
+        self.is_asleep = false;
+        self.wake_up_counter = 0;
+        self.on_bungee_state = PlantOnBungeeState::NotOnBungee;
+        self.potted_plant_index = -1;
 
-        // 设置植物的基本属性
-        self.plant_health = Plant::get_health_for_type(seed_type);
+        let a_plant_def = get_plant_definition(seed_type);
+        self.launch_rate = a_plant_def.launch_rate;
+        self.subclass = a_plant_def.sub_class as i32;
+        self.base.render_order = self.calc_render_order();
+
+        // 加载重动画
+        if a_plant_def.reanimation_type != ReanimationType::None {
+            let a_offset_y = Self::plant_draw_height_offset(self.base.get_board(), self, seed_type, grid_x, grid_y);
+            let render_order = self.base.render_order;
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(body_reanim) = app.add_reanimation(0.0, a_offset_y, render_order + 1, a_plant_def.reanimation_type as i32) {
+                    unsafe {
+                        (*body_reanim).m_loop_type = ReanimLoopType::Loop;
+                        (*body_reanim).m_anim_rate = 10.0 + RandFloat(5.0);
+                        if (*body_reanim).track_exists("anim_idle") {
+                            (*body_reanim).set_frames_for_layer("anim_idle");
+                        }
+                        (*body_reanim).m_is_attachment = true;
+                    }
+                    self.body_reanim_id = app.reanimation_get_id(body_reanim);
+                }
+            }
+            self.blink_countdown = 400 + RandRange(400);
+        }
+
+        // 夜间植物睡眠
+        if Self::is_nocturnal(seed_type) {
+            if let Some(board) = self.base.get_board() {
+                if !board.stage_is_night() {
+                    self.set_sleeping(true);
+                }
+            }
+        }
+
+        // 发射计数器初始化
+        if self.launch_rate > 0 {
+            if self.makes_sun() {
+                self.launch_counter = RandRange(self.launch_rate / 2) + 300;
+            } else {
+                self.launch_counter = RandRange(self.launch_rate);
+            }
+        } else {
+            self.launch_counter = 0;
+        }
+
+        // 根据种子类型初始化
+        match seed_type {
+            SeedType::Blover => {
+                self.do_special_countdown = 50;
+                if self.is_in_play() {
+                    // Reanimation 操作在 stub 中
+                    self.set_body_reanim_frame("anim_blow");
+                    self.set_body_reanim_loop(ReanimLoopType::PlayOnceAndHold);
+                    self.set_body_reanim_rate(20.0);
+                } else {
+                    self.set_body_reanim_frame("anim_idle");
+                    self.set_body_reanim_rate(10.0);
+                }
+            }
+            SeedType::Peashooter | SeedType::Snowpea | SeedType::Repeater |
+            SeedType::Leftpeater | SeedType::Gatlingpea => {
+                self.set_body_reanim_rate(15.0 + RandFloat(5.0));
+                // 头部动画 — 通过 stub 处理
+                self.add_head_reanim("anim_head_idle");
+            }
+            SeedType::Splitpea => {
+                self.set_body_reanim_rate(15.0 + RandFloat(5.0));
+                self.add_head_reanim("anim_head_idle");
+                self.add_head_reanim2("anim_splitpea_idle");
+            }
+            SeedType::Threepeater => {
+                self.set_body_reanim_rate(15.0 + RandFloat(5.0));
+                self.add_head_reanim("anim_head_idle1");
+                self.add_head_reanim2("anim_head_idle2");
+                self.add_head_reanim3("anim_head_idle3");
+            }
+            SeedType::Wallnut => {
+                self.plant_health = 4000;
+                self.blink_countdown = 1000 + RandRange(1000);
+            }
+            SeedType::ExplodeONut => {
+                self.plant_health = 4000;
+                self.blink_countdown = 1000 + RandRange(1000);
+            }
+            SeedType::GiantWallnut => {
+                self.plant_health = 4000;
+                self.blink_countdown = 1000 + RandRange(1000);
+            }
+            SeedType::Tallnut => {
+                self.plant_health = 8000;
+                self.base.height = 80;
+                self.blink_countdown = 1000 + RandRange(1000);
+            }
+            SeedType::Garlic => {
+                self.plant_health = 400;
+            }
+            SeedType::GoldMagnet | SeedType::Magnetshroom => {
+                // SetTruncateDisappearingFrames — stub
+            }
+            SeedType::Imitater => {
+                self.set_body_reanim_rate(25.0 + RandFloat(5.0));
+                self.state_countdown = 200;
+            }
+            SeedType::Cherrybomb | SeedType::Jalapeno => {
+                if self.is_in_play() {
+                    self.do_special_countdown = 100;
+                    self.set_body_reanim_frame("anim_explode");
+                    self.set_body_reanim_loop(ReanimLoopType::PlayOnceAndHold);
+                }
+            }
+            SeedType::PotatoMine => {
+                self.set_body_reanim_rate(12.0);
+                if self.is_in_play() {
+                    self.state_countdown = 1500;
+                } else {
+                    self.set_body_reanim_frame("anim_armed");
+                    self.state = PlantState::PotatoArmed;
+                }
+            }
+            SeedType::Gravebuster => {
+                if self.is_in_play() {
+                    self.set_body_reanim_frame("anim_land");
+                    self.set_body_reanim_loop(ReanimLoopType::PlayOnceAndHold);
+                    self.state = PlantState::GravebusterLanding;
+                }
+            }
+            SeedType::Sunshroom => {
+                self.set_body_reanim_frame_base_pose(6);
+                if self.is_in_play() {
+                    self.base.x += RandRange(10) - 5;
+                    self.base.y += RandRange(10) - 5;
+                } else if self.is_asleep {
+                    self.set_body_reanim_frame("anim_bigsleep");
+                } else {
+                    self.set_body_reanim_frame("anim_bigidle");
+                }
+                self.state = PlantState::SunshroomSmall;
+                self.state_countdown = 12000;
+            }
+            SeedType::Puffshroom | SeedType::Seashroom => {
+                if self.is_in_play() {
+                    self.base.x += RandRange(10) - 5;
+                    self.base.y += RandRange(6) - 3;
+                }
+            }
+            SeedType::Pumpkinshell => {
+                self.plant_health = 4000;
+                self.base.width = 120;
+            }
+            SeedType::Chomper => {
+                self.state = PlantState::Ready;
+            }
+            SeedType::Plantern => {
+                self.state_countdown = 50;
+            }
+            SeedType::Cactus => {
+                self.state = PlantState::CactusLow;
+            }
+            SeedType::InstantCoffee => {
+                self.do_special_countdown = 100;
+            }
+            SeedType::Scaredyshroom => {
+                self.state = PlantState::Ready;
+            }
+            SeedType::Cobcannon => {
+                if self.is_in_play() {
+                    self.state = PlantState::CobcannonArming;
+                    self.state_countdown = 500;
+                    self.set_body_reanim_frame("anim_unarmed_idle");
+                }
+            }
+            SeedType::Kernelpult => {
+                // AssignRenderGroupToPrefix("Cornpult_butter", RENDER_GROUP_HIDDEN) — stub
+            }
+            SeedType::Spikerock => {
+                self.plant_health = 450;
+            }
+            SeedType::Flowerpot => {
+                if self.is_in_play() {
+                    self.state = PlantState::FlowerpotInvulnerable;
+                    self.state_countdown = 100;
+                }
+            }
+            SeedType::Lilypad => {
+                if self.is_in_play() {
+                    self.state = PlantState::LilypadInvulnerable;
+                    self.state_countdown = 100;
+                }
+            }
+            SeedType::Tanglekelp => {
+                // SetTruncateDisappearingFrames — stub
+            }
+            _ => {}
+        }
+
+        // Big Time 模式翻倍血量
+        if let Some(app) = self.base.get_app() {
+            if app.game_mode == GameMode::ChallengeTimeAttack &&
+                (seed_type == SeedType::Wallnut || seed_type == SeedType::Sunflower || seed_type == SeedType::Marigold) {
+                self.plant_health *= 2;
+            }
+        }
+
         self.plant_max_health = self.plant_health;
-        self.launch_rate = Plant::get_launch_rate_for_type(seed_type);
-        self.frame_length = Plant::get_frame_length_for_type(seed_type);
-        self.num_frames = Plant::get_num_frames_for_type(seed_type);
 
-        // 加载动画
-        // self.play_body_reanim(...)
+        // 花盆处理
+        if seed_type != SeedType::Flowerpot && self.is_on_board {
+            if let Some(board) = self.base.get_board() {
+                if let Some(_flower_pot) = board.get_flower_pot_at(grid_x, grid_y) {
+                    // 通过 app 设置花盆动画速率
+                }
+            }
+        }
     }
 
     /// 更新植物
@@ -367,6 +620,41 @@ impl Plant {
         matches!(self.seed_type, SeedType::Sunflower | SeedType::Twinsunflower |
             SeedType::Sunshroom | SeedType::Marigold)
     }
+
+    // ========== 辅助函数（stub，对应 C++ Plant 方法） ==========
+
+    /// 是否在游戏中（对应 C++ IsInPlay）
+    pub fn is_in_play(&self) -> bool { self.is_on_board }
+
+    /// 设置睡眠状态（对应 C++ SetSleeping）
+    pub fn set_sleeping(&mut self, _is_asleep: bool) {}
+
+    /// 计算渲染顺序（对应 C++ CalcRenderOrder）
+    pub fn calc_render_order(&self) -> i32 { 0 }
+
+    /// 设置身体动画帧（对应 C++ 设置 Reanimation 的 FramesForLayer）
+    pub fn set_body_reanim_frame(&mut self, _layer: &str) {}
+
+    /// 设置身体动画速率（对应 C++ 设置 Reanimation 的 mAnimRate）
+    pub fn set_body_reanim_rate(&mut self, _rate: f32) {}
+
+    /// 设置身体动画循环模式（对应 C++ 设置 Reanimation 的 mLoopType）
+    pub fn set_body_reanim_loop(&mut self, _loop_type: ReanimLoopType) {}
+
+    /// 设置帧基础姿势（对应 C++ 设置 Reanimation 的 mFrameBasePose）
+    pub fn set_body_reanim_frame_base_pose(&mut self, _pose: i32) {}
+
+    /// 添加头部重动画（对应 C++ 添加头部 Reanimation）
+    pub fn add_head_reanim(&mut self, _layer: &str) {}
+
+    /// 添加头部重动画2（对应 C++ 添加第二个头部 Reanimation）
+    pub fn add_head_reanim2(&mut self, _layer: &str) {}
+
+    /// 添加头部重动画3（对应 C++ 添加第三个头部 Reanimation）
+    pub fn add_head_reanim3(&mut self, _layer: &str) {}
+
+    /// 绘制高度偏移（对应 C++ PlantDrawHeightOffset，静态函数）
+    pub fn plant_draw_height_offset(_board: Option<&Board>, _plant: &Plant, _seed_type: SeedType, _grid_x: i32, _grid_y: i32) -> f32 { 0.0 }
 }
 
 impl Default for Plant {
@@ -390,4 +678,61 @@ pub struct PlantDefinition {
     pub sub_class: PlantSubClass,
     pub launch_rate: i32,
     pub plant_name: Option<&'static str>,
+}
+
+/// 获取植物定义（对应 C++ GetPlantDefinition）
+pub fn get_plant_definition(seed_type: SeedType) -> PlantDefinition {
+    match seed_type {
+        SeedType::Peashooter => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 0, seed_cost: 100, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("PEASHOOTER") },
+        SeedType::Sunflower => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 1, seed_cost: 50, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 2500, plant_name: Some("SUNFLOWER") },
+        SeedType::Cherrybomb => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 3, seed_cost: 150, refresh_time: 5000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("CHERRY_BOMB") },
+        SeedType::Wallnut => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 2, seed_cost: 50, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("WALL_NUT") },
+        SeedType::PotatoMine => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 37, seed_cost: 25, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("POTATO_MINE") },
+        SeedType::Snowpea => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 4, seed_cost: 175, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("SNOW_PEA") },
+        SeedType::Chomper => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 31, seed_cost: 150, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("CHOMPER") },
+        SeedType::Repeater => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 5, seed_cost: 200, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("REPEATER") },
+        SeedType::Puffshroom => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 6, seed_cost: 0, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("PUFF_SHROOM") },
+        SeedType::Sunshroom => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 7, seed_cost: 25, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 2500, plant_name: Some("SUN_SHROOM") },
+        SeedType::Fumeshroom => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 9, seed_cost: 75, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("FUME_SHROOM") },
+        SeedType::Gravebuster => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 40, seed_cost: 75, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("GRAVE_BUSTER") },
+        SeedType::Hypnoshroom => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 10, seed_cost: 75, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("HYPNO_SHROOM") },
+        SeedType::Scaredyshroom => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 33, seed_cost: 25, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("SCAREDY_SHROOM") },
+        SeedType::Iceshroom => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 36, seed_cost: 75, refresh_time: 5000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("ICE_SHROOM") },
+        SeedType::Doomshroom => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 20, seed_cost: 125, refresh_time: 5000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("DOOM_SHROOM") },
+        SeedType::Lilypad => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 19, seed_cost: 25, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("LILY_PAD") },
+        SeedType::Squash => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 21, seed_cost: 50, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("SQUASH") },
+        SeedType::Threepeater => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 12, seed_cost: 325, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("THREEPEATER") },
+        SeedType::Tanglekelp => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 17, seed_cost: 25, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("TANGLE_KELP") },
+        SeedType::Jalapeno => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 11, seed_cost: 125, refresh_time: 5000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("JALAPENO") },
+        SeedType::Spikeweed => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 22, seed_cost: 100, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("SPIKEWEED") },
+        SeedType::Torchwood => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 29, seed_cost: 175, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("TORCHWOOD") },
+        SeedType::Tallnut => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 28, seed_cost: 125, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("TALL_NUT") },
+        SeedType::Seashroom => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 39, seed_cost: 0, refresh_time: 3000, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("SEA_SHROOM") },
+        SeedType::Plantern => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 38, seed_cost: 25, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 2500, plant_name: Some("PLANTERN") },
+        SeedType::Cactus => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 15, seed_cost: 125, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("CACTUS") },
+        SeedType::Blover => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 18, seed_cost: 100, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("BLOVER") },
+        SeedType::Splitpea => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 32, seed_cost: 125, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("SPLIT_PEA") },
+        SeedType::Starfruit => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 30, seed_cost: 125, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("STARFRUIT") },
+        SeedType::Pumpkinshell => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 25, seed_cost: 125, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("PUMPKIN") },
+        SeedType::Magnetshroom => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 35, seed_cost: 100, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("MAGNET_SHROOM") },
+        SeedType::Cabbagepult => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 13, seed_cost: 100, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 300, plant_name: Some("CABBAGE_PULT") },
+        SeedType::Flowerpot => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 33, seed_cost: 25, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("FLOWER_POT") },
+        SeedType::Kernelpult => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 13, seed_cost: 100, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 300, plant_name: Some("KERNEL_PULT") },
+        SeedType::InstantCoffee => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 33, seed_cost: 75, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("COFFEE_BEAN") },
+        SeedType::Garlic => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 8, seed_cost: 50, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("GARLIC") },
+        SeedType::Umbrella => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 23, seed_cost: 100, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("UMBRELLA_LEAF") },
+        SeedType::Marigold => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 24, seed_cost: 50, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 2500, plant_name: Some("MARIGOLD") },
+        SeedType::Melonpult => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 14, seed_cost: 300, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 300, plant_name: Some("MELON_PULT") },
+        SeedType::Gatlingpea => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 5, seed_cost: 250, refresh_time: 5000, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("GATLING_PEA") },
+        SeedType::Twinsunflower => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 1, seed_cost: 150, refresh_time: 5000, sub_class: PlantSubClass::Normal, launch_rate: 2500, plant_name: Some("TWIN_SUNFLOWER") },
+        SeedType::Gloomshroom => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 27, seed_cost: 150, refresh_time: 5000, sub_class: PlantSubClass::Shooter, launch_rate: 200, plant_name: Some("GLOOM_SHROOM") },
+        SeedType::Cattail => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 27, seed_cost: 225, refresh_time: 5000, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("CATTAIL") },
+        SeedType::Wintermelon => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 27, seed_cost: 200, refresh_time: 5000, sub_class: PlantSubClass::Shooter, launch_rate: 300, plant_name: Some("WINTER_MELON") },
+        SeedType::GoldMagnet => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 27, seed_cost: 50, refresh_time: 5000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("GOLD_MAGNET") },
+        SeedType::Spikerock => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 27, seed_cost: 125, refresh_time: 5000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("SPIKEROCK") },
+        SeedType::Cobcannon => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 16, seed_cost: 500, refresh_time: 5000, sub_class: PlantSubClass::Normal, launch_rate: 600, plant_name: Some("COB_CANNON") },
+        SeedType::Imitater => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 33, seed_cost: 0, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("IMITATER") },
+        SeedType::ExplodeONut => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 2, seed_cost: 0, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("EXPLODE_O_NUT") },
+        _ => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 0, seed_cost: 0, refresh_time: 0, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: None },
+    }
 }

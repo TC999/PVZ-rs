@@ -75,6 +75,10 @@ pub struct Reanimation {
     pub m_y: f32,
     pub m_override_scale_x: f32,
     pub m_override_scale_y: f32,
+// 新增字段
+    pub m_anim_rate: f32,
+    pub m_is_attachment: bool,
+    pub m_frame_base_pose: i32,
 }
 
 impl Reanimation {
@@ -99,6 +103,9 @@ impl Reanimation {
             m_y: 0.0,
             m_override_scale_x: 1.0,
             m_override_scale_y: 1.0,
+            m_anim_rate: 12.0,
+            m_is_attachment: false,
+            m_frame_base_pose: 0,
         }
     }
 
@@ -208,6 +215,12 @@ impl Reanimation {
         self.m_override_scale_x = sx;
         self.m_override_scale_y = sy;
     }
+
+    /// 检查轨道是否存在（对应 C++ TrackExists）
+    pub fn track_exists(&self, _name: &str) -> bool { false }
+
+    /// 设置帧层（对应 C++ SetFramesForLayer）
+    pub fn set_frames_for_layer(&mut self, _layer: &str) {}
 }
 
 impl Default for Reanimation {
