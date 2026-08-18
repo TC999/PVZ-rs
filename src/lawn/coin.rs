@@ -25,6 +25,15 @@ pub struct Coin {
     pub alpha: u8,
     pub dead: bool,
     pub is_sun: bool,
+    pub fade_count: i32,
+    pub ground_y: f32,
+    pub coin_age: i32,
+    pub hit_ground: bool,
+    pub disappear_counter: i32,
+    pub scale: f32,
+    pub is_being_collected: bool,
+    pub collection_distance: f32,
+    pub attachment_id: AttachmentID,
 }
 
 impl Coin {
@@ -47,6 +56,15 @@ impl Coin {
             alpha: 255,
             dead: false,
             is_sun: false,
+            fade_count: 0,
+            ground_y: 0.0,
+            coin_age: 0,
+            hit_ground: false,
+            disappear_counter: 0,
+            scale: 1.0,
+            is_being_collected: false,
+            collection_distance: 0.0,
+            attachment_id: ATTACHMENTID_NULL,
         }
     }
 
@@ -86,38 +104,57 @@ impl Coin {
         }
     }
 
-    /// 更新
+    /// 更新（对应 C++ Coin::Update）
     pub fn update(&mut self) {
         if self.dead { return; }
 
-        match self.coin_motion {
-            CoinMotion::FromSky => {
-                // 从天空掉落
-                self.vel_y += 0.5;
-                self.pos_x += self.vel_x;
-                self.pos_y += self.vel_y;
-                if self.pos_y >= self.destination_y && self.destination_y > 0.0 {
-                    self.pos_y = self.destination_y;
-                    self.vel_y = 0.0;
-                    self.coin_motion = CoinMotion::Coin;
-                }
-            },
-            CoinMotion::FromPlant => {
-                self.vel_y -= 1.5;
-                self.pos_y += self.vel_y;
-                if self.vel_y < 0.0 && self.vel_y > -3.0 {
-                    self.coin_motion = CoinMotion::FromSky;
-                    self.destination_y = self.pos_y + 100.0;
-                }
-            },
-            _ => {}
+        self.coin_age += 1;
+
+        if self.fade_count != 0 {
+            self.update_fade();
+        } else if !self.is_being_collected {
+            self.update_fall();
+        } else {
+            self.update_collected();
         }
 
-        self.lifetime += 1;
-        if self.lifetime >= self.lifespan {
-            self.alpha = self.alpha.saturating_sub(3);
-            if self.alpha == 0 {
-                self.dead = true;
+        // [TRANSLATION_NOTE]: AttachmentUpdateAndMove 暂未实现
+    }
+
+    /// 更新掉落物理（对应 C++ Coin::UpdateFall）
+    pub fn update_fall(&mut self) {
+        if self.coin_motion == CoinMotion::FromSky {
+            self.vel_y += 0.5;
+            self.pos_x += self.vel_x;
+            self.pos_y += self.vel_y;
+            if self.pos_y >= self.destination_y && self.destination_y > 0.0 {
+                self.pos_y = self.destination_y;
+                self.vel_y = 0.0;
+                self.coin_motion = CoinMotion::Coin;
+            }
+        } else if self.coin_motion == CoinMotion::FromPlant {
+            self.vel_y -= 1.5;
+            self.pos_y += self.vel_y;
+            if self.vel_y < 0.0 && self.vel_y > -3.0 {
+                self.coin_motion = CoinMotion::FromSky;
+                self.destination_y = self.pos_y + 100.0;
+            }
+        } else {
+            // 通用重力
+            if self.pos_y + self.vel_y < self.ground_y || self.ground_y == 0.0 {
+                self.pos_y += self.vel_y;
+                self.vel_y += 0.15;
+                self.pos_x += self.vel_x;
+            } else {
+                if !self.hit_ground {
+                    self.hit_ground = true;
+                }
+                self.pos_y = self.ground_y;
+                // 消失计时
+                self.disappear_counter += 1;
+                if self.disappear_counter >= 600 {
+                    self.start_fade();
+                }
             }
         }
 
@@ -127,6 +164,12 @@ impl Coin {
             self.frame = (self.frame + 1) % 12;
             self.counter = 0;
         }
+    }
+
+    /// 更新收集动画（对应 C++ Coin::UpdateCollected 简化版）
+    pub fn update_collected(&mut self) {
+        // [TRANSLATION_NOTE]: 收集动画暂未实现
+        self.dead = true;
     }
 
     /// 绘制
@@ -186,12 +229,15 @@ impl Coin {
 
     /// 开始淡出（对应 C++ StartFade）
     pub fn start_fade(&mut self) {
-        // [TRANSLATION_NOTE]: 淡出计数器暂未实现
+        self.fade_count = 15;
     }
 
     /// 更新淡出（对应 C++ UpdateFade）
     pub fn update_fade(&mut self) {
-        // [TRANSLATION_NOTE]: 淡出逻辑暂未实现
+        self.fade_count -= 1;
+        if self.fade_count == 0 {
+            self.dead = true;
+        }
     }
 
     /// 获取阳光缩放（对应 C++ GetSunScale）
