@@ -429,12 +429,13 @@ impl Plant {
 
         // 根据种子类型和状态更新
         match self.seed_type {
-            SeedType::Sunflower | SeedType::Twinsunflower => {
+            SeedType::Sunflower | SeedType::Twinsunflower | SeedType::Sunshroom | SeedType::Marigold => {
                 self.update_production_plant();
             },
             SeedType::Peashooter | SeedType::Snowpea | SeedType::Repeater |
-            SeedType::Gatlingpea | SeedType::Threepeater | SeedType::Splitpea => {
-                self.find_target_and_fire(self.base.row, PlantWeapon::Primary);
+            SeedType::Gatlingpea | SeedType::Threepeater | SeedType::Splitpea |
+            SeedType::Starfruit | SeedType::Cactus | SeedType::Cattail | SeedType::Leftpeater => {
+                self.update_shooter();
             },
             _ => {
                 // 其他类型的更新逻辑
@@ -443,16 +444,65 @@ impl Plant {
         }
     }
 
-    /// 更新生产类植物（向日葵等）
+    /// 更新射手类植物（对应 C++ UpdateShooter）
+    pub fn update_shooter(&mut self) {
+        self.launch_counter -= 1;
+        if self.launch_counter <= 0 {
+            self.launch_counter = self.launch_rate - 15 + RandRange(15); // Rand(15)
+
+            match self.seed_type {
+                SeedType::Threepeater => {
+                    // [TRANSLATION_NOTE]: LaunchThreepeater 暂未实现
+                }
+                SeedType::Starfruit => {
+                    // [TRANSLATION_NOTE]: LaunchStarFruit 暂未实现
+                }
+                SeedType::Splitpea => {
+                    self.find_target_and_fire(self.base.row, PlantWeapon::Primary);
+                    self.find_target_and_fire(self.base.row, PlantWeapon::Secondary);
+                }
+                SeedType::Cactus => {
+                    if self.state == PlantState::CactusHigh {
+                        self.find_target_and_fire(self.base.row, PlantWeapon::Primary);
+                    } else if self.state == PlantState::CactusLow {
+                        self.find_target_and_fire(self.base.row, PlantWeapon::Secondary);
+                    }
+                }
+                _ => {
+                    self.find_target_and_fire(self.base.row, PlantWeapon::Primary);
+                }
+            }
+        }
+
+        // 二次射击（Cattail/Repeater/Splitpea）
+        if self.launch_counter == 50 && self.seed_type == SeedType::Cattail {
+            self.find_target_and_fire(self.base.row, PlantWeapon::Primary);
+        }
+        if self.launch_counter == 25 {
+            match self.seed_type {
+                SeedType::Repeater | SeedType::Leftpeater => {
+                    self.find_target_and_fire(self.base.row, PlantWeapon::Primary);
+                }
+                SeedType::Splitpea => {
+                    self.find_target_and_fire(self.base.row, PlantWeapon::Secondary);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// 更新生产类植物（对应 C++ UpdateProductionPlant）
     pub fn update_production_plant(&mut self) {
-        self.launch_counter += 1;
-        if self.launch_counter >= 300 { // 每300帧生产一次
-            self.launch_counter = 0;
-            // 产生阳光
-            let bx = self.base.x;
-            let by = self.base.y;
-            if let Some(board) = self.base.get_board_mut() {
-                board.add_coin((bx + 20) as f32, (by - 10) as f32, CoinType::Sun, CoinMotion::FromPlant);
+        // [TRANSLATION_NOTE]: IsInPlay/IZombie/LastStand 检查暂略
+        if self.makes_sun() {
+            self.launch_counter -= 1;
+            if self.launch_counter <= 0 {
+                self.launch_counter = self.launch_rate;
+                let bx = self.base.x;
+                let by = self.base.y;
+                if let Some(board) = self.base.get_board_mut() {
+                    board.add_coin((bx + 20) as f32, (by - 10) as f32, CoinType::Sun, CoinMotion::FromPlant);
+                }
             }
         }
     }
@@ -511,9 +561,6 @@ impl Plant {
 
     /// 绘制影子
     pub fn draw_shadow(&self, _g: &mut Graphics, _offset_x: f32, _offset_y: f32) {}
-
-    /// 更新射手类植物
-    pub fn update_shooter(&mut self) {}
 
     /// 更新特殊能力（默认空实现）
     pub fn update_abilities(&mut self) {}
