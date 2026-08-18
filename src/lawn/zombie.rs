@@ -1314,8 +1314,100 @@ impl Zombie {
         }
     }
 
-    /// 更新矿工僵尸（对应 C++ UpdateZombieDigger，stub）
-    pub fn update_zombie_digger(&mut self) {}
+    /// 矿工僵尸丢镐（对应 C++ DiggerLoseAxe）
+    pub fn digger_lose_axe(&mut self) {
+        if self.zombie_phase == ZombiePhase::DiggerTunneling {
+            self.zombie_phase = ZombiePhase::DiggerTunnelingPauseWithoutAxe;
+            self.phase_counter = 200;
+            self.set_anim_rate(0.0);
+            self.update_anim_speed();
+            // [TRANSLATION_NOTE]: AttachmentDetachCrossFadeParticleType 暂未实现
+            self.stop_zombie_sound();
+        }
+
+        self.has_object = false;
+        // [TRANSLATION_NOTE]: ReanimShowTrack 隐藏镐和泥土
+    }
+
+    /// 更新矿工僵尸（对应 C++ UpdateZombieDigger）
+    pub fn update_zombie_digger(&mut self) {
+        if self.zombie_phase == ZombiePhase::DiggerTunneling {
+            if self.pos_x < 10.0 {
+                self.altitude = -120.0;
+                self.zombie_phase = ZombiePhase::DiggerRising;
+                self.phase_counter = 130;
+                self.play_zombie_reanim("anim_drill", ReanimLoopType::Loop, 0, 20.0);
+
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::DirtRise as i32);
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::WakeUp as i32);
+                }
+                // [TRANSLATION_NOTE]: AttachmentDetachCrossFadeParticleType 暂未实现
+                self.stop_zombie_sound();
+                // [TRANSLATION_NOTE]: AddPvzpParticle + AddReanimation 暂未实现
+            }
+        } else if self.zombie_phase == ZombiePhase::DiggerRising {
+            if self.phase_counter > 40 {
+                self.altitude = crate::todlib::tod_common::tod_animate_curve(
+                    130, 40, self.phase_counter, -120, 20, TodCurves::EaseOut,
+                ) as f32;
+            } else {
+                self.altitude = crate::todlib::tod_common::tod_animate_curve(
+                    30, 0, self.phase_counter, 20, 0, TodCurves::EaseIn,
+                ) as f32;
+            }
+
+            if self.phase_counter == 30 {
+                self.play_zombie_reanim("anim_landing", ReanimLoopType::PlayOnceAndHold, 0, 12.0);
+            }
+
+            if self.phase_counter == 0 {
+                self.altitude = 0.0;
+                self.zombie_phase = ZombiePhase::DiggerStunned;
+                self.play_zombie_reanim("anim_dizzy", ReanimLoopType::Loop, 10, 12.0);
+            }
+        } else if self.zombie_phase == ZombiePhase::DiggerTunnelingPauseWithoutAxe {
+            if self.phase_counter == 150 {
+                // [TRANSLATION_NOTE]: AddAttachedReanim 暂未实现
+            }
+
+            if self.phase_counter == 0 {
+                self.altitude = -120.0;
+                self.zombie_phase = ZombiePhase::DiggerRiseWithoutAxe;
+                self.phase_counter = 130;
+                self.play_zombie_reanim("anim_landing", ReanimLoopType::PlayOnceAndHold, 0, 0.0);
+
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::DirtRise as i32);
+                }
+                // [TRANSLATION_NOTE]: AddPvzpParticle + AddReanimation 暂未实现
+            }
+        } else if self.zombie_phase == ZombiePhase::DiggerRiseWithoutAxe {
+            if self.phase_counter > 40 {
+                self.altitude = crate::todlib::tod_common::tod_animate_curve(
+                    130, 40, self.phase_counter, -120, 20, TodCurves::EaseOut,
+                ) as f32;
+            } else {
+                self.altitude = crate::todlib::tod_common::tod_animate_curve(
+                    30, 0, self.phase_counter, 20, 0, TodCurves::EaseIn,
+                ) as f32;
+            }
+
+            if self.phase_counter == 30 {
+                self.play_zombie_reanim("anim_landing", ReanimLoopType::PlayOnceAndHold, 20, 12.0);
+            }
+
+            if self.phase_counter == 0 {
+                self.altitude = 0.0;
+                self.zombie_phase = ZombiePhase::DiggerWalkingWithoutAxe;
+                self.start_walk_anim(20);
+            }
+        } else if self.zombie_phase == ZombiePhase::DiggerStunned {
+            // [TRANSLATION_NOTE]: mLoopCount > 1 依赖 Reanimation 系统，简化处理
+            self.zombie_phase = ZombiePhase::DiggerWalking;
+            self.start_walk_anim(20);
+        }
+    }
 
     /// 更新小丑僵尸（对应 C++ UpdateZombieJackInTheBox，stub）
     pub fn update_zombie_jack_in_the_box(&mut self) {}
@@ -1511,8 +1603,48 @@ impl Zombie {
         }
     }
 
-    /// 更新冰车僵尸（对应 C++ UpdateZamboni，stub）
-    pub fn update_zamboni(&mut self) {}
+    /// 更新冰车僵尸（对应 C++ UpdateZamboni）
+    pub fn update_zamboni(&mut self) {
+        if self.pos_x > 400.0 && !self.flat_tires {
+            // PvzpAnimateCurveFloat(700, 300, mPosX, 0.25f, 0.05f, CURVE_LINEAR)
+            self.vel_x = crate::todlib::tod_common::tod_animate_curve_float(
+                700, 300, self.pos_x as i32, 0.25, 0.05, TodCurves::Linear,
+            );
+        } else if self.flat_tires && self.vel_x > 0.0005 {
+            self.vel_x -= 0.0005;
+        }
+
+        let my_pos_x = self.pos_x as i32;
+        let my_row = self.base.row;
+        let mut an_ice_x = my_pos_x + 118;
+        let has_roof = if let Some(board) = self.base.get_board() {
+            board.stage_has_roof()
+        } else {
+            false
+        };
+        if has_roof {
+            an_ice_x = an_ice_x.max(500);
+        } else {
+            an_ice_x = an_ice_x.max(25);
+        }
+
+        if an_ice_x < 800 {
+            let is_bobsled_bonanza = if let Some(app) = self.base.get_app() {
+                app.game_mode == GameMode::ChallengeBobsledBonanza
+            } else {
+                false
+            };
+            if let Some(board) = self.base.get_board_mut() {
+                let row = my_row as usize;
+                board.m_ice_min_x[row] = board.m_ice_min_x[row].min(an_ice_x);
+                if is_bobsled_bonanza {
+                    board.m_ice_timer[row] = i32::MAX;
+                } else {
+                    board.m_ice_timer[row] = 3000;
+                }
+            }
+        }
+    }
 
     /// 更新梯子僵尸（对应 C++ UpdateLadder，stub）
     pub fn update_ladder(&mut self) {}
