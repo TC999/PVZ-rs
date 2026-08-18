@@ -22,6 +22,19 @@ pub const POGO_BOUNCE_TIME: i32 = 80;
 pub const DOLPHIN_JUMP_TIME: i32 = 120;
 pub const CHILLED_SPEED_FACTOR: f32 = 0.4;
 
+// C++ DamageFlags 位索引（对应 ConstEnums.h DamageFlags）
+const DAMAGE_BYPASSES_SHIELD: u32 = 0;
+const DAMAGE_HITS_SHIELD_AND_BODY: u32 = 1;
+const DAMAGE_FREEZE: u32 = 2;
+const DAMAGE_DOESNT_CAUSE_FLASH: u32 = 3;
+const DAMAGE_DOESNT_LEAVE_BODY: u32 = 4;
+const DAMAGE_SPIKE: u32 = 5;
+
+/// 测试位标志（对应 C++ TestBit）
+pub fn test_bit(flags: u32, bit: u32) -> bool {
+    (flags & (1 << bit)) != 0
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum ZombieAttackType {
@@ -1356,48 +1369,301 @@ impl Zombie {
         self.is_eating = false;
     }
 
-    /// 受伤
-    pub fn take_damage(&mut self, damage: i32, _damage_flags: u32) {
-        self.just_got_shot_counter = 10;
+    /// 受伤（对应 C++ Zombie::TakeDamage）
+    pub fn take_damage(&mut self, damage: i32, damage_flags: u32) {
+        if self.zombie_phase == ZombiePhase::JackInTheBoxPopping || self.is_dead_or_dying() {
+            return;
+        }
 
-        // 先伤害头盔/盾牌
-        if self.helm_health > 0 {
-            self.helm_health -= damage;
-            if self.helm_health <= 0 {
-                self.helm_health = 0;
-                self.helm_type = HelmType::None;
+        let mut damage_remaining = damage;
+
+        // 先伤害飞行物（气球）
+        if self.is_flying() {
+            damage_remaining = self.take_flying_damage(damage_remaining, damage_flags);
+        }
+        // 再伤害盾牌
+        if damage_remaining > 0 && self.shield_type != ShieldType::None && !test_bit(damage_flags, DAMAGE_BYPASSES_SHIELD) {
+            damage_remaining = self.take_shield_damage(damage_remaining, damage_flags);
+            if test_bit(damage_flags, DAMAGE_HITS_SHIELD_AND_BODY) {
+                damage_remaining = damage;
             }
-        } else if self.shield_health > 0 {
-            self.shield_health -= damage;
-            if self.shield_health <= 0 {
-                self.shield_health = 0;
-                self.shield_type = ShieldType::None;
+        }
+        // 再伤害头盔
+        if damage_remaining > 0 && self.helm_type != HelmType::None {
+            damage_remaining = self.take_helm_damage(damage_remaining, damage_flags);
+        }
+        // 最后伤害身体
+        if damage_remaining > 0 {
+            self.take_body_damage(damage_remaining, damage_flags);
+        }
+    }
+
+    /// 盾牌受伤（对应 C++ TakeShieldDamage）
+    pub fn take_shield_damage(&mut self, damage: i32, damage_flags: u32) -> i32 {
+        if !test_bit(damage_flags, DAMAGE_DOESNT_CAUSE_FLASH) {
+            self.shield_just_got_shot_counter = 25;
+            self.just_got_shot_counter = self.just_got_shot_counter.max(0);
+        }
+
+        if !test_bit(damage_flags, DAMAGE_DOESNT_CAUSE_FLASH) && !test_bit(damage_flags, DAMAGE_HITS_SHIELD_AND_BODY) {
+            self.shield_recoil_counter = 12;
+            if self.shield_type == ShieldType::Door || self.shield_type == ShieldType::Ladder {
+                // 播放盾牌受击音效 — PlayFoley(FOLEY_SHIELD_HIT)
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::ShieldHit as i32);
+                }
             }
-        } else {
-            self.body_health -= damage;
-            if self.body_health <= 0 {
-                self.body_health = 0;
+        }
+
+        let damage_actual = self.shield_health.min(damage);
+        let damage_remaining = damage - damage_actual;
+        self.shield_health -= damage_actual;
+        if self.shield_health == 0 {
+            self.drop_shield(damage_flags);
+            return damage_remaining;
+        }
+
+        damage_remaining
+    }
+
+    /// 头盔受伤（对应 C++ TakeHelmDamage）
+    pub fn take_helm_damage(&mut self, damage: i32, damage_flags: u32) -> i32 {
+        if !test_bit(damage_flags, DAMAGE_DOESNT_CAUSE_FLASH) {
+            self.just_got_shot_counter = 25;
+        }
+
+        let damage_actual = self.helm_health.min(damage);
+        let damage_remaining = damage - damage_actual;
+        self.helm_health -= damage_actual;
+        if test_bit(damage_flags, DAMAGE_FREEZE) {
+            self.apply_chill(false);
+        }
+        if self.helm_health == 0 {
+            self.drop_helm(damage_flags);
+            return damage_remaining;
+        }
+
+        damage_remaining
+    }
+
+    /// 飞行物受伤（对应 C++ TakeFlyingDamage）
+    pub fn take_flying_damage(&mut self, damage: i32, damage_flags: u32) -> i32 {
+        if !test_bit(damage_flags, DAMAGE_DOESNT_CAUSE_FLASH) {
+            self.just_got_shot_counter = 25;
+        }
+
+        let damage_actual = self.flying_health.min(damage);
+        let damage_remaining = damage - damage_actual;
+        self.flying_health -= damage_actual;
+        if self.flying_health == 0 {
+            self.land_flyer(damage_flags);
+        }
+
+        damage_remaining
+    }
+
+    /// 身体受伤（对应 C++ TakeBodyDamage）
+    pub fn take_body_damage(&mut self, damage: i32, damage_flags: u32) {
+        if !test_bit(damage_flags, DAMAGE_DOESNT_CAUSE_FLASH) {
+            self.just_got_shot_counter = 25;
+        }
+
+        if test_bit(damage_flags, DAMAGE_FREEZE) {
+            self.apply_chill(false);
+        }
+
+        let body_health_origin = self.body_health;
+        self.body_health -= damage;
+        if self.body_health <= 0 {
+            self.body_health = 0;
+            self.play_death_anim(damage_flags);
+            self.drop_loot();
+            return;
+        }
+
+        // 特殊僵尸类型的受伤处理
+        match self.zombie_type {
+            ZombieType::Zamboni | ZombieType::Catapult => {
+                if test_bit(damage_flags, DAMAGE_SPIKE) || self.body_health <= 0 {
+                    if self.zombie_type == ZombieType::Zamboni {
+                        self.zamboni_death(damage_flags);
+                    } else {
+                        self.catapult_death(damage_flags);
+                    }
+                }
+            }
+            _ => {
+                self.update_damage_states(damage_flags);
+            }
+        }
+
+        if self.body_health <= 0 {
+            self.body_health = 0;
+            self.play_death_anim(damage_flags);
+            self.drop_loot();
+        }
+    }
+
+    /// 更新受伤状态（对应 C++ UpdateDamageStates）
+    pub fn update_damage_states(&mut self, damage_flags: u32) {
+        if !self.can_lose_body_parts() {
+            return;
+        }
+
+        if self.has_arm && self.body_health < 2 * self.body_max_health / 3 && self.body_health > 0 {
+            self.drop_arm(damage_flags);
+        }
+
+        if self.has_head && self.body_health < self.body_max_health / 3 {
+            self.drop_head(damage_flags);
+            self.drop_loot();
+            self.stop_zombie_sound();
+
+            if self.zombie_phase == ZombiePhase::SnorkelWalkingInPool {
                 self.die_no_loot();
             }
         }
     }
 
-    /// 直接死亡（不掉落物品）
+    /// 是否能失去身体部位（对应 C++ CanLoseBodyParts）
+    pub fn can_lose_body_parts(&self) -> bool {
+        self.zombie_type != ZombieType::Zamboni
+            && self.zombie_type != ZombieType::Bungee
+            && self.zombie_type != ZombieType::Catapult
+            && self.zombie_type != ZombieType::Gargantuar
+            && self.zombie_type != ZombieType::RedeEyeGargantuar
+            && self.zombie_type != ZombieType::Boss
+            && self.zombie_height != ZombieHeight::Zombiquarium
+            && !self.is_flying()
+            && !self.is_bobsled_team_with_sled()
+    }
+
+    /// 是否在飞行（对应 C++ IsFlying）
+    pub fn is_flying(&self) -> bool {
+        self.zombie_phase == ZombiePhase::BalloonFlying || self.zombie_phase == ZombiePhase::BalloonPopping
+    }
+
+    /// 获取身体伤害指数（对应 C++ GetBodyDamageIndex）
+    pub fn get_body_damage_index(&self) -> i32 {
+        if self.zombie_type == ZombieType::Boss {
+            if self.body_health < self.body_max_health / 2 {
+                return 2;
+            }
+            if self.body_health < self.body_max_health * 4 / 5 {
+                return 1;
+            }
+            return 0;
+        }
+        if self.body_health < self.body_max_health / 3 {
+            return 2;
+        }
+        if self.body_health < self.body_max_health * 2 / 3 {
+            return 1;
+        }
+        0
+    }
+
+    /// 获取头盔伤害指数（对应 C++ GetHelmDamageIndex）
+    pub fn get_helm_damage_index(&self) -> i32 {
+        if self.helm_health < self.helm_max_health / 3 {
+            return 2;
+        }
+        if self.helm_health < self.helm_max_health * 2 / 3 {
+            return 1;
+        }
+        0
+    }
+
+    /// 获取盾牌伤害指数（对应 C++ GetShieldDamageIndex）
+    pub fn get_shield_damage_index(&self) -> i32 {
+        if self.shield_health < self.shield_max_health / 3 {
+            return 2;
+        }
+        if self.shield_health < self.shield_max_health * 2 / 3 {
+            return 1;
+        }
+        0
+    }
+
+    /// 掉头盔（对应 C++ DropHelm）
+    pub fn drop_helm(&mut self, damage_flags: u32) {
+        if self.helm_type == HelmType::None {
+            return;
+        }
+        // [TRANSLATION_NOTE]: 头盔掉落粒子效果暂未实现
+        self.helm_type = HelmType::None;
+        let _ = damage_flags;
+    }
+
+    /// 掉盾牌（对应 C++ DropShield）
+    pub fn drop_shield(&mut self, damage_flags: u32) {
+        if self.shield_type == ShieldType::None {
+            return;
+        }
+        // [TRANSLATION_NOTE]: 盾牌掉落逻辑暂未实现
+        self.shield_type = ShieldType::None;
+        let _ = damage_flags;
+    }
+
+    /// 掉手臂（对应 C++ DropArm）
+    pub fn drop_arm(&mut self, damage_flags: u32) {
+        self.has_arm = false;
+        let _ = damage_flags;
+    }
+
+    /// 掉头（对应 C++ DropHead）
+    pub fn drop_head(&mut self, damage_flags: u32) {
+        self.has_head = false;
+        let _ = damage_flags;
+    }
+
+    /// 气球僵尸落地（对应 C++ LandFlyer）
+    pub fn land_flyer(&mut self, damage_flags: u32) {
+        let _ = damage_flags;
+    }
+
+    /// 播放死亡动画（对应 C++ PlayDeathAnim）
+    pub fn play_death_anim(&mut self, damage_flags: u32) {
+        let _ = damage_flags;
+    }
+
+    /// 冰车僵尸死亡（对应 C++ ZamboniDeath）
+    pub fn zamboni_death(&mut self, damage_flags: u32) {
+        let _ = damage_flags;
+    }
+
+    /// 投石车僵尸死亡（对应 C++ CatapultDeath）
+    pub fn catapult_death(&mut self, damage_flags: u32) {
+        let _ = damage_flags;
+    }
+
+    /// 停止僵尸音效（对应 C++ StopZombieSound）
+    pub fn stop_zombie_sound(&mut self) {}
+
+    /// 施加冻结（对应 C++ ApplyChill）
+    pub fn apply_chill(&mut self, _is_ice_trap: bool) {
+        self.chilled_counter = 100;
+    }
+
+    /// 直接死亡（对应 C++ DieNoLoot）
     pub fn die_no_loot(&mut self) {
         self.dead = true;
         self.zombie_phase = ZombiePhase::Dying;
+        if self.playing_song {
+            self.stop_zombie_sound();
+        }
     }
 
-    /// 死亡并掉落物品
+    /// 死亡并掉落物品（对应 C++ DieWithLoot）
     pub fn die_with_loot(&mut self) {
         self.dropped_loot = true;
         self.die_no_loot();
         self.drop_loot();
     }
 
-    /// 掉落物品
+    /// 掉落物品（对应 C++ DropLoot）
     pub fn drop_loot(&mut self) {
-        // 掉落硬币
+        // [TRANSLATION_NOTE]: 掉落硬币逻辑暂未实现
     }
 
     /// 绘制僵尸
