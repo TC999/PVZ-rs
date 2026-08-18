@@ -2591,7 +2591,48 @@ impl Zombie {
 
     /// 播放死亡动画（对应 C++ PlayDeathAnim）
     pub fn play_death_anim(&mut self, damage_flags: u32) {
+        if self.zombie_phase == ZombiePhase::Dying || self.zombie_phase == ZombiePhase::Burned || self.zombie_phase == ZombiePhase::Mowered {
+            return;
+        }
+
+        // 冰陷阱/黄油/恶心表情清理
+        // [TRANSLATION_NOTE]: 这些清理依赖 Reanimation 系统，简化处理
+
+        self.stop_eating();
+        if self.shield_type != ShieldType::None {
+            self.drop_shield(1);
+        }
+
+        self.vel_x = 0.0;
+        self.zombie_phase = ZombiePhase::Dying;
+
+        // 不同僵尸类型的死亡动画速率
+        let a_death_anim_rate = match self.zombie_type {
+            ZombieType::Football => 24.0,
+            ZombieType::Gargantuar | ZombieType::RedeEyeGargantuar => 14.0,
+            ZombieType::Snorkel => 14.0,
+            ZombieType::Digger => 18.0,
+            ZombieType::Yeti => 14.0,
+            ZombieType::Boss => 18.0,
+            _ => 24.0 + RandFloat(6.0),
+        };
+
+        // 选择死亡动画轨道
+        let mut a_death_track = "anim_death";
+        // [TRANSLATION_NOTE]: 特殊死亡动画选择（superlongdeath/death2/waterdeath）依赖 Reanimation 系统
         let _ = damage_flags;
+
+        self.play_zombie_reanim(a_death_track, ReanimLoopType::PlayOnceAndHold, 20, a_death_anim_rate);
+    }
+
+    /// 更新死亡状态（对应 C++ UpdateDeath）
+    pub fn update_death(&mut self) {
+        // [TRANSLATION_NOTE]: 死亡动画播放依赖 Reanimation 系统，简化处理
+        // 大多数僵尸类型在死亡动画播放完后通过 zombie_fade 消失
+        // 直接触发 DieNoLoot（已由播放死亡动画的调用方处理后半段）
+        if self.zombie_fade == -1 {
+            self.zombie_fade = if self.in_pool { 10 } else { 100 };
+        }
     }
 
     /// 冰车僵尸死亡（对应 C++ ZamboniDeath）
@@ -2684,8 +2725,6 @@ impl Zombie {
         self.base.row = row;
         self.pos_y = crate::lawn::board::row_to_y(row) as f32;
     }
-
-    pub fn update_death(&mut self) {}
 
     /// 获取渲染位置
     pub fn get_draw_pos(&self) -> ZombieDrawPosition {
