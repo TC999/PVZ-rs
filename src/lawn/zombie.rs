@@ -16,6 +16,8 @@ use crate::lawn::lawn_app::LawnApp;
 use crate::lawn::board::Board;
 
 pub const MAX_ZOMBIE_FOLLOWERS: usize = 4;
+pub const NUM_BACKUP_DANCERS: usize = 4;
+pub const ZOMBIE_BACKUP_DANCER_RISE_HEIGHT: i32 = -200;
 pub const BUNGEE_ZOMBIE_HEIGHT: i32 = 3000;
 pub const ZOMBIE_LIMP_SPEED_FACTOR: i32 = 2;
 pub const POGO_BOUNCE_TIME: i32 = 80;
@@ -1442,11 +1444,207 @@ impl Zombie {
     /// 更新梯子僵尸（对应 C++ UpdateLadder，stub）
     pub fn update_ladder(&mut self) {}
 
-    /// 更新舞王僵尸（对应 C++ UpdateZombieDancer，stub）
-    pub fn update_zombie_dancer(&mut self) {}
+    /// 召唤伴舞（对应 C++ SummonBackupDancer）
+    pub fn summon_backup_dancer(&mut self, row: i32, pos_x: i32) -> ZombieID {
+        // [TRANSLATION_NOTE]: RowCanHaveZombieType 与 AddZombie 已存在，
+        // 但 AddZombie 返回 Option<&mut Zombie> 无法在此持久返回 ID
+        if let Some(board) = self.base.get_board() {
+            if !board.row_can_have_zombie_type(row, ZombieType::BackupDancer) {
+                return ZOMBIEID_NULL;
+            }
+        }
+        let from_wave = self.from_wave;
+        if let Some(board) = self.base.get_board_mut() {
+            board.add_zombie(ZombieType::BackupDancer, from_wave);
+        }
+        ZOMBIEID_NULL
+    }
 
-    /// 更新伴舞僵尸（对应 C++ UpdateZombieBackupDancer，stub）
-    pub fn update_zombie_backup_dancer(&mut self) {}
+    /// 召唤全部伴舞（对应 C++ SummonBackupDancers）
+    pub fn summon_backup_dancers(&mut self) {
+        if !self.has_head {
+            return;
+        }
+
+        for i in 0..NUM_BACKUP_DANCERS {
+            // [TRANSLATION_NOTE]: ZombieTryToGet 未实现，简化处理
+            let (a_row, a_pos_x) = match i {
+                0 => (self.base.row - 1, self.base.x),
+                1 => (self.base.row + 1, self.base.x),
+                2 => (self.base.row, self.base.x - 100),
+                3 => (self.base.row, self.base.x + 100),
+                _ => (0, 0),
+            };
+            let _id = self.summon_backup_dancer(a_row, a_pos_x);
+            // self.follower_zombie_ids[i] = id;
+        }
+    }
+
+    /// 是否需要更多伴舞（对应 C++ NeedsMoreBackupDancers）
+    pub fn needs_more_backup_dancers(&self) -> bool {
+        if let Some(board) = self.base.get_board() {
+            for i in 0..NUM_BACKUP_DANCERS {
+                // [TRANSLATION_NOTE]: ZombieTryToGet 未实现，简化处理
+                if i == 0 && !board.row_can_have_zombie_type(self.base.row - 1, ZombieType::BackupDancer) {
+                    continue;
+                }
+                if i == 1 && !board.row_can_have_zombie_type(self.base.row + 1, ZombieType::BackupDancer) {
+                    continue;
+                }
+                return true;
+            }
+        }
+        false
+    }
+
+    /// 获取舞蹈帧（对应 C++ GetDancerFrame）
+    pub fn get_dancer_frame(&self) -> i32 {
+        if self.from_wave == Zombie::ZOMBIE_WAVE_UI || self.is_immobilized() {
+            return 0;
+        }
+
+        let mut a_frame_length = 20;
+        let mut a_frames_count = 23;
+        if self.zombie_phase == ZombiePhase::DancerDancingIn {
+            a_frames_count = 11;
+            a_frame_length = 10;
+        }
+
+        let counter = if let Some(board) = self.base.get_board() {
+            board.m_main_counter as i32
+        } else {
+            0
+        };
+        (counter % (a_frame_length * a_frames_count)) / a_frame_length
+    }
+
+    /// 获取舞蹈相位（对应 C++ GetDancerPhase）
+    pub fn get_dancer_phase(&self) -> ZombiePhase {
+        let a_frame = self.get_dancer_frame();
+        if a_frame <= 11 {
+            ZombiePhase::DancerDancingLeft
+        } else if a_frame <= 12 {
+            ZombiePhase::DancerWalkToRaise
+        } else if a_frame <= 18 {
+            ZombiePhase::DancerRaiseLeft1
+        } else {
+            ZombiePhase::DancerRaiseLeft2
+        }
+    }
+
+    /// 更新舞王僵尸（对应 C++ UpdateZombieDancer）
+    pub fn update_zombie_dancer(&mut self) {
+        if self.is_eating {
+            return;
+        }
+
+        // 召唤倒计时
+        if self.summon_counter > 0 {
+            self.summon_counter -= 1;
+            if self.summon_counter == 0 {
+                if self.get_dancer_frame() == 12 && self.has_head && self.pos_x < 700.0 {
+                    self.zombie_phase = ZombiePhase::DancerSnappingFingersWithLight;
+                    self.play_zombie_reanim("anim_point", ReanimLoopType::PlayOnceAndHold, 20, 24.0);
+                } else {
+                    self.summon_counter = 1;
+                }
+            }
+        }
+
+        if self.zombie_phase == ZombiePhase::DancerDancingIn {
+            if self.has_head && self.phase_counter == 0 {
+                self.zombie_phase = ZombiePhase::DancerSnappingFingers;
+                self.play_zombie_reanim("anim_point", ReanimLoopType::PlayOnceAndHold, 20, 24.0);
+                self.pick_random_speed();
+            }
+        } else if self.zombie_phase == ZombiePhase::DancerSnappingFingers
+            || self.zombie_phase == ZombiePhase::DancerSnappingFingersWithLight
+        {
+            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统，简化处理
+            if self.zombie_phase == ZombiePhase::DancerSnappingFingers {
+                if let Some(board) = self.base.get_board() {
+                    if board.count_zombies_on_screen() <= 15 {
+                        if let Some(app) = self.base.get_app() {
+                            app.play_foley(crate::todlib::tod_foley::FoleyType::Dancer as i32);
+                        }
+                    }
+                }
+            }
+            self.summon_backup_dancers();
+            self.zombie_phase = ZombiePhase::DancerSnappingFingersHold;
+            self.phase_counter = 200;
+        } else {
+            if self.zombie_phase == ZombiePhase::DancerSnappingFingersHold {
+                if self.phase_counter != 0 {
+                    return;
+                }
+                self.zombie_phase = ZombiePhase::DancerDancingLeft;
+                self.play_zombie_reanim("anim_walk", ReanimLoopType::Loop, 20, 0.0);
+            }
+
+            // 获取舞步相位并切换
+            let a_dancer_phase = self.get_dancer_phase();
+            if a_dancer_phase != self.zombie_phase {
+                match a_dancer_phase {
+                    ZombiePhase::DancerDancingLeft => {
+                        self.zombie_phase = a_dancer_phase;
+                        self.play_zombie_reanim("anim_walk", ReanimLoopType::Loop, 10, 0.0);
+                    }
+                    ZombiePhase::DancerWalkToRaise => {
+                        self.zombie_phase = a_dancer_phase;
+                        self.play_zombie_reanim("anim_armraise", ReanimLoopType::Loop, 10, 18.0);
+                    }
+                    ZombiePhase::DancerRaiseLeft1 | ZombiePhase::DancerRaiseLeft2 => {
+                        self.zombie_phase = a_dancer_phase;
+                        self.play_zombie_reanim("anim_armraise", ReanimLoopType::Loop, 10, 18.0);
+                    }
+                    _ => {}
+                }
+            }
+
+            if self.has_head && self.summon_counter == 0 && self.needs_more_backup_dancers() {
+                self.summon_counter = 100;
+            }
+        }
+    }
+
+    /// 更新伴舞僵尸（对应 C++ UpdateZombieBackupDancer）
+    pub fn update_zombie_backup_dancer(&mut self) {
+        if self.is_eating {
+            return;
+        }
+
+        if self.zombie_phase == ZombiePhase::DancerRising {
+            // PvzpAnimateCurve(150, 0, mPhaseCounter, -200, 0, CURVE_LINEAR)
+            self.altitude = crate::todlib::tod_common::tod_animate_curve(
+                150, 0, self.phase_counter, ZOMBIE_BACKUP_DANCER_RISE_HEIGHT, 0, TodCurves::Linear,
+            ) as f32;
+
+            if self.phase_counter != 0 {
+                return;
+            }
+        }
+
+        // 获取舞步相位并切换
+        let a_dancer_phase = self.get_dancer_phase();
+        if a_dancer_phase != self.zombie_phase {
+            match a_dancer_phase {
+                ZombiePhase::DancerDancingLeft => {
+                    self.zombie_phase = a_dancer_phase;
+                    self.play_zombie_reanim("anim_walk", ReanimLoopType::Loop, 10, 0.0);
+                }
+                ZombiePhase::DancerWalkToRaise => {
+                    self.zombie_phase = a_dancer_phase;
+                    self.play_zombie_reanim("anim_armraise", ReanimLoopType::Loop, 10, 18.0);
+                }
+                ZombiePhase::DancerRaiseLeft1 | ZombiePhase::DancerRaiseLeft2 => {
+                    self.zombie_phase = a_dancer_phase;
+                    self.play_zombie_reanim("anim_armraise", ReanimLoopType::Loop, 10, 18.0);
+                }
+                _ => {}
+            }
+        }
+    }
 
     /// 更新 Boss（对应 C++ UpdateBoss，stub）
     pub fn update_boss(&mut self) {}
