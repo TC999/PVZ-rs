@@ -69,6 +69,11 @@ impl GameObject {
     pub fn get_app(&self) -> Option<&LawnApp> {
         unsafe { self.app.map(|a| &*a) }
     }
+
+    /// 获取可变 LawnApp 引用
+    pub fn get_app_mut(&mut self) -> Option<&mut LawnApp> {
+        unsafe { self.app.map(|a| &mut *a) }
+    }
 }
 
 impl Default for GameObject {

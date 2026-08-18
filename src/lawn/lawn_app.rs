@@ -473,6 +473,12 @@ impl LawnApp {
     /// 添加动画（对应 C++ AddReanimation）
     pub fn add_reanimation(&mut self, _x: f32, _y: f32, _render_order: i32, _type: i32) -> Option<*mut Reanimation> { None }
 
+    /// 获取动画（对应 C++ ReanimationGet）
+    pub fn reanimation_get(&self, _id: ReanimationID) -> Option<&Reanimation> { None }
+
+    /// 获取动画 ID（对应 C++ ReanimationGetID）
+    pub fn reanimation_get_id(&self, _reanim: *mut Reanimation) -> ReanimationID { REANIMATIONID_NULL }
+
     /// 添加粒子（对应 C++ AddTodParticle）
     pub fn add_tod_particle(&mut self, _x: f32, _y: f32, _render_order: i32, _effect: i32) -> Option<*mut TodParticleSystem> { None }
 
