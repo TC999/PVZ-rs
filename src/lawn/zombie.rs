@@ -1199,8 +1199,91 @@ impl Zombie {
     /// 更新僵尸撑杆跳（对应 C++ UpdateZombiePolevaulter，stub）
     pub fn update_zombie_polevaulter(&mut self) {}
 
-    /// 更新投石车僵尸（对应 C++ UpdateZombieCatapult，stub）
-    pub fn update_zombie_catapult(&mut self) {}
+    /// 投石车僵尸射击（对应 C++ ZombieCatapultFire）
+    pub fn zombie_catapult_fire(&mut self, target_x: Option<i32>, target_y: Option<i32>) {
+        let a_origin_x = self.pos_x + 113.0;
+        let a_origin_y = self.pos_y - 44.0;
+        let (a_target_x, a_target_y) = match (target_x, target_y) {
+            (Some(tx), Some(ty)) => (tx as f32, ty as f32),
+            _ => (self.pos_x - 300.0, 0.0),
+        };
+
+        // 抛投音效
+        if let Some(app) = self.base.get_app() {
+            app.play_foley(crate::todlib::tod_foley::FoleyType::Basketball as i32);
+        }
+
+        // [TRANSLATION_NOTE]: AddProjectile 当前只支持 SeedType 参数，投石车篮球
+        // 的 ProjectileType::BASKETBALL 与 MOTION_LOBBED 设置需后续扩展 Projectile 系统
+        let a_range_x = (a_origin_x - a_target_x - 20.0).max(40.0);
+        let a_range_y = a_target_y - a_origin_y;
+        // 计算抛物线参数（保留原始公式）
+        let _vel_x = -a_range_x / 120.0;
+        let _vel_z = a_range_y / 120.0 - 7.0;
+        let _acc_z = 0.115;
+        // 暂不实际发射投射物
+    }
+
+    /// 寻找投石目标（对应 C++ FindCatapultTarget）
+    pub fn find_catapult_target(&self) -> bool {
+        if let Some(board) = self.base.get_board() {
+            for plant in &board.plants {
+                if plant.dead {
+                    continue;
+                }
+                if plant.base.row == self.base.row && self.base.x >= plant.base.x + 100 {
+                    // [TRANSLATION_NOTE]: NotOnGround/IsSpiky 未实现，简化检查
+                    if plant.seed_type != SeedType::Spikeweed && plant.seed_type != SeedType::Spikerock {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// 更新投石车僵尸（对应 C++ UpdateZombieCatapult）
+    pub fn update_zombie_catapult(&mut self) {
+        if self.zombie_phase == ZombiePhase::Normal {
+            if self.pos_x <= 650.0 && self.find_catapult_target() && self.summon_counter > 0 {
+                self.zombie_phase = ZombiePhase::CatapultLaunching;
+                self.phase_counter = 300;
+                self.play_zombie_reanim("anim_shoot", ReanimLoopType::PlayOnceAndHold, 0, 24.0);
+            }
+        } else if self.zombie_phase == ZombiePhase::CatapultLaunching {
+            // [TRANSLATION_NOTE]: ShouldTriggerTimedEvent(0.545f) 依赖 Reanimation 系统
+            // 简化：anim_counter % 40 触发一次发射
+            if self.anim_counter % 40 == 0 {
+                let has_target = self.find_catapult_target();
+                // [TRANSLATION_NOTE]: 投石目标的具体坐标需 FindCatapultTarget 返回 Plant 引用，
+                // 当前简化为用僵尸前方的默认位置
+                let target_x = if has_target { Some(self.base.x - 200) } else { None };
+                self.zombie_catapult_fire(target_x, None);
+            }
+
+            // 动画循环结束后处理
+            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统，用简化计数
+            if self.anim_counter % 120 == 0 {
+                self.summon_counter -= 1;
+                if self.summon_counter == 0 {
+                    self.play_zombie_reanim("anim_walk", ReanimLoopType::Loop, 20, 6.0);
+                    self.zombie_phase = ZombiePhase::Normal;
+                } else {
+                    self.play_zombie_reanim("anim_idle", ReanimLoopType::Loop, 20, 12.0);
+                    self.zombie_phase = ZombiePhase::CatapultReloading;
+                }
+            }
+        } else if self.zombie_phase == ZombiePhase::CatapultReloading && self.phase_counter == 0 {
+            if self.find_catapult_target() {
+                self.zombie_phase = ZombiePhase::CatapultLaunching;
+                self.phase_counter = 300;
+                self.play_zombie_reanim("anim_shoot", ReanimLoopType::PlayOnceAndHold, 20, 24.0);
+            } else {
+                self.play_zombie_reanim("anim_walk", ReanimLoopType::Loop, 20, 6.0);
+                self.zombie_phase = ZombiePhase::Normal;
+            }
+        }
+    }
 
     /// 更新海豚骑士（对应 C++ UpdateZombieDolphinRider，stub）
     pub fn update_zombie_dolphin_rider(&mut self) {}
