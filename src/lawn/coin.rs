@@ -57,7 +57,7 @@ impl Coin {
         self.coin_type = coin_type;
         self.coin_motion = motion;
         self.is_sun = matches!(coin_type, CoinType::Sun | CoinType::SmallSun | CoinType::LargeSun);
-
+        self.value = 0;
         match coin_type {
             CoinType::Sun => {
                 self.value = 25;
@@ -157,6 +157,61 @@ impl Coin {
             30 + extra * 2,
         );
         r.contains(x, y)
+    }
+
+    /// 是否是金钱（对应 C++ IsMoney）
+    pub fn is_money(&self) -> bool {
+        matches!(self.coin_type, CoinType::Silver | CoinType::Gold | CoinType::Diamond)
+    }
+
+    /// 是否是阳光（对应 C++ IsSun）
+    pub fn is_sun_type(&self) -> bool {
+        self.is_sun
+    }
+
+    /// 计分收集（对应 C++ ScoreCoin）
+    pub fn score_coin(&mut self) {
+        self.dead = true;
+        if self.is_sun {
+            if let Some(board) = self.base.get_board_mut() {
+                board.add_sun_money(self.value);
+            }
+        } else if self.is_money() {
+            // [TRANSLATION_NOTE]: PlayerInfo.AddCoins 暂未实现
+            if let Some(board) = self.base.get_board_mut() {
+                board.add_sun_money(self.value);
+            }
+        }
+    }
+
+    /// 开始淡出（对应 C++ StartFade）
+    pub fn start_fade(&mut self) {
+        // [TRANSLATION_NOTE]: 淡出计数器暂未实现
+    }
+
+    /// 更新淡出（对应 C++ UpdateFade）
+    pub fn update_fade(&mut self) {
+        // [TRANSLATION_NOTE]: 淡出逻辑暂未实现
+    }
+
+    /// 获取阳光缩放（对应 C++ GetSunScale）
+    pub fn get_sun_scale(&self) -> f32 {
+        if self.coin_type == CoinType::LargeSun { 1.5 } else { 1.0 }
+    }
+
+    /// 获取阳光值（对应 C++ GetSunValue）
+    pub fn get_sun_value(&self) -> i32 {
+        self.value
+    }
+
+    /// 获取硬币值（静态，对应 C++ GetCoinValue）
+    pub fn get_coin_value(coin_type: CoinType) -> i32 {
+        match coin_type {
+            CoinType::Silver => 10,
+            CoinType::Gold => 50,
+            CoinType::Diamond => 100,
+            _ => 0,
+        }
     }
 }
 
