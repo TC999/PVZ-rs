@@ -1368,8 +1368,122 @@ impl Zombie {
     /// 更新 Boss（对应 C++ UpdateBoss，stub）
     pub fn update_boss(&mut self) {}
 
+    /// 弹簧折断（对应 C++ PogoBreak）
+    pub fn pogo_break(&mut self, damage_flags: u32) {
+        if !self.has_object {
+            return;
+        }
+
+        if !test_bit(damage_flags, DAMAGE_DOESNT_LEAVE_BODY) {
+            // [TRANSLATION_NOTE]: GetTrackPosition/AddPvzpParticle 暂未实现，跳过弹簧粒子
+        }
+
+        self.zombie_height = ZombieHeight::Falling;
+        self.zombie_phase = ZombiePhase::Normal;
+        self.start_walk_anim(0);
+        self.zombie_rect = Rect::new(36, 17, 42, 115);
+        self.zombie_attack_rect = Rect::new(20, 17, 50, 115);
+        self.shield_health = 0;
+        self.shield_type = ShieldType::None;
+        self.has_object = false;
+    }
+
+    /// 是否在弹跳（对应 C++ IsBouncingPogo）
+    pub fn is_bouncing_pogo(&self) -> bool {
+        let phase = self.zombie_phase as i32;
+        phase >= ZombiePhase::PogoBouncing as i32 && phase <= ZombiePhase::PogoForwardBounce7 as i32
+    }
+
     /// 更新弹簧僵尸（对应 C++ UpdateZombiePogo）
-    fn update_zombie_pogo(&mut self) {}
+    pub fn update_zombie_pogo(&mut self) {
+        if self.is_dead_or_dying() || self.is_immobilized() || !self.is_bouncing_pogo()
+            || self.zombie_height == ZombieHeight::InToChimney
+        {
+            return;
+        }
+
+        let mut a_height = 40.0;
+        let phase_i = self.zombie_phase as i32;
+        if phase_i >= ZombiePhase::PogoHighBounce1 as i32 && phase_i <= ZombiePhase::PogoHighBounce6 as i32 {
+            a_height = 50.0 + 20.0 * (self.zombie_phase as i32 - ZombiePhase::PogoHighBounce1 as i32) as f32;
+        } else if self.zombie_phase == ZombiePhase::PogoForwardBounce2 {
+            a_height = 90.0;
+        } else if self.zombie_phase == ZombiePhase::PogoForwardBounce7 {
+            a_height = 170.0;
+        }
+        // PvzpAnimateCurveFloat(POGO_BOUNCE_TIME, 0, mPhaseCounter, 9.0f, aHeight + 9.0f, CURVE_BOUNCE_SLOW_MIDDLE)
+        self.altitude = crate::todlib::tod_common::tod_animate_curve_float(
+            POGO_BOUNCE_TIME, 0, self.phase_counter, 9.0, a_height + 9.0, TodCurves::BounceSlowMiddle,
+        );
+        self.frame = (3 - self.altitude as i32 / 3).clamp(0, 3);
+
+        // 在棋板上时播放弹簧音效
+        if self.is_on_board() && self.phase_counter == 5 {
+            if let Some(app) = self.base.get_app() {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::PogoZombie as i32);
+            }
+        }
+
+        // 高台处理
+        if self.zombie_height == ZombieHeight::UpToHighGround {
+            self.altitude += 100.0; // HIGH_GROUND_HEIGHT
+            self.zombie_height = ZombieHeight::Normal;
+        } else if self.zombie_height == ZombieHeight::DownOffHighGround {
+            self.on_high_ground = false;
+            self.zombie_height = ZombieHeight::Normal;
+        } else if self.on_high_ground {
+            self.altitude += 100.0; // HIGH_GROUND_HEIGHT
+        }
+
+        // 前跳遇到高坚果
+        if self.zombie_phase == ZombiePhase::PogoForwardBounce2 && self.phase_counter == 70 {
+            // [TRANSLATION_NOTE]: FindPlantTarget 暂未实现；TALL_NUT 阻挡音效/粒子暂跳过
+            // 若目标是高坚果 → PogoBreak
+            let target_plant = self.find_tallnut_target();
+            if target_plant {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Bonk as i32);
+                }
+                self.shield_type = ShieldType::None;
+                self.pogo_break(0);
+                return;
+            }
+        }
+
+        if self.phase_counter != 0 {
+            return;
+        }
+
+        // 相位切换
+        let a_plant = if self.is_on_board() {
+            self.find_vault_target()
+        } else {
+            false
+        };
+        if !a_plant {
+            self.zombie_phase = ZombiePhase::PogoBouncing;
+            self.pick_random_speed();
+            self.phase_counter = POGO_BOUNCE_TIME;
+            return;
+        }
+
+        if self.zombie_phase == ZombiePhase::PogoHighBounce1 {
+            self.zombie_phase = ZombiePhase::PogoForwardBounce2;
+            // mVelX = (mX - aPlant->mX + 60) / POGO_BOUNCE_TIME
+            self.vel_x = (self.base.x as f32 - 300.0 + 60.0) / POGO_BOUNCE_TIME as f32;
+            self.phase_counter = POGO_BOUNCE_TIME;
+        } else {
+            self.zombie_phase = ZombiePhase::PogoHighBounce1;
+            self.vel_x = 0.0;
+            self.phase_counter = POGO_BOUNCE_TIME;
+        }
+    }
+
+    /// 寻找可跳越的植物目标（对应 C++ FindPlantTarget(ATTACKTYPE_VAULT) 简化）
+    fn find_vault_target(&self) -> bool { false }
+
+    /// 寻找高坚果目标（对应 C++ FindPlantTarget 检查 SEED_TALLNUT 简化）
+    fn find_tallnut_target(&self) -> bool { false }
 
     /// 更新僵尸行走（对应 C++ Zombie::Animate）
     pub fn animate(&mut self) {
