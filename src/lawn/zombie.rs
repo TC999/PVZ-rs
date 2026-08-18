@@ -1243,9 +1243,6 @@ impl Zombie {
     /// 更新 Boss（对应 C++ UpdateBoss，stub）
     pub fn update_boss(&mut self) {}
 
-    /// 更新蹦极僵尸（对应 C++ UpdateZombieBungee）
-    fn update_zombie_bungee(&mut self) {}
-
     /// 更新弹簧僵尸（对应 C++ UpdateZombiePogo）
     fn update_zombie_pogo(&mut self) {}
 
@@ -1815,7 +1812,200 @@ impl Zombie {
     pub fn get_pos_y_based_on_row(&self, _row: i32) -> f32 { 0.0 }
 
     /// 选择蹦极僵尸目标（对应 C++ PickBungeeZombieTarget）
-    pub fn pick_bungee_zombie_target(&mut self, _column: i32) {}
+    pub fn pick_bungee_zombie_target(&mut self, column: i32) {
+        let mut allow_sunflower_target = true;
+        if let Some(board) = self.base.get_board() {
+            if self.count_bungees_targeting_sunflowers() == board.count_sunflowers() - 1 {
+                allow_sunflower_target = false;
+            }
+        }
+
+        // 先计算候选格子（需要借用 board，退出借用后再修改 self）
+        let (picks_result, dead_flag) = {
+            let mut picks = Vec::new();
+            if let Some(board) = self.base.get_board() {
+                for x in 0..crate::lawn::board::MAX_GRID_SIZE_X as i32 {
+                    if column == -1 || column == x {
+                        for y in 0..crate::lawn::board::MAX_GRID_SIZE_Y as i32 {
+                            let mut a_weight = 1;
+                            if board.get_grave_stone_at(x, y).is_some()
+                                || board.grid_square_type[y as usize][x as usize] == GridSquareType::Dirt
+                            {
+                                continue;
+                            }
+
+                            if let Some(a_plant) = board.get_top_plant_at(x, y) {
+                                if !allow_sunflower_target && a_plant.makes_sun() {
+                                    continue;
+                                }
+                                if a_plant.seed_type == SeedType::Gravebuster || a_plant.seed_type == SeedType::Cobcannon {
+                                    continue;
+                                }
+                                a_weight = 10000;
+                            }
+
+                            if !board.bungee_is_targeting_cell(x, y) {
+                                picks.push(crate::todlib::tod_common::TodWeightedGridArray { x, y, weight: a_weight });
+                            }
+                        }
+                    }
+                }
+            }
+            let dead_flag = picks.is_empty();
+            (picks, dead_flag)
+        };
+
+        if dead_flag {
+            self.die_no_loot();
+            return;
+        }
+
+        // 从加权数组中随机选择（此时不再借用 board）
+        let pick_count = picks_result.len();
+        let chosen = crate::todlib::tod_common::tod_pick_from_weighted_grid_array(
+            &mut picks_result.clone(), pick_count,
+        );
+        if let Some(idx) = chosen {
+            self.target_col = picks_result[idx].x;
+            let chosen_y = picks_result[idx].y;
+            let chosen_x = picks_result[idx].x;
+            self.set_row(chosen_y);
+            if let Some(board) = self.base.get_board() {
+                self.pos_x = board.grid_to_pixel_x(chosen_x, self.base.row) as f32;
+            }
+            self.pos_y = self.get_pos_y_based_on_row(self.base.row);
+        }
+    }
+
+    /// 统计正在瞄准向日葵的蹦极僵尸数量（对应 C++ CountBungeesTargetingSunFlowers）
+    pub fn count_bungees_targeting_sunflowers(&self) -> i32 {
+        let mut count = 0;
+        if let Some(board) = self.base.get_board() {
+            for zombie in &board.zombies {
+                if zombie.dead {
+                    continue;
+                }
+                if !zombie.is_dead_or_dying() && zombie.zombie_type == ZombieType::Bungee && zombie.target_col != -1 {
+                    if let Some(a_plant) = board.get_top_plant_at(zombie.target_col, zombie.base.row) {
+                        if a_plant.makes_sun() {
+                            count += 1;
+                        }
+                    }
+                }
+            }
+        }
+        count
+    }
+
+    /// 蹦极投放僵尸（对应 C++ BungeeDropZombie）
+    pub fn bungee_drop_zombie(&mut self, dropped_zombie: &mut Zombie, grid_x: i32, grid_y: i32) {
+        self.target_col = grid_x;
+        self.set_row(grid_y);
+        if let Some(board) = self.base.get_board() {
+            self.pos_x = board.grid_to_pixel_x(self.target_col, self.base.row) as f32;
+        }
+        self.pos_y = self.get_pos_y_based_on_row(self.base.row);
+        self.play_zombie_reanim("anim_raise", ReanimLoopType::PlayOnceAndHold, 0, 36.0);
+        // mRelatedZombieID = mBoard->ZombieGetID(theDroppedZombie) — ZombieGetID 未实现，暂用占位
+        // self.related_zombie_id = 0;
+
+        dropped_zombie.pos_x = self.pos_x - 15.0;
+        dropped_zombie.set_row(grid_y);
+        dropped_zombie.pos_y = dropped_zombie.get_pos_y_based_on_row(grid_y);
+        dropped_zombie.zombie_height = ZombieHeight::GettingBungeeDropped;
+        dropped_zombie.play_zombie_reanim("anim_idle", ReanimLoopType::Loop, 0, 0.0);
+        dropped_zombie.base.render_order = self.base.render_order + 1;
+    }
+
+    /// 蹦极偷取目标（对应 C++ BungeeStealTarget）
+    pub fn bungee_steal_target(&mut self) {
+        self.play_zombie_reanim("anim_grab", ReanimLoopType::PlayOnceAndHold, 20, 24.0);
+        if let Some(board) = self.base.get_board() {
+            if let Some(a_plant) = board.get_top_plant_at(self.target_col, self.base.row) {
+                if a_plant.seed_type != SeedType::Cobcannon && a_plant.seed_type != SeedType::Gravebuster {
+                    // mTargetPlantID = (PlantID)mBoard->mPlants.DataArrayGetID(aPlant)
+                    // aPlant->mOnBungeeState = GETTING_GRABBED_BY_BUNGEE
+                    self.base.render_order = crate::lawn::board::make_render_order(RENDER_LAYER_PROJECTILE, self.base.row, 0);
+                }
+            }
+        }
+    }
+
+    /// 蹦极提起目标（对应 C++ BungeeLiftTarget）
+    pub fn bungee_lift_target(&mut self) {
+        self.play_zombie_reanim("anim_raise", ReanimLoopType::PlayOnceAndHold, 0, 36.0);
+        // [TRANSLATION_NOTE]: 植物查找与状态设置依赖 Board mPlants 的 DataArray 机制，暂未实现
+    }
+
+    /// 蹦极着陆（对应 C++ BungeeLanding）
+    pub fn bungee_landing(&mut self) {
+        if self.zombie_phase == ZombiePhase::BungeeDiving && self.altitude < 1500.0 {
+            self.zombie_phase = ZombiePhase::BungeeDivingScreaming;
+        }
+
+        if self.altitude > 40.0 {
+            return;
+        }
+
+        if let Some(board) = self.base.get_board() {
+            if let Some(_a_plant) = board.find_umbrella_plant(self.target_col, self.base.row) {
+                // 荷叶伞弹开蹦极
+                self.zombie_phase = ZombiePhase::BungeeRising;
+                self.base.render_order = crate::lawn::board::make_render_order(RENDER_LAYER_TOP, 0, 1);
+                self.hit_umbrella = true;
+                return;
+            }
+        }
+
+        if self.altitude > 0.0 {
+            return;
+        }
+
+        self.altitude = 0.0;
+        // [TRANSLATION_NOTE]: 释放被抓僵尸 — ZombieTryToGet 未实现
+        // 若携带僵尸则释放它，否则进入底部状态
+        self.zombie_phase = ZombiePhase::BungeeAtBottom;
+        self.phase_counter = 300;
+        self.play_zombie_reanim("anim_idle", ReanimLoopType::Loop, 5, 24.0);
+    }
+
+    /// 更新蹦极僵尸（对应 C++ UpdateZombieBungee）
+    pub fn update_zombie_bungee(&mut self) {
+        if self.is_dead_or_dying() || self.is_immobilized() {
+            return;
+        }
+
+        if self.zombie_phase == ZombiePhase::BungeeDiving || self.zombie_phase == ZombiePhase::BungeeDivingScreaming {
+            self.altitude -= 8.0;
+            self.bungee_landing();
+        } else if self.zombie_phase == ZombiePhase::BungeeAtBottom {
+            if self.phase_counter <= 0 {
+                self.bungee_steal_target();
+                self.zombie_phase = ZombiePhase::BungeeGrabbing;
+            }
+        } else if self.zombie_phase == ZombiePhase::BungeeGrabbing {
+            // Reanimation mLoopCount > 0 检查 — Reanimation 系统暂未实现
+            self.bungee_lift_target();
+            self.zombie_phase = ZombiePhase::BungeeRising;
+        } else if self.zombie_phase == ZombiePhase::BungeeHitOuchy {
+            if self.phase_counter <= 0 {
+                self.die_with_loot();
+            }
+        } else if self.zombie_phase == ZombiePhase::BungeeRising {
+            self.altitude += 8.0;
+            if self.altitude >= 600.0 {
+                self.die_no_loot();
+            }
+        } else if self.zombie_phase == ZombiePhase::BungeeCutscene {
+            self.altitude = crate::todlib::tod_common::tod_animate_curve(200, 0, self.phase_counter, 40, 0, TodCurves::SinWave) as f32;
+            if self.phase_counter <= 0 {
+                self.phase_counter = 200;
+            }
+        }
+
+        self.base.x = self.pos_x as i32;
+        self.base.y = self.pos_y as i32;
+    }
 }
 
 /// 僵尸定义（对应 C++ ZombieDefinition）
