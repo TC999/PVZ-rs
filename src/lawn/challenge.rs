@@ -90,8 +90,25 @@ impl Challenge {
 
     // --- 方法存根（待从 Challenge.cpp 翻译具体实现） ---
 
+    fn get_board(&mut self) -> &mut crate::lawn::board::Board {
+        unsafe { &mut *self.board.unwrap() }
+    }
+
+    fn get_app(&self) -> &crate::lawn::lawn_app::LawnApp {
+        unsafe { &*self.app.unwrap() }
+    }
+
     pub fn start_level(&mut self) {
-        // TODO: 从 Challenge.cpp 翻译
+        // [TRANSLATION_NOTE]: 完整逻辑涉及多个 Board 未翻译字段。保留可用逻辑。
+        let is_stormy = self.get_app().is_stormy_night_level();
+        let a_game_mode = self.get_app().game_mode;
+        if is_stormy {
+            self.challenge_state = ChallengeState::StormFlash1;
+            self.challenge_state_counter = 400;
+        }
+        if a_game_mode == GameMode::ChallengeBeghouled || a_game_mode == GameMode::ChallengeBeghouledTwist {
+            self.challenge_state_counter = 1500;
+        }
     }
 
     pub fn beghouled_populate_board(&mut self) {
@@ -176,7 +193,31 @@ impl Challenge {
     }
 
     pub fn update(&mut self) {
-        // TODO: 从 Challenge.cpp 翻译
+        // [TRANSLATION_NOTE]: 完整逻辑涉及多个未翻译 Board/LawnApp 字段和子函数
+        // 保留核心控制流结构
+        let is_stormy = self.get_app().is_stormy_night_level();
+        let a_game_mode = self.get_app().game_mode;
+        let a_game_scene = self.get_app().game_scene;
+        if is_stormy {
+            // [TRANSLATION_NOTE]: UpdateStormyNight() 暂未实现
+        }
+        let board = self.get_board();
+        if board.m_paused {
+            if a_game_mode == GameMode::ChallengeBeghouledTwist {
+                self.challenge_grid_x = -1;
+                self.challenge_grid_y = -1;
+            }
+            return;
+        }
+        if a_game_mode == GameMode::ChallengeRainingSeeds || is_stormy {
+            // [TRANSLATION_NOTE]: UpdateRain() 暂未实现
+        }
+        if a_game_scene != crate::lawn::lawn_app::GameScenes::Playing && a_game_mode != GameMode::ChallengeTreeOfWisdom {
+            return;
+        }
+        if board.has_conveyor_belt_seed_bank() {
+            self.update_conveyor_belt();
+        }
     }
 
     pub fn update_beghouled(&mut self) {
@@ -300,7 +341,16 @@ impl Challenge {
     }
 
     pub fn init_level(&mut self) {
-        // TODO: 从 Challenge.cpp 翻译
+        // [TRANSLATION_NOTE]: 完整逻辑涉及多个 Board 未翻译字段（m_zombie_count_down_start, m_level, m_seed_bank.add_seed 等）
+        // 当前仅保留状态转换逻辑
+        if self.get_app().is_stormy_night_level() {
+            self.challenge_state = ChallengeState::StormFlash2;
+            self.challenge_state_counter = 100;
+        }
+        if self.get_app().game_mode == GameMode::ChallengeBeghouledTwist {
+            self.challenge_grid_x = -1;
+            self.challenge_grid_y = -1;
+        }
     }
 
     pub fn spawn_zombie_wave(&mut self) {
@@ -782,3 +832,6 @@ impl Default for Challenge {
 
 // 对应 C++: extern int gZombieWaves[NUM_LEVELS];
 // 对应 C++: extern ZombieAllowedLevels gZombieAllowedLevels[NUM_ZOMBIE_TYPES];
+
+
+
