@@ -1059,7 +1059,18 @@ impl Plant {
             }
         }
     }
-    pub fn update_tanglekelp(&mut self) {}
+    pub fn update_tanglekelp(&mut self) {
+        if self.state != PlantState::TanglekelpGrabbing {
+            // [TRANSLATION_NOTE]: 查找目标僵尸 + 附着动画暂未实现
+            self.state = PlantState::TanglekelpGrabbing;
+            self.state_countdown = 100;
+        } else {
+            if self.state_countdown == 0 {
+                // [TRANSLATION_NOTE]: 拖下水 + 水花效果暂未实现
+                // self.die();
+            }
+        }
+    }
     pub fn update_scaredy_shroom(&mut self) {
         // [TRANSLATION_NOTE]: 僵尸邻近检测暂未实现
         // 状态机：Ready→ScaredyshroomLowering→Scared→Raising→Ready
