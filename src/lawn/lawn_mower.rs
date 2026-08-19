@@ -177,9 +177,10 @@ impl LawnMower {
         Rect::new(self.pos_x as i32, self.pos_y as i32, 80, 80)
     }
 
-    /// 割草机死亡
+    /// 割草机死亡（对应 C++ Die）
     pub fn die(&mut self) {
         self.dead = true;
+        // [TRANSLATION_NOTE]: 完整实现需要移除 Reanimation + 检查 bonus mowers
     }
 
     /// 粉碎割草机
@@ -191,11 +192,24 @@ impl LawnMower {
     /// 启用超级割草机
     pub fn enable_super_mower(&mut self, _enable: bool) {}
 
-    /// 水池高度更新
-    pub fn update_pool(&mut self) {}
+    /// 水池高度更新（对应 C++ UpdatePool）
+    /// 泳池割草机进入/离开水池时的高度动画和音效
+    pub fn update_pool(&mut self) {
+        // [TRANSLATION_NOTE]: 完整实现依赖 Reanimation 系统
+        // 状态机：Land→DownToPool(altitude-2)→InPool→UpToLand(altitude+2)→Land
+        // 进入/离开水池时播放水花粒子+音效
+    }
 
-    /// 绘制割草机
-    pub fn draw(&self, _g: &mut Graphics) {}
+    /// 绘制割草机阴影（对应 C++ Draw 中的阴影部分）
+    pub fn draw_shadow(&self, _g: &mut Graphics) {
+        // [TRANSLATION_NOTE]: 阴影绘制依赖 IMAGE_PLANTSHADOW 资源
+    }
+
+    /// 绘制割草机（对应 C++ Draw）
+    pub fn draw(&self, _g: &mut Graphics) {
+        // [TRANSLATION_NOTE]: 完整绘制依赖 Reanimation 系统和 ReanimatorCache
+        // 泳池/屋顶/陆地割草机各有不同偏移和剪辑
+    }
 }
 
 impl Default for LawnMower {
