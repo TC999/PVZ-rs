@@ -616,39 +616,13 @@ impl Board {
         if self.m_paused || self.m_board_result != BoardResult::None { return; }
         self.m_update_count += 1;
 
-        // 更新阳光产生
-        self.update_sun_spawning();
+        // [TRANSLATION_NOTE]: 完整 C++ 实现还包含：CutScene更新、鼠标位置更新、按钮更新、震动等
 
-        // 更新植物
-        for plant in &mut self.plants {
-            plant.update();
-        }
-
-        // 更新僵尸
-        for zombie in &mut self.zombies {
-            zombie.update();
-        }
-
-        // 更新子弹
-        for projectile in &mut self.projectiles {
-            projectile.update();
-        }
-
-        // 更新硬币
-        for coin in &mut self.coins {
-            coin.update();
-        }
-
-        // 更新割草机
-        for mower in &mut self.lawn_mowers {
-            mower.update();
-        }
+        // 主游戏更新（对应 C++ UpdateGame）
+        self.update_game();
 
         // 碰撞检测
         self.check_collisions();
-
-        // 更新波次
-        self.update_waves();
 
         // 清理已死亡的实体
         self.cleanup_dead();
