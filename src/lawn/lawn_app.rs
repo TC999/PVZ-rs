@@ -531,36 +531,77 @@ impl LawnApp {
             // Note: C++ also has GAMEMODE_UPSELL and GAMEMODE_INTRO, but these
             // don't exist in the Rust enum yet
     }
-    pub fn is_puzzle_mode(&self) -> bool { false }
-    pub fn is_challenge_mode(&self) -> bool { false }
+    pub fn is_puzzle_mode(&self) -> bool {
+        matches!(self.game_mode,
+            GameMode::ChallengeScaryPotter | GameMode::ChallengePuzzleMode
+        )
+    }
+    pub fn is_challenge_mode(&self) -> bool {
+        !self.is_adventure_mode() && !self.is_puzzle_mode() && !self.is_survival_mode()
+    }
     pub fn is_art_challenge(&self) -> bool {
         matches!(self.game_mode,
             GameMode::ChallengeSeeingStars
         )
     }
-    pub fn is_izombie_level(&self) -> bool { false }
+    pub fn is_izombie_level(&self) -> bool {
+        self.board.is_some() && matches!(self.game_mode, GameMode::ChallengePuzzleMode)
+    }
     pub fn is_scary_potter_level(&self) -> bool {
         self.game_mode == GameMode::ChallengeScaryPotter
     }
     pub fn is_whack_a_zombie_level(&self) -> bool {
         self.game_mode == GameMode::ChallengeWhackAZombie
     }
-    pub fn is_squirrel_level(&self) -> bool { false }
-    pub fn is_shovel_level(&self) -> bool { false }
-    pub fn is_wallnut_bowling_level(&self) -> bool { false }
-    pub fn is_mini_boss_level(&self) -> bool { false }
-    pub fn is_slot_machine_level(&self) -> bool { false }
-    pub fn is_stormy_night_level(&self) -> bool { false }
-    pub fn is_final_boss_level(&self) -> bool { false }
-    pub fn is_bungee_blitz_level(&self) -> bool { false }
-    pub fn is_night(&self) -> bool { false }
-    pub fn is_challenge_without_seed_bank(&self) -> bool { false }
+    pub fn is_squirrel_level(&self) -> bool {
+        // [TRANSLATION_NOTE]: C++ 有 GAMEMODE_CHALLENGE_SQUIRREL，Rust 枚举暂缺
+        false
+    }
+    pub fn is_shovel_level(&self) -> bool {
+        // [TRANSLATION_NOTE]: C++ 有 GAMEMODE_CHALLENGE_SHOVEL，Rust 枚举暂缺
+        false
+    }
+    pub fn is_wallnut_bowling_level(&self) -> bool {
+        if self.board.is_none() { return false; }
+        if matches!(self.game_mode, GameMode::ChallengeWallnutBowling | GameMode::ChallengeWallnutBowling2) { return true; }
+        self.is_adventure_mode() && self.board.map_or(false, |b| unsafe { (*b).level == 5 })
+    }
+    pub fn is_mini_boss_level(&self) -> bool {
+        if self.board.is_none() { return false; }
+        self.is_adventure_mode() && self.board.map_or(false, |b| unsafe {
+            (*b).level == 10 || (*b).level == 20 || (*b).level == 30
+        })
+    }
+    pub fn is_slot_machine_level(&self) -> bool {
+        self.board.is_some() && self.game_mode == GameMode::ChallengeSlotMachine
+    }
+    pub fn is_stormy_night_level(&self) -> bool {
+        // [TRANSLATION_NOTE]: C++ 有 GAMEMODE_CHALLENGE_STORMY_NIGHT，Rust 枚举暂缺
+        self.is_adventure_mode() && self.board.map_or(false, |b| unsafe { (*b).level == 40 })
+    }
+    pub fn is_final_boss_level(&self) -> bool {
+        if self.board.is_none() { return false; }
+        if self.game_mode == GameMode::ChallengeDrZomboss { return true; }
+        self.is_adventure_mode() && self.board.map_or(false, |b| unsafe { (*b).level == 50 })
+    }
+    pub fn is_bungee_blitz_level(&self) -> bool {
+        // [TRANSLATION_NOTE]: C++ 有 GAMEMODE_CHALLENGE_BUNGEE_BLITZ，Rust 枚举暂缺
+        self.is_adventure_mode() && self.board.map_or(false, |b| unsafe { (*b).level == 45 })
+    }
+    pub fn is_night(&self) -> bool {
+        self.board.map_or(false, |b| unsafe { (*b).stage_is_night() })
+    }
+    pub fn is_challenge_without_seed_bank(&self) -> bool {
+        self.board.is_some() && !self.board.map_or(false, |b| unsafe { (*b).choose_seeds_on_current_level() })
+    }
     pub fn can_show_almanac(&self) -> bool { false }
     pub fn can_show_store(&self) -> bool { false }
     pub fn can_show_zen_garden(&self) -> bool { false }
     pub fn can_pause_now(&self) -> bool { true }
     pub fn can_spawn_yetis(&self) -> bool { false }
-    pub fn has_finished_adventure(&self) -> bool { false }
+    pub fn has_finished_adventure(&self) -> bool {
+        self.player_info.as_ref().map_or(false, |p| p.m_finished_adventure != 0)
+    }
     pub fn has_beaten_challenge(&self, _mode: GameMode) -> bool { false }
     pub fn has_seed_type(&self, _seed: SeedType) -> bool { false }
 
@@ -603,7 +644,9 @@ impl LawnApp {
     pub fn is_ice_demo(&self) -> bool { false }
     pub fn is_trial_stage_locked(&self) -> bool { false }
     pub fn save_file_exists(&self) -> bool { false }
-    pub fn is_first_time_adventure_mode(&self) -> bool { false }
+    pub fn is_first_time_adventure_mode(&self) -> bool {
+        self.is_adventure_mode() && self.player_info.as_ref().map_or(false, |p| p.m_finished_adventure == 0)
+    }
     pub fn earned_gold_trophy(&self) -> bool { false }
     pub fn kill_dialog(&mut self, _dialog: Dialogs) {}
 
@@ -799,3 +842,8 @@ pub fn lawn_get_current_level_name() -> String {
 pub fn lawn_get_close_request() -> bool {
     LawnApp::instance().map(|a| a.m_close_request).unwrap_or(false)
 }
+
+
+
+
+
