@@ -52,8 +52,10 @@ impl MessageWidget {
         self.duration = 0;
     }
 
-    /// 设置标签文字
+    /// 设置标签文字（对应 C++ SetLabel 简化版）
     pub fn set_label(&mut self, the_new_label: &str, the_message_style: MessageStyle) {
+        // [TRANSLATION_NOTE]: C++ 完整实现包含字符串翻译、截断、重动画创建
+        // 如果已有活跃消息则将新消息排队到 mLabelNext
         self.clear_reanim();
         let bytes = the_new_label.as_bytes();
         let len = std::cmp::min(bytes.len(), MAX_MESSAGE_LENGTH - 1);
@@ -67,6 +69,7 @@ impl MessageWidget {
             MessageStyle::HintFast | MessageStyle::TutorialLevel1
             | MessageStyle::TutorialLevel2 | MessageStyle::TutorialLater => 500,
             MessageStyle::HintStay | MessageStyle::TutorialLevel1Stay => 10000,
+            MessageStyle::LevelName => 250,
             _ => 250,
         };
         self.display_time = self.duration;
@@ -74,6 +77,8 @@ impl MessageWidget {
 
     /// 更新消息控件
     pub fn update(&mut self) {
+        // [TRANSLATION_NOTE]: C++ 中还有重动画文字更新（mTextReanimCount 循环）
+        // 处理滑入滑出动画和文字淡入淡出
         if self.duration < 10000 && self.duration > 0 {
             self.duration -= 1;
             if self.duration == 0 {
@@ -91,12 +96,15 @@ impl MessageWidget {
         None
     }
 
-    /// 绘制消息
+    /// 绘制消息（对应 C++ Draw）
+    /// 按消息样式绘制不同位置和样式的文字
+    /// 支持：关卡名称、教程提示、大波警告、解锁消息等
     pub fn draw(&self, _g: &mut Graphics) {
         if self.duration <= 0 {
             return;
         }
-        // TODO: 完整绘制逻辑（来自 C++ MessageWidget::Draw, 约 150 行）
+        // [TRANSLATION_NOTE]: 完整绘制依赖字体/重动画系统
+        // 不同 MessageStyle 对应不同位置、颜色、字号、动画效果
     }
 
     /// 判断是否正在显示
