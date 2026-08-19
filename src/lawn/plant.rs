@@ -787,7 +787,32 @@ impl Plant {
     // ========== 特殊植物更新 stub ==========
     pub fn update_doom_shroom(&mut self) {}
     pub fn update_ice_shroom(&mut self) {}
-    pub fn update_chomper(&mut self) {}
+    pub fn update_chomper(&mut self) {
+        if self.state == PlantState::Ready {
+            // [TRANSLATION_NOTE]: FindTargetZombie 暂未实现
+            self.state = PlantState::ChomperBiting;
+            self.state_countdown = 70;
+        } else if self.state == PlantState::ChomperBiting {
+            if self.state_countdown == 0 {
+                // [TRANSLATION_NOTE]: 大嘴花音效/伤害/吞食判定暂未实现
+                self.state = PlantState::ChomperBitingGotOne;
+            }
+        } else if self.state == PlantState::ChomperBitingGotOne {
+            self.state = PlantState::ChomperDigesting;
+            self.state_countdown = 4000;
+        } else if self.state == PlantState::ChomperDigesting {
+            if self.state_countdown == 0 {
+                self.state = PlantState::ChomperSwallowing;
+            }
+        } else if self.state == PlantState::ChomperSwallowing || self.state == PlantState::ChomperBitingMissed {
+            self.state = PlantState::Ready;
+        }
+    }
+
+    pub fn update_torchwood(&mut self) {
+        // [TRANSLATION_NOTE]: 火炬树桩碰撞检测依赖 Projectile 的 ConvertToFireball
+        // 暂不实现
+    }
     pub fn update_blover(&mut self) {}
     pub fn update_flower_pot(&mut self) {}
     pub fn update_lilypad(&mut self) {}
@@ -800,7 +825,6 @@ impl Plant {
     pub fn update_gold_magnet_shroom(&mut self) {}
     pub fn update_sun_shroom(&mut self) {}
     pub fn update_grave_buster(&mut self) {}
-    pub fn update_torchwood(&mut self) {}
     pub fn update_potato(&mut self) {
         if self.state == PlantState::NotReady {
             if self.state_countdown == 0 {
