@@ -421,27 +421,35 @@ impl Plant {
         }
     }
 
-    /// 更新植物
+    /// 更新植物（对应 C++ Plant::Update）
     pub fn update(&mut self) {
         if self.dead { return; }
 
-        self.anim_counter += 1;
+        let mut do_update = false;
+        // [TRANSLATION_NOTE]: 场景判断暂略
+        do_update = true;
 
-        // 根据种子类型和状态更新
-        match self.seed_type {
-            SeedType::Sunflower | SeedType::Twinsunflower | SeedType::Sunshroom | SeedType::Marigold => {
-                self.update_production_plant();
-            },
-            SeedType::Peashooter | SeedType::Snowpea | SeedType::Repeater |
-            SeedType::Gatlingpea | SeedType::Threepeater | SeedType::Splitpea |
-            SeedType::Starfruit | SeedType::Cactus | SeedType::Cattail | SeedType::Leftpeater => {
-                self.update_shooter();
-            },
-            _ => {
-                // 其他类型的更新逻辑
-                self.update_abilities();
+        if do_update {
+            self.update_abilities();
+            // [TRANSLATION_NOTE]: Animate + UpdateReanim 暂未实现
+
+            if self.plant_health < 0 {
+                self.die();
             }
         }
+    }
+
+    /// 是否不在土地上（对应 C++ NotOnGround）
+    pub fn not_on_ground(&self) -> bool {
+        if self.seed_type == SeedType::Squash {
+            if self.state == PlantState::SquashRising
+                || self.state == PlantState::SquashFalling
+                || self.state == PlantState::SquashDoneFalling
+            {
+                return true;
+            }
+        }
+        self.squished || self.on_bungee_state != PlantOnBungeeState::NotOnBungee || self.dead
     }
 
     /// 更新射手类植物（对应 C++ UpdateShooter）
