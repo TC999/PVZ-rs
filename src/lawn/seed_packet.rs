@@ -24,6 +24,9 @@ pub struct SeedPacket {
     pub slot_machine_countdown: i32,
     pub slot_machine_position: f32,
     pub slot_machine_next_seed: SeedType,
+    pub times_used: i32,
+    pub offset_x: i32,
+    pub offset_y: i32,
     pub app: Option<*mut crate::lawn::lawn_app::LawnApp>,
     pub board: Option<*mut crate::lawn::board::Board>,
 }
@@ -46,6 +49,9 @@ impl SeedPacket {
             slot_machine_countdown: 0,
             slot_machine_position: 0.0,
             slot_machine_next_seed: SeedType::None,
+            times_used: 0,
+            offset_x: 0,
+            offset_y: 0,
             app: None,
             board: None,
         }
@@ -112,6 +118,8 @@ impl SeedPacket {
             return;
         }
 
+        // [TRANSLATION_NOTE]: mMainCounter == 0 时 FlashIfReady 暂未实现
+
         // 冷却刷新
         if !self.active && self.refreshing {
             self.countdown += 1;
@@ -126,7 +134,8 @@ impl SeedPacket {
         // 老虎机滚动
         if self.slot_machine_countdown > 0 {
             self.slot_machine_countdown -= 1;
-            self.slot_machine_position += 0.06; // 简化
+            // [TRANSLATION_NOTE]: 使用曲线动画计算翻转速度
+            self.slot_machine_position += 0.06;
             if self.slot_machine_position >= 1.0 {
                 self.seed_type = self.slot_machine_next_seed;
                 if self.slot_machine_countdown == 0 {
@@ -147,7 +156,31 @@ impl SeedPacket {
     pub fn set_countdown(&mut self, refresh_time: i32) {
         self.countdown = refresh_time;
     }
+
+    /// 种植后处理（对应 C++ WasPlanted）
+    pub fn was_planted(&mut self) {
+        // [TRANSLATION_NOTE]: 完整逻辑依赖 Board::HasConveyorBeltSeedBank 等
+        self.times_used += 1;
+        self.refreshing = true;
+        // [TRANSLATION_NOTE]: refresh_time = Plant::GetRefreshTime(seed_type, imitater_type)
+    }
+
+    /// 鼠标命中测试（对应 C++ MouseHitTest）
+    pub fn mouse_hit_test(&self, x: i32, y: i32, hit_result: &mut HitResult) -> bool {
+        if self.slot_machine_countdown > 0 || self.seed_type == SeedType::None {
+            return false;
+        }
+        if x >= self.x + self.offset_x && x < self.x + self.offset_x + self.width
+            && y >= self.y && y < self.y + self.height
+        {
+            hit_result.object = None;
+            hit_result.object_type = GameObjectType::SeedPacket;
+            return true;
+        }
+        false
+    }
 }
+
 
 impl Default for SeedPacket {
     fn default() -> Self {
@@ -194,3 +227,4 @@ impl Default for SeedBank {
         SeedBank::new()
     }
 }
+
