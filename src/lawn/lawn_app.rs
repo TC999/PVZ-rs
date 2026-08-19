@@ -325,12 +325,22 @@ impl LawnApp {
 
     /// 开始新游戏（对应 C++ NewGame）
     pub fn new_game(&mut self) {
+        // [TRANSLATION_NOTE]: 完整实现对应 C++ NewGame
+        // mFirstTimeGameSelector = false;
+        // MakeNewBoard();
+        // mBoard->InitLevel();
+        // mBoardResult = BOARDRESULT_NONE;
+        // mGameScene = SCENE_LEVEL_INTRO;
+        // ShowSeedChooserScreen();
+        // mBoard->mCutScene->StartLevelIntro();
         self.m_level = 1;
         self.pre_new_game(self.game_mode, true);
     }
 
     /// 预新建游戏（对应 C++ PreNewGame）
-    pub fn pre_new_game(&mut self, _mode: GameMode, _look_for_saved: bool) {}
+    pub fn pre_new_game(&mut self, _mode: GameMode, _look_for_saved: bool) {
+        // [TRANSLATION_NOTE]: 完整实现设置 GameMode、尝试加载存档、删除旧存档、调用 NewGame
+    }
 
     /// 开始关卡
     pub fn start_level(&mut self, level: i32) {
