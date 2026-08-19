@@ -583,6 +583,58 @@ impl Plant {
     /// 绘制影子
     pub fn draw_shadow(&self, _g: &mut Graphics, _offset_x: f32, _offset_y: f32) {}
 
+    /// 窝瓜碾压伤害（对应 C++ DoSquashDamage）
+    pub fn do_squash_damage(&mut self) {
+        let a_damage_range_flags = self.get_damage_range_flags(PlantWeapon::Primary);
+        let a_attack_rect = self.get_plant_attack_rect(PlantWeapon::Primary);
+        let my_row = self.base.row;
+
+        if let Some(board) = self.base.get_board() {
+            for (_idx, zombie) in board.zombies.iter().enumerate() {
+                if zombie.dead { continue; }
+                if (zombie.base.row == my_row || zombie.zombie_type == ZombieType::Boss) {
+                    let z_rect = zombie.get_zombie_rect();
+                    if crate::lawn::board::get_rect_overlap(&a_attack_rect, &z_rect) > 0 {
+                        // [TRANSLATION_NOTE]: TakeDamage(1800, 18U) 需可变引用，暂略
+                    }
+                }
+            }
+        }
+    }
+
+    /// 行范围伤害（对应 C++ DoRowAreaDamage）
+    pub fn do_row_area_damage(&mut self, damage: i32, damage_flags: u32) {
+        let a_damage_range_flags = self.get_damage_range_flags(PlantWeapon::Primary);
+        let a_attack_rect = self.get_plant_attack_rect(PlantWeapon::Primary);
+        let my_row = self.base.row;
+
+        if let Some(board) = self.base.get_board() {
+            for (_idx, zombie) in board.zombies.iter().enumerate() {
+                if zombie.dead { continue; }
+                let a_diff_y = if zombie.zombie_type == ZombieType::Boss { 0 } else { zombie.base.row - my_row };
+                if self.seed_type == SeedType::Gloomshroom {
+                    if a_diff_y < -1 || a_diff_y > 1 { continue; }
+                } else if a_diff_y != 0 { continue; }
+
+                let z_rect = zombie.get_zombie_rect();
+                if crate::lawn::board::get_rect_overlap(&a_attack_rect, &z_rect) > 0 {
+                    // [TRANSLATION_NOTE]: TakeDamage 需可变引用，暂略
+                }
+            }
+        }
+    }
+
+    /// 获取伤害范围标志（对应 C++ GetDamageRangeFlags）
+    pub fn get_damage_range_flags(&self, _weapon: PlantWeapon) -> u32 {
+        // [TRANSLATION_NOTE]: 不同植物的伤害范围标志暂未实现
+        1
+    }
+
+    /// 获取植物攻击矩形（对应 C++ GetPlantAttackRect）
+    pub fn get_plant_attack_rect(&self, _weapon: PlantWeapon) -> Rect {
+        Rect::new(self.base.x - 20, self.base.y - 20, self.base.width + 40, self.base.height + 40)
+    }
+
     /// 更新特殊能力（对应 C++ UpdateAbilities）
     pub fn update_abilities(&mut self) {
         if !self.is_in_play() {
