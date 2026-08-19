@@ -37,6 +37,8 @@ pub enum GameScenes {
     Challenge = 6,
     SeedChooser = 7,
     GameSelector = 8,
+    LevelIntro = 9,
+    ZombiesWon = 10,
 }
 
 /// 关卡统计（对应 C++ LevelStats）
@@ -334,6 +336,14 @@ impl LawnApp {
     pub fn start_level(&mut self, level: i32) {
         self.m_level = level;
         self.make_new_board();
+        if let Some(board) = self.board {
+            unsafe {
+                (*board).init_level();
+                (*board).m_board_result = BoardResult::None;
+            }
+        }
+        self.game_scene = GameScenes::LevelIntro;
+        // [TRANSLATION_NOTE]: ShowSeedChooserScreen + CutScene::StartLevelIntro 暂未实现
     }
 
     /// 创建新 Board（对应 C++ MakeNewBoard）
