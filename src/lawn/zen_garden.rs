@@ -44,7 +44,8 @@ impl ZenGarden {
     // --- 方法存根（待从 ZenGarden.cpp 翻译具体实现） ---
 
     pub fn zen_garden_init_level(&mut self) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // [TRANSLATION_NOTE]: 完整逻辑依赖 Board、PottedPlant 等系统
+        // 设置当前时间、放置盆栽、添加臭鼬、播放音乐
     }
 
     pub fn draw_potted_plant_icon(&self, g: &mut Graphics, x: f32, y: f32, potted_plant: &PottedPlant) {
@@ -55,17 +56,17 @@ impl ZenGarden {
         // TODO: 从 ZenGarden.cpp 翻译
     }
 
-    pub fn is_zen_garden_full(&self, include_dropped_presents: bool) -> bool {
-        // TODO: 从 ZenGarden.cpp 翻译
+    pub fn is_zen_garden_full(&self, _include_dropped_presents: bool) -> bool {
+        // [TRANSLATION_NOTE]: 完整实现需遍历盆栽列表和硬币计数
         false
     }
 
-    pub fn find_open_zen_garden_spot(&self, spot_x: &mut i32, spot_y: &mut i32) {
-        // TODO: 从 ZenGarden.cpp 翻译
+    pub fn find_open_zen_garden_spot(&self, _spot_x: &mut i32, _spot_y: &mut i32) {
+        // [TRANSLATION_NOTE]: 遍历 ZEN_MAX_GRIDSIZE 网格，跳过已占用的格子
     }
 
-    pub fn add_potted_plant(&mut self, potted_plant: &mut PottedPlant) {
-        // TODO: 从 ZenGarden.cpp 翻译
+    pub fn add_potted_plant(&mut self, _potted_plant: &mut PottedPlant) {
+        // [TRANSLATION_NOTE]: 将盆栽添加到玩家信息中
     }
 
     pub fn mouse_down_with_tool(&mut self, x: i32, y: i32, cursor_type: CursorType) {
@@ -101,7 +102,7 @@ impl ZenGarden {
     }
 
     pub fn zen_garden_update(&mut self) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // [TRANSLATION_NOTE]: 核心循环：更新植物需求→盆栽→工具/臭鼬→教程检查
     }
 
     pub fn mouse_down_with_full_wheel_barrow(&mut self, x: i32, y: i32) {
@@ -167,8 +168,8 @@ impl ZenGarden {
         // TODO: 从 ZenGarden.cpp 翻译
     }
 
-    pub fn get_plants_need(&self, potted_plant: &PottedPlant) -> PottedPlantNeed {
-        // TODO: 从 ZenGarden.cpp 翻译
+    pub fn get_plants_need(&self, _potted_plant: &PottedPlant) -> PottedPlantNeed {
+        // [TRANSLATION_NOTE]: 根据浇水和施肥时间判断植物需求
         PottedPlantNeed::None
     }
 
@@ -386,8 +387,8 @@ impl ZenGarden {
         // TODO: 从 ZenGarden.cpp 翻译
     }
 
-    pub fn refresh_plant_needs(&self, potted_plant: &mut PottedPlant) {
-        // TODO: 从 ZenGarden.cpp 翻译
+    pub fn refresh_plant_needs(&self, _potted_plant: &mut PottedPlant) {
+        // [TRANSLATION_NOTE]: 刷新植物需求状态
     }
 
     pub fn plant_set_launch_counter(&self, plant: &mut Plant) {
@@ -419,4 +420,8 @@ impl Default for ZenGarden {
         ZenGarden::new()
     }
 }
+
+
+
+
 
