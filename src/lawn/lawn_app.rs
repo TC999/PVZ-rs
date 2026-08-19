@@ -359,11 +359,14 @@ impl LawnApp {
 
     /// 开始游戏（对应 C++ StartPlaying）
     pub fn start_playing(&mut self) {
-        // [TRANSLATION_NOTE]: 设置游戏场景为 Playing，启动音乐，通知 Board 开始
+        self.game_scene = crate::lawn::lawn_app::GameScenes::Playing;
+        if let Some(board) = self.board {
+            unsafe { (*board).start_level(); }
+        }
     }
-
     /// 结束关卡（对应 C++ EndLevel）
     pub fn end_level(&mut self) {}
+
 
     /// 尝试加载游戏（对应 C++ TryLoadGame）
     pub fn try_load_game(&mut self) -> bool { false }
