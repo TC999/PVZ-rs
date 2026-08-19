@@ -2426,7 +2426,8 @@ impl Board {
 
     /// 更新层（对应 C++ UpdateLayers）
     pub fn update_layers(&mut self) {
-        // 简化版：在 Rust 框架中无需操作 WidgetManager 层
+        // [TRANSLATION_NOTE]: C++ 实现标记所有 Widget 为脏并前置对话框
+        // 在 Rust 框架中暂无需操作
     }
 
     /// 鼠标释放事件（对应 C++ MouseUp L4700）
