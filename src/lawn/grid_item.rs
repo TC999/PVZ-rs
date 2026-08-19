@@ -139,39 +139,61 @@ impl GridItem {
                 self.update_rake();
             }
             GridItemType::DanceEggplant => {
-                if self.grid_item_state == GridItemState::BrainSquished {
-                    self.counter -= 1;
-                    if self.counter <= 0 {
-                        self.grid_item_die();
-                    }
-                }
-                if self.transparent_counter > 0 {
-                    self.transparent_counter -= 1;
-                }
+                self.update_brain();
             }
             _ => {}
         }
     }
 
     /// 更新恐怖罐子（对应 C++ UpdateScaryPot）
+    /// 灯笼植物（Plantern）靠近时使罐子半透明，显示内部内容
     pub fn update_scary_pot(&mut self) {
-        // [TRANSLATION_NOTE]: 灯笼靠近透明状态暂未实现
+        // [TRANSLATION_NOTE]: 作弊键 Shift 加速透明暂未实现
+
+        // 附近有灯笼植物时变为半透明
+        // [TRANSLATION_NOTE]: 遍历植物检测 Plantern 暂未实现
+
+        if self.transparent_counter > 0 {
+            self.transparent_counter -= 1;
+        }
+    }
+
+    /// 更新传送门（对应 C++ UpdatePortal）
+    /// 关闭动画完成后消亡，开启动画完成后进入脉冲循环+粒子效果
+    pub fn update_portal(&mut self) {
+        if self.grid_item_state == GridItemState::PortalClosed {
+            // [TRANSLATION_NOTE]: mLoopCount > 0 检测暂未实现
+            // self.grid_item_die();
+        }
+        // [TRANSLATION_NOTE]: 开启动画完成后切换到脉冲循环+粒子效果暂未实现
+    }
+
+    /// 更新大脑（对应 C++ UpdateBrain）- I, Zombie 模式
+    pub fn update_brain(&mut self) {
+        if self.grid_item_state == GridItemState::BrainSquished {
+            self.counter -= 1;
+            if self.counter <= 0 {
+                self.grid_item_die();
+            }
+        }
         if self.transparent_counter > 0 {
             self.transparent_counter -= 1;
         }
     }
 
     /// 更新耙子（对应 C++ UpdateRake）
+    /// 吸引→触发→伤害僵尸→消亡
     pub fn update_rake(&mut self) {
         if self.grid_item_state == GridItemState::RakeAttracting || self.grid_item_state == GridItemState::RakeWaiting {
             if self.rake_find_zombie().is_some() {
                 self.counter = 200;
                 self.grid_item_state = GridItemState::RakeTriggered;
+                // [TRANSLATION_NOTE]: PlayFoley(FOLEY_SWING) 暂未实现
             }
         } else if self.grid_item_state == GridItemState::RakeTriggered {
-            // [TRANSLATION_NOTE]: ShouldTriggerTimedEvent(0.8f) 暂未实现
-            if let Some(zombie) = self.rake_find_zombie() {
-                // [TRANSLATION_NOTE]: TakeDamage(1800, 0) 所需引用暂未实现
+            if let Some(zombie_idx) = self.rake_find_zombie() {
+                // [TRANSLATION_NOTE]: ShouldTriggerTimedEvent(0.8f) + TakeDamage(1800, 0) 暂未实现
+                let _ = zombie_idx;
             }
             self.counter -= 1;
             if self.counter == 0 {
@@ -198,7 +220,6 @@ impl GridItem {
     }
 
     /// 更新传送门（对应 C++ UpdatePortal，stub）
-    pub fn update_portal(&mut self) {}
 
     /// 绘制
     pub fn draw(&self, _g: &mut Graphics) {}
