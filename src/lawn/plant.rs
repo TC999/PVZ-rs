@@ -886,7 +886,50 @@ impl Plant {
     pub fn update_spikeweed(&mut self) {}
     pub fn update_tanglekelp(&mut self) {}
     pub fn update_scaredy_shroom(&mut self) {}
-    pub fn do_special(&mut self) {}
+    pub fn do_special(&mut self) {
+        let a_pos_x = self.base.x + self.base.width / 2;
+        let a_pos_y = self.base.y + self.base.height / 2;
+
+        match self.seed_type {
+            SeedType::Blover => {
+                if self.state != PlantState::DoingSpecial {
+                    self.state = PlantState::DoingSpecial;
+                    // [TRANSLATION_NOTE]: BlowAwayFliers 暂未实现
+                }
+            }
+            SeedType::Cherrybomb => {
+                // [TRANSLATION_NOTE]: 爆炸音效/粒子/范围伤害暂未实现
+                self.die();
+            }
+            SeedType::Doomshroom => {
+                // [TRANSLATION_NOTE]: 毁灭范围/弹坑/粒子暂未实现
+                self.die();
+            }
+            SeedType::Jalapeno => {
+                // [TRANSLATION_NOTE]: 火焰/冰冻重置暂未实现
+                self.die();
+            }
+            SeedType::Umbrella => {
+                if self.state != PlantState::UmbrellaTriggered && self.state != PlantState::UmbrellaReflecting {
+                    self.state = PlantState::UmbrellaTriggered;
+                    self.state_countdown = 5;
+                }
+            }
+            SeedType::Iceshroom => {
+                // [TRANSLATION_NOTE]: 冰冻效果暂未实现
+                self.die();
+            }
+            SeedType::PotatoMine => {
+                // [TRANSLATION_NOTE]: 土豆雷爆炸暂未实现
+                self.die();
+            }
+            SeedType::InstantCoffee => {
+                // [TRANSLATION_NOTE]: 唤醒睡眠植物暂未实现
+                self.state = PlantState::DoingSpecial;
+            }
+            _ => {}
+        }
+    }
 }
 
 impl Default for Plant {
