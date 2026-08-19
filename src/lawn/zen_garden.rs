@@ -191,8 +191,8 @@ impl ZenGarden {
         false
     }
 
-    pub fn potted_plant_update(&mut self, plant: &mut Plant) {
-        // TODO: 从 ZenGarden.cpp 翻译
+    pub fn potted_plant_update(&mut self, _plant: &mut Plant) {
+        // [TRANSLATION_NOTE]: PottedPlantUpdate — 检查时间戳、睡眠状态、倒计时、生产、效果状态
     }
 
     pub fn add_happy_effect(&self, plant: &mut Plant) {
@@ -239,8 +239,8 @@ impl ZenGarden {
         false
     }
 
-    pub fn zen_tool_update(&self, zen_tool: &mut GridItem) {
-        // TODO: 从 ZenGarden.cpp 翻译
+    pub fn zen_tool_update(&self, _zen_tool: &mut GridItem) {
+        // [TRANSLATION_NOTE]: ZenToolUpdate — 更新禅境工具状态（肥料/杀虫剂/音乐盒等）
     }
 
     pub fn do_feeding_tool(&mut self, x: i32, y: i32, tool_type: GridItemState) {
@@ -251,8 +251,8 @@ impl ZenGarden {
         // TODO: 从 ZenGarden.cpp 翻译
     }
 
-    pub fn stinky_update(&mut self, stinky: &mut GridItem) {
-        // TODO: 从 ZenGarden.cpp 翻译
+    pub fn stinky_update(&mut self, _stinky: &mut GridItem) {
+        // [TRANSLATION_NOTE]: StinkyUpdate — FallingAsleep/Sleeping/WakingUp/行走 状态机
     }
 
     pub fn open_store(&self) {
@@ -391,6 +391,7 @@ impl ZenGarden {
         // [TRANSLATION_NOTE]: 刷新植物需求状态
     }
 
+
     pub fn plant_set_launch_counter(&self, plant: &mut Plant) {
         // TODO: 从 ZenGarden.cpp 翻译
     }
@@ -420,6 +421,9 @@ impl Default for ZenGarden {
         ZenGarden::new()
     }
 }
+
+
+
 
 
 
