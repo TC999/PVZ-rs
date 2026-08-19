@@ -542,14 +542,27 @@ impl Plant {
         false
     }
 
-    /// 发射子弹
+    /// 发射子弹/效果（对应 C++ Plant::Fire 简化版）
     pub fn fire(&mut self, _target_zombie: Option<&mut Zombie>, _row: i32, _weapon: PlantWeapon) {
+        // 特殊植物直接造成范围伤害
+        match self.seed_type {
+            SeedType::Fumeshroom | SeedType::Gloomshroom => {
+                // [TRANSLATION_NOTE]: DoRowAreaDamage 暂未实现
+                return;
+            }
+            SeedType::Starfruit => {
+                // [TRANSLATION_NOTE]: StarFruitFire 暂未实现
+                return;
+            }
+            _ => {}
+        }
+
+        // 普通植物发射子弹
         let x = self.base.x;
         let y = self.base.y;
         let row = self.base.row;
-        let seed_type = self.seed_type;
         if let Some(board) = self.base.get_board_mut() {
-            board.add_projectile((x + 40) as f32, (y + 20) as f32, row, seed_type);
+            board.add_projectile((x + 40) as f32, (y + 20) as f32, row, self.seed_type);
         }
     }
 

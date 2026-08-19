@@ -47,6 +47,12 @@ pub enum ProjectileType {
     Cactus,
     Guod,
     Cobcannon,
+    Fireball,
+    Wintermelon,
+    Puff,
+    Basketball,
+    ZombiePea,
+    Cobbig,
 }
 
 /// 子弹/投射物
