@@ -445,8 +445,13 @@ impl LawnApp {
     pub fn kill_award_screen(&mut self) {}
 
     /// 显示种子选择器
-    pub fn show_seed_chooser_screen(&mut self) {}
-    pub fn kill_seed_chooser_screen(&mut self) {}
+    pub fn show_seed_chooser_screen(&mut self) {
+        // [TRANSLATION_NOTE]: 创建 SeedChooserScreen 并添加到 WidgetManager
+    }
+
+    pub fn kill_seed_chooser_screen(&mut self) {
+        // [TRANSLATION_NOTE]: 从 WidgetManager 移除并销毁 SeedChooserScreen
+    }
 
     /// 显示商店（对应 C++ ShowStoreScreen）
     pub fn show_store_screen() {}
