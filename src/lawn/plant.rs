@@ -858,8 +858,22 @@ impl Plant {
     pub fn plant_draw_height_offset(_board: Option<&Board>, _plant: &Plant, _seed_type: SeedType, _grid_x: i32, _grid_y: i32) -> f32 { 0.0 }
 
     // ========== 特殊植物更新 stub ==========
-    pub fn update_doom_shroom(&mut self) {}
-    pub fn update_ice_shroom(&mut self) {}
+    pub fn update_doom_shroom(&mut self) {
+        if self.is_asleep || self.state == PlantState::DoingSpecial {
+            return;
+        }
+        self.state = PlantState::DoingSpecial;
+        self.do_special_countdown = 100;
+        // [TRANSLATION_NOTE]: 动画/音效依赖 Reanimation 系统
+    }
+
+    pub fn update_ice_shroom(&mut self) {
+        if !self.is_asleep && self.state != PlantState::DoingSpecial {
+            self.state = PlantState::DoingSpecial;
+            self.do_special_countdown = 100;
+            // [TRANSLATION_NOTE]: 冰冻效果由 DoSpecial 处理
+        }
+    }
     pub fn update_chomper(&mut self) {
         if self.state == PlantState::Ready {
             // [TRANSLATION_NOTE]: FindTargetZombie 暂未实现
@@ -917,14 +931,84 @@ impl Plant {
             // [TRANSLATION_NOTE]: 发射音效暂未实现
         }
     }
-    pub fn update_imitater(&mut self) {}
-    pub fn update_coffee_bean(&mut self) {}
-    pub fn update_umbrella(&mut self) {}
-    pub fn update_cactus(&mut self) {}
-    pub fn update_magnet_shroom(&mut self) {}
-    pub fn update_gold_magnet_shroom(&mut self) {}
-    pub fn update_sun_shroom(&mut self) {}
-    pub fn update_grave_buster(&mut self) {}
+    pub fn update_imitater(&mut self) {
+        if self.state != PlantState::ImitaterMorphing {
+            if self.state_countdown == 0 {
+                self.state = PlantState::ImitaterMorphing;
+            }
+        }
+    }
+
+    pub fn update_coffee_bean(&mut self) {
+        if self.state == PlantState::DoingSpecial {
+            // [TRANSLATION_NOTE]: 动画循环检测依赖 Reanimation 系统
+            // self.die();
+        }
+    }
+
+    pub fn update_umbrella(&mut self) {
+        if self.state == PlantState::UmbrellaTriggered {
+            if self.state_countdown == 0 {
+                self.state = PlantState::UmbrellaReflecting;
+            }
+        } else if self.state == PlantState::UmbrellaReflecting {
+            // [TRANSLATION_NOTE]: 动画循环检测依赖 Reanimation 系统
+            self.state = PlantState::NotReady;
+        }
+    }
+
+    pub fn update_cactus(&mut self) {
+        if self.shooting_counter > 0 {
+            return;
+        }
+        if self.state == PlantState::CactusRising {
+            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统
+            self.state = PlantState::CactusHigh;
+            self.launch_counter = 1;
+        } else if self.state == PlantState::CactusHigh {
+            // [TRANSLATION_NOTE]: 查找目标僵尸暂未实现
+        } else if self.state == PlantState::CactusLowering {
+            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统
+            self.state = PlantState::CactusLow;
+        } else {
+            // [TRANSLATION_NOTE]: 查找目标僵尸暂未实现
+        }
+    }
+
+    pub fn update_magnet_shroom(&mut self) {
+        // [TRANSLATION_NOTE]: MagnetItems 移动动画暂未实现
+        if self.state == PlantState::MagnetshroomCharging {
+            if self.state_countdown == 0 {
+                self.state = PlantState::Ready;
+            }
+        } else if self.state == PlantState::MagnetshroomSucking {
+            // [TRANSLATION_NOTE]: 动画循环检测依赖 Reanimation 系统
+            self.state = PlantState::MagnetshroomCharging;
+        }
+    }
+
+    pub fn update_gold_magnet_shroom(&mut self) {
+        // [TRANSLATION_NOTE]: MagnetItems 吸金币动画暂未实现
+        if self.state == PlantState::MagnetshroomCharging {
+            if self.state_countdown == 0 {
+                self.state = PlantState::Ready;
+            }
+        } else if self.state == PlantState::MagnetshroomSucking {
+            // [TRANSLATION_NOTE]: 动画循环检测 + 找金币目标暂未实现
+            self.state = PlantState::MagnetshroomCharging;
+            self.state_countdown = RandRange(300) + 200;
+        }
+    }
+
+    pub fn update_grave_buster(&mut self) {
+        if self.state == PlantState::GravebusterLanding {
+            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统
+            self.state = PlantState::GravebusterEating;
+            self.state_countdown = 400;
+        } else if self.state == PlantState::GravebusterEating && self.state_countdown == 0 {
+            // [TRANSLATION_NOTE]: 墓碑移除 + 掉落奖励暂未实现
+        }
+    }
     pub fn update_potato(&mut self) {
         if self.state == PlantState::NotReady {
             if self.state_countdown == 0 {
@@ -975,9 +1059,41 @@ impl Plant {
             }
         }
     }
-    pub fn update_spikeweed(&mut self) {}
     pub fn update_tanglekelp(&mut self) {}
-    pub fn update_scaredy_shroom(&mut self) {}
+    pub fn update_scaredy_shroom(&mut self) {
+        // [TRANSLATION_NOTE]: 僵尸邻近检测暂未实现
+        // 状态机：Ready→ScaredyshroomLowering→Scared→Raising→Ready
+        if self.state == PlantState::Ready {
+            // 若有僵尸靠近 → ScaredyshroomLowering
+        } else if self.state == PlantState::ScaredyshroomLowering {
+            self.state = PlantState::ScaredyshroomScared;
+        } else if self.state == PlantState::ScaredyshroomScared {
+            // 若无僵尸靠近 → Raising
+        } else if self.state == PlantState::ScaredyshroomRaising {
+            self.state = PlantState::Ready;
+        }
+    }
+
+    pub fn update_spikeweed(&mut self) {
+        if self.state == PlantState::SpikeweedAttacking {
+            if self.state_countdown == 0 {
+                self.state = PlantState::NotReady;
+            }
+        }
+    }
+
+    pub fn update_sun_shroom(&mut self) {
+        if self.state == PlantState::SunshroomSmall {
+            if self.state_countdown == 0 {
+                self.state = PlantState::SunshroomGrowing;
+            }
+            self.update_production_plant();
+        } else if self.state == PlantState::SunshroomGrowing {
+            self.state = PlantState::SunshroomBig;
+        } else {
+            self.update_production_plant();
+        }
+    }
     pub fn do_special(&mut self) {
         let a_pos_x = self.base.x + self.base.width / 2;
         let a_pos_y = self.base.y + self.base.height / 2;
@@ -1103,3 +1219,10 @@ pub fn get_plant_definition(seed_type: SeedType) -> PlantDefinition {
         _ => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 0, seed_cost: 0, refresh_time: 0, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: None },
     }
 }
+
+
+
+
+
+
+
