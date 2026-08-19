@@ -19,7 +19,7 @@ use crate::lawn::tool_tip_widget::ToolTipWidget;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::rect::Rect;
 use crate::framework::color::Color;
-use crate::framework::common;
+use crate::framework::common::{self, RandRange, RandFloat};
 use crate::todlib::tod_particle::ParticleSystem;
 use crate::todlib::reanimator::Reanimation;
 use crate::todlib::tod_common::{TodSmoothArray, TodWeightedArray, TodWeightedGridArray, tod_pick_from_weighted_array, tod_pick_from_weighted_grid_array, tod_animate_curve};
@@ -314,6 +314,9 @@ pub struct Board {
     pub m_rise_from_grave_counter: i32,
     pub m_huge_wave_count_down: i32,
     pub m_zombie_count_down: i32,
+    pub m_zombie_count_down_start: i32,
+    pub m_zombie_health_to_next_wave: i32,
+    pub m_zombie_health_wave_start: i32,
     pub m_final_wave_sound_counter: i32,
     pub m_board_rand_seed: u32,
 
@@ -447,6 +450,9 @@ impl Board {
             m_rise_from_grave_counter: 0,
             m_huge_wave_count_down: 0,
             m_zombie_count_down: 0,
+            m_zombie_count_down_start: 0,
+            m_zombie_health_to_next_wave: 0,
+            m_zombie_health_wave_start: 0,
             m_final_wave_sound_counter: 0,
             m_board_rand_seed: 0,
             m_ice_timer: [0; MAX_GRID_SIZE_Y],
@@ -3087,7 +3093,26 @@ impl Board {
             }
         }
 
-        // 如果已经是最后波次且不是生存模式，提前返回
+        // 大波倒计时处理（对应 C++ mHugeWaveCountDown）
+        if self.m_huge_wave_count_down > 0 {
+            self.m_huge_wave_count_down -= 1;
+            if self.m_huge_wave_count_down == 0 {
+                self.clear_advice(AdviceType::HugeWave);
+                self.next_wave_coming();
+                self.m_zombie_count_down = 1;
+            }
+            // [TRANSLATION_NOTE]: 大波音效/音乐高潮暂未实现
+            return;
+        }
+
+        // 挑战模式自定义生成
+        if let Some(ref mut challenge) = self.challenge {
+            if challenge.update_zombie_spawning() != 0 {
+                return;
+            }
+        }
+
+        // 如果已经是最后波次，检查是否继续生成
         let app_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
         if self.m_current_wave >= self.m_num_waves {
             if self.is_final_survival_stage() || app_mode == GameMode::ChallengeLastStand {
@@ -3100,24 +3125,58 @@ impl Board {
             }
         }
 
-        // 波次倒计时——由 update_waves 处理
-
-        // 大波倒计时处理（对应 C++ mHugeWaveCountDown）
-        if self.m_huge_wave_count_down > 0 {
-            self.m_huge_wave_count_down -= 1;
-            if self.m_huge_wave_count_down == 0 {
-                self.clear_advice(AdviceType::HugeWave);
-                self.next_wave_coming();
-                self.m_zombie_count_down = 1;
-            }
-        }
-
         // 最终波次声音计时
         if self.m_final_wave_sound_counter > 0 {
             self.m_final_wave_sound_counter -= 1;
             if self.m_final_wave_sound_counter == 0 {
-                // 播放最终波次提示音
+                // [TRANSLATION_NOTE]: PlaySample(SOUND_FINALWAVE) 暂未实现
             }
+        }
+
+        // 波次倒计时
+        self.m_zombie_count_down -= 1;
+        if self.m_current_wave == self.m_num_waves && self.app.map_or(false, |app| unsafe { (*app).is_survival_mode() }) {
+            if self.m_zombie_count_down == 0 {
+                // [TRANSLATION_NOTE]: FadeOutLevel() 暂未实现
+            }
+            return;
+        }
+
+        // 限制倒计时上限
+        if self.m_zombie_count_down > 200 && self.m_zombie_count_down_start - self.m_zombie_count_down > 400
+            && self.total_zombies_health_in_wave(self.m_current_wave - 1) <= self.m_zombie_health_to_next_wave
+        {
+            self.m_zombie_count_down = 200;
+        }
+
+        // 倒计时到 5 时触发旗波/下一波提示
+        if self.m_zombie_count_down == 5 {
+            if self.is_flag_wave(self.m_current_wave) {
+                self.clear_advice_immediately();
+                // [TRANSLATION_NOTE]: DisplayAdviceAgain 大波提示暂未实现
+                self.m_huge_wave_count_down = 750;
+                return;
+            }
+            self.next_wave_coming();
+        }
+
+        // 倒计时到 0 时生成僵尸波次
+        if self.m_zombie_count_down == 0 {
+            self.spawn_zombie_wave();
+            self.m_zombie_health_wave_start = self.total_zombies_health_in_wave(self.m_current_wave - 1);
+
+            if self.m_current_wave == self.m_num_waves && self.app.map_or(false, |app| unsafe { (*app).is_survival_mode() }) {
+                self.m_zombie_health_to_next_wave = 0;
+                self.m_zombie_count_down = ZOMBIE_COUNTDOWN_BEFORE_REPICK + 1;
+            } else if self.is_flag_wave(self.m_current_wave) && !self.app.map_or(false, |app| unsafe { (*app).is_wallnut_bowling_level() }) && app_mode != GameMode::ChallengeLastStand {
+                self.m_zombie_health_to_next_wave = 0;
+                self.m_zombie_count_down = ZOMBIE_COUNTDOWN_BEFORE_FLAG;
+            } else {
+                self.m_zombie_health_to_next_wave = (RandFloat(0.5) * self.m_zombie_health_wave_start as f32) as i32;
+                // [TRANSLATION_NOTE]: 特殊模式波次间隔调整暂未实现
+                self.m_zombie_count_down = ZOMBIE_COUNTDOWN + RandRange(ZOMBIE_COUNTDOWN_RANGE);
+            }
+            self.m_zombie_count_down_start = self.m_zombie_count_down;
         }
     }
 
