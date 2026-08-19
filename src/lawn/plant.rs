@@ -886,13 +886,40 @@ impl Plant {
         // [TRANSLATION_NOTE]: 火炬树桩碰撞检测依赖 Projectile 的 ConvertToFireball
         // 暂不实现
     }
-    pub fn update_blover(&mut self) {}
-    pub fn update_flower_pot(&mut self) {}
-    pub fn update_lilypad(&mut self) {}
+    pub fn update_blover(&mut self) {
+        // [TRANSLATION_NOTE]: 三叶草动画循环依赖 Reanimation 系统
+        // 特殊效果由 DoSpecial → BlowAwayFliers 处理
+    }
+
+    pub fn update_flower_pot(&mut self) {
+        if self.state == PlantState::FlowerpotInvulnerable && self.state_countdown == 0 {
+            self.state = PlantState::NotReady;
+        }
+    }
+
+    pub fn update_lilypad(&mut self) {
+        if self.state == PlantState::LilypadInvulnerable && self.state_countdown == 0 {
+            self.state = PlantState::NotReady;
+        }
+    }
+
+    pub fn update_cob_cannon(&mut self) {
+        if self.state == PlantState::CobcannonArming {
+            if self.state_countdown == 0 {
+                self.state = PlantState::CobcannonLoading;
+            }
+        } else if self.state == PlantState::CobcannonLoading {
+            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统
+            self.state = PlantState::CobcannonReady;
+        } else if self.state == PlantState::CobcannonReady {
+            // [TRANSLATION_NOTE]: 玉米闪烁颜色暂未实现
+        } else if self.state == PlantState::CobcannonFiring {
+            // [TRANSLATION_NOTE]: 发射音效暂未实现
+        }
+    }
     pub fn update_imitater(&mut self) {}
     pub fn update_coffee_bean(&mut self) {}
     pub fn update_umbrella(&mut self) {}
-    pub fn update_cob_cannon(&mut self) {}
     pub fn update_cactus(&mut self) {}
     pub fn update_magnet_shroom(&mut self) {}
     pub fn update_gold_magnet_shroom(&mut self) {}
