@@ -348,12 +348,19 @@ impl LawnApp {
     /// 销毁 Board（对应 C++ KillBoard）
     pub fn kill_board(&mut self) {
         if let Some(b) = self.board.take() {
-            unsafe { let _ = Box::from_raw(b); }
+            unsafe {
+                (*b).dispose_board();
+                let _ = Box::from_raw(b);
+            }
         }
+        // [TRANSLATION_NOTE]: 清理种子选择界面、删除存档文件暂未实现
+        // 设置光标为指针
     }
 
     /// 开始游戏（对应 C++ StartPlaying）
-    pub fn start_playing(&mut self) {}
+    pub fn start_playing(&mut self) {
+        // [TRANSLATION_NOTE]: 设置游戏场景为 Playing，启动音乐，通知 Board 开始
+    }
 
     /// 结束关卡（对应 C++ EndLevel）
     pub fn end_level(&mut self) {}
