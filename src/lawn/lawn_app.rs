@@ -490,8 +490,14 @@ impl LawnApp {
     pub fn add_tod_particle(&mut self, _x: f32, _y: f32, _render_order: i32, _effect: i32) -> Option<*mut TodParticleSystem> { None }
 
     /// 播放音效（对应 C++ PlayFoley）
-    pub fn play_foley(&self, _type: i32) {}
-    pub fn play_foley_pitch(&self, _type: i32, _pitch: f32) {}
+    pub fn play_foley(&self, _type: i32) {
+        // [TRANSLATION_NOTE]: 完整实现需要 SoundSystem::PlayFoley
+        // if !self.m_mute_sounds_for_cutscene { self.sound_system.PlayFoley(type); }
+    }
+
+    pub fn play_foley_pitch(&self, _type: i32, _pitch: f32) {
+        // [TRANSLATION_NOTE]: 完整实现需要 SoundSystem::PlayFoleyPitch
+    }
 
     // ==================== 状态查询 ====================
 
@@ -849,6 +855,7 @@ pub fn lawn_get_current_level_name() -> String {
 pub fn lawn_get_close_request() -> bool {
     LawnApp::instance().map(|a| a.m_close_request).unwrap_or(false)
 }
+
 
 
 
