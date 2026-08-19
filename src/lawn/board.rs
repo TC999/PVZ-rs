@@ -3073,6 +3073,10 @@ impl Board {
         for coin in &mut self.coins { coin.update(); }
         for mower in &mut self.lawn_mowers { mower.update(); }
         for item in &mut self.grid_items { item.update(); }
+        // [TRANSLATION_NOTE]: 光标预览/光标对象/种子槽更新暂未实现
+        // mCursorPreview->Update();
+        // mCursorObject->Update();
+        // for packet in seed_bank { packet.update(); }
     }
 
     // ========== 更新循环 ==========
