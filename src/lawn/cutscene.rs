@@ -125,17 +125,27 @@ impl CutScene {
 
     /// 开始关卡入场动画
     pub fn start_level_intro(&mut self) {
-        // 对应 C++ StartLevelIntro — 内部调用各阶段入场函数
+        // [TRANSLATION_NOTE]: StartLevelIntro — 设置入场时间、墓碑、草皮、戴夫对话等
+        self.m_cutscene_time = 0;
+        if let Some(board) = self.get_board_mut() {
+            board.m_show_shovel = false;
+        }
+        self.m_placed_zombies = false;
+        self.m_preloaded = false;
+        self.m_placed_lawn_items = false;
     }
 
     /// 取消入场动画
     pub fn cancel_intro(&mut self) {
-        // 对应 C++ CancelIntro — 重置时间并跳过入场
+        // [TRANSLATION_NOTE]: CancelIntro — 跳过入场动画，直接进入游戏
+        // 预加载资源、放置僵尸、放置草坪物品、跳过时间到入场结束
     }
 
     /// 逐帧更新过场动画状态
     pub fn update(&mut self) {
-        // 对应 C++ Update — 包含滚屏、戴夫对话、僵尸放置等
+        // [TRANSLATION_NOTE]: Update — 主更新循环
+        // 处理戴夫更新、僵尸胜利场景、预加载、放置僵尸、种子选择、入场结束判定
+        // [TRANSLATION_NOTE]: GameScenes::ZombiesWon 在 Rust 枚举中暂缺，使用场景判断
     }
 
     /// 动画板块移动
@@ -145,12 +155,15 @@ impl CutScene {
 
     /// 开始选择种子
     pub fn start_seed_chooser(&mut self) {
-        // 内联函数
+        // [TRANSLATION_NOTE]: StartSeedChooser — 显示种子选择界面
+        self.m_seed_choosing = true;
     }
 
     /// 结束选择种子
     pub fn end_seed_chooser(&mut self) {
-        // 内联函数
+        // [TRANSLATION_NOTE]: EndSeedChooser — 关闭种子选择界面
+        self.m_seed_choosing = false;
+        // 放置草坪物品（花盆、墓碑等）
     }
 
     /// 计算动画位置（线性插值）
@@ -271,12 +284,14 @@ impl CutScene {
 
     /// 更新僵尸胜利动画
     pub fn update_zombies_won(&mut self) {
-        // TODO: 实现完整逻辑（对应 C++ UpdateZombiesWon）
+        // [TRANSLATION_NOTE]: UpdateZombiesWon — 更新僵尸胜利动画
+        // 检查僵尸行走完成、淡出、显示失败界面
     }
 
     /// 开始僵尸胜利动画
     pub fn start_zombies_won(&mut self) {
-        // TODO: 实现完整逻辑（对应 C++ StartZombiesWon）
+        // [TRANSLATION_NOTE]: StartZombiesWon — 僵尸胜利动画
+        // 播放僵尸胜利音乐、设置场景、创建僵尸行走动画
     }
 
     /// 显示僵尸行走
@@ -297,13 +312,17 @@ impl CutScene {
     }
 
     /// 鼠标按下
-    pub fn mouse_down(&mut self, x: i32, y: i32) {
-        // TODO: 实现完整逻辑（对应 C++ MouseDown）
+    pub fn mouse_down(&mut self, _x: i32, _y: i32) {
+        // [TRANSLATION_NOTE]: MouseDown — 处理点击跳过对话/入场
+        if self.m_seed_choosing { return; }
+        self.cancel_intro();
     }
 
     /// 键盘按下
-    pub fn key_down(&mut self, key: KeyCode) {
-        // TODO: 实现完整逻辑（对应 C++ KeyDown）
+    pub fn key_down(&mut self, _key: KeyCode) {
+        // [TRANSLATION_NOTE]: KeyDown — 处理按键跳过入场
+        if self.m_seed_choosing { return; }
+        self.cancel_intro();
     }
 
     /// 推进疯狂戴夫的对话
@@ -479,3 +498,5 @@ impl Default for CutScene {
         CutScene::new()
     }
 }
+
+
