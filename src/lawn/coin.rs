@@ -110,6 +110,8 @@ impl Coin {
 
         self.coin_age += 1;
 
+        // [TRANSLATION_NOTE]: 场景检查（SCENE_PLAYING/SCENE_AWARD/Upsell）暂未实现
+
         if self.fade_count != 0 {
             self.update_fade();
         } else if !self.is_being_collected {
@@ -119,6 +121,20 @@ impl Coin {
         }
 
         // [TRANSLATION_NOTE]: AttachmentUpdateAndMove 暂未实现
+        // 钻石/金钱类硬币有位置偏移 + 颜色/缩放覆盖 + 移动中隐藏动画
+    }
+
+    /// 获取颜色（对应 C++ GetColor）
+    /// 收集中的阳光/金钱根据距离渐隐，淡出时根据 fade_count 线性减淡
+    pub fn get_color(&self) -> (u8, u8, u8, u8) {
+        // [TRANSLATION_NOTE]: 完整实现使用 Curve 动画计算 alpha
+        (255, 255, 255, self.alpha)
+    }
+
+    /// 获取最终种子包类型（对应 C++ GetFinalSeedPacketType）
+    pub fn get_final_seed_packet_type(&self) -> SeedType {
+        // [TRANSLATION_NOTE]: 首次冒险模式 1-50 关返回关卡奖励种子
+        SeedType::None
     }
 
     /// 更新掉落物理（对应 C++ Coin::UpdateFall）
@@ -316,4 +332,5 @@ impl Default for Coin {
         Coin::new()
     }
 }
+
 
