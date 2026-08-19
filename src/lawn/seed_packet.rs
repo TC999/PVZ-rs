@@ -159,10 +159,27 @@ impl SeedPacket {
 
     /// 种植后处理（对应 C++ WasPlanted）
     pub fn was_planted(&mut self) {
-        // [TRANSLATION_NOTE]: 完整逻辑依赖 Board::HasConveyorBeltSeedBank 等
+        // [TRANSLATION_NOTE]: 完整逻辑依赖 Board::HasConveyorBeltSeedBank/IsSlotMachineLevel 等
+        // 传送带模式：从传送带移除
+        // 老虎机模式：Deactivate
+        // 坚不可摧模式：保持激活 + FlashIfReady
+        // 普通模式：times_used++ + refreshing = true + 计算 refresh_time
         self.times_used += 1;
         self.refreshing = true;
-        // [TRANSLATION_NOTE]: refresh_time = Plant::GetRefreshTime(seed_type, imitater_type)
+    }
+
+    /// 鼠标点击（对应 C++ MouseDown 简化版）
+    pub fn mouse_down(&mut self, _x: i32, _y: i32, _click_count: i32) {
+        // [TRANSLATION_NOTE]: 完整逻辑包含阳光检测、需求提示、Buzz 音效、教程状态机等
+        // 核心流程：
+        // 1. 检查暂停/场景/种子类型
+        // 2. 老虎机模式：显示提示 + 记录滚动次数
+        // 3. 检查激活状态 → 显示冷却提示
+        // 4. 检查阳光 → 显示不够提示
+        // 5. 检查合成需求 → 显示对应提示
+        // 6. 清除所有提示
+        // 7. 三消/水族馆模式：转发给 Challenge
+        // 8. 普通模式：设置光标类型 + 播放音效 + 更新教程 + Deactivate
     }
 
     /// 鼠标命中测试（对应 C++ MouseHitTest）
@@ -227,4 +244,6 @@ impl Default for SeedBank {
         SeedBank::new()
     }
 }
+
+
 
