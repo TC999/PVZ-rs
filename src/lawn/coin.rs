@@ -166,14 +166,24 @@ impl Coin {
         }
     }
 
-    /// 更新收集动画（对应 C++ Coin::UpdateCollected 简化版）
+    /// 更新收集动画（对应 C++ Coin::UpdateCollected）
+    /// 硬币飞向目标位置（阳光→左上角、金钱→硬币银行、礼物→解锁提示位置）
     pub fn update_collected(&mut self) {
-        // [TRANSLATION_NOTE]: 收集动画暂未实现
+        // [TRANSLATION_NOTE]: 完整实现需确定目标位置 + 平滑移动 + 得分判定
+        // 阳光飞向 (15, 0)，金钱飞向 (39, 558)，关卡奖励飞向屏幕中央
+        // 到达目标附近时调用 ScoreCoin()
         self.dead = true;
     }
 
-    /// 绘制
-    pub fn draw(&self, _g: &mut Graphics) {}
+    /// 绘制（对应 C++ Coin::Draw）
+    /// 按硬币类型选择不同绘制方式：阳光/金钱/钻石/礼物/种子包
+    pub fn draw(&self, _g: &mut Graphics) {
+        // [TRANSLATION_NOTE]: 完整绘制依赖 IMAGE_REANIM_SUN/IMAGE_COIN_SILVER 等资源
+        // 阳光：使用 Reanimation 绘制，支持缩放和闪烁效果
+        // 金钱：使用 IMAGE_COIN_SILVER/GOLD/DIAMOND 精灵图
+        // 礼物：使用 IMAGE_PRESENT 精灵图
+        // 种子包：使用 IMAGE_PACKET_PLANTS 精灵图
+    }
 
     /// 收集硬币（对应 C++ Coin::Collect 简化版）
     pub fn collect(&mut self) {
@@ -284,6 +294,12 @@ impl Coin {
         self.value
     }
 
+    /// 硬币死亡（对应 C++ Die）
+    pub fn die(&mut self) {
+        self.dead = true;
+        // [TRANSLATION_NOTE]: AttachmentDie(mAttachmentID) 暂未实现
+    }
+
     /// 获取硬币值（静态，对应 C++ GetCoinValue）
     pub fn get_coin_value(coin_type: CoinType) -> i32 {
         match coin_type {
@@ -300,3 +316,4 @@ impl Default for Coin {
         Coin::new()
     }
 }
+
