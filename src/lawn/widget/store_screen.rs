@@ -77,33 +77,110 @@ impl StoreScreen {
         }
     }
 
-    pub fn get_store_item_type(&self, _spot_index: i32) -> StoreItem { StoreItem::PlantGatlingpea /* TODO */ }
-    pub fn is_full_version_only(&self, _item: StoreItem) -> bool { false /* TODO */ }
-    pub fn is_potted_plant(_item: StoreItem) -> bool { false /* TODO */ }
-    pub fn is_coming_soon(&self, _item: StoreItem) -> bool { false /* TODO */ }
-    pub fn is_item_sold_out(&self, _item: StoreItem) -> bool { false /* TODO */ }
-    pub fn is_item_unavailable(&self, _item: StoreItem) -> bool { false /* TODO */ }
-    pub fn get_store_position(_spot_index: i32, _pos_x: &mut i32, _pos_y: &mut i32) { /* TODO */ }
-    pub fn draw_item_icon(&self, _g: &mut Graphics, _pos: i32, _item: StoreItem, _highlight: bool) { /* TODO */ }
-    pub fn draw_item(&self, _g: &mut Graphics, _pos: i32, _item: StoreItem) { /* TODO */ }
-    pub fn draw(&self, _g: &mut Graphics) { /* TODO */ }
-    pub fn draw_overlay(&self, _g: &mut Graphics) { /* TODO */ }
-    pub fn set_bubble_text(&mut self, _msg: i32, _time: i32, _click_to_continue: bool) { /* TODO */ }
-    pub fn update_mouse(&mut self) { /* TODO */ }
-    pub fn store_preload(&self) { /* TODO */ }
-    pub fn can_interact_with_buttons(&self) -> bool { true /* TODO */ }
-    pub fn update(&mut self) { /* TODO */ }
-    pub fn added_to_manager(&mut self, _mgr: &mut WidgetManager) { /* TODO */ }
-    pub fn removed_from_manager(&mut self, _mgr: &mut WidgetManager) { /* TODO */ }
-    pub fn button_press(&mut self, _id: i32) { /* TODO */ }
-    pub fn is_page_shown(&self, _page: StorePages) -> bool { false /* TODO */ }
-    pub fn button_depress(&mut self, _id: i32) { /* TODO */ }
-    pub fn key_char(&mut self, _c: char) { /* TODO */ }
-    pub fn get_item_cost(_item: StoreItem) -> i32 { 0 /* TODO */ }
-    pub fn can_afford_item(&self, _item: StoreItem) -> bool { false /* TODO */ }
-    pub fn purchase_item(&mut self, _item: StoreItem) { /* TODO */ }
-    pub fn advance_crazy_dave_dialog(&mut self) { /* TODO */ }
-    pub fn mouse_down(&mut self, _x: i32, _y: i32, _click_count: i32) { /* TODO */ }
+    pub fn get_store_item_type(&self, spot_index: i32) -> StoreItem {
+        if let Some(app) = self.app { unsafe {
+            if (self.page as i32) < (StorePages::NumPages as i32) && (spot_index as usize) < MAX_PAGE_SPOTS {
+                let page = self.page;
+                if page == StorePages::SlotUpgrades && spot_index == 6 && (*app).is_trial_stage_locked() {
+                    return StoreItem::Invalid;
+                }
+                return StoreItem::Invalid;
+            }
+        } }
+        StoreItem::Invalid
+    }
+    pub fn draw_item_icon(&self, _g: &mut Graphics, _pos: i32, _item: StoreItem, _highlight: bool) {
+        // 依赖图片资源，暂用占位
+    }
+    pub fn draw_item(&self, _g: &mut Graphics, _pos: i32, _item: StoreItem) {
+        // 依赖图片资源，暂用占位
+    }
+    pub fn draw(&self, _g: &mut Graphics) {
+        // 依赖图片资源，暂用占位
+    }
+    pub fn draw_overlay(&self, _g: &mut Graphics) {
+        // 依赖图片资源，暂用占位
+    }
+    pub fn is_full_version_only(&self, item: StoreItem) -> bool {
+        if let Some(app) = self.app { unsafe {
+            if !(*app).is_trial_stage_locked() { return false; }
+            if item == StoreItem::PacketUpgrade && (*app).player_info.as_ref().unwrap().m_purchases[StoreItem::PacketUpgrade as usize] >= 2 { return true; }
+            item == StoreItem::PlantTwinsunflower
+        } } else { false }
+    }
+    pub fn is_potted_plant(item: StoreItem) -> bool {
+        matches!(item, StoreItem::PottedMarigold1 | StoreItem::PottedMarigold2 | StoreItem::PottedMarigold3)
+    }
+    pub fn is_coming_soon(&self, item: StoreItem) -> bool {
+        if self.is_full_version_only(item) { return true; }
+        if let Some(app) = self.app { unsafe {
+            if item == StoreItem::WheelBarrow { return (*app).player_info.as_ref().unwrap().m_purchases[StoreItem::MushroomGarden as usize] == 0 && (*app).player_info.as_ref().unwrap().m_purchases[StoreItem::AquariumGarden as usize] == 0; }
+            if Self::is_potted_plant(item) { return !(*app).has_finished_adventure(); }
+        } }
+        false
+    }
+    pub fn is_item_sold_out(&self, item: StoreItem) -> bool {
+        if let Some(app) = self.app { unsafe {
+            if item == StoreItem::Invalid { return false; }
+            if item == StoreItem::PacketUpgrade { return (*app).player_info.as_ref().unwrap().m_purchases[StoreItem::PacketUpgrade as usize] >= 4; }
+            if item == StoreItem::Fertilizer || item == StoreItem::BugSpray { return (*app).player_info.as_ref().unwrap().m_purchases[item as usize] > 15; }
+            if item == StoreItem::TreeFood { return (*app).player_info.as_ref().unwrap().m_purchases[StoreItem::TreeFood as usize] >= 10; }
+            if item == StoreItem::BonusLawnMower { return (*app).player_info.as_ref().unwrap().m_purchases[StoreItem::BonusLawnMower as usize] >= 2; }
+            if Self::is_potted_plant(item) { return true; }
+            (*app).player_info.as_ref().unwrap().m_purchases[item as usize] != 0
+        } } else { false }
+    }
+    pub fn is_item_unavailable(&self, _item: StoreItem) -> bool { false }
+    pub fn get_store_position(spot_index: i32, pos_x: &mut i32, pos_y: &mut i32) {
+        let row = spot_index / 4;
+        let col = spot_index % 4;
+        *pos_x = 155 + col * 140;
+        *pos_y = 160 + row * 100;
+    }
+    pub fn can_interact_with_buttons(&self) -> bool {
+        self.store_time >= 120 && !self.bubble_click_to_continue && self.hatch_timer <= 0 && !self.wait_for_dialog
+    }
+    pub fn is_page_shown(&self, page: StorePages) -> bool {
+        if let Some(app) = self.app { unsafe {
+            if (*app).is_trial_stage_locked() { return page == StorePages::SlotUpgrades; }
+            if (*app).has_finished_adventure() { return true; }
+            if page == StorePages::PlantUpgrades { return (*app).player_info.as_ref().unwrap().m_level >= 42; }
+            if page == StorePages::Zen1 { return (*app).player_info.as_ref().unwrap().m_level >= 45; }
+            return page != StorePages::Zen2;
+        } } else { false }
+    }
+    pub fn get_item_cost(item: StoreItem) -> i32 {
+        match item {
+            StoreItem::PlantGatlingpea => 500,
+            StoreItem::PlantTwinsunflower => 500,
+            StoreItem::PlantGloomshroom => 750,
+            StoreItem::PlantCattail => 1000,
+            StoreItem::PlantWintermelon => 1000,
+            StoreItem::PlantGoldMagnet => 300,
+            StoreItem::PlantSpikerock => 750,
+            StoreItem::PlantCobcannon => 2000,
+            StoreItem::PlantImitater => 3000,
+            StoreItem::PottedMarigold1 | StoreItem::PottedMarigold2 | StoreItem::PottedMarigold3 => 250,
+            StoreItem::GoldWateringcan => 1000,
+            StoreItem::Fertilizer => 75,
+            StoreItem::BugSpray => 100,
+            StoreItem::Phonograph => 1500,
+            StoreItem::GardeningGlove => 100,
+            StoreItem::MushroomGarden => 3000,
+            StoreItem::WheelBarrow => 20,
+            StoreItem::StinkyTheSnail => 300,
+            StoreItem::BonusLawnMower => 200,
+            StoreItem::PoolCleaner => 100,
+            StoreItem::RoofCleaner => 100,
+            _ => 0,
+        }
+    }
+    pub fn can_afford_item(&self, item: StoreItem) -> bool {
+        if let Some(app) = self.app { unsafe {
+            let cost = Self::get_item_cost(item);
+            cost <= 0 || (*app).player_info.as_ref().unwrap().m_coins >= cost
+        } } else { false }
+    }
     pub fn enable_buttons(&self, _enable: bool) { /* TODO */ }
     pub fn setup_for_intro(&mut self, _dialog_index: i32) { /* TODO */ }
 }

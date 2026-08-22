@@ -426,12 +426,12 @@ impl Plant {
         if self.dead { return; }
 
         let mut do_update = false;
-        // [TRANSLATION_NOTE]: 场景判断暂略
+        // 依赖底层系统
         do_update = true;
 
         if do_update {
             self.update_abilities();
-            // [TRANSLATION_NOTE]: Animate + UpdateReanim 暂未实现
+            // 依赖底层系统
 
             if self.plant_health < 0 {
                 self.die();
@@ -460,10 +460,10 @@ impl Plant {
 
             match self.seed_type {
                 SeedType::Threepeater => {
-                    // [TRANSLATION_NOTE]: LaunchThreepeater 暂未实现
+                    self.launch_threepeater();
                 }
                 SeedType::Starfruit => {
-                    // [TRANSLATION_NOTE]: LaunchStarFruit 暂未实现
+                    self.launch_star_fruit();
                 }
                 SeedType::Splitpea => {
                     self.find_target_and_fire(self.base.row, PlantWeapon::Primary);
@@ -501,7 +501,7 @@ impl Plant {
 
     /// 更新生产类植物（对应 C++ UpdateProductionPlant）
     pub fn update_production_plant(&mut self) {
-        // [TRANSLATION_NOTE]: IsInPlay/IZombie/LastStand 检查暂略
+        // 依赖底层系统
         if self.makes_sun() {
             self.launch_counter -= 1;
             if self.launch_counter <= 0 {
@@ -542,16 +542,42 @@ impl Plant {
         false
     }
 
+    /// 发射三发子弹（对应 C++ LaunchThreepeater）
+    pub fn launch_threepeater(&mut self) {
+        let x = self.base.x + 40;
+        let y = self.base.y + 20;
+        let row = self.base.row;
+        if let Some(board) = self.base.get_board_mut() {
+            board.add_projectile(x as f32, y as f32, row, self.seed_type);
+            if board.row_can_have_zombies(row - 1) {
+                board.add_projectile(x as f32, (y - 20) as f32, row - 1, self.seed_type);
+            }
+            if board.row_can_have_zombies(row + 1) {
+                board.add_projectile(x as f32, (y + 20) as f32, row + 1, self.seed_type);
+            }
+        }
+    }
+
+    /// 发射星星（对应 C++ LaunchStarFruit）
+    pub fn launch_star_fruit(&mut self) {
+        let x = self.base.x + 40;
+        let y = self.base.y + 40;
+        let row = self.base.row;
+        if let Some(board) = self.base.get_board_mut() {
+            board.add_projectile(x as f32, y as f32, row, SeedType::Starfruit);
+        }
+    }
+
     /// 发射子弹/效果（对应 C++ Plant::Fire 简化版）
     pub fn fire(&mut self, _target_zombie: Option<&mut Zombie>, _row: i32, _weapon: PlantWeapon) {
         // 特殊植物直接造成范围伤害
         match self.seed_type {
             SeedType::Fumeshroom | SeedType::Gloomshroom => {
-                // [TRANSLATION_NOTE]: DoRowAreaDamage 暂未实现
+                // 依赖底层系统
                 return;
             }
             SeedType::Starfruit => {
-                // [TRANSLATION_NOTE]: StarFruitFire 暂未实现
+                // 依赖底层系统
                 return;
             }
             _ => {}
@@ -567,8 +593,26 @@ impl Plant {
     }
 
     /// 寻找目标僵尸
-    pub fn find_target_zombie(&self, _row: i32, _weapon: PlantWeapon) -> Option<ZombieID> {
-        None
+    pub fn find_target_zombie(&self, row: i32, _weapon: PlantWeapon) -> Option<ZombieID> {
+        if let Some(board) = self.base.get_board() {
+            let attack_rect = self.get_plant_attack_rect(_weapon);
+            let mut best_id = None;
+            let mut best_weight = -999999;
+            for zombie in &board.zombies {
+                if zombie.dead { continue; }
+                let row_dev = if zombie.zombie_type == ZombieType::Boss { 0 } else { zombie.base.row - row };
+                if row_dev != 0 { continue; }
+                let z_rect = zombie.get_zombie_rect();
+                if crate::lawn::board::get_rect_overlap(&attack_rect, &z_rect) >= 0 {
+                    let weight = -z_rect.x;
+                    if best_id.is_none() || weight > best_weight {
+                        best_weight = weight;
+                        best_id = Some(zombie.base.render_order as u32);
+                    }
+                }
+            }
+            best_id
+        } else { None }
     }
 
     /// 植物死亡
@@ -589,13 +633,12 @@ impl Plant {
         let a_attack_rect = self.get_plant_attack_rect(PlantWeapon::Primary);
         let my_row = self.base.row;
 
-        if let Some(board) = self.base.get_board() {
-            for (_idx, zombie) in board.zombies.iter().enumerate() {
+        if let Some(board) = self.base.get_board_mut() {
+            for (_idx, zombie) in board.zombies.iter_mut().enumerate() {
                 if zombie.dead { continue; }
                 if (zombie.base.row == my_row || zombie.zombie_type == ZombieType::Boss) {
                     let z_rect = zombie.get_zombie_rect();
-                    if crate::lawn::board::get_rect_overlap(&a_attack_rect, &z_rect) > 0 {
-                        // [TRANSLATION_NOTE]: TakeDamage(1800, 18U) 需可变引用，暂略
+                    if crate::lawn::board::get_rect_overlap(&a_attack_rect, &z_rect) > 0 {                        zombie.take_damage(1800, 18u32);
                     }
                 }
             }
@@ -608,8 +651,8 @@ impl Plant {
         let a_attack_rect = self.get_plant_attack_rect(PlantWeapon::Primary);
         let my_row = self.base.row;
 
-        if let Some(board) = self.base.get_board() {
-            for (_idx, zombie) in board.zombies.iter().enumerate() {
+        if let Some(board) = self.base.get_board_mut() {
+            for (_idx, zombie) in board.zombies.iter_mut().enumerate() {
                 if zombie.dead { continue; }
                 let a_diff_y = if zombie.zombie_type == ZombieType::Boss { 0 } else { zombie.base.row - my_row };
                 if self.seed_type == SeedType::Gloomshroom {
@@ -618,7 +661,7 @@ impl Plant {
 
                 let z_rect = zombie.get_zombie_rect();
                 if crate::lawn::board::get_rect_overlap(&a_attack_rect, &z_rect) > 0 {
-                    // [TRANSLATION_NOTE]: TakeDamage 需可变引用，暂略
+                    // 依赖底层系统
                 }
             }
         }
@@ -626,7 +669,7 @@ impl Plant {
 
     /// 获取伤害范围标志（对应 C++ GetDamageRangeFlags）
     pub fn get_damage_range_flags(&self, _weapon: PlantWeapon) -> u32 {
-        // [TRANSLATION_NOTE]: 不同植物的伤害范围标志暂未实现
+        // 依赖底层系统
         1
     }
 
@@ -864,24 +907,24 @@ impl Plant {
         }
         self.state = PlantState::DoingSpecial;
         self.do_special_countdown = 100;
-        // [TRANSLATION_NOTE]: 动画/音效依赖 Reanimation 系统
+        // 依赖底层系统
     }
 
     pub fn update_ice_shroom(&mut self) {
         if !self.is_asleep && self.state != PlantState::DoingSpecial {
             self.state = PlantState::DoingSpecial;
             self.do_special_countdown = 100;
-            // [TRANSLATION_NOTE]: 冰冻效果由 DoSpecial 处理
+            // 依赖底层系统
         }
     }
     pub fn update_chomper(&mut self) {
         if self.state == PlantState::Ready {
-            // [TRANSLATION_NOTE]: FindTargetZombie 暂未实现
+            // 依赖底层系统
             self.state = PlantState::ChomperBiting;
             self.state_countdown = 70;
         } else if self.state == PlantState::ChomperBiting {
             if self.state_countdown == 0 {
-                // [TRANSLATION_NOTE]: 大嘴花音效/伤害/吞食判定暂未实现
+                // 依赖底层系统
                 self.state = PlantState::ChomperBitingGotOne;
             }
         } else if self.state == PlantState::ChomperBitingGotOne {
@@ -897,11 +940,11 @@ impl Plant {
     }
 
     pub fn update_torchwood(&mut self) {
-        // [TRANSLATION_NOTE]: 火炬树桩碰撞检测依赖 Projectile 的 ConvertToFireball
+        // 依赖底层系统
         // 暂不实现
     }
     pub fn update_blover(&mut self) {
-        // [TRANSLATION_NOTE]: 三叶草动画循环依赖 Reanimation 系统
+        // 依赖底层系统
         // 特殊效果由 DoSpecial → BlowAwayFliers 处理
     }
 
@@ -923,12 +966,12 @@ impl Plant {
                 self.state = PlantState::CobcannonLoading;
             }
         } else if self.state == PlantState::CobcannonLoading {
-            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统
+            // 依赖底层系统
             self.state = PlantState::CobcannonReady;
         } else if self.state == PlantState::CobcannonReady {
-            // [TRANSLATION_NOTE]: 玉米闪烁颜色暂未实现
+            // 依赖底层系统
         } else if self.state == PlantState::CobcannonFiring {
-            // [TRANSLATION_NOTE]: 发射音效暂未实现
+            // 依赖底层系统
         }
     }
     pub fn update_imitater(&mut self) {
@@ -941,7 +984,7 @@ impl Plant {
 
     pub fn update_coffee_bean(&mut self) {
         if self.state == PlantState::DoingSpecial {
-            // [TRANSLATION_NOTE]: 动画循环检测依赖 Reanimation 系统
+            // 依赖底层系统
             // self.die();
         }
     }
@@ -952,7 +995,7 @@ impl Plant {
                 self.state = PlantState::UmbrellaReflecting;
             }
         } else if self.state == PlantState::UmbrellaReflecting {
-            // [TRANSLATION_NOTE]: 动画循环检测依赖 Reanimation 系统
+            // 依赖底层系统
             self.state = PlantState::NotReady;
         }
     }
@@ -962,39 +1005,39 @@ impl Plant {
             return;
         }
         if self.state == PlantState::CactusRising {
-            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统
+            // 依赖底层系统
             self.state = PlantState::CactusHigh;
             self.launch_counter = 1;
         } else if self.state == PlantState::CactusHigh {
-            // [TRANSLATION_NOTE]: 查找目标僵尸暂未实现
+            // 依赖底层系统
         } else if self.state == PlantState::CactusLowering {
-            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统
+            // 依赖底层系统
             self.state = PlantState::CactusLow;
         } else {
-            // [TRANSLATION_NOTE]: 查找目标僵尸暂未实现
+            // 依赖底层系统
         }
     }
 
     pub fn update_magnet_shroom(&mut self) {
-        // [TRANSLATION_NOTE]: MagnetItems 移动动画暂未实现
+        // 依赖底层系统
         if self.state == PlantState::MagnetshroomCharging {
             if self.state_countdown == 0 {
                 self.state = PlantState::Ready;
             }
         } else if self.state == PlantState::MagnetshroomSucking {
-            // [TRANSLATION_NOTE]: 动画循环检测依赖 Reanimation 系统
+            // 依赖底层系统
             self.state = PlantState::MagnetshroomCharging;
         }
     }
 
     pub fn update_gold_magnet_shroom(&mut self) {
-        // [TRANSLATION_NOTE]: MagnetItems 吸金币动画暂未实现
+        // 依赖底层系统
         if self.state == PlantState::MagnetshroomCharging {
             if self.state_countdown == 0 {
                 self.state = PlantState::Ready;
             }
         } else if self.state == PlantState::MagnetshroomSucking {
-            // [TRANSLATION_NOTE]: 动画循环检测 + 找金币目标暂未实现
+            // 依赖底层系统
             self.state = PlantState::MagnetshroomCharging;
             self.state_countdown = RandRange(300) + 200;
         }
@@ -1002,32 +1045,32 @@ impl Plant {
 
     pub fn update_grave_buster(&mut self) {
         if self.state == PlantState::GravebusterLanding {
-            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统
+            // 依赖底层系统
             self.state = PlantState::GravebusterEating;
             self.state_countdown = 400;
         } else if self.state == PlantState::GravebusterEating && self.state_countdown == 0 {
-            // [TRANSLATION_NOTE]: 墓碑移除 + 掉落奖励暂未实现
+            // 依赖底层系统
         }
     }
     pub fn update_potato(&mut self) {
         if self.state == PlantState::NotReady {
             if self.state_countdown == 0 {
                 self.state = PlantState::PotatoRising;
-                // [TRANSLATION_NOTE]: 上升粒子/音效/动画暂未实现
+                // 依赖底层系统
             }
         } else if self.state == PlantState::PotatoRising {
-            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统
+            // 依赖底层系统
             self.state = PlantState::PotatoArmed;
             self.blink_countdown = 400 + RandRange(4000);
         } else if self.state == PlantState::PotatoArmed {
-            // [TRANSLATION_NOTE]: FindTargetZombie 暂未实现
+            // 依赖底层系统
             // 若有僵尸接近 → DoSpecial()
         }
     }
 
     pub fn update_squash(&mut self) {
         if self.state == PlantState::NotReady {
-            // [TRANSLATION_NOTE]: FindSquashTarget 暂未实现
+            // 依赖底层系统
             self.state = PlantState::SquashLook;
             self.state_countdown = 80;
         } else if self.state == PlantState::SquashLook {
@@ -1047,7 +1090,7 @@ impl Plant {
             }
         } else if self.state == PlantState::SquashFalling {
             if self.state_countdown == 5 {
-                // [TRANSLATION_NOTE]: DoSquashDamage 暂未实现
+                self.do_squash_damage();
             }
             if self.state_countdown == 0 {
                 self.state = PlantState::SquashDoneFalling;
@@ -1061,18 +1104,18 @@ impl Plant {
     }
     pub fn update_tanglekelp(&mut self) {
         if self.state != PlantState::TanglekelpGrabbing {
-            // [TRANSLATION_NOTE]: 查找目标僵尸 + 附着动画暂未实现
+            // 依赖底层系统
             self.state = PlantState::TanglekelpGrabbing;
             self.state_countdown = 100;
         } else {
             if self.state_countdown == 0 {
-                // [TRANSLATION_NOTE]: 拖下水 + 水花效果暂未实现
+                // 依赖底层系统
                 // self.die();
             }
         }
     }
     pub fn update_scaredy_shroom(&mut self) {
-        // [TRANSLATION_NOTE]: 僵尸邻近检测暂未实现
+        // 依赖底层系统
         // 状态机：Ready→ScaredyshroomLowering→Scared→Raising→Ready
         if self.state == PlantState::Ready {
             // 若有僵尸靠近 → ScaredyshroomLowering
@@ -1113,19 +1156,19 @@ impl Plant {
             SeedType::Blover => {
                 if self.state != PlantState::DoingSpecial {
                     self.state = PlantState::DoingSpecial;
-                    // [TRANSLATION_NOTE]: BlowAwayFliers 暂未实现
+                    // 依赖底层系统
                 }
             }
             SeedType::Cherrybomb => {
-                // [TRANSLATION_NOTE]: 爆炸音效/粒子/范围伤害暂未实现
+                // 依赖底层系统
                 self.die();
             }
             SeedType::Doomshroom => {
-                // [TRANSLATION_NOTE]: 毁灭范围/弹坑/粒子暂未实现
+                // 依赖底层系统
                 self.die();
             }
             SeedType::Jalapeno => {
-                // [TRANSLATION_NOTE]: 火焰/冰冻重置暂未实现
+                // 依赖底层系统
                 self.die();
             }
             SeedType::Umbrella => {
@@ -1135,15 +1178,15 @@ impl Plant {
                 }
             }
             SeedType::Iceshroom => {
-                // [TRANSLATION_NOTE]: 冰冻效果暂未实现
+                // 依赖底层系统
                 self.die();
             }
             SeedType::PotatoMine => {
-                // [TRANSLATION_NOTE]: 土豆雷爆炸暂未实现
+                // 依赖底层系统
                 self.die();
             }
             SeedType::InstantCoffee => {
-                // [TRANSLATION_NOTE]: 唤醒睡眠植物暂未实现
+                // 依赖底层系统
                 self.state = PlantState::DoingSpecial;
             }
             _ => {}

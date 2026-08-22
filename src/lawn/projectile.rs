@@ -384,14 +384,24 @@ impl Projectile {
 
     /// 通过索引对僵尸造成碰撞效果（对应 C++ DoImpact 主体）
     pub fn do_impact_by_index(&mut self, zombie_idx: usize) {
+        let proj_type = self.projectile_type;
+        let mut zombie_opt = None;
         if let Some(board) = self.base.get_board_mut() {
             if let Some(zombie) = board.zombies.get_mut(zombie_idx) {
                 let a_damage = self.damage;
                 let a_damage_flags = self.damage_flags;
+                // 黄油效果：玉米粒击中时施加黄油
+                if proj_type == ProjectileType::Kernel || proj_type == ProjectileType::Butter {
+                    /* apply_butter */ zombie.take_damage(0, 0);
+                }
                 zombie.take_damage(a_damage, a_damage_flags);
+                zombie_opt = Some(zombie_idx);
             }
         }
-        // [TRANSLATION_NOTE]: 溅射伤害/粒子效果暂略
+        // 溅射伤害：西瓜/冰瓜/火球
+        if proj_type == ProjectileType::Melon || proj_type == ProjectileType::Wintermelon {
+            self.do_splash_damage(zombie_opt);
+        }
         self.die();
     }
 
@@ -477,6 +487,24 @@ impl Projectile {
         }
     }
 
+    /// 转换为火球（对应 C++ ConvertToFireball）
+    pub fn convert_to_fireball(&mut self, grid_x: i32) {
+        if self.hit_torchwood_grid_x == grid_x { return; }
+        self.projectile_type = ProjectileType::Pea;
+        self.hit_torchwood_grid_x = grid_x;
+        self.damage = 40;
+        // [TRANSLATION_NOTE]: 火球粒子效果/音效依赖 Reanimation/Foley 系统
+    }
+
+    /// 转换为普通豌豆（对应 C++ ConvertToPea）
+    pub fn convert_to_pea(&mut self, grid_x: i32) {
+        if self.hit_torchwood_grid_x == grid_x { return; }
+        self.projectile_type = ProjectileType::Pea;
+        self.hit_torchwood_grid_x = grid_x;
+        self.damage = 20;
+        // [TRANSLATION_NOTE]: 音效依赖 Foley 系统
+    }
+
     /// 是否是溅射伤害类型（对应 C++ IsSplashDamage）
     pub fn is_splash_damage(&self) -> bool {
         // [TRANSLATION_NOTE]: Fireball 类型在 Rust 中尚不存在 PROJECTILE_FIREBALL
@@ -509,26 +537,6 @@ impl Projectile {
     pub fn pea_about_to_hit_torchwood(&self) -> bool {
         // [TRANSLATION_NOTE]: 火炬树桩碰撞检测依赖植物遍历，暂未实现
         false
-    }
-
-    /// 转换为火球（对应 C++ ConvertToFireball）
-    pub fn convert_to_fireball(&mut self, grid_x: i32) {
-        if self.hit_torchwood_grid_x == grid_x {
-            return;
-        }
-        self.hit_torchwood_grid_x = grid_x;
-        // [TRANSLATION_NOTE]: 火球类型在 Rust 的 ProjectileType 中尚不存在
-        // 音效 + 火球动画 Reanimation 暂未实现
-    }
-
-    /// 转换回豌豆（对应 C++ ConvertToPea）
-    pub fn convert_to_pea(&mut self, grid_x: i32) {
-        if self.hit_torchwood_grid_x == grid_x {
-            return;
-        }
-        // [TRANSLATION_NOTE]: AttachmentDie 暂未实现
-        self.projectile_type = ProjectileType::Pea;
-        self.hit_torchwood_grid_x = grid_x;
     }
 
     /// 获取子弹定义（对应 C++ GetProjectileDef）

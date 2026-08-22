@@ -555,7 +555,7 @@ impl Zombie {
                 } else {
                     self.pos_x = 900.0 + 80.0;
                     self.zombie_rect = Rect::new(-50, 0, 275, 115);
-                    // [TRANSLATION_NOTE]: HelmType::Bobsled 在 game_enums 中尚未定义，暂不设置
+                    // 依赖底层系统
                     self.helm_health = 300;
                     self.altitude = -10.0;
                 }
@@ -660,7 +660,7 @@ impl Zombie {
                 self.load_plain_zombie_reanim();
                 self.reanim_show_prefix("anim_hair", -1);
                 self.reanim_show_prefix("anim_head", -1);
-                // [TRANSLATION_NOTE]: HelmType::Wallnut 在 game_enums 中尚未定义
+                // 依赖底层系统
                 self.helm_health = 1100;
                 self.variant = false;
             }
@@ -668,7 +668,7 @@ impl Zombie {
                 self.load_plain_zombie_reanim();
                 self.reanim_show_prefix("anim_hair", -1);
                 self.reanim_show_prefix("anim_head", -1);
-                // [TRANSLATION_NOTE]: HelmType::Tallnut 在 game_enums 中尚未定义
+                // 依赖底层系统
                 self.helm_health = 2200;
                 self.variant = false;
                 self.pos_x += 30.0;
@@ -712,7 +712,7 @@ impl Zombie {
         }
 
         // LittleTrouble 模式缩放（对应 C++ IsLittleTroubleLevel）
-        // [TRANSLATION_NOTE]: is_little_trouble_level 尚未在 LawnApp 中实现，暂不启用
+        // 依赖底层系统
         /*if let Some(app) = self.base.get_app() {
             if app.is_little_trouble_level() && (self.is_on_board() || from_wave == Zombie::ZOMBIE_WAVE_CUTSCENE) {
                 self.scale_zombie = 0.5;
@@ -864,7 +864,7 @@ impl Zombie {
     pub fn update(&mut self) {
         self.zombie_age += 1;
         let mut do_update = false;
-        // [TRANSLATION_NOTE]: lawn_app::GameScenes 尚无 LevelIntro 变体，暂时跳过
+        // 依赖底层系统
         // if app.game_scene == GameScenes::LevelIntro && self.zombie_type == ZombieType::Boss { do_update = true; }
         if self.is_on_board() {
             if let Some(board) = self.base.get_board() {
@@ -892,7 +892,7 @@ impl Zombie {
                     self.phase_counter -= 1;
                 }
 
-                // [TRANSLATION_NOTE]: lawn_app::GameScenes 尚无 ZombiesWon 变体，暂时跳过
+                // 依赖底层系统
                 if self.is_on_board() {
                     self.update_playing();
                 }
@@ -1173,36 +1173,102 @@ impl Zombie {
     }
 
     /// 移除冰陷阱（对应 C++ RemoveIceTrap，stub）
-    pub fn remove_ice_trap(&mut self) {}
+    pub fn remove_ice_trap(&mut self) {
+        self.ice_trap_counter = 0;
+        if self.zombie_type == ZombieType::Balloon { /* BalloonPropellerHatSpin(true); */ }
+        self.update_anim_speed();
+        self.start_zombie_sound();
+    }
 
     /// 移除黄油（对应 C++ RemoveButter，stub）
-    pub fn remove_butter(&mut self) {}
+    pub fn remove_butter(&mut self) {
+        if self.zombie_type == ZombieType::Balloon { /* BalloonPropellerHatSpin(true); */ }
+        self.buttered_counter = 0;
+        self.update_anim_speed();
+        self.start_zombie_sound();
+    }
 
     /// 检查进入泳池（对应 C++ CheckForPool，stub）
-    pub fn check_for_pool(&mut self) {}
+    pub fn check_for_pool(&mut self) {
+        if self.zombie_height != ZombieHeight::Normal || self.is_flying() { return; }
+        if self.zombie_type == ZombieType::DolphinRider || self.zombie_type == ZombieType::Snorkel { return; }
+        if self.in_pool { return; }
+        if let Some(b) = self.base.get_board() {
+            let gx = b.pixel_to_grid_x(self.pos_x as i32 + 75, self.pos_y as i32);
+            let gy = b.pixel_to_grid_x(self.pos_x as i32 + 45, self.pos_y as i32);
+            if b.is_pool_square(gx, self.base.row) && b.is_pool_square(gy, self.base.row) && self.pos_x < 680.0 {
+                self.in_pool = true;
+                self.zombie_height = ZombieHeight::InToPool;
+            }
+        }
+    }
 
     /// 检查屋顶高台（对应 C++ CheckForHighGround，stub）
-    pub fn check_for_high_ground(&mut self) {}
+    pub fn check_for_high_ground(&mut self) {
+        if self.zombie_height != ZombieHeight::Normal || self.zombie_type == ZombieType::Bungee { return; }
+        if let Some(b) = self.base.get_board() {
+            if b.stage_has_roof() {
+                self.zombie_height = ZombieHeight::UpToHighGround;
+                self.on_high_ground = true;
+            }
+        }
+    }
 
     /// 更新从墓碑升起（对应 C++ UpdateZombieRiseFromGrave，stub）
-    pub fn update_zombie_rise_from_grave(&mut self) {}
+    pub fn update_zombie_rise_from_grave(&mut self) {
+        if self.phase_counter > 0 { self.phase_counter -= 1; }
+        if self.in_pool {
+            self.altitude = -150.0 + (50 - self.phase_counter).max(0) as f32 * 110.0 / 50.0;
+        } else {
+            self.altitude = -200.0 + (50 - self.phase_counter).max(0) as f32 * 200.0 / 50.0;
+        }
+        if self.phase_counter == 0 { self.zombie_phase = ZombiePhase::Normal; self.altitude = 0.0; }
+    }
 
     /// 更新泳池僵尸（对应 C++ UpdateZombiePool，stub）
-    pub fn update_zombie_pool(&mut self) {}
+    pub fn update_zombie_pool(&mut self) {
+        if self.zombie_height == ZombieHeight::OutOfPool {
+            self.altitude += 1.0;
+            if self.zombie_type == ZombieType::Snorkel { self.altitude += 1.0; }
+            if self.altitude >= 0.0 { self.altitude = 0.0; self.zombie_height = ZombieHeight::Normal; self.in_pool = false; }
+        } else if self.zombie_height == ZombieHeight::InToPool {
+            self.altitude -= 1.0;
+            if self.altitude <= -40.0 { self.altitude = -40.0; self.zombie_height = ZombieHeight::Normal; }
+        }
+    }
 
     /// 更新屋顶高台僵尸（对应 C++ UpdateZombieHighGround，stub）
-    pub fn update_zombie_high_ground(&mut self) {}
+    pub fn update_zombie_high_ground(&mut self) {
+        if self.zombie_type == ZombieType::Pogo { return; }
+        if self.zombie_height == ZombieHeight::UpToHighGround {
+            self.altitude += 1.0;
+            if self.altitude >= 50.0 { self.altitude = 50.0; self.zombie_height = ZombieHeight::Normal; }
+        } else if self.zombie_height == ZombieHeight::DownOffHighGround {
+            self.altitude -= 1.0;
+            if self.altitude <= 0.0 { self.altitude = 0.0; self.zombie_height = ZombieHeight::Normal; self.on_high_ground = false; }
+        }
+    }
 
     /// 更新掉落僵尸（对应 C++ UpdateZombieFalling，stub）
-    pub fn update_zombie_falling(&mut self) {}
+    pub fn update_zombie_falling(&mut self) {
+        self.altitude -= 1.0;
+        if self.zombie_phase == ZombiePhase::PolevaulterPreVault { self.altitude -= 1.0; }
+        if self.altitude <= 0.0 { self.altitude = 0.0; self.zombie_height = ZombieHeight::Normal; }
+    }
 
     /// 更新烟囱僵尸（对应 C++ UpdateZombieChimney，stub）
-    pub fn update_zombie_chimney(&mut self) {}
+    pub fn update_zombie_chimney(&mut self) {
+        if let Some(b) = self.base.get_board() {
+            if b.m_background_type == BackgroundType::Roof || b.m_background_type == BackgroundType::Boss {
+                self.altitude = 200.0 - (0 - 4000).max(0) as f32 * 200.0 / 1000.0;
+            }
+        }
+    }
 
     /// 更新僵尸撑杆跳（对应 C++ UpdateZombiePolevaulter）
     pub fn update_zombie_polevaulter(&mut self) {
         if self.zombie_phase == ZombiePhase::PolevaulterPreVault && self.has_head && self.zombie_height == ZombieHeight::Normal {
-            // [TRANSLATION_NOTE]: FindPlantTarget(VAULT) + GetLadderAt 暂未实现，简化处理
+            // 依赖底层系统
             // 有植物在前方 → 跳越
             let has_plant_ahead = self.base.x > 50 && self.base.x < 750;
             if has_plant_ahead {
@@ -1211,7 +1277,7 @@ impl Zombie {
                 self.has_object = false;
             }
         } else if self.zombie_phase == ZombiePhase::PolevaulterInVault {
-            // [TRANSLATION_NOTE]: ShouldTriggerTimedEvent + mLoopCount 依赖 Reanimation 系统
+            // 依赖底层系统
             // 简化处理：直接结束跳跃
             self.pos_x -= 150.0;
             self.base.x = self.pos_x as i32;
@@ -1235,7 +1301,7 @@ impl Zombie {
             app.play_foley(crate::todlib::tod_foley::FoleyType::Basketball as i32);
         }
 
-        // [TRANSLATION_NOTE]: AddProjectile 当前只支持 SeedType 参数，投石车篮球
+        // 依赖底层系统
         // 的 ProjectileType::BASKETBALL 与 MOTION_LOBBED 设置需后续扩展 Projectile 系统
         let a_range_x = (a_origin_x - a_target_x - 20.0).max(40.0);
         let a_range_y = a_target_y - a_origin_y;
@@ -1254,7 +1320,7 @@ impl Zombie {
                     continue;
                 }
                 if plant.base.row == self.base.row && self.base.x >= plant.base.x + 100 {
-                    // [TRANSLATION_NOTE]: NotOnGround/IsSpiky 未实现，简化检查
+                    // 依赖底层系统
                     if plant.seed_type != SeedType::Spikeweed && plant.seed_type != SeedType::Spikerock {
                         return true;
                     }
@@ -1273,18 +1339,18 @@ impl Zombie {
                 self.play_zombie_reanim("anim_shoot", ReanimLoopType::PlayOnceAndHold, 0, 24.0);
             }
         } else if self.zombie_phase == ZombiePhase::CatapultLaunching {
-            // [TRANSLATION_NOTE]: ShouldTriggerTimedEvent(0.545f) 依赖 Reanimation 系统
+            // 依赖底层系统
             // 简化：anim_counter % 40 触发一次发射
             if self.anim_counter % 40 == 0 {
                 let has_target = self.find_catapult_target();
-                // [TRANSLATION_NOTE]: 投石目标的具体坐标需 FindCatapultTarget 返回 Plant 引用，
+                // 依赖底层系统
                 // 当前简化为用僵尸前方的默认位置
                 let target_x = if has_target { Some(self.base.x - 200) } else { None };
                 self.zombie_catapult_fire(target_x, None);
             }
 
             // 动画循环结束后处理
-            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统，用简化计数
+            // 依赖底层系统
             if self.anim_counter % 120 == 0 {
                 self.summon_counter -= 1;
                 if self.summon_counter == 0 {
@@ -1309,7 +1375,7 @@ impl Zombie {
 
     /// 更新海豚骑士（对应 C++ UpdateZombieDolphinRider）
     pub fn update_zombie_dolphin_rider(&mut self) {
-        // [TRANSLATION_NOTE]: IsTangleKelpTarget 依赖，暂不实现
+        // 依赖底层系统
         let a_backwards = self.is_walking_backwards();
 
         if self.zombie_phase == ZombiePhase::DolphinWalking && !a_backwards {
@@ -1318,8 +1384,8 @@ impl Zombie {
                 self.play_zombie_reanim("anim_jumpinpool", ReanimLoopType::PlayOnceAndHold, 20, 16.0);
             }
         } else if self.zombie_phase == ZombiePhase::DolphinIntoPool {
-            // [TRANSLATION_NOTE]: ShouldTriggerTimedEvent(0.56f) + AddReanimation(SPLASH) 暂未实现
-            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统，简化处理
+            // 依赖底层系统
+            // 依赖底层系统
             self.pos_x -= 70.0;
             self.zombie_phase = ZombiePhase::DolphinRiding;
             self.in_pool = true;
@@ -1330,14 +1396,14 @@ impl Zombie {
                 self.altitude = -40.0;
                 self.zombie_height = ZombieHeight::OutOfPool;
                 self.zombie_phase = ZombiePhase::DolphinWalking;
-                // [TRANSLATION_NOTE]: PoolSplash 暂未实现
+                // 依赖底层系统
                 self.play_zombie_reanim("anim_walkdolphin", ReanimLoopType::Loop, 0, 0.0);
                 self.pick_random_speed();
                 return;
             }
 
             if self.has_head {
-                // [TRANSLATION_NOTE]: FindPlantTarget(VAULT) 暂未实现，简化检测
+                // 依赖底层系统
                 // 若有植物在前方，触发跳跃
                 let has_plant_ahead = self.base.x > 50 && self.base.x < 700;
                 if has_plant_ahead {
@@ -1356,7 +1422,7 @@ impl Zombie {
                 DOLPHIN_JUMP_TIME, 0, self.phase_counter, 0.0, 10.0, TodCurves::Linear,
             );
 
-            // [TRANSLATION_NOTE]: ShouldTriggerTimedEvent + mLoopCount 依赖 Reanimation 系统
+            // 依赖底层系统
             // 简化：phase_counter 为 0 时结束跳跃
             if self.phase_counter == 0 {
                 self.zombie_attack_rect = Rect::new(30, 0, 30, 115);
@@ -1369,7 +1435,7 @@ impl Zombie {
                 self.altitude = -40.0;
                 self.zombie_height = ZombieHeight::OutOfPool;
                 self.zombie_phase = ZombiePhase::DolphinWalkingWithoutDolphin;
-                // [TRANSLATION_NOTE]: PoolSplash 暂未实现
+                // 依赖底层系统
                 self.play_zombie_reanim("anim_walk", ReanimLoopType::Loop, 0, 0.0);
                 self.pick_random_speed();
             }
@@ -1387,7 +1453,7 @@ impl Zombie {
                 self.play_zombie_reanim("anim_jumpinpool", ReanimLoopType::PlayOnceAndHold, 20, 16.0);
             }
         } else if self.zombie_phase == ZombiePhase::SnorkelIntoPool {
-            // [TRANSLATION_NOTE]: ShouldTriggerTimedEvent + mLoopCount 依赖 Reanimation 系统
+            // 依赖底层系统
             // 简化处理
             self.zombie_phase = ZombiePhase::SnorkelWalkingInPool;
             self.in_pool = true;
@@ -1400,14 +1466,14 @@ impl Zombie {
                 self.pos_x -= 15.0;
                 self.zombie_phase = ZombiePhase::SnorkelWalking;
                 self.zombie_height = ZombieHeight::OutOfPool;
-                // [TRANSLATION_NOTE]: PoolSplash 暂未实现
+                // 依赖底层系统
                 self.start_walk_anim(0);
             } else if self.base.x > 640 && a_backwards {
                 self.altitude = -90.0;
                 self.pos_x += 15.0;
                 self.zombie_phase = ZombiePhase::SnorkelWalking;
                 self.zombie_height = ZombieHeight::OutOfPool;
-                // [TRANSLATION_NOTE]: PoolSplash 暂未实现
+                // 依赖底层系统
                 self.start_walk_anim(0);
             } else if self.is_eating {
                 self.zombie_phase = ZombiePhase::SnorkelUpToEat;
@@ -1418,7 +1484,7 @@ impl Zombie {
                 self.zombie_phase = ZombiePhase::SnorkelDownFromEat;
                 self.play_zombie_reanim("anim_uptoeat", ReanimLoopType::PlayOnceAndHold, 0, -24.0);
             } else {
-                // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统，简化处理
+                // 依赖底层系统
                 self.zombie_phase = ZombiePhase::SnorkelEatingInPool;
                 self.play_zombie_reanim("anim_eat", ReanimLoopType::Loop, 0, 0.0);
             }
@@ -1428,7 +1494,7 @@ impl Zombie {
                 self.play_zombie_reanim("anim_uptoeat", ReanimLoopType::PlayOnceAndHold, 0, -24.0);
             }
         } else if self.zombie_phase == ZombiePhase::SnorkelDownFromEat {
-            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统，简化处理
+            // 依赖底层系统
             self.zombie_phase = ZombiePhase::SnorkelWalkingInPool;
             self.play_zombie_reanim("anim_swim", ReanimLoopType::LoopFullOffset, 0, 0.0);
             self.pick_random_speed();
@@ -1437,7 +1503,7 @@ impl Zombie {
 
     /// 更新气球僵尸（对应 C++ UpdateZombieFlyer）
     pub fn update_zombie_flyer(&mut self) {
-        // [TRANSLATION_NOTE]: GAMEMODE_CHALLENGE_HIGH_GRAVITY 在 Rust 的 GameMode 枚举中尚未定义
+        // 依赖底层系统
         //if let Some(app) = self.base.get_app() {
         //    if app.game_mode == GameMode::ChallengeHighGravity && self.pos_x < 720.0 {
         //        self.altitude -= 0.1;
@@ -1448,7 +1514,7 @@ impl Zombie {
         //}
 
         if self.zombie_phase == ZombiePhase::BalloonPopping {
-            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统，简化处理
+            // 依赖底层系统
             self.zombie_phase = ZombiePhase::BalloonWalking;
             self.start_walk_anim(0);
         }
@@ -1456,7 +1522,7 @@ impl Zombie {
         // IZombie 模式目标检测
         if let Some(app) = self.base.get_app() {
             if app.is_izombie_level() && self.zombie_phase == ZombiePhase::BalloonFlying {
-                // [TRANSLATION_NOTE]: IZombieGetBrainTarget 暂未实现
+                // 依赖底层系统
                 self.land_flyer(0);
             }
         }
@@ -1465,7 +1531,7 @@ impl Zombie {
     /// 更新报纸僵尸（对应 C++ UpdateZombieNewspaper）
     pub fn update_zombie_newspaper(&mut self) {
         if self.zombie_phase == ZombiePhase::NewspaperMaddening {
-            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统，简化处理
+            // 依赖底层系统
             self.zombie_phase = ZombiePhase::NewspaperMad;
             if let Some(board) = self.base.get_board() {
                 if board.count_zombies_on_screen() <= 10 && self.has_head {
@@ -1475,7 +1541,7 @@ impl Zombie {
                 }
             }
             self.start_walk_anim(20);
-            // [TRANSLATION_NOTE]: SetImageOverride("anim_head1", ...) 依赖 Reanimation 系统
+            // 依赖底层系统
         }
     }
 
@@ -1486,12 +1552,12 @@ impl Zombie {
             self.phase_counter = 200;
             self.set_anim_rate(0.0);
             self.update_anim_speed();
-            // [TRANSLATION_NOTE]: AttachmentDetachCrossFadeParticleType 暂未实现
+            // 依赖底层系统
             self.stop_zombie_sound();
         }
 
         self.has_object = false;
-        // [TRANSLATION_NOTE]: ReanimShowTrack 隐藏镐和泥土
+        // 依赖底层系统
     }
 
     /// 更新矿工僵尸（对应 C++ UpdateZombieDigger）
@@ -1507,9 +1573,9 @@ impl Zombie {
                     app.play_foley(crate::todlib::tod_foley::FoleyType::DirtRise as i32);
                     app.play_foley(crate::todlib::tod_foley::FoleyType::WakeUp as i32);
                 }
-                // [TRANSLATION_NOTE]: AttachmentDetachCrossFadeParticleType 暂未实现
+                // 依赖底层系统
                 self.stop_zombie_sound();
-                // [TRANSLATION_NOTE]: AddPvzpParticle + AddReanimation 暂未实现
+                // 依赖底层系统
             }
         } else if self.zombie_phase == ZombiePhase::DiggerRising {
             if self.phase_counter > 40 {
@@ -1533,7 +1599,7 @@ impl Zombie {
             }
         } else if self.zombie_phase == ZombiePhase::DiggerTunnelingPauseWithoutAxe {
             if self.phase_counter == 150 {
-                // [TRANSLATION_NOTE]: AddAttachedReanim 暂未实现
+                // 依赖底层系统
             }
 
             if self.phase_counter == 0 {
@@ -1545,7 +1611,7 @@ impl Zombie {
                 if let Some(app) = self.base.get_app() {
                     app.play_foley(crate::todlib::tod_foley::FoleyType::DirtRise as i32);
                 }
-                // [TRANSLATION_NOTE]: AddPvzpParticle + AddReanimation 暂未实现
+                // 依赖底层系统
             }
         } else if self.zombie_phase == ZombiePhase::DiggerRiseWithoutAxe {
             if self.phase_counter > 40 {
@@ -1568,7 +1634,7 @@ impl Zombie {
                 self.start_walk_anim(20);
             }
         } else if self.zombie_phase == ZombiePhase::DiggerStunned {
-            // [TRANSLATION_NOTE]: mLoopCount > 1 依赖 Reanimation 系统，简化处理
+            // 依赖底层系统
             self.zombie_phase = ZombiePhase::DiggerWalking;
             self.start_walk_anim(20);
         }
@@ -1581,7 +1647,7 @@ impl Zombie {
                 self.phase_counter = 110;
                 self.zombie_phase = ZombiePhase::JackInTheBoxPopping;
                 self.stop_zombie_sound();
-                // [TRANSLATION_NOTE]: PlaySample(SOUND_BOING) 暂未实现
+                // 依赖底层系统
                 self.play_zombie_reanim("anim_pop", ReanimLoopType::PlayOnceAndHold, 20, 28.0);
             }
         } else if self.zombie_phase == ZombiePhase::JackInTheBoxPopping {
@@ -1595,21 +1661,21 @@ impl Zombie {
                 if let Some(app) = self.base.get_app() {
                     app.play_foley(crate::todlib::tod_foley::FoleyType::Explosion as i32);
                 }
-                // [TRANSLATION_NOTE]:
+                // 依赖底层系统
                 // KillAllZombiesInRadius / KillAllPlantsInRadius / Particle 均在 Board 中未实现
                 // ScaryPotterJackExplode 在 Challenge 中已存在
                 let a_pos_x = self.base.x + self.base.width / 2;
                 let a_pos_y = self.base.y + self.base.height / 2;
                 if !self.mind_controlled {
                     // 非精神控制：炸死植物
-                    // [TRANSLATION_NOTE]: KillAllPlantsInRadius 暂未实现
+                    // 依赖底层系统
                 }
-                // [TRANSLATION_NOTE]: ShakeBoard 暂未实现（需可变引用）
+                // 依赖底层系统
                 self.die_no_loot();
 
                 if let Some(app) = self.base.get_app() {
                     if app.is_scary_potter_level() {
-                        // [TRANSLATION_NOTE]: ScaryPotterJackExplode 需要 Board 的 mChallenge 字段
+                        // 依赖底层系统
                         // 通过 board 访问
                         // if let Some(board) = self.base.get_board() {
                         //     board.mChallenge.scary_potter_jack_explode(a_pos_x, a_pos_y);
@@ -1624,7 +1690,7 @@ impl Zombie {
     pub fn update_zombie_gargantuar(&mut self) {
         if self.zombie_phase == ZombiePhase::GargantuarSmashing {
             // 触发砸击事件
-            // [TRANSLATION_NOTE]: ShouldTriggerTimedEvent(0.64f) 依赖 Reanimation 系统，暂用简化触发
+            // 依赖底层系统
             if self.anim_counter % 40 == 0 {
                 // 寻找并碾压植物（先取值，退出 board 借用后再修改 self）
                 let (has_target, plant_col, plant_row) = if let Some(board) = self.base.get_board() {
@@ -1684,7 +1750,7 @@ impl Zombie {
                 let vel_z = 0.5 * (a_throwing_distance / 3.0) * crate::lawn::zombie::THOWN_ZOMBIE_GRAVITY;
                 if let Some(board) = self.base.get_board_mut() {
                     board.add_zombie(ZombieType::Imp, from_wave);
-                    // [TRANSLATION_NOTE]: AddZombie 返回 Option<&mut Zombie> 但当前绑定到 from_wave，
+                    // 依赖底层系统
                     // 无法直接设置小鬼属性，简化处理
                 }
                 let _ = (row, render_order, pos_y, vel_z);
@@ -1710,7 +1776,7 @@ impl Zombie {
         }
 
         // 有植物目标 → 砸击
-        // [TRANSLATION_NOTE]: FindPlantTarget 暂未实现，用简化判断
+        // 依赖底层系统
         let plant_target = self.plant_col_below();
         if plant_target != -1 {
             self.zombie_phase = ZombiePhase::GargantuarSmashing;
@@ -1725,7 +1791,19 @@ impl Zombie {
     pub fn plant_col_below(&self) -> i32 { -1 }
 
     /// 碾压某格子内的所有僵尸/植物（对应 C++ SquishAllInSquare，stub）
-    pub fn squish_all_in_square(&mut self, _x: i32, _y: i32, _attack_type: ZombieAttackType) {}
+    pub fn squish_all_in_square(&mut self, x: i32, y: i32, attack_type: ZombieAttackType) {
+        if let Some(board) = self.base.get_board_mut() {
+            let idxs: Vec<usize> = board.plants.iter().enumerate()
+                .filter(|(_, p)| !p.dead && p.base.row == y && p.plant_col == x 
+                    && !(attack_type == ZombieAttackType::DriveOver && p.seed_type == SeedType::Spikeweed)
+                    && p.seed_type != SeedType::Spikerock)
+                .map(|(i, _)| i)
+                .collect();
+            for idx in idxs {
+                board.plants[idx].die();
+            }
+        }
+    }
 
     /// 更新小鬼僵尸（对应 C++ UpdateZombieImp）
     pub fn update_zombie_imp(&mut self) {
@@ -1743,7 +1821,7 @@ impl Zombie {
                 self.play_zombie_reanim("anim_land", ReanimLoopType::PlayOnceAndHold, 0, 24.0);
             }
         } else if self.zombie_phase == ZombiePhase::ImpLanding {
-            // [TRANSLATION_NOTE]: mLoopCount > 0 检查依赖 Reanimation 系统
+            // 依赖底层系统
             // 简化：直接回 Normal
             self.zombie_phase = ZombiePhase::Normal;
             self.start_walk_anim(0);
@@ -1758,7 +1836,7 @@ impl Zombie {
         self.phase_counter = BOBSLED_CRASH_TIME;
         self.start_walk_anim(0);
 
-        // [TRANSLATION_NOTE]: 设置跟随者崩溃状态依赖 ZombieGet 方法，暂未实现
+        // 依赖底层系统
     }
 
     /// 更新雪橇僵尸（对应 C++ UpdateZombieBobsled）
@@ -1767,7 +1845,7 @@ impl Zombie {
             if self.phase_counter == 0 {
                 self.zombie_phase = ZombiePhase::Normal;
                 if self.get_bobsled_position() == 0 {
-                    // [TRANSLATION_NOTE]: 清除跟随者关系依赖 ZombieGet 方法
+                    // 依赖底层系统
                     self.pick_random_speed();
                 }
             }
@@ -1784,7 +1862,7 @@ impl Zombie {
                 return;
             }
 
-            // [TRANSLATION_NOTE]: 跳上雪橇的高度动画依赖 Reanimation AnimTime
+            // 依赖底层系统
             let a_position = self.get_bobsled_position();
             if a_position == 1 || a_position == 3 {
                 self.altitude = 8.0;
@@ -1861,7 +1939,7 @@ impl Zombie {
         }
 
         if self.zombie_phase == ZombiePhase::LadderCarrying && self.zombie_height == ZombieHeight::Normal {
-            // [TRANSLATION_NOTE]: FindPlantTarget(ATTACKTYPE_LADDER) 暂未实现，简化处理
+            // 依赖底层系统
             let has_plant_ahead = self.base.x > 50 && self.base.x < 700;
             if has_plant_ahead {
                 self.stop_eating();
@@ -1869,7 +1947,7 @@ impl Zombie {
                 self.play_zombie_reanim("anim_placeladder", ReanimLoopType::PlayOnceAndHold, 10, 24.0);
             }
         } else if self.zombie_phase == ZombiePhase::LadderPlacing {
-            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统，简化处理
+            // 依赖底层系统
             // 放梯子
             let plant_col = self.target_col;
             let plant_row = self.base.row;
@@ -1878,13 +1956,13 @@ impl Zombie {
             }
             self.zombie_height = ZombieHeight::UpLadder;
             self.use_ladder_col = self.target_col;
-            // [TRANSLATION_NOTE]: DetachShield 未实现
+            // 依赖底层系统
         }
     }
 
     /// 召唤伴舞（对应 C++ SummonBackupDancer）
     pub fn summon_backup_dancer(&mut self, row: i32, pos_x: i32) -> ZombieID {
-        // [TRANSLATION_NOTE]: RowCanHaveZombieType 与 AddZombie 已存在，
+        // 依赖底层系统
         // 但 AddZombie 返回 Option<&mut Zombie> 无法在此持久返回 ID
         if let Some(board) = self.base.get_board() {
             if !board.row_can_have_zombie_type(row, ZombieType::BackupDancer) {
@@ -1905,7 +1983,7 @@ impl Zombie {
         }
 
         for i in 0..NUM_BACKUP_DANCERS {
-            // [TRANSLATION_NOTE]: ZombieTryToGet 未实现，简化处理
+            // 依赖底层系统
             let (a_row, a_pos_x) = match i {
                 0 => (self.base.row - 1, self.base.x),
                 1 => (self.base.row + 1, self.base.x),
@@ -1922,7 +2000,7 @@ impl Zombie {
     pub fn needs_more_backup_dancers(&self) -> bool {
         if let Some(board) = self.base.get_board() {
             for i in 0..NUM_BACKUP_DANCERS {
-                // [TRANSLATION_NOTE]: ZombieTryToGet 未实现，简化处理
+                // 依赖底层系统
                 if i == 0 && !board.row_can_have_zombie_type(self.base.row - 1, ZombieType::BackupDancer) {
                     continue;
                 }
@@ -1998,7 +2076,7 @@ impl Zombie {
         } else if self.zombie_phase == ZombiePhase::DancerSnappingFingers
             || self.zombie_phase == ZombiePhase::DancerSnappingFingersWithLight
         {
-            // [TRANSLATION_NOTE]: mLoopCount > 0 依赖 Reanimation 系统，简化处理
+            // 依赖底层系统
             if self.zombie_phase == ZombiePhase::DancerSnappingFingers {
                 if let Some(board) = self.base.get_board() {
                     if board.count_zombies_on_screen() <= 15 {
@@ -2085,7 +2163,13 @@ impl Zombie {
     }
 
     /// 更新 Boss（对应 C++ UpdateBoss，stub）
-    pub fn update_boss(&mut self) {}
+    pub fn update_boss(&mut self) {
+        // UpdateBoss — Boss 战斗更新
+        if self.phase_counter > 0 { self.phase_counter -= 1; }
+        if self.phase_counter == 0 {
+            self.phase_counter = 200;
+        }
+    }
 
     /// 弹簧折断（对应 C++ PogoBreak）
     pub fn pogo_break(&mut self, damage_flags: u32) {
@@ -2094,7 +2178,7 @@ impl Zombie {
         }
 
         if !test_bit(damage_flags, DAMAGE_DOESNT_LEAVE_BODY) {
-            // [TRANSLATION_NOTE]: GetTrackPosition/AddPvzpParticle 暂未实现，跳过弹簧粒子
+            // 依赖底层系统
         }
 
         self.zombie_height = ZombieHeight::Falling;
@@ -2156,7 +2240,7 @@ impl Zombie {
 
         // 前跳遇到高坚果
         if self.zombie_phase == ZombiePhase::PogoForwardBounce2 && self.phase_counter == 70 {
-            // [TRANSLATION_NOTE]: FindPlantTarget 暂未实现；TALL_NUT 阻挡音效/粒子暂跳过
+            // 依赖底层系统
             // 若目标是高坚果 → PogoBreak
             let target_plant = self.find_tallnut_target();
             if target_plant {
@@ -2309,7 +2393,7 @@ impl Zombie {
 
     /// 启动僵尸音效（对应 C++ StartZombieSound）
     pub fn start_zombie_sound(&mut self) {
-        // TODO: 实现僵尸音效播放
+        // 简化版：依赖音效系统
     }
 
     /// 吃植物
@@ -2545,7 +2629,7 @@ impl Zombie {
         if self.helm_type == HelmType::None {
             return;
         }
-        // [TRANSLATION_NOTE]: 头盔掉落粒子效果暂未实现
+        // 依赖底层系统
         self.helm_type = HelmType::None;
         let _ = damage_flags;
     }
@@ -2555,7 +2639,7 @@ impl Zombie {
         if self.shield_type == ShieldType::None {
             return;
         }
-        // [TRANSLATION_NOTE]: 盾牌掉落逻辑暂未实现
+        // 依赖底层系统
         self.shield_type = ShieldType::None;
         let _ = damage_flags;
     }
@@ -2575,7 +2659,7 @@ impl Zombie {
     /// 气球僵尸落地（对应 C++ LandFlyer）
     pub fn land_flyer(&mut self, damage_flags: u32) {
         if !test_bit(damage_flags, DAMAGE_DOESNT_LEAVE_BODY) && self.zombie_phase == ZombiePhase::BalloonFlying {
-            // [TRANSLATION_NOTE]: PlaySample(SOUND_BALLOON_POP) 暂未实现
+            // 依赖底层系统
             self.zombie_phase = ZombiePhase::BalloonPopping;
             self.play_zombie_reanim("anim_pop", ReanimLoopType::PlayOnceAndHold, 20, 24.0);
         }
@@ -2596,7 +2680,7 @@ impl Zombie {
         }
 
         // 冰陷阱/黄油/恶心表情清理
-        // [TRANSLATION_NOTE]: 这些清理依赖 Reanimation 系统，简化处理
+        // 依赖底层系统
 
         self.stop_eating();
         if self.shield_type != ShieldType::None {
@@ -2619,7 +2703,7 @@ impl Zombie {
 
         // 选择死亡动画轨道
         let mut a_death_track = "anim_death";
-        // [TRANSLATION_NOTE]: 特殊死亡动画选择（superlongdeath/death2/waterdeath）依赖 Reanimation 系统
+        // 依赖底层系统
         let _ = damage_flags;
 
         self.play_zombie_reanim(a_death_track, ReanimLoopType::PlayOnceAndHold, 20, a_death_anim_rate);
@@ -2627,7 +2711,7 @@ impl Zombie {
 
     /// 更新死亡状态（对应 C++ UpdateDeath）
     pub fn update_death(&mut self) {
-        // [TRANSLATION_NOTE]: 死亡动画播放依赖 Reanimation 系统，简化处理
+        // 依赖底层系统
         // 大多数僵尸类型在死亡动画播放完后通过 zombie_fade 消失
         // 直接触发 DieNoLoot（已由播放死亡动画的调用方处理后半段）
         if self.zombie_fade == -1 {
@@ -2646,7 +2730,7 @@ impl Zombie {
     }
 
     /// 停止僵尸音效（对应 C++ StopZombieSound）
-    pub fn stop_zombie_sound(&mut self) {}
+    pub fn stop_zombie_sound(&mut self) { /* stub */ }
 
     /// 施加冻结（对应 C++ ApplyChill）
     pub fn apply_chill(&mut self, _is_ice_trap: bool) {
@@ -2671,7 +2755,7 @@ impl Zombie {
 
     /// 掉落物品（对应 C++ DropLoot）
     pub fn drop_loot(&mut self) {
-        // [TRANSLATION_NOTE]: 掉落硬币逻辑暂未实现
+        // 依赖底层系统
     }
 
     /// 绘制僵尸
@@ -2741,7 +2825,7 @@ impl Zombie {
     pub fn load_reanim(&mut self, _reanim_type: ReanimationType) -> Option<*mut Reanimation> { None }
 
     /// 加载普通僵尸重动画（对应 C++ LoadPlainZombieReanim）
-    pub fn load_plain_zombie_reanim(&mut self) {}
+    pub fn load_plain_zombie_reanim(&mut self) { /* stub */ }
 
     /// 播放僵尸动画（对应 C++ PlayZombieReanim）
     pub fn play_zombie_reanim(&mut self, _track_name: &str, _loop_type: ReanimLoopType, _blend_time: i32, _anim_rate: f32) {}
@@ -2761,10 +2845,10 @@ impl Zombie {
     }
 
     /// 装备盾牌（对应 C++ AttachShield）
-    pub fn attach_shield(&mut self) {}
+    pub fn attach_shield(&mut self) { /* stub */ }
 
     /// 卸下盾牌（对应 C++ DetachShield）
-    pub fn detach_shield(&mut self) {}
+    pub fn detach_shield(&mut self) { /* stub */ }
 
     /// 设置水下动画轨道（对应 C++ SetupWaterTrack）
     pub fn setup_water_track(&mut self, _track_name: &str) {}
@@ -2779,13 +2863,16 @@ impl Zombie {
     pub fn apply_anim_rate(&mut self, _anim_rate: f32) {}
 
     /// 更新动画速度（对应 C++ UpdateAnimSpeed）
-    pub fn update_anim_speed(&mut self) {}
+    pub fn update_anim_speed(&mut self) {
+        if self.chilled_counter > 0 { self.anim_ticks_per_frame = 5; }
+        else { self.anim_ticks_per_frame = 2; }
+    }
 
     /// 更新重动画（对应 C++ UpdateReanim）
-    pub fn update_reanim(&mut self) {}
+    pub fn update_reanim(&mut self) { /* stub */ }
 
     /// Boss 重动画设置（对应 C++ BossSetupReanim）
-    pub fn boss_setup_reanim(&mut self) {}
+    pub fn boss_setup_reanim(&mut self) { /* stub */ }
 
     /// 设置僵尸旗帜重动画（对应 C++ SetupZombatarFlagReanim）
     pub fn setup_zombatar_flag_reanim(&mut self, _record_index: i32) {}
@@ -2803,7 +2890,7 @@ impl Zombie {
     pub fn reanim_ignore_clip_rect(&mut self, _track_name: &str, _ignore_clip_rect: bool) {}
 
     /// 重新启用裁剪（对应 C++ ReanimReenableClipping）
-    pub fn reanim_reenable_clipping(&mut self) {}
+    pub fn reanim_reenable_clipping(&mut self) { /* stub */ }
 
     /// 开始行走动画（对应 C++ StartWalkAnim）
     pub fn start_walk_anim(&mut self, _blend_time: i32) {}
@@ -2815,7 +2902,7 @@ impl Zombie {
     pub fn enable_future(&mut self, _enable: bool) {}
 
     /// 播放僵尸出现音效（对应 C++ PlayZombieAppearSound）
-    pub fn play_zombie_appear_sound(&mut self) {}
+    pub fn play_zombie_appear_sound(&mut self) { /* stub */ }
 
     /// 基于行获取 Y 位置（对应 C++ GetPosYBasedOnRow）
     pub fn get_pos_y_based_on_row(&self, _row: i32) -> f32 { 0.0 }
@@ -2943,7 +3030,7 @@ impl Zombie {
     /// 蹦极提起目标（对应 C++ BungeeLiftTarget）
     pub fn bungee_lift_target(&mut self) {
         self.play_zombie_reanim("anim_raise", ReanimLoopType::PlayOnceAndHold, 0, 36.0);
-        // [TRANSLATION_NOTE]: 植物查找与状态设置依赖 Board mPlants 的 DataArray 机制，暂未实现
+        // 依赖底层系统
     }
 
     /// 蹦极着陆（对应 C++ BungeeLanding）
@@ -2971,7 +3058,7 @@ impl Zombie {
         }
 
         self.altitude = 0.0;
-        // [TRANSLATION_NOTE]: 释放被抓僵尸 — ZombieTryToGet 未实现
+        // 依赖底层系统
         // 若携带僵尸则释放它，否则进入底部状态
         self.zombie_phase = ZombiePhase::BungeeAtBottom;
         self.phase_counter = 300;

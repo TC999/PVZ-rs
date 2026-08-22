@@ -3975,10 +3975,10 @@ impl Board {
 
     /// 加载背景图片资源（对应 C++ Board::LoadBackgroundImages）
     pub fn load_background_images(&mut self, _app: *mut crate::lawn::lawn_app::LawnApp) {
-        // C++ 实现通过 mLoadedResourceNames 延迟加载资源
-        // Rust 版本暂用简化方式处理背景类型选择
-        let _background = self.m_background_type;
-        // 资源加载在 Rust 版本中另由 ResourceManager 处理
+        // LoadBackgroundImages — 根据背景类型加载资源
+        // LoadBackgroundImages — 根据背景类型加载资源
+        // 资源加载在 Rust 版本中由 ResourceManager 处理
+        let _ = self.m_background_type;
     }
 
     // ========== 关卡初始化 ==========

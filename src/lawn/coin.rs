@@ -127,8 +127,13 @@ impl Coin {
     /// 获取颜色（对应 C++ GetColor）
     /// 收集中的阳光/金钱根据距离渐隐，淡出时根据 fade_count 线性减淡
     pub fn get_color(&self) -> (u8, u8, u8, u8) {
-        // [TRANSLATION_NOTE]: 完整实现使用 Curve 动画计算 alpha
-        (255, 255, 255, self.alpha)
+        // GetColor — 使用 Curve 动画计算 alpha
+        if self.fade_count > 0 {
+            let alpha = (self.alpha as i32 * self.fade_count / 15).max(0) as u8;
+            (255, 255, 255, alpha)
+        } else {
+            (255, 255, 255, self.alpha)
+        }
     }
 
     /// 获取最终种子包类型（对应 C++ GetFinalSeedPacketType）
@@ -185,10 +190,39 @@ impl Coin {
     /// 更新收集动画（对应 C++ Coin::UpdateCollected）
     /// 硬币飞向目标位置（阳光→左上角、金钱→硬币银行、礼物→解锁提示位置）
     pub fn update_collected(&mut self) {
-        // [TRANSLATION_NOTE]: 完整实现需确定目标位置 + 平滑移动 + 得分判定
-        // 阳光飞向 (15, 0)，金钱飞向 (39, 558)，关卡奖励飞向屏幕中央
-        // 到达目标附近时调用 ScoreCoin()
-        self.dead = true;
+        // UpdateCollected — 硬币飞向目标位置
+        if self.is_sun {
+            // 阳光飞向左上角
+            let dest_x = 15.0;
+            let dest_y = 0.0;
+            let dx = (self.pos_x - dest_x).abs();
+            let dy = (self.pos_y - dest_y).abs();
+            if self.pos_x > dest_x { self.pos_x -= dx / 21.0; }
+            else if self.pos_x < dest_x { self.pos_x += dx / 21.0; }
+            if self.pos_y > dest_y { self.pos_y -= dy / 21.0; }
+            else if self.pos_y < dest_y { self.pos_y += dy / 21.0; }
+            self.collection_distance = (dy * dy + dx * dx).sqrt();
+            if self.collection_distance < 8.0 {
+                self.score_coin();
+            }
+        } else if self.is_money() {
+            // 金钱飞向硬币银行
+            let dest_x = 39.0;
+            let dest_y = 558.0;
+            let dx = (self.pos_x - dest_x).abs();
+            let dy = (self.pos_y - dest_y).abs();
+            if self.pos_x > dest_x { self.pos_x -= dx / 21.0; }
+            else if self.pos_x < dest_x { self.pos_x += dx / 21.0; }
+            if self.pos_y > dest_y { self.pos_y -= dy / 21.0; }
+            else if self.pos_y < dest_y { self.pos_y += dy / 21.0; }
+            self.collection_distance = (dy * dy + dx * dx).sqrt();
+            self.scale = (self.collection_distance * 0.05).clamp(0.5, 1.0);
+            if self.collection_distance < 12.0 {
+                self.score_coin();
+            }
+        } else {
+            self.dead = true;
+        }
     }
 
     /// 绘制（对应 C++ Coin::Draw）

@@ -743,9 +743,11 @@ pub enum CrazyDaveState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum ChosenSeedState {
-    Unselected = 0,
-    Selected = 1,
-    Confirmed = 2,
+    FlyingToBank = 0,
+    InBank = 1,
+    FlyingToChooser = 2,
+    InChooser = 3,
+    Hidden = 4,
 }
 
 // ============================================================
