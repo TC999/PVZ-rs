@@ -345,18 +345,15 @@ impl CursorPreview {
         g.set_colorize_images(false);
     }
 
-    /// 计算植物绘制高度偏移（简化版 PlantDrawHeightOffset）
-    /// 原始 C++ 实现在 Plant.cpp 中，此处做基本计算
+    /// 计算植物绘制高度偏移（对应 C++ CursorObject 调用的 PlantDrawHeightOffset(mBoard, nullptr, ...)）
     fn plant_draw_height_offset(
         &self,
-        _board: &Board,
-        _seed_type: SeedType,
-        _grid_x: i32,
-        _grid_y: i32,
+        board: &Board,
+        seed_type: SeedType,
+        grid_x: i32,
+        grid_y: i32,
     ) -> f32 {
-        // 完整实现在 Plant.cpp 中基于种子类型和背景类型计算偏移
-        // 此处返回默认值 0.0，待 PlantDrawHeightOffset 翻译后替换
-        0.0
+        crate::lawn::plant::Plant::plant_draw_height_offset(Some(board), None, seed_type, grid_x, grid_y)
     }
 }
 
