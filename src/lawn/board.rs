@@ -1031,8 +1031,8 @@ impl Board {
         self.coins.push(coin);
     }
 
-    /// 添加子弹
-    pub fn add_projectile(&mut self, x: f32, y: f32, row: i32, seed_type: SeedType) {
+    /// 添加子弹，返回新子弹在 mProjectiles 中的下标
+    pub fn add_projectile(&mut self, x: f32, y: f32, row: i32, seed_type: SeedType) -> usize {
         let mut proj = Projectile::new();
         proj.projectile_initialize(x, y, row, seed_type);
         if let Some(app) = self.app {
@@ -1040,6 +1040,7 @@ impl Board {
         }
         proj.base.board = Some(self as *mut Board);
         self.projectiles.push(proj);
+        self.projectiles.len() - 1
     }
 
     /// 添加植物到棋盘
@@ -1315,13 +1316,119 @@ impl Board {
     }
 
     /// 绘制背景
-    fn draw_background(&self, _g: &Graphics) {
-        // 根据背景类型绘制草地/夜晚/水池/屋顶等
+    fn draw_background(&self, g: &mut Graphics) {
+        // 对应 C++ Board::DrawBackdrop：
+        // 1) 按背景类型绘制背景图
+        // 2) 绘制草地网格线（辅助显示格子边界）
+        let bg_path = match self.m_background_type {
+            BackgroundType::Day => Some("images/background1.jpg"),
+            BackgroundType::Night => Some("images/background2.jpg"),
+            BackgroundType::Pool => Some("images/background3.jpg"),
+            BackgroundType::Fog => Some("images/background4.jpg"),
+            BackgroundType::Roof => Some("images/background5.jpg"),
+            BackgroundType::Boss => Some("images/background6boss.jpg"),
+            BackgroundType::MushroomGarden => Some("images/background_mushroomgarden.jpg"),
+            BackgroundType::Greenhouse => Some("images/background_greenhouse.jpg"),
+            BackgroundType::Zombiquarium => Some("images/aquarium1.jpg"),
+            _ => None,
+        };
+
+        if let Some(path) = bg_path {
+            if let Some(img_ptr) = crate::todlib::reanim_loader::load_image_by_path(path) {
+                let img = unsafe { &*img_ptr };
+                if img.width > 0 && img.height > 0 {
+                    // 花园类背景从 (0,0) 绘制，普通草坪从 -BOARD_OFFSET 绘制（对齐 9 列草坪）
+                    let is_garden = matches!(self.m_background_type,
+                        BackgroundType::MushroomGarden
+                        | BackgroundType::Greenhouse
+                        | BackgroundType::Zombiquarium);
+                    let draw_x = if is_garden { 0 } else { -BOARD_OFFSET };
+                    g.draw_image_f_xy(img, draw_x as f32, 0.0);
+                }
+            }
+        }
+
+        // 草地网格线（半透明白，便于观察格子边界；对应原版草坪网格）
+        g.set_color(&Color::new(255, 255, 255, 36));
+        let rows = if self.stage_has_6_rows() { 6 } else { 5 };
+        let bottom_y = LAWN_YMIN + rows * 85 + 20;
+        for col in 0..=MAX_GRID_SIZE_X as i32 {
+            let x = LAWN_XMIN + col * 80;
+            g.draw_line(x, LAWN_YMIN, x, bottom_y);
+        }
+        for row in 0..=rows {
+            let y = LAWN_YMIN + row * 85;
+            g.draw_line(LAWN_XMIN, y, LAWN_XMIN + MAX_GRID_SIZE_X as i32 * 80, y);
+        }
     }
 
-    /// 绘制 UI
-    fn draw_ui(&self, _g: &Graphics) {
-        // 绘制阳光数量、种子选择器等
+    /// 绘制 UI（对应 C++ Board::DrawUIBottom + DrawShovel + 阳光计数）
+    fn draw_ui(&self, g: &mut Graphics) {
+        // 种子槽背景
+        if let Some(img_ptr) = crate::todlib::reanim_loader::load_image_by_path("images/seedbank.png") {
+            let img = unsafe { &*img_ptr };
+            if img.width > 0 {
+                g.draw_image_f_xy(img, 0.0, 490.0);
+            }
+        }
+
+        // 每个种子槽（x 按 get_seed_packet_position_x：80 + index*70）
+        for packet in &self.seed_bank {
+            if packet.seed_type == SeedType::None {
+                continue;
+            }
+            let x = self.get_seed_packet_position_x(packet.packet_index);
+            let y = packet.y;
+            // 包背景
+            g.set_color(&Color::new(48, 74, 38, 255));
+            g.fill_rect_xywh(x, y, packet.width, packet.height);
+            // 成本数字（位图字体，失败回退 draw_string）
+            let cost = self.get_current_plant_cost(packet.seed_type, packet.imitater_type);
+            let cost_text = format!("{}", cost);
+            if !self.draw_ui_text(g, &cost_text, x + 8, y + packet.height - 8, &Color::new(255, 255, 255, 255)) {
+                g.draw_string(&cost_text, x + 8, y + packet.height - 8);
+            }
+        }
+
+        // 阳光计数（sunbank 图 + 数字）
+        if let Some(img_ptr) = crate::todlib::reanim_loader::load_image_by_path("images/sunbank.png") {
+            let img = unsafe { &*img_ptr };
+            if img.width > 0 {
+                g.draw_image_f_xy(img, 0.0, 500.0);
+            }
+        }
+        let sun_text = format!("{}", self.m_sun_money);
+        if !self.draw_ui_text(g, &sun_text, 34, 540, &Color::new(0, 0, 0, 255)) {
+            g.draw_string(&sun_text, 34, 540);
+        }
+
+        // 铲子按钮（对应 C++ DrawShovel）
+        if self.m_show_shovel {
+            // C++ GetShovelButtonRect: x = GetSeedBankExtraWidth() + 456, y = 0
+            let bx = self.get_seed_bank_extra_width() + 456;
+            if let Some(img_ptr) = crate::todlib::reanim_loader::load_image_by_path("images/shovelbank.png") {
+                let img = unsafe { &*img_ptr };
+                if img.width > 0 {
+                    g.draw_image_f_xy(img, bx as f32, 0.0);
+                }
+            }
+            if let Some(img_ptr) = crate::todlib::reanim_loader::load_image_by_path("images/shovel.png") {
+                let img = unsafe { &*img_ptr };
+                if img.width > 0 {
+                    g.draw_image_f_xy(img, (bx - 7) as f32, -3.0);
+                }
+            }
+        }
+    }
+
+    /// 用位图字体绘制 UI 文本（成功返回 true；字体未加载返回 false）
+    fn draw_ui_text(&self, g: &mut Graphics, text: &str, x: i32, y: i32, color: &Color) -> bool {
+        if let Some(font_ptr) = crate::framework::graphics::bitmap_font::load_bitmap_font("continuumbold14") {
+            let font = unsafe { &*font_ptr };
+            font.draw_text(g, x, y, text, color);
+            return true;
+        }
+        false
     }
 
     /// 绘制淡出效果（对应 C++ DrawFadeOut）
