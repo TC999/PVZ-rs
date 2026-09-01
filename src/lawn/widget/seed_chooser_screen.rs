@@ -163,7 +163,17 @@ impl SeedChooserScreen {
         } }
         false
     }
-    pub fn check_seed_upgrade(&self, _to: SeedType, _from: SeedType) -> bool { true }
+    pub fn check_seed_upgrade(&self, to: SeedType, from: SeedType) -> bool {
+        // 对应 C++ SeedChooserScreen::CheckSeedUpgrade
+        let a_survival = self.app.map_or(false, |app| unsafe { (*app).is_survival_mode() });
+        if a_survival || !self.picked_plant_type(to) || self.picked_plant_type(from) {
+            return true;
+        }
+
+        // [TRANSLATION_NOTE]: C++ 用 Plant::GetNameString 构建 [SEED_CHOOSER_UPGRADE_WARNING] 文本后弹窗；
+        // Rust 侧字符串翻译与弹窗未完全移植，直接调用 display_repick_warning_dialog
+        self.display_repick_warning_dialog("")
+    }
     pub fn on_start_button(&mut self) {
         // OnStartButton — 简化版
         self.close_seed_chooser();

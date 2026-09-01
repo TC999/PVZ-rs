@@ -506,13 +506,46 @@ impl LawnApp {
     // ==================== 游戏对象管理 ====================
 
     /// 添加动画（对应 C++ AddReanimation）
-    pub fn add_reanimation(&mut self, _x: f32, _y: f32, _render_order: i32, _type: i32) -> Option<*mut Reanimation> { None }
+    pub fn add_reanimation(&mut self, x: f32, y: f32, render_order: i32, reanim_type: i32) -> Option<*mut Reanimation> {
+        // [TRANSLATION_NOTE]: render_order 存储在 Reanimation 的 extra 字段（待渲染层系统接入）
+        let _ = render_order;
+        let reanim_type = unsafe { std::mem::transmute::<i32, ReanimationType>(reanim_type) };
+        if let Some(es) = self.effect_system.as_mut() {
+            let mut reanim = Reanimation::new();
+            reanim.reanimation_initialize_type(x, y, reanim_type);
+            let id = es.add_reanimation(reanim);
+            let idx = id as usize;
+            if idx < es.reanimations.len() {
+                return Some(&mut es.reanimations[idx] as *mut Reanimation);
+            }
+        }
+        None
+    }
 
     /// 获取动画（对应 C++ ReanimationGet）
-    pub fn reanimation_get(&self, _id: ReanimationID) -> Option<&Reanimation> { None }
+    pub fn reanimation_get(&self, id: ReanimationID) -> Option<&Reanimation> {
+        self.effect_system.as_ref().and_then(|es| es.reanimations.get(id as usize))
+    }
+
+    /// 获取动画（可变版本）
+    pub fn reanimation_get_mut(&mut self, id: ReanimationID) -> Option<&mut Reanimation> {
+        self.effect_system.as_mut().and_then(|es| es.reanimations.get_mut(id as usize))
+    }
 
     /// 获取动画 ID（对应 C++ ReanimationGetID）
-    pub fn reanimation_get_id(&self, _reanim: *mut Reanimation) -> ReanimationID { REANIMATIONID_NULL }
+    pub fn reanimation_get_id(&self, reanim: *mut Reanimation) -> ReanimationID {
+        if reanim.is_null() {
+            return REANIMATIONID_NULL;
+        }
+        if let Some(es) = self.effect_system.as_ref() {
+            for (i, r) in es.reanimations.iter().enumerate() {
+                if std::ptr::eq(r, reanim) {
+                    return i as ReanimationID;
+                }
+            }
+        }
+        REANIMATIONID_NULL
+    }
 
     /// 添加粒子（对应 C++ AddTodParticle）
     pub fn add_tod_particle(&mut self, _x: f32, _y: f32, _render_order: i32, _effect: i32) -> Option<*mut TodParticleSystem> { None }
@@ -635,25 +668,138 @@ impl LawnApp {
     pub fn is_challenge_without_seed_bank(&self) -> bool {
         self.board.is_some() && !self.board.map_or(false, |b| unsafe { (*b).choose_seeds_on_current_level() })
     }
-    pub fn can_show_almanac(&self) -> bool { false }
-    pub fn can_show_store(&self) -> bool { false }
-    pub fn can_show_zen_garden(&self) -> bool { false }
+    pub fn can_show_almanac(&self) -> bool {
+        if self.is_ice_demo() {
+            return false;
+        }
+        if self.player_info.is_none() {
+            return false;
+        }
+        self.has_finished_adventure() || self.player_info.as_ref().unwrap().m_level >= 15
+    }
+    pub fn can_show_store(&self) -> bool {
+        if self.is_ice_demo() {
+            return false;
+        }
+        if self.player_info.is_none() {
+            return false;
+        }
+        self.has_finished_adventure()
+            || self.player_info.as_ref().unwrap().m_has_seen_upsell != 0
+            || self.player_info.as_ref().unwrap().m_level >= 25
+    }
+    pub fn can_show_zen_garden(&self) -> bool {
+        if self.player_info.is_none() {
+            return false;
+        }
+        if self.is_trial_stage_locked() {
+            return false;
+        }
+        self.has_finished_adventure() || self.player_info.as_ref().unwrap().m_level >= 45
+    }
     pub fn can_pause_now(&self) -> bool { true }
-    pub fn can_spawn_yetis(&self) -> bool { false }
+    pub fn can_spawn_yetis(&self) -> bool {
+        // [TRANSLATION_NOTE]: 对应 C++ CanSpawnYetis，需要 get_zombie_definition 的 mStartingLevel
+        if self.player_info.is_none() {
+            return false;
+        }
+        let zombie_def = crate::lawn::zombie::get_zombie_definition(ZombieType::Yeti);
+        self.has_finished_adventure()
+            && (self.player_info.as_ref().unwrap().m_finished_adventure >= 2
+                || self.player_info.as_ref().unwrap().m_level >= zombie_def.starting_level)
+    }
     pub fn has_finished_adventure(&self) -> bool {
         self.player_info.as_ref().map_or(false, |p| p.m_finished_adventure != 0)
     }
-    pub fn has_beaten_challenge(&self, _mode: GameMode) -> bool { false }
-    pub fn has_seed_type(&self, _seed: SeedType) -> bool { false }
+    pub fn has_beaten_challenge(&self, mode: GameMode) -> bool {
+        if self.player_info.is_none() {
+            return false;
+        }
+        let a_challenge_index = mode as i32 - GameMode::SurvivalNormalStage1 as i32;
+        if self.is_survival_normal(mode) {
+            return self.player_info.as_ref().unwrap().m_challenge_records[a_challenge_index as usize] >= SURVIVAL_NORMAL_FLAGS;
+        }
+        if self.is_survival_hard(mode) {
+            return self.player_info.as_ref().unwrap().m_challenge_records[a_challenge_index as usize] >= SURVIVAL_HARD_FLAGS;
+        }
+        // [TRANSLATION_NOTE]: C++ 的 IsEndlessScaryPotter / IsEndlessIZombie 对应
+        // GAMEMODE_SCARY_POTTER_ENDLESS / GAMEMODE_PUZZLE_I_ZOMBIE_ENDLESS，
+        // 这两个变体在 Rust GameMode 枚举中不存在，故恒为 false。
+        if self.is_survival_endless(mode) {
+            return false;
+        }
+        self.player_info.as_ref().unwrap().m_challenge_records[a_challenge_index as usize] > 0
+    }
+    pub fn has_seed_type(&self, seed: SeedType) -> bool {
+        if self.is_trial_stage_locked() && seed as i32 >= SeedType::Jalapeno as i32 {
+            return false;
+        }
+        // [TRANSLATION_NOTE]: C++ 未检查 mPlayerInfo 为 null；Rust 侧为规避读档未加载时的崩溃，None 时返回 false
+        let player_info = match self.player_info.as_ref() {
+            Some(p) => p,
+            None => return false,
+        };
+        match seed {
+            SeedType::Gatlingpea => player_info.m_purchases[StoreItem::PlantGatlingpea as usize] > 0,
+            SeedType::Twinsunflower => player_info.m_purchases[StoreItem::PlantTwinsunflower as usize] > 0,
+            SeedType::Gloomshroom => player_info.m_purchases[StoreItem::PlantGloomshroom as usize] > 0,
+            SeedType::Cattail => player_info.m_purchases[StoreItem::PlantCattail as usize] > 0,
+            SeedType::Wintermelon => player_info.m_purchases[StoreItem::PlantWintermelon as usize] > 0,
+            SeedType::GoldMagnet => player_info.m_purchases[StoreItem::PlantGoldMagnet as usize] > 0,
+            SeedType::Spikerock => player_info.m_purchases[StoreItem::PlantSpikerock as usize] > 0,
+            SeedType::Cobcannon => player_info.m_purchases[StoreItem::PlantCobcannon as usize] > 0,
+            SeedType::Imitater => player_info.m_purchases[StoreItem::PlantImitater as usize] > 0,
+            _ => (seed as i32) < self.get_seeds_available(),
+        }
+    }
 
-    pub fn get_seeds_available(&self) -> i32 { 0 }
+    pub fn get_seeds_available(&self) -> i32 {
+        if self.player_info.is_none() {
+            return 0;
+        }
+        let a_level = self.player_info.as_ref().unwrap().m_level;
+        if self.has_finished_adventure() || a_level > 50 {
+            return 49;
+        }
+        let a_seed_type_max = Self::get_award_seed_for_level(a_level) as i32;
+        std::cmp::min(NUM_SEEDS_IN_CHOOSER, a_seed_type_max)
+    }
+    pub fn get_award_seed_for_level(level: i32) -> SeedType {
+        let a_area = (level - 1) / LEVELS_PER_AREA + 1;
+        let a_sub = (level - 1) % LEVELS_PER_AREA + 1;
+        let mut a_seeds_has_got = (a_area - 1) * 8 + a_sub;  // in general, each area awards 8 plants and each level awards 1
+        if a_sub >= 10 {
+            a_seeds_has_got -= 2;  // 2 levels in this area don't award a new plant
+        } else if a_sub >= 5 {
+            a_seeds_has_got -= 1;  // 1 level in this area doesn't award a new plant
+        }
+        if a_seeds_has_got > 40 {
+            a_seeds_has_got = 40;
+        }
+        // [TRANSLATION_NOTE]: C++ 直接 (SeedType)aSeedsHasGot 强转；Rust 枚举无法直接转换，用 unsafe transmute 保持等价
+        unsafe { std::mem::transmute::<i32, SeedType>(a_seeds_has_got) }
+    }
     pub fn get_current_challenge_def() -> u32 { 0 }
     pub fn get_current_challenge_index(&self) -> i32 { 0 }
     pub fn get_current_level_name(&self) -> String { format!("Level {}", self.m_level) }
     pub fn get_stage_string(level: i32) -> String { format!("Stage {}", level) }
     pub fn get_num_trophies(_page: i32) -> i32 { 0 }
-    pub fn get_award_seed_for_level(_level: i32) -> SeedType { SeedType::Peashooter }
-    pub fn get_money_string(amount: i32) -> String { format!("${}", amount) }
+    pub fn get_money_string(amount: i32) -> String {
+        // 对应 C++ LawnApp::GetMoneyString（金额以"分"为单位显示，×10）
+        let a_value = amount * 10;
+        if a_value > 999999 {
+            format!(
+                "${},{:03},{:03}",
+                a_value / 1000000,
+                (a_value - a_value / 1000000 * 1000000) / 1000,
+                a_value - a_value / 1000 * 1000
+            )
+        } else if a_value > 9999 {
+            format!("${},{:03}", a_value / 1000, a_value - a_value / 1000 * 1000)
+        } else {
+            format!("${}", a_value)
+        }
+    }
     pub fn get_close_request(&self) -> bool { self.m_close_request }
     pub fn has_used_cheat_keys(&self) -> bool { self.m_cheat_keys_used }
 
@@ -683,7 +829,12 @@ impl LawnApp {
     // ==================== 缺失的方法（GameSelector 需要） ====================
 
     pub fn is_ice_demo(&self) -> bool { false }
-    pub fn is_trial_stage_locked(&self) -> bool { false }
+    pub fn is_trial_stage_locked(&self) -> bool {
+        if self.m_debug_trial_locked {
+            return true;
+        }
+        self.m_trial_type == TrialType::StageLocked
+    }
     pub fn save_file_exists(&self) -> bool { false }
     pub fn is_first_time_adventure_mode(&self) -> bool {
         self.is_adventure_mode() && self.player_info.as_ref().map_or(false, |p| p.m_finished_adventure == 0)

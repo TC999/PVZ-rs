@@ -244,7 +244,12 @@ impl GridItem {
     pub fn draw_squirrel(&self, g: &mut Graphics) {}
     pub fn draw_i_zombie_brain(&self, g: &mut Graphics) {}
     pub fn draw_stinky(&self, g: &mut Graphics) {}
-    pub fn is_open_portal(&self) -> bool { false }
+    pub fn is_open_portal(&self) -> bool {
+        // 对应 C++ GridItem::IsOpenPortal；Rust 的 PortalCrystalBall = C++ GRIDITEM_PORTAL_CIRCLE
+        self.grid_item_state != GridItemState::PortalClosed
+            && (self.grid_item_type == GridItemType::PortalCrystalBall
+                || self.grid_item_type == GridItemType::PortalSquare)
+    }
     */
 }
 

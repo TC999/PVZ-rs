@@ -130,7 +130,42 @@ impl StoreScreen {
             (*app).player_info.as_ref().unwrap().m_purchases[item as usize] != 0
         } } else { false }
     }
-    pub fn is_item_unavailable(&self, _item: StoreItem) -> bool { false }
+    pub fn is_item_unavailable(&self, item: StoreItem) -> bool {
+        // 对应 C++ StoreScreen::IsItemUnavailable
+        if self.easy_buying_cheat {
+            return false;
+        }
+        let app_ref = match self.app {
+            Some(app) => unsafe { &*app },
+            None => return false,
+        };
+        let a_finished = app_ref.has_finished_adventure();
+        let a_level = app_ref.player_info.as_ref().map_or(0, |p| p.m_level);
+
+        if item == StoreItem::RoofCleaner {
+            return app_ref.is_trial_stage_locked() || (!a_finished && a_level < 42);
+        }
+        if item == StoreItem::PlantGloomshroom {
+            return app_ref.is_trial_stage_locked() || (!a_finished && a_level < 35);
+        }
+        if item == StoreItem::PlantCattail {
+            return app_ref.is_trial_stage_locked() || (!a_finished && a_level < 35);
+        }
+        if item == StoreItem::PlantSpikerock {
+            return !a_finished && a_level < 41;
+        }
+        if item == StoreItem::PlantGoldMagnet {
+            return !a_finished && a_level < 41;
+        }
+        if item == StoreItem::PlantWintermelon
+            || item == StoreItem::PlantCobcannon
+            || item == StoreItem::PlantImitater
+            || item == StoreItem::Firstaid
+        {
+            return !a_finished;
+        }
+        false
+    }
     pub fn get_store_position(spot_index: i32, pos_x: &mut i32, pos_y: &mut i32) {
         let row = spot_index / 4;
         let col = spot_index % 4;

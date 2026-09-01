@@ -70,6 +70,8 @@ pub struct PlayerInfo {
     pub m_has_unlocked_survival_mode: bool,
     pub m_has_used_cheat_keys: bool,
     pub m_needs_magic_taco_reward: bool,
+    /// 对应 C++ PlayerInfo::mHasSeenUpsell
+    pub m_has_seen_upsell: i32,
     pub m_num_potted_plants: i32,
     pub m_coins: i32,
     pub m_purchases: Vec<i32>,
@@ -89,6 +91,7 @@ impl PlayerInfo {
             m_has_unlocked_survival_mode: false,
             m_has_used_cheat_keys: false,
             m_needs_magic_taco_reward: false,
+            m_has_seen_upsell: 0,
             m_num_potted_plants: 0,
             m_coins: 0,
             m_purchases: vec![0; 200],
@@ -98,6 +101,12 @@ impl PlayerInfo {
 
     pub fn get_level(&self) -> i32 {
         self.m_level
+    }
+
+    /// 增加金币（对应 C++ PlayerInfo::AddCoins）
+    pub fn add_coins(&mut self, amount: i32) {
+        self.m_coins += amount;
+        self.m_coins = self.m_coins.clamp(0, 99999);
     }
 }
 
