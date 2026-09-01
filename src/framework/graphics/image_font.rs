@@ -501,7 +501,7 @@ impl DescParser for FontData {
                 }
                 false
             }
-            "LAYERIMAG" => {
+            "LAYERIMAG" | "LAYERSETIMAGE" => {
                 if list.len() == 3 {
                     if let Some(idx) = self.data_to_layer(&list[1]) {
                         let mut image_name = String::new();
@@ -531,7 +531,98 @@ impl DescParser for FontData {
                 }
                 false
             }
-            "LAYEROFFSET" => {
+            "LAYERSETCHARWIDTHS" => {
+                // 对应 C++ LayerSetCharWidths：设置每字符宽度
+                if list.len() == 4 {
+                    if let Some(idx) = self.data_to_layer(&list[1]) {
+                        let mut chars = Vec::new();
+                        let mut widths = Vec::new();
+                        if self.data_to_string_vector(&list[2], &mut chars)
+                            && self.data_to_int_vector(&list[3], &mut widths)
+                            && chars.len() == widths.len()
+                        {
+                            if let Some(layer) = self.font_layer_list.get_mut(idx) {
+                                for (i, ch_s) in chars.iter().enumerate() {
+                                    if let Some(ch) = ch_s.chars().next() {
+                                        layer.get_char_data(ch).width = widths[i];
+                                    }
+                                }
+                                return true;
+                            }
+                        }
+                    }
+                }
+                false
+            }
+            "LAYERSETIMAGEMAP" => {
+                // 对应 C++ LayerSetImageMap：设置每字符图集源矩形
+                if list.len() == 4 {
+                    if let Some(idx) = self.data_to_layer(&list[1]) {
+                        let mut chars = Vec::new();
+                        let mut rects = Vec::new();
+                        if self.data_to_string_vector(&list[2], &mut chars)
+                            && self.data_to_list(&list[3], &mut rects)
+                            && chars.len() == rects.len()
+                        {
+                            // 先解析所有矩形（避免对 layer 与 self 的同时可变借用）
+                            let mut parsed: Vec<(char, Rect)> = Vec::new();
+                            for (i, ch_s) in chars.iter().enumerate() {
+                                let mut nums = Vec::new();
+                                if let Some(ch) = ch_s.chars().next() {
+                                    if self.data_to_int_vector(&rects[i], &mut nums) && nums.len() == 4 {
+                                        parsed.push((ch, Rect::new(nums[0], nums[1], nums[2], nums[3])));
+                                    }
+                                }
+                            }
+                            if let Some(layer) = self.font_layer_list.get_mut(idx) {
+                                for (ch, rect) in parsed {
+                                    layer.get_char_data(ch).image_rect = rect;
+                                }
+                                // 对应 C++：计算 default_height = max(mImageRect.mHeight + mOffset.mY)
+                                let mut def_h = 0;
+                                for (_, cd) in layer.char_data_map.iter() {
+                                    def_h = def_h.max(cd.image_rect.height + cd.offset.y);
+                                }
+                                layer.default_height = def_h;
+                                return true;
+                            }
+                        }
+                    }
+                }
+                false
+            }
+            "LAYERSETCHAROFFSETS" => {
+                // 对应 C++ LayerSetCharOffsets：设置每字符绘制偏移
+                if list.len() == 4 {
+                    if let Some(idx) = self.data_to_layer(&list[1]) {
+                        let mut chars = Vec::new();
+                        let mut offsets = Vec::new();
+                        if self.data_to_string_vector(&list[2], &mut chars)
+                            && self.data_to_list(&list[3], &mut offsets)
+                            && chars.len() == offsets.len()
+                        {
+                            // 先解析所有偏移（避免对 layer 与 self 的同时可变借用）
+                            let mut parsed: Vec<(char, Point)> = Vec::new();
+                            for (i, ch_s) in chars.iter().enumerate() {
+                                let mut nums = Vec::new();
+                                if let Some(ch) = ch_s.chars().next() {
+                                    if self.data_to_int_vector(&offsets[i], &mut nums) && nums.len() == 2 {
+                                        parsed.push((ch, Point::new(nums[0], nums[1])));
+                                    }
+                                }
+                            }
+                            if let Some(layer) = self.font_layer_list.get_mut(idx) {
+                                for (ch, off) in parsed {
+                                    layer.get_char_data(ch).offset = off;
+                                }
+                                return true;
+                            }
+                        }
+                    }
+                }
+                false
+            }
+            "LAYEROFFSET" | "LAYERSETOFFSET" => {
                 if list.len() == 3 {
                     if let Some(idx) = self.data_to_layer(&list[1]) {
                         let mut offset_str = String::new();
@@ -550,7 +641,7 @@ impl DescParser for FontData {
                 }
                 false
             }
-            "LAYERSPACING" => {
+            "LAYERSPACING" | "LAYERSETSPACING" => {
                 if list.len() == 3 {
                     if let Some(idx) = self.data_to_layer(&list[1]) {
                         let mut spacing = 0i32;
@@ -564,7 +655,7 @@ impl DescParser for FontData {
                 }
                 false
             }
-            "LAYERPOINTSIZ" => {
+            "LAYERPOINTSIZ" | "LAYERSETPOINTSIZE" => {
                 if list.len() == 3 {
                     if let Some(idx) = self.data_to_layer(&list[1]) {
                         let mut pt_size = 0i32;
@@ -620,7 +711,7 @@ impl DescParser for FontData {
                 }
                 false
             }
-            "LAYERCOLORMULT" => {
+            "LAYERCOLORMULT" | "LAYERSETCOLORMULT" => {
                 if list.len() == 3 {
                     if let Some(idx) = self.data_to_layer(&list[1]) {
                         let mut color = Color::WHITE;
@@ -634,7 +725,7 @@ impl DescParser for FontData {
                 }
                 false
             }
-            "LAYERCOLORADD" => {
+            "LAYERCOLORADD" | "LAYERSETCOLORADD" => {
                 if list.len() == 3 {
                     if let Some(idx) = self.data_to_layer(&list[1]) {
                         let mut color = Color::new(0, 0, 0, 0);
@@ -648,7 +739,7 @@ impl DescParser for FontData {
                 }
                 false
             }
-            "LAYERDRAWMOD" => {
+            "LAYERDRAWMOD" | "LAYERSETDRAWMODE" => {
                 if list.len() == 3 {
                     if let Some(idx) = self.data_to_layer(&list[1]) {
                         let mut mode = 0i32;
@@ -662,7 +753,7 @@ impl DescParser for FontData {
                 }
                 false
             }
-            "LAYERASCENT" => {
+            "LAYERASCENT" | "LAYERSETASCENT" => {
                 if list.len() == 3 {
                     if let Some(idx) = self.data_to_layer(&list[1]) {
                         let mut val = 0i32;
@@ -676,7 +767,7 @@ impl DescParser for FontData {
                 }
                 false
             }
-            "LAYERASCENTPADDING" => {
+            "LAYERASCENTPADDING" | "LAYERSETASCENTPADDING" => {
                 if list.len() == 3 {
                     if let Some(idx) = self.data_to_layer(&list[1]) {
                         let mut val = 0i32;
@@ -690,7 +781,7 @@ impl DescParser for FontData {
                 }
                 false
             }
-            "LAYERHEIGHT" => {
+            "LAYERHEIGHT" | "LAYERSETHEIGHT" => {
                 if list.len() == 3 {
                     if let Some(idx) = self.data_to_layer(&list[1]) {
                         let mut val = 0i32;
@@ -704,7 +795,7 @@ impl DescParser for FontData {
                 }
                 false
             }
-            "LAYERDEFAULTHEIGHT" => {
+            "LAYERDEFAULTHEIGHT" | "LAYERSETDEFAULTHEIGHT" => {
                 if list.len() == 3 {
                     if let Some(idx) = self.data_to_layer(&list[1]) {
                         let mut val = 0i32;
@@ -718,7 +809,7 @@ impl DescParser for FontData {
                 }
                 false
             }
-            "LAYERLINESPACINGOFFSET" => {
+            "LAYERLINESPACINGOFFSET" | "LAYERSETLINESPACINGOFFSET" => {
                 if list.len() == 3 {
                     if let Some(idx) = self.data_to_layer(&list[1]) {
                         let mut val = 0i32;
@@ -732,7 +823,7 @@ impl DescParser for FontData {
                 }
                 false
             }
-            "LAYERBASEORDER" => {
+            "LAYERBASEORDER" | "LAYERSETBASEORDER" => {
                 if list.len() == 3 {
                     if let Some(idx) = self.data_to_layer(&list[1]) {
                         let mut val = 0i32;
@@ -1612,3 +1703,54 @@ static RENDER_POOL: Mutex<Vec<RenderCommand>> = Mutex::new(Vec::new());
 /// 渲染互斥锁（对应 C++ gRenderCritSec）
 static RENDER_LOCK: Mutex<()> = Mutex::new(());
 
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::framework::paklib;
+
+    #[test]
+    fn fontdata_loads_real_descriptor() {
+        // 初始化 pak 接口并加载 main.pak（测试工作目录为 crate 根）
+        paklib::init_pak_interface();
+        paklib::with_pak_interface_mut(|pak| {
+            pak.set_resource_folder(".");
+            let _ = pak.add_pak_file("main.pak");
+        });
+        // 读取真实字体描述 data/continuumbold14.txt
+        let desc = paklib::with_pak_interface(|pak| pak.load_file("data/continuumbold14.txt"));
+        assert!(desc.is_some(), "描述文件未找到");
+        let desc_text = String::from_utf8_lossy(&desc.unwrap()).into_owned();
+
+        let mut fd = FontData::new();
+        let ok = fd.load(&desc_text);
+        if !ok { panic!("FontData::load FAIL: error={:?} line={} current={:?}",
+            fd.error_message(), fd.current_line_num(), fd.current_line()); }
+        assert!(ok);
+
+        // 验证图层创建
+        assert_eq!(fd.font_layer_list.len(), 1, "应创建 1 个图层");
+        assert_eq!(fd.default_point_size, 12, "default_point_size 应=12");
+
+        let layer = &fd.font_layer_list[0];
+        assert_eq!(layer.ascent, 14, "ascent 应=14");
+        assert_eq!(layer.height, 18, "height 应=18");
+
+        // 验证 ASCII 字符数据（宽度 + 图集矩形 + 偏移）
+        let zero = layer.char_data_map.get(&'0').expect("缺字符 '0'");
+        assert!(zero.width > 0, "'0' 宽度应>0");
+        assert!(zero.image_rect.width > 0, "'0' 图集矩形宽应>0");
+        let a = layer.char_data_map.get(&'A').expect("缺字符 'A'");
+        assert!(a.width > 0);
+        assert!(a.image_rect.width > 0);
+        let space = layer.char_data_map.get(&' ').expect("缺空格字符");
+        assert!(space.image_rect.width == 0 || space.width > 0, "空格字符宽度应合理");
+        assert_eq!(space.offset.x, 0);
+    }
+
+
+
+
+
+}

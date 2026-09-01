@@ -7,6 +7,7 @@ pub mod gl_interface;
 pub mod memory_image;
 pub mod native_display;
 pub mod font;
+pub mod bitmap_font;
 pub mod shared_image;
 pub mod image_font;
 pub mod quantize;

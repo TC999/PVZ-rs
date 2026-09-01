@@ -368,12 +368,13 @@ pub trait DescParser {
                             return false; // "Unexpected List Start"
                         } else {
                             let mut child_list = Vec::new();
-                            if !Self::parse_to_list(s, &mut child_list, true, &mut Some(pos)) {
+                            // 用本地 Option 可变引用，递归解析后写回其更新位置
+                            let mut child_pos = Some(pos);
+                            if !Self::parse_to_list(s, &mut child_list, true, &mut child_pos) {
                                 return false;
                             }
+                            pos = child_pos.unwrap_or(pos);
                             list.push(DataElement::List(child_list));
-                            // pos was updated by parse_to_list via the Some(pos) reference
-                            // Re-read the actual pos from the closure
                         }
                     } else if is_separator {
                         cur_single_idx = None;
@@ -436,6 +437,8 @@ pub trait DescParser {
     /// 加载描述文件（对应 C++ LoadDescriptor）
     /// 注意：此方法需要外部提供文件内容，不直接依赖 SexyAppBase
     fn load_descriptor(&mut self, file_content: &str) -> bool {
+        // 剥离 UTF-8 BOM（真实描述文件以 EF BB BF 开头）
+        let file_content = file_content.trim_start_matches('\u{FEFF}');
         self.set_current_line_num(0);
         self.error_message_mut().clear();
         let mut has_errors = false;
