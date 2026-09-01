@@ -25,6 +25,16 @@ pub const DOLPHIN_JUMP_TIME: i32 = 120;
 pub const BOBSLED_CRASH_TIME: i32 = 150;
 pub const CHILLED_SPEED_FACTOR: f32 = 0.4;
 pub const THOWN_ZOMBIE_GRAVITY: f32 = 0.05;
+pub const HIGH_GROUND_HEIGHT: f32 = 30.0; // C++ GameConstants.h HIGH_GROUND_HEIGHT = 30
+pub const DAMAGE_PER_EAT: i32 = 4; // C++ TICKS_BETWEEN_EATS / DAMAGE_PER_EAT
+pub const NUM_BOSS_BUNGEES: usize = 3; // C++ Zombie.h NUM_BOSS_BUNGEES
+
+/// Boss 召唤僵尸列表（对应 C++ gBossZombieList）
+pub const BOSS_ZOMBIE_LIST: [ZombieType; 12] = [
+    ZombieType::TrafficCone, ZombieType::Pail, ZombieType::Football, ZombieType::Polevaulter,
+    ZombieType::JackInTheBox, ZombieType::Ladder, ZombieType::Zamboni, ZombieType::Catapult,
+    ZombieType::Pogo, ZombieType::Newspaper, ZombieType::Door, ZombieType::Gargantuar,
+];
 
 // C++ DamageFlags 位索引（对应 ConstEnums.h DamageFlags）
 const DAMAGE_BYPASSES_SHIELD: u32 = 0;
@@ -808,8 +818,8 @@ impl Zombie {
         }
     }
 
-    fn pick_random_speed(&mut self) {
-        // 对应 C++ Zombie::PickRandomSpeed
+    pub fn pick_random_speed(&mut self) {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
         if self.zombie_phase == ZombiePhase::SnorkelWalkingInPool {
             self.vel_x = 0.3;
         } else if self.zombie_phase == ZombiePhase::DiggerWalking {
@@ -923,6 +933,15 @@ impl Zombie {
 
             self.base.x = self.pos_x as i32;
             self.base.y = self.pos_y as i32;
+
+            // 同步身体 reanim 位置（对应 C++ UpdateReanim 中 SetPosition）
+            if self.body_reanim_id != REANIMATIONID_NULL {
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                        reanim.set_position(self.pos_x, self.pos_y);
+                    }
+                }
+            }
 
             self.update_reanim();
         }
@@ -1788,7 +1807,16 @@ impl Zombie {
     }
 
     /// 获取伽刚特尔下方植物的列（对应 C++ FindPlantTarget 简化）
-    pub fn plant_col_below(&self) -> i32 { -1 }
+    pub fn plant_col_below(&self) -> i32 {
+        if let Some(idx) = self.find_plant_target_index(ZombieAttackType::Chew) {
+            if let Some(board) = self.base.get_board() {
+                if idx < board.plants.len() {
+                    return board.plants[idx].plant_col;
+                }
+            }
+        }
+        -1
+    }
 
     /// 碾压某格子内的所有僵尸/植物（对应 C++ SquishAllInSquare，stub）
     pub fn squish_all_in_square(&mut self, x: i32, y: i32, attack_type: ZombieAttackType) {
@@ -2164,12 +2192,918 @@ impl Zombie {
 
     /// 更新 Boss（对应 C++ UpdateBoss，stub）
     pub fn update_boss(&mut self) {
-        // UpdateBoss — Boss 战斗更新
-        if self.phase_counter > 0 { self.phase_counter -= 1; }
-        if self.phase_counter == 0 {
-            self.phase_counter = 200;
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        let a_game_scene = self.base.get_app().map_or(crate::lawn::lawn_app::GameScenes::Playing, |app| app.game_scene);
+        if a_game_scene == crate::lawn::lawn_app::GameScenes::LevelIntro {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+            return;
+        }
+
+        self.update_boss_fireball();
+
+        if self.ice_trap_counter == 0 {
+            if self.summon_counter > 0 {
+                self.summon_counter -= 1;
+            }
+            if self.boss_bungee_counter > 0 {
+                self.boss_bungee_counter -= 1;
+            }
+            if self.boss_stomp_counter > 0 {
+                self.boss_stomp_counter -= 1;
+            }
+            if self.boss_head_counter > 0 {
+                self.boss_head_counter -= 1;
+            }
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        } else {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        }
+
+        if self.phase_counter > 0 {
+            self.phase_counter -= 1;
+        }
+
+        match self.zombie_phase {
+            ZombiePhase::BossEnter => {
+                self.boss_play_idle();
+            }
+            ZombiePhase::BossIdle => {
+                if self.body_health == 1 {
+                    self.play_death_anim(0);
+                    return;
+                }
+                if self.phase_counter > 0 {
+                    return;
+                }
+
+                let a_damage_index = self.get_body_damage_index();
+                if a_damage_index != self.boss_mode {
+                    self.boss_mode = a_damage_index;
+                    if self.boss_mode == 1 {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+                        self.boss_bungee_attack();
+                    } else {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+                        self.boss_rv_attack();
+                    }
+                } else if self.boss_stomp_counter == 0 {
+                    self.boss_stomp_attack();
+                } else if self.boss_bungee_counter == 0 {
+                    let a_rand = if self.base.get_app().map_or(false, |a| a.is_adventure_mode()) { 4 } else { 2 };
+                    if RandRange(a_rand) == 0 {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+                        self.boss_bungee_counter = 4000 + RandRange(1001);
+                        self.boss_rv_attack();
+                    } else {
+                        self.boss_bungee_attack();
+                    }
+                } else if self.boss_head_counter == 0 {
+                    self.boss_head_attack();
+                } else if self.summon_counter == 0 {
+                    self.boss_spawn_attack();
+                } else {
+                    self.phase_counter = 100 + RandRange(101);
+                }
+            }
+            ZombiePhase::BossSpawning => {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+                self.boss_spawn_contact();
+                self.boss_play_idle();
+            }
+            ZombiePhase::BossStomping => {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+                self.boss_stomp_contact();
+                self.boss_play_idle();
+            }
+            ZombiePhase::BossBungeesEnter => {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+                self.boss_bungee_spawn();
+            }
+            ZombiePhase::BossBungeesDrop => {
+                if self.boss_are_bungees_done() {
+                    self.boss_bungee_leave();
+                }
+            }
+            ZombiePhase::BossBungeesLeave => {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+                self.boss_play_idle();
+            }
+            ZombiePhase::BossDropRv => {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+                self.boss_rv_landing();
+                self.boss_play_idle();
+            }
+            ZombiePhase::BossHeadEnter => {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+                self.zombie_phase = ZombiePhase::BossHeadIdleBeforeSpit;
+                self.play_zombie_reanim("anim_head_idle", ReanimLoopType::Loop, 0, 12.0);
+                self.phase_counter = 500;
+            }
+            ZombiePhase::BossHeadIdleBeforeSpit => {
+                if self.body_health == 1 {
+                    self.boss_start_death();
+                } else if self.phase_counter == 0 {
+                    self.boss_head_spit();
+                }
+            }
+            ZombiePhase::BossHeadSpit => {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+                self.boss_head_spit_effect();
+                self.boss_head_spit_contact();
+                self.zombie_phase = ZombiePhase::BossHeadIdleAfterSpit;
+                self.play_zombie_reanim("anim_head_idle", ReanimLoopType::Loop, 0, 12.0);
+                self.phase_counter = 300;
+            }
+            ZombiePhase::BossHeadIdleAfterSpit => {
+                if self.body_health == 1 {
+                    self.boss_start_death();
+                } else if self.phase_counter == 0 {
+                    self.zombie_phase = ZombiePhase::BossHeadLeave;
+                    self.play_zombie_reanim("anim_head_leave", ReanimLoopType::PlayOnceAndHold, 0, 12.0);
+                }
+            }
+            ZombiePhase::BossHeadLeave => {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+                self.apply_boss_smoke_particles(false);
+                self.boss_play_idle();
+            }
+            _ => {}
         }
     }
+    fn find_plant_target_index(&self, attack_type: ZombieAttackType) -> Option<usize> {
+        let attack_rect = self.get_zombie_attack_rect();
+        let board = self.base.get_board()?;
+        for (i, plant) in board.plants.iter().enumerate() {
+            if plant.dead {
+                continue;
+            }
+            if plant.base.row == self.base.row {
+                let plant_rect = plant.get_plant_rect();
+                if crate::lawn::board::get_rect_overlap(&attack_rect, &plant_rect) >= 20
+                    && self.can_target_plant(plant, attack_type)
+                {
+                    return Some(i);
+                }
+            }
+        }
+        None
+    }
+
+    fn can_target_plant(&self, plant: &Plant, attack_type: ZombieAttackType) -> bool {
+        let board = match self.base.get_board() {
+            Some(b) => b,
+            None => return false,
+        };
+        if self.base.get_app().map_or(false, |app| app.is_wallnut_bowling_level())
+            && attack_type != ZombieAttackType::Vault
+        {
+            return false;
+        }
+
+        if plant.not_on_ground() || plant.seed_type == SeedType::Tanglekelp {
+            return false;
+        }
+
+        if !self.in_pool && board.is_pool_square(plant.plant_col, plant.base.row) {
+            return false;
+        }
+
+        if self.zombie_phase == ZombiePhase::DiggerTunneling {
+            return plant.seed_type == SeedType::PotatoMine && plant.state == PlantState::NotReady;
+        }
+
+        if plant.is_spiky() {
+            return matches!(self.zombie_type,
+                ZombieType::Gargantuar | ZombieType::RedeEyeGargantuar | ZombieType::Zamboni)
+                || board.is_pool_square(plant.plant_col, plant.base.row)
+                || board.get_flower_pot_at(plant.plant_col, plant.base.row).is_some();
+        }
+
+        if attack_type == ZombieAttackType::DriveOver {
+            if matches!(plant.seed_type,
+                SeedType::Cherrybomb | SeedType::Jalapeno | SeedType::Blover | SeedType::Squash)
+            {
+                return false;
+            }
+            if matches!(plant.seed_type, SeedType::Doomshroom | SeedType::Iceshroom) {
+                return plant.is_asleep;
+            }
+        }
+
+        if self.zombie_phase == ZombiePhase::LadderCarrying
+            || self.zombie_phase == ZombiePhase::LadderPlacing
+        {
+            let mut a_place_ladder = matches!(plant.seed_type,
+                SeedType::Wallnut | SeedType::Tallnut | SeedType::Pumpkinshell);
+            if board.get_ladder_at(plant.plant_col, plant.base.row).is_some() {
+                a_place_ladder = false;
+            }
+            if (attack_type == ZombieAttackType::Chew && a_place_ladder)
+                || (attack_type == ZombieAttackType::Ladder && !a_place_ladder)
+            {
+                return false;
+            }
+        }
+
+        if attack_type == ZombieAttackType::Chew {
+            if let Some(top_plant) = board.get_top_plant_at(plant.plant_col, plant.base.row) {
+                if !std::ptr::eq(top_plant, plant) && self.can_target_plant(top_plant, attack_type) {
+                    return false;
+                }
+            }
+        }
+
+        if attack_type == ZombieAttackType::Vault {
+            if let Some(top_plant) = board.get_top_plant_at(plant.plant_col, plant.base.row) {
+                if !std::ptr::eq(top_plant, plant) && self.can_target_plant(top_plant, attack_type) {
+                    return false;
+                }
+            }
+        }
+
+        true
+    }
+
+    pub fn remove_cold_effects(&mut self) {
+        if self.ice_trap_counter > 0 {
+            self.remove_ice_trap();
+        }
+        if self.chilled_counter > 0 {
+            self.chilled_counter = 0;
+            self.update_anim_speed();
+        }
+    }
+
+    pub fn boss_play_idle(&mut self) {
+        self.zombie_phase = ZombiePhase::BossIdle;
+        self.phase_counter = 100 + RandRange(101);  // RandRangeInt(100, 200)
+        self.play_zombie_reanim("anim_idle", ReanimLoopType::Loop, 0, 6.0);
+    }
+
+    pub fn boss_rv_attack(&mut self) {
+        self.remove_cold_effects();
+        self.zombie_phase = ZombiePhase::BossDropRv;
+        let a_has_6_rows = self.base.get_board().map_or(false, |b| b.stage_has_6_rows());
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        self.target_row = if a_has_6_rows { RandRange(5) } else { RandRange(4) };  // RandRangeInt(0, 4/3)
+        self.target_col = RandRange(3);  // RandRangeInt(0, 2)
+
+        self.play_zombie_reanim("anim_RV_1", ReanimLoopType::PlayOnceAndHold, 20, 16.0);
+        if let Some(app) = self.base.get_app() {
+            app.play_foley(crate::todlib::tod_foley::FoleyType::HydraulicShort as i32);
+        }
+    }
+
+    pub fn boss_rv_landing(&mut self) {
+        let a_target_row = self.target_row;
+        let a_target_col = self.target_col;
+        if let Some(board) = self.base.get_board_mut() {
+            let mut to_die: Vec<usize> = board.plants.iter().enumerate()
+                .filter(|(_, p)| {
+                    !p.dead && p.base.row >= a_target_row && p.base.row <= a_target_row + 1
+                        && p.plant_col >= a_target_col && p.plant_col <= a_target_col + 2
+                })
+                .map(|(i, _)| i)
+                .collect();
+            for idx in to_die.drain(..) {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+                board.plants[idx].die();
+            }
+            board.shake_board(1, 2);
+        }
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+
+        self.summon_counter = 500;
+        self.boss_head_counter = 5000;
+        if self.boss_mode >= 1 {
+            self.boss_stomp_counter = 4000;
+        }
+        if self.boss_mode >= 2 {
+            self.boss_bungee_counter = 6500;
+        }
+    }
+
+    pub fn boss_spawn_attack(&mut self) {
+        self.remove_cold_effects();
+        self.zombie_phase = ZombiePhase::BossSpawning;
+        if self.boss_mode == 0 {
+            self.summon_counter = 450 + RandRange(101);  // RandRangeInt(450, 550)
+        } else if self.boss_mode == 1 {
+            self.summon_counter = 350 + RandRange(101);  // RandRangeInt(350, 450)
+        } else if self.boss_mode == 2 {
+            self.summon_counter = 150 + RandRange(101);  // RandRangeInt(150, 250)
+        }
+
+        if let Some(board) = self.base.get_board_mut() {
+            self.target_row = board.pick_row_for_new_zombie(ZombieType::Normal);
+        }
+
+        let a_track_name = match self.target_row {
+            0 => "anim_spawn_1",
+            1 => "anim_spawn_2",
+            2 => "anim_spawn_3",
+            3 => "anim_spawn_4",
+            _ => "anim_spawn_5",
+        };
+        self.play_zombie_reanim(a_track_name, ReanimLoopType::PlayOnceAndHold, 20, 12.0);
+        if let Some(app) = self.base.get_app() {
+            app.play_foley(crate::todlib::tod_foley::FoleyType::HydraulicShort as i32);
+        }
+    }
+
+    pub fn boss_spawn_contact(&mut self) {
+        let a_zombie_type = if self.zombie_age < 3500 {
+            ZombieType::Normal
+        } else if self.zombie_age < 8000 {
+            ZombieType::TrafficCone
+        } else if self.zombie_age < 12500 {
+            ZombieType::Pail
+        } else {
+            let mut a_zombie_type_count = BOSS_ZOMBIE_LIST.len();
+            if self.target_row == 0 {
+                // C++: PVZP_ASSERT(gBossZombieList[aZombieTypeCount - 1] == ZOMBIE_GARGANTUAR)
+                a_zombie_type_count -= 1;
+            }
+            BOSS_ZOMBIE_LIST[RandRange(a_zombie_type_count as i32) as usize]
+        };
+
+        if let Some(board) = self.base.get_board_mut() {
+            board.add_zombie_in_row(a_zombie_type, self.target_row, 0);
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        }
+    }
+
+    pub fn boss_can_stomp_row(&self, row: i32) -> bool {
+        if let Some(board) = self.base.get_board() {
+            for plant in &board.plants {
+                if plant.dead {
+                    continue;
+                }
+                if !plant.not_on_ground() && plant.base.row >= row && plant.base.row <= row + 1 && plant.plant_col >= 5 {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    pub fn boss_stomp_attack(&mut self) {
+        self.remove_cold_effects();
+        self.zombie_phase = ZombiePhase::BossStomping;
+        self.boss_stomp_counter = 5500 + RandRange(1001);  // RandRangeInt(5500, 6500)
+
+        let mut a_rows_count = 0;
+        let mut a_row_array = [0i32; 4];
+        for i in 0..4 {
+            if self.boss_can_stomp_row(i) {
+                a_row_array[a_rows_count as usize] = i;
+                a_rows_count += 1;
+            }
+        }
+        if a_rows_count == 0 {
+            return;
+        }
+
+        self.target_row = a_row_array[RandRange(a_rows_count) as usize];  // PvzpPickFromArray
+
+        let a_track_name = match self.target_row {
+            0 => "anim_stomp_1",
+            1 => "anim_stomp_2",
+            2 => "anim_stomp_3",
+            _ => "anim_stomp_4",
+        };
+        self.play_zombie_reanim(a_track_name, ReanimLoopType::PlayOnceAndHold, 20, 12.0);
+        if let Some(app) = self.base.get_app() {
+            app.play_foley(crate::todlib::tod_foley::FoleyType::HydraulicShort as i32);
+        }
+    }
+
+    pub fn boss_stomp_contact(&mut self) {
+        let a_target_row = self.target_row;
+        if let Some(board) = self.base.get_board_mut() {
+            let mut to_die: Vec<usize> = board.plants.iter().enumerate()
+                .filter(|(_, p)| {
+                    !p.dead && p.base.row >= a_target_row && p.base.row <= a_target_row + 1 && p.plant_col >= 5
+                })
+                .map(|(i, _)| i)
+                .collect();
+            for idx in to_die.drain(..) {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+                board.plants[idx].die();
+            }
+            board.shake_board(1, 4);
+        }
+        if let Some(app) = self.base.get_app() {
+            app.play_foley(crate::todlib::tod_foley::FoleyType::Thump as i32);
+        }
+    }
+
+    pub fn boss_bungee_attack(&mut self) {
+        self.remove_cold_effects();
+        self.zombie_phase = ZombiePhase::BossBungeesEnter;
+        self.boss_bungee_counter = 4000 + RandRange(1001);  // RandRangeInt(4000, 5000)
+        self.target_col = RandRange(3);  // RandRangeInt(0, 2)
+
+        self.play_zombie_reanim("anim_bungee_1_enter", ReanimLoopType::PlayOnceAndHold, 20, 12.0);
+        if let Some(app) = self.base.get_app() {
+            app.play_foley(crate::todlib::tod_foley::FoleyType::HydraulicShort as i32);
+            app.play_foley(crate::todlib::tod_foley::FoleyType::BungeeScream as i32);
+        }
+    }
+
+    pub fn boss_bungee_spawn(&mut self) {
+        self.zombie_phase = ZombiePhase::BossBungeesDrop;
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        if let Some(board) = self.base.get_board_mut() {
+            for _i in 0..NUM_BOSS_BUNGEES {
+                board.add_zombie_in_row(ZombieType::Bungee, 0, 0);
+            }
+        }
+    }
+
+    pub fn boss_bungee_leave(&mut self) {
+        self.zombie_phase = ZombiePhase::BossBungeesLeave;
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        self.play_zombie_reanim("anim_bungee_1_leave", ReanimLoopType::PlayOnceAndHold, 20, 18.0);
+    }
+
+    pub fn boss_are_bungees_done(&self) -> bool {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        true
+    }
+
+    pub fn boss_head_attack(&mut self) {
+        self.zombie_phase = ZombiePhase::BossHeadEnter;
+        self.boss_head_counter = 4000 + RandRange(1001);  // RandRangeInt(4000, 5000)
+
+        self.play_zombie_reanim("anim_head_enter", ReanimLoopType::PlayOnceAndHold, 20, 12.0);
+        if let Some(app) = self.base.get_app() {
+            app.play_foley(crate::todlib::tod_foley::FoleyType::HydraulicShort as i32);
+        }
+    }
+
+    pub fn boss_head_spit(&mut self) {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        self.zombie_phase = ZombiePhase::BossHeadSpit;
+        let a_has_6_rows = self.base.get_board().map_or(false, |b| b.stage_has_6_rows());
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        self.fireball_row = if a_has_6_rows { RandRange(6) } else { RandRange(5) };  // RandRangeInt(0, 5/4)
+        self.is_fire_ball = RandRange(2) == 0;  // RandRangeInt(0, 1) == 0
+
+        let a_track_name = match self.fireball_row {
+            0 => "anim_head_attack_1",
+            1 => "anim_head_attack_2",
+            2 => "anim_head_attack_3",
+            3 => "anim_head_attack_4",
+            _ => "anim_head_attack_5",
+        };
+        self.play_zombie_reanim(a_track_name, ReanimLoopType::PlayOnceAndHold, 20, 12.0);
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    }
+
+    pub fn boss_destroy_iceball_in_row(&mut self) {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        self.boss_fire_ball_reanim_id = REANIMATIONID_NULL;
+    }
+
+    pub fn boss_destroy_fireball(&mut self) {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        self.boss_fire_ball_reanim_id = REANIMATIONID_NULL;
+    }
+
+    pub fn boss_head_spit_effect(&mut self) {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    }
+
+    pub fn boss_head_spit_contact(&mut self) {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    }
+
+    pub fn update_boss_fireball(&mut self) {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        if self.boss_fire_ball_reanim_id == REANIMATIONID_NULL {
+            return;
+        }
+        let _ = self.fireball_row;
+    }
+
+    pub fn boss_start_death(&mut self) {
+        self.zombie_phase = ZombiePhase::BossHeadLeave;
+        self.play_zombie_reanim("anim_head_leave", ReanimLoopType::PlayOnceAndHold, 0, 24.0);
+        // [TRANSLATION_NOTE]: AddPvzpParticle(BOSS_EXPLOSION) + PlaySample(SOUND_BOSSEXPLOSION)
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        self.boss_die();
+    }
+
+    pub fn boss_die(&mut self) {
+        if !self.is_on_board() {
+            return;
+        }
+        if self.boss_fire_ball_reanim_id != REANIMATIONID_NULL {
+            self.boss_fire_ball_reanim_id = REANIMATIONID_NULL;
+            self.boss_destroy_iceball_in_row();
+            self.boss_destroy_fireball();
+        }
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+
+        let self_ptr = self as *const Zombie;
+        if let Some(board) = self.base.get_board_mut() {
+            for idx in 0..board.zombies.len() {
+                let z_ptr = &board.zombies[idx] as *const Zombie;
+                if std::ptr::eq(z_ptr, self_ptr) {
+                    continue;  // C++: aZombie != this
+                }
+                if !board.zombies[idx].dead && !board.zombies[idx].is_dead_or_dying() {
+                    board.zombies[idx].die_with_loot();
+                }
+            }
+        }
+        self.remove_cold_effects();
+    }
+
+    pub fn apply_boss_smoke_particles(&mut self, _enable: bool) {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    }
+
+    pub fn start_eating(&mut self) {
+        if self.is_eating {
+            return;
+        }
+        self.is_eating = true;
+
+        if self.zombie_phase == ZombiePhase::DiggerTunneling {
+            return;
+        }
+
+        if self.zombie_phase == ZombiePhase::LadderCarrying {
+            self.play_zombie_reanim("anim_laddereat", ReanimLoopType::Loop, 20, 0.0);
+        } else if self.zombie_phase == ZombiePhase::NewspaperMad {
+            self.play_zombie_reanim("anim_eat_nopaper", ReanimLoopType::Loop, 20, 0.0);
+        } else {
+            if self.zombie_type != ZombieType::Snorkel {
+                self.play_zombie_reanim("anim_eat", ReanimLoopType::Loop, 20, 0.0);
+            }
+            if self.shield_type == ShieldType::Door {
+                self.show_door_arms(false);
+            }
+        }
+    }
+
+    pub fn eat_zombie(&mut self, zombie: &mut Zombie) {
+        zombie.take_damage(DAMAGE_PER_EAT, 9);  // DAMAGE_PER_EAT = TICKS_BETWEEN_EATS = 4
+        self.start_eating();
+        if zombie.body_health <= 0 {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        }
+    }
+
+    pub fn is_zombotany(zombie_type: ZombieType) -> bool {
+        matches!(zombie_type,
+            ZombieType::PeaHead | ZombieType::WallnutHead | ZombieType::TallnutHead
+            | ZombieType::JalapenoHead | ZombieType::GatlingHead | ZombieType::SquashHead)
+    }
+
+    pub fn can_be_chilled(&self) -> bool {
+        if self.zombie_type == ZombieType::Zamboni || self.is_bobsled_team_with_sled() {
+            return false;
+        }
+        if self.is_dead_or_dying() {
+            return false;
+        }
+        if self.zombie_phase == ZombiePhase::DiggerTunneling
+            || self.zombie_phase == ZombiePhase::DiggerRising
+            || self.zombie_phase == ZombiePhase::DiggerTunnelingPauseWithoutAxe
+            || self.zombie_phase == ZombiePhase::DiggerRiseWithoutAxe
+            || self.zombie_phase == ZombiePhase::RisingFromGrave
+            || self.zombie_phase == ZombiePhase::DancerRising
+        {
+            return false;
+        }
+        if self.mind_controlled {
+            return false;
+        }
+        self.zombie_type != ZombieType::Boss
+            || self.zombie_phase == ZombiePhase::BossHeadIdleBeforeSpit
+            || self.zombie_phase == ZombiePhase::BossHeadIdleAfterSpit
+            || self.zombie_phase == ZombiePhase::BossHeadSpit
+    }
+
+    pub fn can_be_frozen(&self) -> bool {
+        if !self.can_be_chilled() {
+            return false;
+        }
+        if self.zombie_phase == ZombiePhase::PolevaulterInVault
+            || self.zombie_phase == ZombiePhase::DolphinIntoPool
+            || self.zombie_phase == ZombiePhase::DolphinInJump
+            || self.zombie_phase == ZombiePhase::SnorkelIntoPool
+            || self.is_flying()
+            || self.zombie_phase == ZombiePhase::ImpGettingThrown
+            || self.zombie_phase == ZombiePhase::ImpLanding
+            || self.zombie_phase == ZombiePhase::BobsledCrashing
+            || self.zombie_phase == ZombiePhase::JackInTheBoxPopping
+            || self.zombie_phase == ZombiePhase::SquashRising
+            || self.zombie_phase == ZombiePhase::SquashFalling
+            || self.zombie_phase == ZombiePhase::SquashDoneFalling
+            || self.is_bouncing_pogo()
+        {
+            return false;
+        }
+        self.zombie_type != ZombieType::Bungee || self.zombie_phase == ZombiePhase::BungeeAtBottom
+    }
+
+    pub fn is_fire_resistant(&self) -> bool {
+        self.zombie_type == ZombieType::Catapult
+            || self.zombie_type == ZombieType::Zamboni
+            || self.shield_type == ShieldType::Door
+            || self.shield_type == ShieldType::Ladder
+    }
+
+    pub fn effected_by_damage(&self, damage_range_flags: u32) -> bool {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        if !test_bit(damage_range_flags, 5) && self.is_dead_or_dying() {
+            return false;
+        }
+        if test_bit(damage_range_flags, 7) {
+            if !self.mind_controlled {
+                return false;
+            }
+        } else if self.mind_controlled {
+            return false;
+        }
+        if self.zombie_type == ZombieType::Bungee
+            && self.zombie_phase != ZombiePhase::BungeeAtBottom
+            && self.zombie_phase != ZombiePhase::BungeeGrabbing
+        {
+            return false;
+        }
+        if self.zombie_height == ZombieHeight::GettingBungeeDropped {
+            return false;
+        }
+        if self.zombie_type == ZombieType::Boss {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+            if self.zombie_phase == ZombiePhase::BossHeadEnter {
+                return false;
+            }
+            if self.zombie_phase == ZombiePhase::BossHeadLeave {
+                return false;
+            }
+        }
+        true
+    }
+
+    pub fn is_tangle_kelp_target(&self) -> bool {
+        if self.zombie_height == ZombieHeight::DraggedUnder {
+            return true;
+        }
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        false
+    }
+
+    pub fn is_squash_target(&self, _the_except: Option<&Plant>) -> bool {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        false
+    }
+
+    pub fn apply_butter(&mut self) {
+        if !self.has_head || !self.can_be_frozen() {
+            return;
+        }
+        if self.zombie_type == ZombieType::Zamboni || self.zombie_type == ZombieType::Boss
+            || self.is_tangle_kelp_target() || self.is_bobsled_team_with_sled() || self.is_flying()
+        {
+            return;
+        }
+
+        self.buttered_counter = 400;
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+
+        if self.zombie_type == ZombieType::Pogo {
+            self.altitude = 0.0;
+            if self.on_high_ground {
+                self.altitude += HIGH_GROUND_HEIGHT;
+            }
+        } else if self.zombie_type == ZombieType::Balloon {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        } else if Self::is_zombotany(self.zombie_type) {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        }
+
+        self.update_anim_speed();
+        self.stop_zombie_sound();
+    }
+
+    pub fn apply_burn(&mut self) {
+        if self.dead || self.zombie_phase == ZombiePhase::Burned {
+            return;
+        }
+
+        if self.body_health >= 1800 || self.zombie_type == ZombieType::Boss {
+            self.take_damage(1800, 18);
+            return;
+        }
+
+        if self.zombie_type == ZombieType::SquashHead && !self.has_head {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+            self.special_head_reanim_id = REANIMATIONID_NULL;
+        }
+
+        if self.ice_trap_counter > 0 {
+            self.remove_ice_trap();
+        }
+        self.buttered_counter = self.buttered_counter.min(0);
+
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+
+        if self.zombie_phase == ZombiePhase::Dying
+            || self.zombie_phase == ZombiePhase::PolevaulterInVault
+            || self.zombie_phase == ZombiePhase::ImpGettingThrown
+            || self.zombie_phase == ZombiePhase::RisingFromGrave
+            || self.zombie_phase == ZombiePhase::DancerRising
+            || self.zombie_phase == ZombiePhase::DolphinIntoPool
+            || self.zombie_phase == ZombiePhase::DolphinInJump
+            || self.zombie_phase == ZombiePhase::DolphinRiding
+            || self.zombie_phase == ZombiePhase::SnorkelIntoPool
+            || self.zombie_phase == ZombiePhase::DiggerTunneling
+            || self.zombie_phase == ZombiePhase::DiggerTunnelingPauseWithoutAxe
+            || self.zombie_phase == ZombiePhase::DiggerRising
+            || self.zombie_phase == ZombiePhase::DiggerRiseWithoutAxe
+            || self.zombie_phase == ZombiePhase::Mowered
+            || self.in_pool
+        {
+            self.die_with_loot();
+        } else if self.zombie_type == ZombieType::Bungee
+            || self.zombie_type == ZombieType::Yeti
+            || Self::is_zombotany(self.zombie_type)
+            || self.is_bobsled_team_with_sled()
+            || self.is_flying()
+            || !self.has_head
+        {
+            self.set_anim_rate(0.0);
+            self.zombie_phase = ZombiePhase::Burned;
+            self.phase_counter = 300;
+            self.just_got_shot_counter = 0;
+            self.drop_loot();
+
+            if self.zombie_type == ZombieType::Balloon {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+            }
+        } else {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+            self.die_with_loot();
+        }
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    }
+
+    pub fn hit_ice_trap(&mut self) {
+        let mut cold = false;
+        if self.chilled_counter > 0 || self.ice_trap_counter != 0 {
+            cold = true;
+        }
+
+        self.apply_chill(true);
+        if !self.can_be_frozen() {
+            return;
+        }
+
+        if self.in_pool {
+            self.ice_trap_counter = 300;
+        } else if cold {
+            self.ice_trap_counter = 300 + RandRange(100);  // RandRangeInt(300, 400)
+        } else {
+            self.ice_trap_counter = 400 + RandRange(200);  // RandRangeInt(400, 600)
+        }
+
+        self.stop_zombie_sound();
+        if self.zombie_type == ZombieType::Balloon {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        }
+        if self.zombie_phase == ZombiePhase::BossHeadSpit {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        }
+
+        self.take_damage(20, 1);
+        self.update_anim_speed();
+    }
+
+    pub fn convert_to_normal_zombie(&mut self) {
+        self.stop_zombie_sound();
+        self.pos_y = self.get_pos_y_based_on_row(self.base.row);
+        self.base.x = self.pos_x as i32;
+        self.base.y = self.pos_y as i32;
+
+        self.zombie_type = ZombieType::Normal;
+        self.zombie_phase = ZombiePhase::Normal;
+        self.zombie_attack_rect = Rect::new(50, 0, 20, 115);
+
+        self.anim_frames = 12;
+        self.anim_ticks_per_frame = 12;
+        self.phase_counter = 0;
+
+        self.pick_random_speed();
+    }
+
+    pub fn rise_from_grave(&mut self, col: i32, row: i32) {
+        // PVZP_ASSERT(mZombiePhase == PHASE_ZOMBIE_NORMAL)
+        let has_pool = self.base.get_board().map_or(false, |b| b.stage_has_pool());
+
+        if let Some(board) = self.base.get_board() {
+            self.pos_x = board.grid_to_pixel_x(col, self.base.row) as f32 - 25.0;
+        }
+        self.pos_y = self.get_pos_y_based_on_row(row);
+        self.set_row(row);
+        self.base.x = self.pos_x as i32;
+        self.base.y = self.pos_y as i32;
+        self.altitude = -200.0; // CLIP_HEIGHT_OFF
+        self.zombie_phase = ZombiePhase::RisingFromGrave;
+        self.phase_counter = 150;
+
+        if has_pool {
+            self.altitude = -150.0;
+            self.in_pool = true;
+            self.phase_counter = 50;
+            self.zombie_height = ZombieHeight::Normal;
+            self.start_walk_anim(0);
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        } else {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        }
+    }
+
+    pub fn walk_into_house(&mut self) {
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        self.from_wave = Zombie::ZOMBIE_WAVE_WINNER;
+        self.reanim_reenable_clipping();
+
+        if self.zombie_phase == ZombiePhase::PolevaulterPreVault {
+            self.zombie_phase = ZombiePhase::PolevaulterPostVault;
+            self.start_walk_anim(0);
+        }
+
+        let a_background = self.base.get_board().map_or(BackgroundType::Day, |b| b.m_background_type);
+        let has_pool = self.base.get_board().map_or(false, |b| b.stage_has_pool());
+
+        if a_background == BackgroundType::Day
+            || a_background == BackgroundType::Night
+            || a_background == BackgroundType::Pool
+            || a_background == BackgroundType::Fog
+        {
+            self.pos_y = 290.0;
+            self.base.render_order = crate::lawn::board::make_render_order(RENDER_LAYER_ZOMBIE, 2, 0);
+
+            if self.zombie_type == ZombieType::Gargantuar
+                || self.zombie_type == ZombieType::RedeEyeGargantuar
+            {
+                self.pos_y += 30.0;
+            } else if self.zombie_phase == ZombiePhase::PolevaulterPreVault {
+                self.pos_x += 35.0;
+            } else if self.zombie_type == ZombieType::Zamboni {
+                self.pos_y += 15.0;
+            }
+
+            if has_pool {
+                if self.zombie_type == ZombieType::Football {
+                    self.pos_x -= 10.0;
+                } else {
+                    self.pos_x -= 80.0;
+                }
+            }
+        } else if a_background == BackgroundType::Roof || a_background == BackgroundType::Boss {
+            self.pos_x = -180.0;
+            self.pos_y = 250.0;
+            self.zombie_height = ZombieHeight::InToChimney;
+            self.base.render_order = crate::lawn::board::make_render_order(RENDER_LAYER_GRAVE_STONE, 0, 2);
+
+            if self.zombie_type == ZombieType::Gargantuar
+                || self.zombie_type == ZombieType::RedeEyeGargantuar
+            {
+                self.pos_y += 5.0;
+            } else if self.zombie_type == ZombieType::Football {
+                self.pos_x -= 14.0;
+            } else if self.zombie_type == ZombieType::Zamboni {
+                self.pos_x -= 28.0;
+            }
+
+    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        }
+    }
+
 
     /// 弹簧折断（对应 C++ PogoBreak）
     pub fn pogo_break(&mut self, damage_flags: u32) {
@@ -2283,10 +3217,21 @@ impl Zombie {
     }
 
     /// 寻找可跳越的植物目标（对应 C++ FindPlantTarget(ATTACKTYPE_VAULT) 简化）
-    fn find_vault_target(&self) -> bool { false }
+    fn find_vault_target(&self) -> bool {
+        self.find_plant_target_index(ZombieAttackType::Vault).is_some()
+    }
 
     /// 寻找高坚果目标（对应 C++ FindPlantTarget 检查 SEED_TALLNUT 简化）
-    fn find_tallnut_target(&self) -> bool { false }
+    fn find_tallnut_target(&self) -> bool {
+        if let Some(idx) = self.find_plant_target_index(ZombieAttackType::Vault) {
+            if let Some(board) = self.base.get_board() {
+                if idx < board.plants.len() {
+                    return board.plants[idx].seed_type == SeedType::Tallnut;
+                }
+            }
+        }
+        false
+    }
 
     /// 更新僵尸行走（对应 C++ Zombie::Animate）
     pub fn animate(&mut self) {
@@ -2405,7 +3350,24 @@ impl Zombie {
 
     /// 停止进食
     pub fn stop_eating(&mut self) {
+        if !self.is_eating {
+            return;
+        }
         self.is_eating = false;
+
+        if self.zombie_phase == ZombiePhase::DiggerTunneling {
+            return;
+        }
+
+        if self.zombie_type != ZombieType::Snorkel {
+            self.start_walk_anim(20);
+        }
+
+        if self.shield_type == ShieldType::Door {
+            self.show_door_arms(true);
+        }
+
+        self.update_anim_speed();
     }
 
     /// 受伤（对应 C++ Zombie::TakeDamage）
@@ -2758,11 +3720,61 @@ impl Zombie {
         // 依赖底层系统
     }
 
-    /// 绘制僵尸
-    pub fn draw(&self, _g: &mut Graphics) {}
+    /// 绘制僵尸（对应 C++ Zombie::DrawZombie 简化：绘制身体 reanim + 影子）
+    pub fn draw(&self, g: &mut Graphics) {
+        let mut has_reanim = false;
+        if let Some(app) = self.base.get_app() {
+            if let Some(reanim) = app.reanimation_get(self.body_reanim_id) {
+                reanim.draw(g);
+                has_reanim = true;
+            }
+        }
 
-    /// 绘制僵尸头部
-    pub fn draw_zombie_head(&self, _g: &mut Graphics, _pos: &ZombieDrawPosition, _frame: i32) {}
+        // 无 reanim 时的占位回退：按僵尸类型绘制色块（便于整体渲染验证）
+        if !has_reanim {
+            let color = match self.zombie_type {
+                ZombieType::Boss => crate::framework::color::Color::new(200, 0, 0, 255),
+                ZombieType::Gargantuar | ZombieType::RedeEyeGargantuar => crate::framework::color::Color::new(120, 40, 160, 255),
+                ZombieType::Balloon => crate::framework::color::Color::new(0, 160, 200, 255),
+                ZombieType::Zamboni => crate::framework::color::Color::new(60, 60, 60, 255),
+                _ => crate::framework::color::Color::new(60, 120, 40, 255),
+            };
+            g.set_color(&color);
+            let w = match self.zombie_type {
+                ZombieType::Zamboni => 100,
+                ZombieType::Gargantuar | ZombieType::RedeEyeGargantuar => 70,
+                ZombieType::Boss => 120,
+                _ => 40,
+            };
+            g.fill_rect_xywh(self.pos_x as i32, self.pos_y as i32, w, 65);
+        }
+
+        self.draw_shadow(g);
+    }
+
+    /// 绘制僵尸头部（对应 C++ DrawZombieHead：特殊头 reanim）
+    pub fn draw_zombie_head(&self, g: &mut Graphics, _pos: &ZombieDrawPosition, _frame: i32) {
+        // [TRANSLATION_NOTE]: C++ 用 ReanimationLawn 缓存图与头轨道变换绘制，
+        // Rust 侧特殊头 reanim（mSpecialHeadReanimID）若有则直接绘制
+        if let Some(app) = self.base.get_app() {
+            if let Some(reanim) = app.reanimation_get(self.special_head_reanim_id) {
+                reanim.draw(g);
+            }
+        }
+    }
+
+    /// 绘制影子（对应 C++ Zombie::DrawShadow，半透明椭圆占位）
+    pub fn draw_shadow(&self, g: &mut Graphics) {
+        // [TRANSLATION_NOTE]: C++ 绘制沼泽阴影图；Rust 用半透明椭圆近似
+        let shadow_y = self.pos_y as i32 + 30;
+        let w = match self.zombie_type {
+            ZombieType::Zamboni | ZombieType::Boss => 90,
+            ZombieType::Gargantuar | ZombieType::RedeEyeGargantuar => 60,
+            _ => 34,
+        };
+        g.set_color(&crate::framework::color::Color::new(0, 0, 0, 80));
+        g.fill_rect_xywh(self.pos_x as i32 - w / 2, shadow_y, w, 6);
+    }
 
     /// 获取僵尸矩形
     pub fn get_zombie_rect(&self) -> Rect {
@@ -2822,7 +3834,33 @@ impl Zombie {
     // ========== 辅助函数（stub，对应 C++ Zombie 方法） ==========
 
     /// 加载重动画（对应 C++ LoadReanim）
-    pub fn load_reanim(&mut self, _reanim_type: ReanimationType) -> Option<*mut Reanimation> { None }
+    pub fn load_reanim(&mut self, reanim_type: ReanimationType) -> Option<*mut Reanimation> {
+        // 对应 C++ Zombie::LoadReanim
+        let render_order = self.base.render_order;
+        let app = self.base.get_app_mut()?;
+        let body_reanim = app.add_reanimation(self.pos_x, self.pos_y, render_order, reanim_type as i32)?;
+        self.body_reanim_id = app.reanimation_get_id(body_reanim);
+        unsafe {
+            (*body_reanim).m_loop_type = ReanimLoopType::Loop;
+            (*body_reanim).m_is_attachment = true;
+            (*body_reanim).m_override_scale_x = self.scale_zombie;
+            (*body_reanim).m_override_scale_y = self.scale_zombie;
+        }
+
+        if !self.is_on_board() {
+            // 不在棋盘：随机取 idle 动画帧起点
+            if RandRange(4) > 0 && unsafe { (*body_reanim).track_exists("anim_idle2") } {
+                self.play_zombie_reanim("anim_idle2", ReanimLoopType::Loop, 0, 12.0 + RandFloat(12.0));  // RandRangeFloat(12,24)
+            } else if unsafe { (*body_reanim).track_exists("anim_idle") } {
+                self.play_zombie_reanim("anim_idle", ReanimLoopType::Loop, 0, 12.0 + RandFloat(6.0));  // RandRangeFloat(12,18)
+            }
+            unsafe { (*body_reanim).m_anim_time = RandFloat(0.99); }
+        } else {
+            self.start_walk_anim(0);
+        }
+
+        Some(body_reanim)
+    }
 
     /// 加载普通僵尸重动画（对应 C++ LoadPlainZombieReanim）
     pub fn load_plain_zombie_reanim(&mut self) { /* stub */ }
@@ -2905,7 +3943,30 @@ impl Zombie {
     pub fn play_zombie_appear_sound(&mut self) { /* stub */ }
 
     /// 基于行获取 Y 位置（对应 C++ GetPosYBasedOnRow）
-    pub fn get_pos_y_based_on_row(&self, _row: i32) -> f32 { 0.0 }
+pub fn get_pos_y_based_on_row(&mut self, row: i32) -> f32 {
+        if !self.is_on_board() {
+            return 0.0;
+        }
+
+        if self.on_high_ground {
+            if self.altitude < HIGH_GROUND_HEIGHT {
+                self.zombie_height = ZombieHeight::UpToHighGround;
+            }
+            self.on_high_ground = true;
+        }
+
+        let mut a_pos_y = match self.base.get_board() {
+            Some(board) => board.get_pos_y_based_on_row(self.pos_x + 40.0, row) - 30.0,
+            None => 0.0,
+        };
+        if self.zombie_type == ZombieType::Balloon {
+            a_pos_y -= 30.0;
+        } else if self.zombie_type == ZombieType::Pogo {
+            a_pos_y -= 16.0;
+        }
+
+        a_pos_y
+    }
 
     /// 选择蹦极僵尸目标（对应 C++ PickBungeeZombieTarget）
     pub fn pick_bungee_zombie_target(&mut self, column: i32) {
@@ -3118,32 +4179,32 @@ pub struct ZombieDefinition {
 
 /// 僵尸定义表（对应 C++ gZombieDefs）
 pub const ZOMBIE_DEFS: &[ZombieDefinition] = &[
-    ZombieDefinition { zombie_type: ZombieType::Normal, reanimation_type: ReanimationType::ReanimZombie, zombie_value: 1, starting_level: 1, first_allowed_wave: 1, pick_weight: 4000, zombie_name: "ZOMBIE" },
-    ZombieDefinition { zombie_type: ZombieType::Flag, reanimation_type: ReanimationType::ReanimZombie, zombie_value: 1, starting_level: 1, first_allowed_wave: 1, pick_weight: 0, zombie_name: "FLAG_ZOMBIE" },
-    ZombieDefinition { zombie_type: ZombieType::TrafficCone, reanimation_type: ReanimationType::ReanimZombie, zombie_value: 2, starting_level: 3, first_allowed_wave: 1, pick_weight: 4000, zombie_name: "CONEHEAD_ZOMBIE" },
-    ZombieDefinition { zombie_type: ZombieType::Polevaulter, reanimation_type: ReanimationType::ReanimPolevaulter, zombie_value: 2, starting_level: 6, first_allowed_wave: 5, pick_weight: 2000, zombie_name: "POLE_VAULTING_ZOMBIE" },
-    ZombieDefinition { zombie_type: ZombieType::Pail, reanimation_type: ReanimationType::ReanimZombie, zombie_value: 4, starting_level: 8, first_allowed_wave: 1, pick_weight: 3000, zombie_name: "BUCKETHEAD_ZOMBIE" },
-    ZombieDefinition { zombie_type: ZombieType::Newspaper, reanimation_type: ReanimationType::ReanimZombieNewspaper, zombie_value: 2, starting_level: 11, first_allowed_wave: 1, pick_weight: 1000, zombie_name: "NEWSPAPER_ZOMBIE" },
-    ZombieDefinition { zombie_type: ZombieType::Door, reanimation_type: ReanimationType::ReanimZombie, zombie_value: 4, starting_level: 13, first_allowed_wave: 5, pick_weight: 3500, zombie_name: "SCREEN_DOOR_ZOMBIE" },
-    ZombieDefinition { zombie_type: ZombieType::Football, reanimation_type: ReanimationType::ReanimZombieFootball, zombie_value: 7, starting_level: 16, first_allowed_wave: 5, pick_weight: 2000, zombie_name: "FOOTBALL_ZOMBIE" },
-    ZombieDefinition { zombie_type: ZombieType::Dancer, reanimation_type: ReanimationType::ReanimDancer, zombie_value: 5, starting_level: 18, first_allowed_wave: 5, pick_weight: 1000, zombie_name: "DANCING_ZOMBIE" },
-    ZombieDefinition { zombie_type: ZombieType::BackupDancer, reanimation_type: ReanimationType::ReanimBackupDancer, zombie_value: 1, starting_level: 18, first_allowed_wave: 1, pick_weight: 0, zombie_name: "BACKUP_DANCER" },
-    ZombieDefinition { zombie_type: ZombieType::DuckyTube, reanimation_type: ReanimationType::ReanimZombie, zombie_value: 1, starting_level: 21, first_allowed_wave: 5, pick_weight: 0, zombie_name: "DUCKY_TUBE_ZOMBIE" },
-    ZombieDefinition { zombie_type: ZombieType::Snorkel, reanimation_type: ReanimationType::ReanimSnorkel, zombie_value: 3, starting_level: 23, first_allowed_wave: 10, pick_weight: 2000, zombie_name: "SNORKEL_ZOMBIE" },
-    ZombieDefinition { zombie_type: ZombieType::Zamboni, reanimation_type: ReanimationType::ReanimZombieZamboni, zombie_value: 7, starting_level: 26, first_allowed_wave: 10, pick_weight: 2000, zombie_name: "ZOMBONI" },
-    ZombieDefinition { zombie_type: ZombieType::Bobsled, reanimation_type: ReanimationType::ReanimBobsled, zombie_value: 3, starting_level: 26, first_allowed_wave: 10, pick_weight: 2000, zombie_name: "ZOMBIE_BOBSLED_TEAM" },
-    ZombieDefinition { zombie_type: ZombieType::DolphinRider, reanimation_type: ReanimationType::ReanimZombieDolphinrider, zombie_value: 3, starting_level: 28, first_allowed_wave: 10, pick_weight: 1500, zombie_name: "DOLPHIN_RIDER_ZOMBIE" },
-    ZombieDefinition { zombie_type: ZombieType::JackInTheBox, reanimation_type: ReanimationType::ReanimJackinthebox, zombie_value: 3, starting_level: 31, first_allowed_wave: 10, pick_weight: 1000, zombie_name: "JACK_IN_THE_BOX_ZOMBIE" },
-    ZombieDefinition { zombie_type: ZombieType::Balloon, reanimation_type: ReanimationType::ReanimBalloon, zombie_value: 2, starting_level: 33, first_allowed_wave: 10, pick_weight: 2000, zombie_name: "BALLOON_ZOMBIE" },
-    ZombieDefinition { zombie_type: ZombieType::Digger, reanimation_type: ReanimationType::ReanimDigger, zombie_value: 4, starting_level: 36, first_allowed_wave: 10, pick_weight: 1000, zombie_name: "DIGGER_ZOMBIE" },
-    ZombieDefinition { zombie_type: ZombieType::Pogo, reanimation_type: ReanimationType::ReanimPogo, zombie_value: 4, starting_level: 38, first_allowed_wave: 10, pick_weight: 1000, zombie_name: "POGO_ZOMBIE" },
-    ZombieDefinition { zombie_type: ZombieType::Yeti, reanimation_type: ReanimationType::ReanimYeti, zombie_value: 4, starting_level: 40, first_allowed_wave: 1, pick_weight: 1, zombie_name: "ZOMBIE_YETI" },
-    ZombieDefinition { zombie_type: ZombieType::Bungee, reanimation_type: ReanimationType::ReanimBungee, zombie_value: 3, starting_level: 41, first_allowed_wave: 10, pick_weight: 1000, zombie_name: "BUNGEE_ZOMBIE" },
-    ZombieDefinition { zombie_type: ZombieType::Ladder, reanimation_type: ReanimationType::ReanimLadder, zombie_value: 4, starting_level: 43, first_allowed_wave: 10, pick_weight: 1000, zombie_name: "LADDER_ZOMBIE" },
-    ZombieDefinition { zombie_type: ZombieType::Catapult, reanimation_type: ReanimationType::ReanimCatapult, zombie_value: 5, starting_level: 46, first_allowed_wave: 10, pick_weight: 1500, zombie_name: "CATAPULT_ZOMBIE" },
-    ZombieDefinition { zombie_type: ZombieType::Gargantuar, reanimation_type: ReanimationType::ReanimGargantuar, zombie_value: 10, starting_level: 48, first_allowed_wave: 15, pick_weight: 1500, zombie_name: "GARGANTUAR" },
-    ZombieDefinition { zombie_type: ZombieType::Imp, reanimation_type: ReanimationType::ReanimImp, zombie_value: 10, starting_level: 48, first_allowed_wave: 1, pick_weight: 0, zombie_name: "IMP" },
-    ZombieDefinition { zombie_type: ZombieType::Boss, reanimation_type: ReanimationType::ReanimBoss, zombie_value: 10, starting_level: 50, first_allowed_wave: 1, pick_weight: 0, zombie_name: "BOSS" },
+    ZombieDefinition { zombie_type: ZombieType::Normal, reanimation_type: ReanimationType::Zombie, zombie_value: 1, starting_level: 1, first_allowed_wave: 1, pick_weight: 4000, zombie_name: "ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::Flag, reanimation_type: ReanimationType::Zombie, zombie_value: 1, starting_level: 1, first_allowed_wave: 1, pick_weight: 0, zombie_name: "FLAG_ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::TrafficCone, reanimation_type: ReanimationType::Zombie, zombie_value: 2, starting_level: 3, first_allowed_wave: 1, pick_weight: 4000, zombie_name: "CONEHEAD_ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::Polevaulter, reanimation_type: ReanimationType::Polevaulter, zombie_value: 2, starting_level: 6, first_allowed_wave: 5, pick_weight: 2000, zombie_name: "POLE_VAULTING_ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::Pail, reanimation_type: ReanimationType::Zombie, zombie_value: 4, starting_level: 8, first_allowed_wave: 1, pick_weight: 3000, zombie_name: "BUCKETHEAD_ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::Newspaper, reanimation_type: ReanimationType::ZombieNewspaper, zombie_value: 2, starting_level: 11, first_allowed_wave: 1, pick_weight: 1000, zombie_name: "NEWSPAPER_ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::Door, reanimation_type: ReanimationType::Zombie, zombie_value: 4, starting_level: 13, first_allowed_wave: 5, pick_weight: 3500, zombie_name: "SCREEN_DOOR_ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::Football, reanimation_type: ReanimationType::ZombieFootball, zombie_value: 7, starting_level: 16, first_allowed_wave: 5, pick_weight: 2000, zombie_name: "FOOTBALL_ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::Dancer, reanimation_type: ReanimationType::Dancer, zombie_value: 5, starting_level: 18, first_allowed_wave: 5, pick_weight: 1000, zombie_name: "DANCING_ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::BackupDancer, reanimation_type: ReanimationType::BackupDancer, zombie_value: 1, starting_level: 18, first_allowed_wave: 1, pick_weight: 0, zombie_name: "BACKUP_DANCER" },
+    ZombieDefinition { zombie_type: ZombieType::DuckyTube, reanimation_type: ReanimationType::Zombie, zombie_value: 1, starting_level: 21, first_allowed_wave: 5, pick_weight: 0, zombie_name: "DUCKY_TUBE_ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::Snorkel, reanimation_type: ReanimationType::Snorkel, zombie_value: 3, starting_level: 23, first_allowed_wave: 10, pick_weight: 2000, zombie_name: "SNORKEL_ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::Zamboni, reanimation_type: ReanimationType::ZombieZamboni, zombie_value: 7, starting_level: 26, first_allowed_wave: 10, pick_weight: 2000, zombie_name: "ZOMBONI" },
+    ZombieDefinition { zombie_type: ZombieType::Bobsled, reanimation_type: ReanimationType::Bobsled, zombie_value: 3, starting_level: 26, first_allowed_wave: 10, pick_weight: 2000, zombie_name: "ZOMBIE_BOBSLED_TEAM" },
+    ZombieDefinition { zombie_type: ZombieType::DolphinRider, reanimation_type: ReanimationType::ZombieDolphinrider, zombie_value: 3, starting_level: 28, first_allowed_wave: 10, pick_weight: 1500, zombie_name: "DOLPHIN_RIDER_ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::JackInTheBox, reanimation_type: ReanimationType::Jackinthebox, zombie_value: 3, starting_level: 31, first_allowed_wave: 10, pick_weight: 1000, zombie_name: "JACK_IN_THE_BOX_ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::Balloon, reanimation_type: ReanimationType::Balloon, zombie_value: 2, starting_level: 33, first_allowed_wave: 10, pick_weight: 2000, zombie_name: "BALLOON_ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::Digger, reanimation_type: ReanimationType::Digger, zombie_value: 4, starting_level: 36, first_allowed_wave: 10, pick_weight: 1000, zombie_name: "DIGGER_ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::Pogo, reanimation_type: ReanimationType::Pogo, zombie_value: 4, starting_level: 38, first_allowed_wave: 10, pick_weight: 1000, zombie_name: "POGO_ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::Yeti, reanimation_type: ReanimationType::Yeti, zombie_value: 4, starting_level: 40, first_allowed_wave: 1, pick_weight: 1, zombie_name: "ZOMBIE_YETI" },
+    ZombieDefinition { zombie_type: ZombieType::Bungee, reanimation_type: ReanimationType::Bungee, zombie_value: 3, starting_level: 41, first_allowed_wave: 10, pick_weight: 1000, zombie_name: "BUNGEE_ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::Ladder, reanimation_type: ReanimationType::Ladder, zombie_value: 4, starting_level: 43, first_allowed_wave: 10, pick_weight: 1000, zombie_name: "LADDER_ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::Catapult, reanimation_type: ReanimationType::Catapult, zombie_value: 5, starting_level: 46, first_allowed_wave: 10, pick_weight: 1500, zombie_name: "CATAPULT_ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::Gargantuar, reanimation_type: ReanimationType::Gargantuar, zombie_value: 10, starting_level: 48, first_allowed_wave: 15, pick_weight: 1500, zombie_name: "GARGANTUAR" },
+    ZombieDefinition { zombie_type: ZombieType::Imp, reanimation_type: ReanimationType::Imp, zombie_value: 10, starting_level: 48, first_allowed_wave: 1, pick_weight: 0, zombie_name: "IMP" },
+    ZombieDefinition { zombie_type: ZombieType::Boss, reanimation_type: ReanimationType::Boss, zombie_value: 10, starting_level: 50, first_allowed_wave: 1, pick_weight: 0, zombie_name: "BOSS" },
 ];
 
 /// 获取僵尸定义（对应 C++ GetZombieDefinition）
