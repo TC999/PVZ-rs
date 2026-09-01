@@ -12,6 +12,8 @@ pub mod tod_string_file;
 pub mod tod_foley;
 pub mod data_array;
 pub mod definition;
+pub mod reanim_loader;
+pub mod xml_parser;
 pub mod reanim_atlas;
 pub mod tod_debug;
 pub mod tod_list;

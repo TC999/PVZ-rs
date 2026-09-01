@@ -12,33 +12,8 @@ use crate::framework::graphics::gl_interface::TriVertex;
 use crate::todlib::definition::{ReanimatorDefinition, ReanimatorTrackInstance, ReanimatorTransform};
 use crate::todlib::data_array::DataArray;
 
-/// 动画类型
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(i32)]
-pub enum ReanimationType {
-    None = -1,
-    ReanimZombie = 0,
-    ReanimPolevaulter,
-    ReanimZombieNewspaper,
-    ReanimZombieFootball,
-    ReanimDancer,
-    ReanimBackupDancer,
-    ReanimSnorkel,
-    ReanimZombieZamboni,
-    ReanimBobsled,
-    ReanimZombieDolphinrider,
-    ReanimJackinthebox,
-    ReanimBalloon,
-    ReanimDigger,
-    ReanimPogo,
-    ReanimYeti,
-    ReanimBungee,
-    ReanimLadder,
-    ReanimCatapult,
-    ReanimGargantuar,
-    ReanimImp,
-    ReanimBoss,
-}
+// use crate::lawn::game_enums::ReanimationType 替代本地简化枚举（146 变体，与 C++ 一致）
+pub use crate::lawn::game_enums::ReanimationType;
 
 /// 循环模式
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -140,9 +115,68 @@ impl Reanimation {
     }
 
     /// 绘制
-    pub fn draw(&self, _g: &mut Graphics) {
-        // 渲染所有轨道实例
-        // 由 GLInterface 实际处理
+    pub fn draw(&self, g: &mut Graphics) {
+        let Some(def_ptr) = self.m_definition else { return };
+        unsafe {
+            let def = &*def_ptr;
+            if def.m_tracks.is_empty() {
+                return;
+            }
+            let time = self.get_frame_time();
+            for (i, track_def) in def.m_tracks.iter().enumerate() {
+                let ti = match self.m_track_instances.get(i) {
+                    Some(t) => t,
+                    None => continue,
+                };
+                if !ti.m_last_visible {
+                    continue;
+                }
+                let frames = &track_def.m_transforms;
+                if frames.is_empty() {
+                    continue;
+                }
+                // 当前帧索引：按动画时长取模（对应 C++ Ge tTransformByTime 简化）
+                let total_time = if def.m_fps > 0.0 { def.m_fps } else { 1.0 };
+                let frame_idx = ((time % total_time * total_time) as usize) % frames.len();
+                let t = &frames[frame_idx];
+                if !t.m_visible {
+                    continue;
+                }
+                let px = self.m_x + t.m_trans_x;
+                let py = self.m_y + t.m_trans_y;
+
+                // 真实图片绘制：从图片名索引取标准 PNG 并绘制
+                // 对应 C++ Reanimation::DrawRenderGroup 的 SetImageTransform + DrawImage
+                let scale_x = self.m_override_scale_x * t.m_scale_x;
+                let scale_y = self.m_override_scale_y * t.m_scale_y;
+                if let Some(img_ptr) = crate::todlib::reanim_loader::reanimator_get_image(t.m_image) {
+                    let img = unsafe { &*img_ptr };
+                    if img.width > 0 && img.height > 0 {
+                        // 设置透明度（通过颜色覆盖）
+                        let alpha = (t.m_alpha * 255.0).clamp(0.0, 255.0) as u8;
+                        g.set_color(&crate::framework::color::Color::new(255, 255, 255, alpha));
+                        if (scale_x - 1.0).abs() > 0.001 || (scale_y - 1.0).abs() > 0.001 {
+                            let w = (img.width as f32 * scale_x).round() as i32;
+                            let h = (img.height as f32 * scale_y).round() as i32;
+                            g.set_scale(scale_x, scale_y, 0.0, 0.0);
+                            g.draw_image_f_xy(img, px, py);
+                            g.set_scale(1.0, 1.0, 0.0, 0.0);
+                        } else {
+                            g.draw_image_f_xy(img, px, py);
+                        }
+                        continue;
+                    }
+                }
+
+                // 图片缺失时的占位回退（按轨道索引着色，便于调试）
+                let w = (40.0 * scale_x).max(2.0) as i32;
+                let h = (40.0 * scale_y).max(2.0) as i32;
+                let alpha = (t.m_alpha * 255.0).clamp(0.0, 255.0) as u8;
+                let hue = (i * 47) % 256;
+                g.set_color(&crate::framework::color::Color::new(hue as u8, 128, 255 - hue as u8, alpha));
+                g.fill_rect_xywh(px as i32, py as i32, w, h);
+            }
+        }
     }
 
     /// 重置动画
@@ -217,10 +251,71 @@ impl Reanimation {
     }
 
     /// 检查轨道是否存在（对应 C++ TrackExists）
-    pub fn track_exists(&self, _name: &str) -> bool { false }
+    pub fn track_exists(&self, name: &str) -> bool {
+        if let Some(def) = self.m_definition {
+            unsafe {
+                return (*def).m_tracks.iter().any(|t| t.m_name == name);
+            }
+        }
+        false
+    }
+
+    /// 按类型初始化动画（对应 C++ ReanimationInitializeType）
+    pub fn reanimation_initialize_type(&mut self, x: f32, y: f32, reanim_type: ReanimationType) {
+        let def_ptr = crate::todlib::reanim_loader::reanimator_get_definition(reanim_type);
+        self.reanim_type = reanim_type;
+        if let Some(def_ptr) = def_ptr {
+            unsafe {
+                let def_ref = &*def_ptr;
+                self.m_definition = Some(def_ptr);
+                self.m_fps = def_ref.m_fps;
+                self.m_anim_rate = def_ref.m_fps;
+                let track_count = def_ref.m_tracks.len();
+                self.m_track_instances = (0..track_count)
+                    .map(|_| crate::todlib::definition::ReanimatorTrackInstance::new())
+                    .collect();
+            }
+        }
+        self.m_x = x;
+        self.m_y = y;
+        self.m_anim_time = 0.0;
+        self.m_loop_count = 0;
+    }
+
+    /// 设置动画类型（从定义名称查找）（对应 C++ SetReanimType + ReanimationInitializeType）
+    pub fn set_reanim(&mut self, x: f32, y: f32, reanim_type: ReanimationType) {
+        self.reanimation_initialize_type(x, y, reanim_type);
+    }
+
+    /// 播放指定轨道（对应 C++ Reanimation::PlayReanim）
+    pub fn play_reanim(&mut self, track_name: &str, loop_type: ReanimLoopType, blend_time: i32, anim_rate: f32) {
+        let _ = blend_time;
+        self.m_loop_type = loop_type;
+        if anim_rate > 0.0 {
+            self.m_anim_rate = anim_rate;
+        }
+        // 记录当前播放轨道（通过 frame 归零近似）
+        self.m_anim_time = 0.0;
+        self.m_loop_count = 0;
+        // 查找轨道并重置其动画时间（简化：直接全局归零）
+        if let Some(def) = self.m_definition {
+            unsafe {
+                for (i, t) in (*def).m_tracks.iter().enumerate() {
+                    if t.m_name == track_name {
+                        if let Some(ti) = self.m_track_instances.get_mut(i) {
+                            ti.m_anim_time = 0.0;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
 
     /// 设置帧层（对应 C++ SetFramesForLayer）
-    pub fn set_frames_for_layer(&mut self, _layer: &str) {}
+    pub fn set_frames_for_layer(&mut self, _layer: &str) {
+        // [TRANSLATION_NOTE]: 完整实现需要 layer 帧区间计算，当前为骨架
+    }
 }
 
 impl Default for Reanimation {

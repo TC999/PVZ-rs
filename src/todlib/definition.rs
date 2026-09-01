@@ -18,7 +18,8 @@ pub struct ReanimatorDefinition {
 pub struct ReanimatorTrackDefinition {
     pub m_name: String,
     pub m_parent_name: String,
-    pub m_transform: ReanimatorTransform,
+    /// 每帧一个变换（对应 C++ ReanimatorTrack::mTransforms 数组）
+    pub m_transforms: Vec<ReanimatorTransform>,
     pub m_shader: String,
 }
 
