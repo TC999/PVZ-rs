@@ -393,7 +393,35 @@ impl CreditScreen {
             }
         }
     }
-    pub fn pre_load_credits(&mut self) { /* TODO */ }
+    pub fn pre_load_credits(&mut self) {
+        // 对应 C++ PreLoadCredits：加载片尾背景资源组与 reanim 定义
+        self.preloaded = true;
+        let resource_names = [
+            "DelayLoad_Background1",
+            "DelayLoad_Background2",
+            "DelayLoad_Background3",
+            "DelayLoad_Background4",
+            "DelayLoad_Background5",
+            "DelayLoad_Background6",
+        ];
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(rm) = (*app).base.resource_manager.as_mut() {
+                    for name in &resource_names {
+                        let _ = (**rm).load_resources(name);
+                    }
+                }
+                // C++ 中 ReanimatorEnsureDefinitionLoaded + ReanimationPreload
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::CreditsMain);
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::CreditsMain2);
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::CreditsMain3);
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::ZombieCreditsDance);
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::CreditsBigbrain);
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::CreditsFlowerPetals);
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::CreditsInfantry);
+            }
+        }
+    }
 }
 
 /// 制作人员叠加 Widget（对应 C++ CreditsOverlay）
