@@ -4,6 +4,7 @@
 #![allow(dead_code)]
 
 use crate::framework::graphics::graphics::Graphics;
+use crate::lawn::system::music::MusicTune;
 use crate::todlib::tod_foley::FoleyType;
 use crate::framework::widget::widget_manager::WidgetManager;
 use crate::framework::widget::widget::Widget;
@@ -110,7 +111,48 @@ impl CreditScreen {
         }
     }
 
-    pub fn update(&mut self) { /* TODO: CreditScreen.cpp */ }
+    pub fn update(&mut self) {
+        // 对应 C++ Update：片尾阶段推进与 reanim 同步
+        if !self.credits_paused {
+            let menu_over = self.main_menu_button.map_or(false, |p| unsafe { (*p).is_over });
+            let replay_over = self.replay_button.map_or(false, |p| unsafe { (*p).is_over });
+            if !menu_over && !replay_over {
+                // [TRANSLATION_NOTE]: C++ 中 SetCursor(CURSOR_POINTER)
+            }
+        }
+        // [TRANSLATION_NOTE]: C++ 中 !IsInDemoMode() && mDrawCount == 0 时暂停；Rust 侧无 demo 模式
+        if self.credits_paused {
+            return;
+        }
+
+        self.update_count += 1;
+        if self.update_count == 1 {
+            // C++ 中 PreLoadCredits() + PlayReanim(1) + 播放片尾音乐
+            let _ = self.play_reanim(1);
+            if let Some(app) = self.app {
+                unsafe {
+                    if let Some(music) = (*app).music.as_mut() {
+                        music.make_sure_music_is_playing(MusicTune::CreditsZombiesOnYourLawn);
+                    }
+                }
+            }
+        } else if self.dont_sync || self.credits_phase == CreditsPhase::End {
+            self.update_movie();
+        } else if self.update_count > 1 {
+            // [TRANSLATION_NOTE]: C++ 中按 reanim 定义时长与计时器差值调用
+            // JumpToFrame(phase+1, 0) 推进阶段或补帧 UpdateMovie()；Rust 侧
+            // reanim 轨道计数/计时器未接入，简化直接推进阶段
+            if self.credits_phase == CreditsPhase::Main1 {
+                self.jump_to_frame(CreditsPhase::Main2, 0.0);
+            } else if self.credits_phase == CreditsPhase::Main2 {
+                self.jump_to_frame(CreditsPhase::Main3, 0.0);
+            } else if self.credits_phase == CreditsPhase::Main3 {
+                self.jump_to_frame(CreditsPhase::End, 0.0);
+            }
+        }
+
+        self.last_draw_count = self.draw_count;
+    }
     pub fn draw(&self, _g: &mut Graphics) { /* TODO: CreditScreen.cpp */ }
     pub fn key_char(&mut self, _c: char) { /* TODO: CreditScreen.cpp */ }
     pub fn key_down(&mut self, key: KeyCode) {
