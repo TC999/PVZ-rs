@@ -184,6 +184,8 @@ pub struct GameSelectorImpl {
 
     // ---- 动画状态 ----
     pub selector_state: SelectorAnimState,
+    /// 对应 C++ mSelectorReanimID（选择器动画）
+    pub selector_reanim_id: ReanimationID,
 
     // ---- 工具提示 ----
     pub tool_tip: ToolTipWidget,
@@ -240,6 +242,7 @@ impl GameSelectorImpl {
             mouse_x: 0, mouse_y: 0,
             overlay_widget: None,
             synced: false,
+            selector_reanim_id: REANIMATIONID_NULL,
         };
 
         // 创建按钮（位置为近似值，实际坐标由 update_button_positions 修正）
@@ -551,8 +554,19 @@ impl GameSelectorImpl {
 
     /// 跟踪按钮位置（对应 C++ TrackButton）
     /// 根据动画轨道位置设置按钮位置
-    pub fn track_button(&self, _button: *mut crate::framework::widget::dialog_button::DialogButton, _track_name: &str, _offset_x: f32, _offset_y: f32) {
-        // TODO: 从 Reanimation 获取轨道变换并设置按钮位置
+    pub fn track_button(&self, button: *mut crate::framework::widget::dialog_button::DialogButton, track_name: &str, offset_x: f32, offset_y: f32) {
+        // 对应 C++ TrackButton：按选择器动画轨道位置设置按钮位置
+        unsafe {
+            if let Some(reanim) = (*self.app).reanimation_get(self.selector_reanim_id) {
+                let a_track_index = reanim.find_track_index(track_name);
+                let mut a_transform = crate::todlib::definition::ReanimatorTransform::default();
+                reanim.get_current_transform(a_track_index, &mut a_transform);
+                if !button.is_null() {
+                    (*button).x = (a_transform.m_trans_x + offset_x) as i32;
+                    (*button).y = (a_transform.m_trans_y + offset_y) as i32;
+                }
+            }
+        }
     }
 
     /// 添加预览配置文件（对应 C++ AddPreviewProfiles）
