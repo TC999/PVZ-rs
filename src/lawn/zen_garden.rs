@@ -15,6 +15,9 @@ use crate::lawn::system::player_info::PottedPlant;
 pub const ZEN_MAX_GRIDSIZE_X: i32 = 8;
 pub const ZEN_MAX_GRIDSIZE_Y: i32 = 4;
 
+/// 臭鼬睡觉位置 Y（对应 C++ STINKY_SLEEP_POS_Y）
+pub const STINKY_SLEEP_POS_Y: f32 = 461.0;
+
 /// 特殊网格布局（对应 C++ SpecialGridPlacement）
 pub struct SpecialGridPlacement {
     pub pixel_x: i32,
@@ -897,11 +900,139 @@ impl ZenGarden {
     }
 
     pub fn add_stinky(&mut self) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ AddStinky
+        if !self.has_purchased_stinky() || self.garden_type != GardenType::Main {
+            return;
+        }
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(info) = (*app).player_info.as_mut() {
+                    if info.m_has_seen_stinky == 0 {
+                        info.m_has_seen_stinky = 1;
+                        let mut a_time = self.now_time as u32;
+                        if a_time == 0 {
+                            a_time = 1;
+                        }
+                        let idx = StoreItem::StinkyTheSnail as usize;
+                        if info.m_purchases.len() > idx {
+                            info.m_purchases[idx] = a_time as i32;
+                        }
+                    }
+                }
+            }
+        }
+        // [TRANSLATION_NOTE]: 创建 GridItem(REANIM_STINKY) + StinkyPickGoal/ShouldStinkyBeAwake 分支依赖 Board 网格物品与动画系统，暂不执行
     }
 
-    pub fn stinky_update(&mut self, _stinky: &mut GridItem) {
-        // [TRANSLATION_NOTE]: StinkyUpdate — FallingAsleep/Sleeping/WakingUp/行走 状态机
+    pub fn stinky_update(&mut self, stinky: &mut GridItem) {
+        // 对应 C++ StinkyUpdate 核心状态机
+        let a_stinky_high_on_chocolate = self.is_stinky_high_on_chocolate();
+        self.update_stinky_motion_trail(stinky, a_stinky_high_on_chocolate);
+
+        let mut a_loop_count = 0i32;
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(reanim) = (*app).reanimation_get(stinky.grid_item_reanim_id) {
+                    a_loop_count = reanim.m_loop_count;
+                }
+            }
+        }
+
+        if stinky.grid_item_state == GridItemState::StinkyFallingAsleep {
+            if a_loop_count > 0 {
+                self.stinky_finish_falling_asleep(stinky, 20);
+            }
+            return;
+        }
+
+        if stinky.grid_item_state == GridItemState::StinkySleeping {
+            if self.should_stinky_be_awake() {
+                self.stinky_wake_up(stinky);
+            }
+            return;
+        }
+
+        if stinky.grid_item_state == GridItemState::StinkyWakingUp {
+            if a_loop_count > 0 {
+                stinky.grid_item_state = GridItemState::StinkyWalkingLeft;
+                if let Some(app) = self.app {
+                    unsafe {
+                        if let Some(reanim) = (*app).reanimation_get_mut(stinky.grid_item_reanim_id) {
+                            reanim.play_reanim("anim_crawl", crate::todlib::reanimator::ReanimLoopType::Loop, 10, 6.0);
+                        }
+                    }
+                }
+                self.stinky_pick_goal(stinky);
+            }
+            return;
+        }
+
+        if !self.should_stinky_be_awake() {
+            if stinky.pos_y >= STINKY_SLEEP_POS_Y {
+                if stinky.grid_item_state == GridItemState::StinkyWalkingLeft {
+                    self.stinky_start_falling_asleep(stinky);
+                    return;
+                } else if stinky.grid_item_state == GridItemState::StinkyWalkingRight {
+                    stinky.grid_item_state = GridItemState::StinkyTurningLeft;
+                    stinky.motion_trail_count = 0;
+                    stinky.goal_x = stinky.pos_x;
+                    stinky.goal_y = stinky.pos_y;
+                    return;
+                }
+            }
+        }
+
+        // C++: 靠近硬币自动收集
+        if let Some(board_ptr) = self.board {
+            let board = unsafe { &mut *board_ptr };
+            for coin in board.coins.iter_mut() {
+                if coin.dead { continue; }
+                if !coin.is_being_collected
+                    && crate::todlib::tod_common::distance(
+                        coin.pos_x, coin.pos_y + 30.0,
+                        stinky.pos_x, stinky.pos_y,
+                    ) < 20.0
+                {
+                    coin.collect();
+                }
+            }
+        }
+
+        if stinky.grid_item_state == GridItemState::StinkyWalkingLeft
+            || stinky.grid_item_state == GridItemState::StinkyWalkingRight
+        {
+            if stinky.counter > 0 {
+                stinky.counter -= 1;
+            }
+            // 简化：走到目标后重新选目标
+            let a_delta_x = (stinky.pos_x - stinky.goal_x).abs();
+            let a_delta_y = (stinky.pos_y - stinky.goal_y).abs();
+            if (a_delta_x < 5.0 && a_delta_y < 5.0) || stinky.counter == 0 {
+                self.stinky_pick_goal(stinky);
+            }
+        }
+
+        if stinky.grid_item_state == GridItemState::StinkyTurningLeft
+            || stinky.grid_item_state == GridItemState::StinkyTurningRight
+        {
+            if a_loop_count > 0 {
+                let new_state = if stinky.grid_item_state == GridItemState::StinkyTurningLeft {
+                    GridItemState::StinkyWalkingLeft
+                } else {
+                    GridItemState::StinkyWalkingRight
+                };
+                stinky.grid_item_state = new_state;
+                if let Some(app) = self.app {
+                    unsafe {
+                        if let Some(reanim) = (*app).reanimation_get_mut(stinky.grid_item_reanim_id) {
+                            reanim.play_reanim("anim_crawl", crate::todlib::reanimator::ReanimLoopType::Loop, 10, 6.0);
+                        }
+                    }
+                }
+            }
+        }
+
+        self.stinky_anim_rate_update(stinky);
     }
 
     pub fn open_store(&self) {
@@ -922,7 +1053,96 @@ impl ZenGarden {
     }
 
     pub fn stinky_pick_goal(&mut self, stinky: &mut GridItem) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ StinkyPickGoal
+        let a_cur_dist_to_goal = crate::todlib::tod_common::distance(
+            stinky.goal_x, stinky.goal_y, stinky.pos_x, stinky.pos_y,
+        );
+
+        // C++: 找最近的未收集金币
+        let mut a_best_coin: Option<usize> = None;
+        let mut a_cur_weight = 0.0f32;
+        let mut a_goal_set = false;
+        if let Some(board_ptr) = self.board {
+            let board = unsafe { &*board_ptr };
+            for (i, coin) in board.coins.iter().enumerate() {
+                if coin.dead { continue; }
+                if !coin.is_being_collected && coin.pos_y == coin.ground_y {
+                    let mut a_weight = crate::todlib::tod_common::distance(
+                        coin.pos_x, coin.pos_y + 30.0, stinky.pos_x, stinky.pos_y,
+                    );
+                    if coin.coin_type == CoinType::Gold {
+                        a_weight -= 40.0;
+                    } else if coin.coin_type == CoinType::Diamond {
+                        a_weight -= 80.0;
+                    }
+                    let a_dist_from_last_goal = crate::todlib::tod_common::distance(
+                        coin.pos_x, coin.pos_y + 30.0, stinky.goal_x, stinky.goal_y,
+                    );
+                    if a_dist_from_last_goal < 5.0 {
+                        a_weight -= 20.0;
+                    }
+                    if a_best_coin.is_none() || a_weight < a_cur_weight {
+                        a_best_coin = Some(i);
+                        a_cur_weight = a_weight;
+                    }
+                }
+            }
+        }
+
+        if let Some(i) = a_best_coin {
+            if let Some(board_ptr) = self.board {
+                let board = unsafe { &*board_ptr };
+                if let Some(coin) = board.coins.get(i) {
+                    stinky.goal_x = coin.pos_x;
+                    stinky.goal_y = coin.pos_y + 30.0;
+                    a_goal_set = true;
+                }
+            }
+        } else if a_cur_dist_to_goal <= 10.0 {
+            // C++: 无硬币时随机选一个网格目标（简化：选最近网格中心）
+            let mut count = 0;
+            let mut target = crate::lawn::zen_garden::SpecialGridPlacement { pixel_x: 0, pixel_y: 0, grid_x: 0, grid_y: 0 };
+            if let Some(placements) = self.get_special_grid_placements(&mut count) {
+                let placements = unsafe { std::slice::from_raw_parts(placements, count as usize) };
+                if !placements.is_empty() {
+                    let idx = crate::framework::common::rand_range(placements.len() as i32) as usize;
+                    target = crate::lawn::zen_garden::SpecialGridPlacement {
+                        pixel_x: placements[idx].pixel_x,
+                        pixel_y: placements[idx].pixel_y,
+                        grid_x: placements[idx].grid_x,
+                        grid_y: placements[idx].grid_y,
+                    };
+                }
+            }
+            stinky.goal_x = (target.pixel_x + 15) as f32;
+            stinky.goal_y = (target.pixel_y + 80) as f32;
+            a_goal_set = true;
+        }
+
+        if !a_goal_set {
+            return;
+        }
+
+        stinky.counter = 100;
+        // C++: 目标方向与当前行走方向不符时转身
+        let turn_to = if stinky.goal_x < stinky.pos_x && stinky.grid_item_state == GridItemState::StinkyWalkingRight {
+            Some(GridItemState::StinkyTurningLeft)
+        } else if stinky.goal_x > stinky.pos_x && stinky.grid_item_state == GridItemState::StinkyWalkingLeft {
+            Some(GridItemState::StinkyTurningRight)
+        } else {
+            None
+        };
+        if let Some(new_state) = turn_to {
+            stinky.grid_item_state = new_state;
+            stinky.motion_trail_count = 0;
+            if let Some(app) = self.app {
+                unsafe {
+                    if let Some(reanim) = (*app).reanimation_get_mut(stinky.grid_item_reanim_id) {
+                        reanim.play_reanim("turn", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, 10, 6.0);
+                    }
+                }
+            }
+        }
     }
 
     pub fn setup_for_zen_tutorial(&self) {
@@ -930,12 +1150,39 @@ impl ZenGarden {
     }
 
     pub fn wake_stinky(&self) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ WakeStinky
+        let mut a_time = self.now_time as u32;
+        if a_time == 0 {
+            a_time = 1;
+        }
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(info) = (*app).player_info.as_mut() {
+                    let idx = StoreItem::StinkyTheSnail as usize;
+                    if info.m_purchases.len() > idx {
+                        info.m_purchases[idx] = a_time as i32;
+                    }
+                    info.m_has_woken_stinky = 1;
+                }
+            }
+        }
+        // [TRANSLATION_NOTE]: PlaySample(SOUND_TAP) 与 ClearAdvice(ADVICE_STINKY_SLEEPING) 依赖音效/提示系统，暂不执行
     }
 
     pub fn should_stinky_be_awake(&self) -> bool {
-        // TODO: 从 ZenGarden.cpp 翻译
-        false
+        // 对应 C++ ShouldStinkyBeAwake
+        if self.is_stinky_high_on_chocolate() {
+            return true;
+        }
+        // C++ 无符号算术处理回绕；Rust 侧以 i64 直接相减并转 u32 近似
+        let a_now = self.now_time as u32;
+        let a_purchase = self.app.map_or(0u32, |app| unsafe {
+            (*app).player_info.as_ref().map_or(0u32, |info| {
+                let idx = StoreItem::StinkyTheSnail as usize;
+                info.m_purchases.get(idx).copied().unwrap_or(0) as u32
+            })
+        });
+        a_now.wrapping_sub(a_purchase) < 180
     }
 
     pub fn is_stinky_sleeping(&self) -> bool {
@@ -955,15 +1202,58 @@ impl ZenGarden {
     }
 
     pub fn stinky_wake_up(&self, stinky: &mut GridItem) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ StinkyWakeUp
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(reanim) = (*app).reanimation_get_mut(stinky.grid_item_reanim_id) {
+                    reanim.play_reanim("anim_out", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, 20, 6.0);
+                }
+            }
+        }
+        stinky.grid_item_state = GridItemState::StinkyWakingUp;
+        // [TRANSLATION_NOTE]: FindReanimAttachment(shell) + ReanimationDie 依赖附着系统，暂不执行
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(info) = (*app).player_info.as_mut() {
+                    info.m_has_woken_stinky = 1;
+                }
+            }
+        }
     }
 
     pub fn stinky_start_falling_asleep(&self, stinky: &mut GridItem) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ StinkyStartFallingAsleep
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(reanim) = (*app).reanimation_get_mut(stinky.grid_item_reanim_id) {
+                    reanim.play_reanim("anim_in", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, 20, 6.0);
+                }
+            }
+        }
+        stinky.grid_item_state = GridItemState::StinkyFallingAsleep;
     }
 
     pub fn stinky_finish_falling_asleep(&self, stinky: &mut GridItem, blend_time: i32) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ StinkyFinishFallingAsleep
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(reanim) = (*app).reanimation_get_mut(stinky.grid_item_reanim_id) {
+                    reanim.play_reanim("anim_out", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, blend_time, 0.0);
+                    reanim.m_anim_rate = 0.0;
+                }
+                // [TRANSLATION_NOTE]: AddReanimation(REANIM_SLEEPING) + AttachReanim 依赖附着系统，暂不执行
+            }
+        }
+        stinky.grid_item_state = GridItemState::StinkySleeping;
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(info) = (*app).player_info.as_ref() {
+                    if info.m_has_woken_stinky == 0 {
+                        // [TRANSLATION_NOTE]: DisplayAdvice("[ADVICE_STINKY_SLEEPING]") 依赖提示系统，暂不执行
+                    }
+                }
+            }
+        }
     }
 
     pub fn advance_crazy_dave_dialog(&mut self) {
@@ -996,15 +1286,62 @@ impl ZenGarden {
     }
 
     pub fn update_stinky_motion_trail(&self, stinky: &mut GridItem, stinky_high_on_chocolate: bool) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ UpdateStinkyMotionTrail
+        let a_stinky_reanim_time = self.app.and_then(|app| unsafe {
+            (*app).reanimation_get(stinky.grid_item_reanim_id).map(|r| r.m_anim_time)
+        }).unwrap_or(0.0);
+        if !stinky_high_on_chocolate {
+            stinky.motion_trail_count = 0;
+            return;
+        }
+        if stinky.grid_item_state != GridItemState::StinkyWalkingRight
+            && stinky.grid_item_state != GridItemState::StinkyWalkingLeft
+        {
+            stinky.motion_trail_count = 0;
+            return;
+        }
+
+        if stinky.motion_trail_count == crate::lawn::grid_item::NUM_MOTION_TRAIL_FRAMES as i32 {
+            stinky.motion_trail_count -= 1;
+        }
+        if stinky.motion_trail_count > 0 {
+            // C++ memmove：右移一帧
+            let count = stinky.motion_trail_count as usize;
+            for i in (1..=count).rev() {
+                stinky.motion_trail_frames[i] = stinky.motion_trail_frames[i - 1];
+            }
+        }
+        let mut f = crate::lawn::grid_item::MotionTrailFrame::new();
+        f.pos_x = stinky.pos_x;
+        f.pos_y = stinky.pos_y;
+        f.anim_time = a_stinky_reanim_time;
+        stinky.motion_trail_frames[0] = f;
+        stinky.motion_trail_count += 1;
     }
 
     pub fn reset_plant_timers(&self, potted_plant: &mut PottedPlant) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ ResetPlantTimers
+        potted_plant.last_watered_time = self.now_time;
+        potted_plant.last_need_fulfilled_time = 0;
+        potted_plant.last_fertilized_time = 0;
+        potted_plant.last_chocolate_time = 0;
+        potted_plant.plant_need = PottedPlantNeed::None;
+        potted_plant.times_fed = 0;
     }
 
     pub fn reset_stinky_timers(&self) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ ResetStinkyTimers
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(info) = (*app).player_info.as_mut() {
+                    let idx = StoreItem::StinkyTheSnail as usize;
+                    if info.m_purchases.len() > idx {
+                        info.m_purchases[idx] = 2;
+                    }
+                    info.m_last_stinky_chocolate_time = 0;
+                }
+            }
+        }
     }
 
     pub fn plant_set_launch_counter(&self, plant: &mut Plant) {
@@ -1017,12 +1354,31 @@ impl ZenGarden {
     }
 
     pub fn is_stinky_high_on_chocolate(&self) -> bool {
-        // TODO: 从 ZenGarden.cpp 翻译
-        false
+        // 对应 C++ IsStinkyHighOnChocolate（无符号比较近似）
+        let a_now = self.now_time as u32;
+        let a_last = self.app.map_or(0u32, |app| unsafe {
+            (*app).player_info.as_ref().map_or(0u32, |info| info.m_last_stinky_chocolate_time)
+        });
+        a_now.wrapping_sub(a_last) < 3600
     }
 
     pub fn stinky_anim_rate_update(&self, stinky: &mut GridItem) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ StinkyAnimRateUpdate
+        let walking = stinky.grid_item_state == GridItemState::StinkyWalkingLeft
+            || stinky.grid_item_state == GridItemState::StinkyWalkingRight
+            || stinky.grid_item_state == GridItemState::StinkyTurningRight
+            || stinky.grid_item_state == GridItemState::StinkyTurningLeft;
+        if !walking {
+            return;
+        }
+        let a_rate = if self.is_stinky_high_on_chocolate() { 12.0 } else { 6.0 };
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(reanim) = (*app).reanimation_get_mut(stinky.grid_item_reanim_id) {
+                    reanim.m_anim_rate = a_rate;
+                }
+            }
+        }
     }
 }
 

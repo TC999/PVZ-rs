@@ -83,6 +83,12 @@ pub struct PlayerInfo {
     pub m_challenge_records: Vec<i32>,
     /// 对应 C++ PlayerInfo::mPottedPlant[MAX_POTTED_PLANTS]
     pub m_potted_plant: Vec<PottedPlant>,
+    /// 对应 C++ PlayerInfo::mHasWokenStinky
+    pub m_has_woken_stinky: i32,
+    /// 对应 C++ PlayerInfo::mLastStinkyChocolateTime
+    pub m_last_stinky_chocolate_time: u32,
+    /// 对应 C++ PlayerInfo::mHasSeenStinky
+    pub m_has_seen_stinky: i32,
 }
 
 impl PlayerInfo {
@@ -105,6 +111,9 @@ impl PlayerInfo {
             m_purchases: vec![0; 200],
             m_challenge_records: vec![0; 200],
             m_potted_plant: Vec::new(),
+            m_has_woken_stinky: 0,
+            m_last_stinky_chocolate_time: 0,
+            m_has_seen_stinky: 0,
         }
     }
 
