@@ -101,14 +101,16 @@ impl Attachment {
         // TODO: 从 Attachment.cpp 翻译
     }
 
-    /// 销毁
+    /// 销毁（对应 C++ Attachment::Die）
     pub fn die(&mut self) {
-        // TODO: 从 Attachment.cpp 翻译
+        self.num_effects = 0;
+        self.dead = true;
     }
 
-    /// 分离
+    /// 分离（对应 C++ Attachment::Detach）
     pub fn detach(&mut self) {
-        // TODO: 从 Attachment.cpp 翻译
+        self.num_effects = 0;
+        self.dead = true;
     }
 
     /// 交叉淡出
@@ -156,8 +158,12 @@ impl AttachmentHolder {
     }
 
     pub fn alloc_attachment(&mut self) -> Option<*mut Attachment> {
-        // TODO: 从 Attachment.cpp 翻译
-        None
+        // 对应 C++ AttachmentHolder::AllocAttachment
+        let ptr = self.attachments.alloc();
+        if ptr.is_null() {
+            return None;
+        }
+        Some(ptr)
     }
 }
 
