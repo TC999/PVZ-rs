@@ -217,8 +217,41 @@ impl StoreScreen {
             cost <= 0 || (*app).player_info.as_ref().unwrap().m_coins >= cost
         } } else { false }
     }
-    pub fn enable_buttons(&self, _enable: bool) { /* TODO */ }
-    pub fn setup_for_intro(&mut self, _dialog_index: i32) { /* TODO */ }
+    pub fn enable_buttons(&mut self, enable: bool) {
+        // 对应 C++ EnableButtons
+        let plant_upgrades_page = self.is_page_shown(StorePages::PlantUpgrades);
+        // [TRANSLATION_NOTE]: C++ 中 mMouseVisible = theEnable；Rust 侧用 visible 近似
+        if self.easy_buying_cheat || plant_upgrades_page || !enable {
+            if let Some(btn) = self.next_button {
+                unsafe {
+                    (*btn).visible = enable;
+                    (*btn).set_disabled(!enable);
+                }
+            }
+            if let Some(btn) = self.prev_button {
+                unsafe {
+                    (*btn).visible = enable;
+                    (*btn).set_disabled(!enable);
+                }
+            }
+        }
+        if let Some(btn) = self.back_button {
+            unsafe {
+                (*btn).visible = enable;
+                (*btn).set_disabled(!enable);
+            }
+        }
+    }
+
+    pub fn setup_for_intro(&mut self, dialog_index: i32) {
+        // 对应 C++ SetupForIntro
+        self.start_dialog = dialog_index;
+        self.hatch_open = false;
+        if let Some(btn) = self.back_button {
+            unsafe { (*btn).set_label("[STORE_NEXT_LEVEL_BUTTON]"); }
+        }
+        self.enable_buttons(false);
+    }
 }
 
 impl Default for StoreScreen {

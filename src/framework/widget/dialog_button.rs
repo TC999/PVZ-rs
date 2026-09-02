@@ -116,6 +116,16 @@ impl DialogButton {
         self.is_down && self.is_over && !self.disabled
     }
 
+    /// 设置禁用状态（对应 C++ SetDisabled）
+    pub fn set_disabled(&mut self, the_disabled: bool) {
+        self.disabled = the_disabled;
+    }
+
+    /// 设置标签（对应 C++ SetLabel）
+    pub fn set_label(&mut self, the_label: &str) {
+        self.label = the_label.to_string();
+    }
+
     /// 绘制（对应 C++ Draw）
     pub fn draw(&mut self, g: &mut Graphics) {
         if self.btn_no_draw { return; }
