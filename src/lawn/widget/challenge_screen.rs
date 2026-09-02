@@ -93,17 +93,61 @@ impl ChallengeScreen {
     }
 
     pub fn show_page_buttons(&self) -> bool {
-        // TODO: 从 ChallengeScreen.cpp 翻译
-        false
+        // 对应 C++ ShowPageButtons
+        let cheat_keys = self.app.map_or(false, |app| unsafe { (*app).m_tod_cheat_keys });
+        cheat_keys
+            && self.page_index != ChallengePage::Survival
+            && self.page_index != ChallengePage::Puzzle
     }
 
     pub fn update_buttons(&mut self) {
-        // TODO: 从 ChallengeScreen.cpp 翻译
+        // 对应 C++ UpdateButtons
+        for a_challenge_mode in 0..72 { // NUM_CHALLENGE_MODES
+            let visible = get_challenge_definition(a_challenge_mode)
+                .map_or(false, |def| def.page == self.page_index);
+            if let Some(btn) = self.challenge_buttons.get(a_challenge_mode as usize).copied().flatten() {
+                unsafe { (*btn).visible = visible; }
+            }
+        }
+        for a_page in 0..4 { // MAX_CHALLANGE_PAGES
+            let Some(btn) = self.page_button[a_page] else { continue };
+            unsafe {
+                let b = &mut *btn;
+                if a_page as i32 == ChallengePage::Limbo as i32 && self.limbo_page_unlocked {
+                    b.visible = true;
+                }
+                if a_page as i32 == self.page_index as i32 {
+                    if !b.colors.is_empty() {
+                        b.colors[crate::framework::widget::button_widget::COLOR_LABEL] = crate::framework::color::Color::from_rgb(64, 64, 64);
+                    }
+                    b.disabled = true;
+                } else {
+                    if !b.colors.is_empty() {
+                        b.colors[crate::framework::widget::button_widget::COLOR_LABEL] = crate::framework::color::Color::from_rgb(255, 240, 0);
+                    }
+                    b.disabled = false;
+                }
+            }
+        }
     }
 
-    pub fn accomplishments_needed(&self, _challenge_index: i32) -> i32 {
-        // TODO: 从 ChallengeScreen.cpp 翻译
-        0
+    pub fn accomplishments_needed(&self, challenge_index: i32) -> i32 {
+        // 对应 C++ AccomplishmentsNeeded
+        let mut a_trophies_needed = self.more_trophies_needed(challenge_index);
+        let a_game_mode = get_challenge_definition(challenge_index).map_or(GameMode::Adventure, |d| d.challenge_mode);
+        if let Some(app) = self.app {
+            unsafe {
+                if (*app).is_survival_endless(a_game_mode)
+                    && a_trophies_needed <= 3
+                    && crate::lawn::lawn_app::LawnApp::get_num_trophies(ChallengePage::Survival as i32) < 10
+                    && (*app).has_finished_adventure()
+                    && !(*app).is_trial_stage_locked()
+                {
+                    a_trophies_needed = 1;
+                }
+            }
+        }
+        if self.cheat_enable_challenges { 0 } else { a_trophies_needed }
     }
 
     pub fn draw_button(&self, _g: &mut Graphics, _challenge_index: i32) {
