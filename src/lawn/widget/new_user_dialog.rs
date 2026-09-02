@@ -54,9 +54,40 @@ impl NewUserDialog {
     pub fn mouse_down(&mut self, _x: i32, _y: i32, _btn: i32) {}
     pub fn added_to_manager(&mut self, _manager: &mut WidgetManager) {}
     pub fn removed_from_manager(&mut self, _manager: &mut WidgetManager) {}
-    pub fn edit_widget_text(&mut self, _id: i32, _text: &str) {}
-    pub fn allow_char(&self, _id: i32, _ch: char) -> bool { true }
-    pub fn get_name(&self) -> String { String::new() }
-    pub fn set_name(&mut self, _name: &str) {}
+    pub fn edit_widget_text(&mut self, _id: i32, _text: &str) {
+        // [TRANSLATION_NOTE]: C++ 中 mApp->ButtonDepress(mId + 2000)；Rust 侧 LawnApp 无 button_depress
+    }
+    pub fn allow_char(&self, _id: i32, _ch: char) -> bool {
+        // 对应 C++ AllowChar：仅允许字母数字与空格
+        _ch.is_alphanumeric() || _ch == ' '
+    }
+
+    /// 获取净化后的用户名（对应 C++ GetName：压缩连续空格并去尾空格）
+    pub fn get_name(&self) -> String {
+        let the_string = self.name_edit_widget.map_or(String::new(), |pw| unsafe { (*pw).text.clone() });
+        let mut a_string = String::new();
+        let mut a_last_char = ' ';
+        for a_char in the_string.chars() {
+            if a_char != ' ' {
+                a_string.push(a_char);
+            } else if a_char != a_last_char {
+                a_string.push(' ');
+            }
+            a_last_char = a_char;
+        }
+        if a_string.ends_with(' ') {
+            a_string.pop();
+        }
+        a_string
+    }
+
+    pub fn set_name(&mut self, the_name: &str) {
+        // 对应 C++ SetName
+        if let Some(pw) = self.name_edit_widget {
+            unsafe {
+                (*pw).text = the_name.to_string();
+            }
+        }
+    }
     pub fn get_preferred_height(&self, _width: i32) -> i32 { 0 }
 }
