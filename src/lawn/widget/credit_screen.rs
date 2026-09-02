@@ -4,6 +4,7 @@
 #![allow(dead_code)]
 
 use crate::framework::graphics::graphics::Graphics;
+use crate::todlib::tod_foley::FoleyType;
 use crate::framework::widget::widget_manager::WidgetManager;
 use crate::framework::widget::widget::Widget;
 use crate::framework::key_codes::KeyCode;
@@ -112,10 +113,36 @@ impl CreditScreen {
     pub fn update(&mut self) { /* TODO: CreditScreen.cpp */ }
     pub fn draw(&self, _g: &mut Graphics) { /* TODO: CreditScreen.cpp */ }
     pub fn key_char(&mut self, _c: char) { /* TODO: CreditScreen.cpp */ }
-    pub fn key_down(&mut self, _key: KeyCode) { /* TODO: CreditScreen.cpp */ }
-    pub fn mouse_up(&mut self, _x: i32, _y: i32, _click_count: i32) { /* TODO: CreditScreen.cpp */ }
-    pub fn button_press(&mut self, _id: i32) { /* TODO: CreditScreen.cpp */ }
-    pub fn button_depress(&mut self, _id: i32) { /* TODO: CreditScreen.cpp */ }
+    pub fn key_down(&mut self, key: KeyCode) {
+        // 对应 C++ KeyDown：空格/回车/ESC 暂停片尾
+        if key == crate::framework::key_codes::KEYCODE_SPACE
+            || key == crate::framework::key_codes::KEYCODE_RETURN
+            || key == crate::framework::key_codes::KEYCODE_ESCAPE
+        {
+            self.pause_credits();
+        }
+    }
+    pub fn mouse_up(&mut self, _x: i32, _y: i32, _click_count: i32) {
+        // C++ 中为空实现
+    }
+    pub fn button_press(&mut self, _id: i32) {
+        // [TRANSLATION_NOTE]: C++ 中 PlaySample(SOUND_GRAVEBUTTON)
+    }
+    pub fn button_depress(&mut self, the_id: i32) {
+        // 对应 C++ ButtonDepress
+        const CREDITS_BUTTON_REPLAY: i32 = 0;
+        const CREDITS_BUTTON_MAIN_MENU: i32 = 1;
+        let Some(app) = self.app else { return };
+        unsafe {
+            if the_id == CREDITS_BUTTON_MAIN_MENU {
+                (*app).kill_credit_screen();
+                (*app).do_back_to_main();
+            } else if the_id == CREDITS_BUTTON_REPLAY {
+                (*app).kill_credit_screen();
+                (*app).show_credit_screen();
+            }
+        }
+    }
     pub fn play_reanim(&self, _index: i32) -> Option<*mut Reanimation> { None /* TODO */ }
     pub fn jump_to_frame(&self, _phase: CreditsPhase, _frame: f32) { /* TODO: CreditScreen.cpp */ }
     pub fn draw_fog_effect(&self, _g: &mut Graphics, _time: f32) { /* TODO */ }
@@ -123,7 +150,38 @@ impl CreditScreen {
     pub fn draw_final_credits(&self, _g: &mut Graphics) { /* TODO */ }
     pub fn draw_overlay(&self, _g: &mut Graphics) { /* TODO */ }
     pub fn update_movie(&mut self) { /* TODO */ }
-    pub fn pause_credits(&mut self) { /* TODO */ }
+    pub fn pause_credits(&mut self) {
+        // 对应 C++ PauseCredits：停止音效/音乐并弹出暂停菜单
+        if self.credits_paused {
+            return;
+        }
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(ss) = (*app).sound_system.as_ref() {
+                    ss.stop_foley(FoleyType::Scream);
+                }
+                // [TRANSLATION_NOTE]: C++ 中 PlaySample(SOUND_PAUSE)
+                if let Some(music) = (*app).music.as_mut() {
+                    music.game_music_pause(true);
+                }
+            }
+        }
+        self.credits_paused = true;
+        // [TRANSLATION_NOTE]: C++ 中 LawnMessageBox(DIALOG_MESSAGE, ...) 暂停菜单与恢复流程
+        // 未接入，此处以 do_dialog 近似提示
+        if let Some(app) = self.app {
+            unsafe {
+                let _ = (*app).do_dialog(
+                    crate::lawn::game_enums::Dialogs::Message as i32,
+                    true,
+                    "[CREDITS_PAUSE_HEADER]",
+                    "[CREDITS_PAUSE_BODY]",
+                    "[DIALOG_BUTTON_RESUME]",
+                    crate::framework::widget::dialog::BUTTONS_FOOTER,
+                );
+            }
+        }
+    }
     pub fn pre_load_credits(&mut self) { /* TODO */ }
 }
 
