@@ -572,7 +572,75 @@ impl GameSelectorImpl {
     /// 添加预览配置文件（对应 C++ AddPreviewProfiles）
     /// 创建内置预览存档（调试/预览用途）
     pub fn add_preview_profiles(&mut self) {
-        // TODO: 使用 ProfileMgr 创建预览存档
+        // 对应 C++ AddPreviewProfiles：创建 5 个内置预览存档
+        unsafe {
+            let Some(mgr) = (*self.app).profile_mgr.as_mut() else { return };
+
+            if let Some(p) = mgr.add_profile("2 Night") {
+                p.m_level = 11;
+            }
+            if let Some(p) = mgr.add_profile("3 Pool") {
+                p.m_level = 21;
+                p.m_has_unlocked_minigames = true;
+                p.m_coins = 400;
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::PacketUpgrade as usize) { *v = 1; }
+            }
+            if let Some(p) = mgr.add_profile("4 Fog") {
+                p.m_level = 31;
+                p.m_has_unlocked_minigames = true;
+                p.m_has_unlocked_survival_mode = true;
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::PacketUpgrade as usize) { *v = 2; }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::PoolCleaner as usize) { *v = 1; }
+                p.m_coins = 400;
+            }
+            if let Some(p) = mgr.add_profile("5 Roof") {
+                p.m_level = 41;
+                p.m_has_unlocked_minigames = true;
+                p.m_has_unlocked_puzzle_mode = true;
+                p.m_has_unlocked_survival_mode = true;
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::PacketUpgrade as usize) { *v = 2; }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::PoolCleaner as usize) { *v = 1; }
+                p.m_coins = 500;
+            }
+            if let Some(p) = mgr.add_profile("Complete") {
+                p.m_level = 1;
+                p.m_finished_adventure = 1;
+                p.m_has_unlocked_minigames = true;
+                p.m_has_unlocked_puzzle_mode = true;
+                p.m_has_unlocked_survival_mode = true;
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::PacketUpgrade as usize) { *v = 2; }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::PoolCleaner as usize) { *v = 1; }
+                p.m_coins = 1000;
+            }
+            if let Some(p) = mgr.add_profile("Full Unlock") {
+                p.m_level = 1;
+                p.m_finished_adventure = 2;
+                p.add_coins(50000);
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::Fertilizer as usize) { *v = 1000 + 5; }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::BugSpray as usize) { *v = 1000 + 5; }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::Chocolate as usize) { *v = 1000 + 5; }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::TreeOfWisdom as usize) { *v = 1000 + 5; }
+                p.m_has_unlocked_minigames = true;
+                p.m_has_unlocked_puzzle_mode = true;
+                for item in [StoreItem::PlantGatlingpea, StoreItem::PlantTwinsunflower,
+                    StoreItem::PlantGloomshroom, StoreItem::PlantCattail,
+                    StoreItem::PlantWintermelon, StoreItem::PlantGoldMagnet,
+                    StoreItem::PlantSpikerock, StoreItem::PlantCobcannon, StoreItem::PlantImitater]
+                {
+                    if let Some(v) = p.m_purchases.get_mut(item as usize) { *v = 1; }
+                }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::PacketUpgrade as usize) { *v = 3; }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::PoolCleaner as usize) { *v = 1; }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::Phonograph as usize) { *v = 1; }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::GardeningGlove as usize) { *v = 1; }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::MushroomGarden as usize) { *v = 1; }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::WheelBarrow as usize) { *v = 1; }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::AquariumGarden as usize) { *v = 1; }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::TreeOfWisdom as usize) { *v = 1; }
+                // [TRANSLATION_NOTE]: C++ 中 mChallengeRecords 挑战记录设定与 SaveDetails()；
+                // Rust 侧挑战记录索引与持久化未完全对齐，暂略
+            }
+        }
     }
 }
 
