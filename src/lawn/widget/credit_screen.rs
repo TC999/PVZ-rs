@@ -153,7 +153,18 @@ impl CreditScreen {
 
         self.last_draw_count = self.draw_count;
     }
-    pub fn draw(&self, _g: &mut Graphics) { /* TODO: CreditScreen.cpp */ }
+    pub fn draw(&self, g: &mut Graphics) {
+        // 对应 C++ Draw：按阶段绘制片尾场景
+        // [TRANSLATION_NOTE]: C++ 中按 credits_phase 绘制对应 reanim 动画与
+        // 文字（IMAGE_* 资源）；Rust 侧图片资源未接入，暂略
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(r) = (*app).reanimation_get(self.credits_reanim_id) {
+                    r.draw(g);
+                }
+            }
+        }
+    }
     pub fn key_char(&mut self, c: char) {
         // 对应 C++ KeyChar：调试键跳帧
         if self.credits_paused {
@@ -319,8 +330,29 @@ impl CreditScreen {
             let _ = unsafe { (*app).add_reanimation(0.0, 0.0, 0, ReanimationType::Sunflower as i32) };
         }
     }
-    pub fn draw_final_credits(&self, _g: &mut Graphics) { /* TODO */ }
-    pub fn draw_overlay(&self, _g: &mut Graphics) { /* TODO */ }
+    pub fn draw_final_credits(&self, g: &mut Graphics) {
+        // 对应 C++ DrawFinalCredits：最终名单滚动
+        // [TRANSLATION_NOTE]: C++ 中 CREDIT_SCREEN_ANIM_RATE = 0.3f
+        const CREDIT_SCREEN_ANIM_RATE: f32 = 0.3;
+        let a_content_height = draw_credits_content(g, 0, false);
+        let a_total_cycle = a_content_height + crate::lawn::game_enums::BOARD_HEIGHT;
+        let a_scroll_offset = ((self.credits_phase_counter as f32 * CREDIT_SCREEN_ANIM_RATE) as i32) % a_total_cycle;
+        draw_credits_content(g, crate::lawn::game_enums::BOARD_HEIGHT - a_scroll_offset, true);
+    }
+    pub fn draw_overlay(&self, g: &mut Graphics) {
+        // 对应 C++ DrawOverlay：END 阶段黑色淡出
+        if self.credits_phase == CreditsPhase::End {
+            let a_fade_alpha = crate::todlib::tod_common::tod_animate_curve(
+                50, 100, self.credits_phase_counter, 255, 0,
+                crate::lawn::game_enums::TodCurves::Linear,
+            );
+            if a_fade_alpha > 0 {
+                g.set_color(&crate::framework::color::Color::from_rgb(0, 0, 0));
+                g.fill_rect_xywh(0, 0, crate::lawn::game_enums::BOARD_WIDTH, crate::lawn::game_enums::BOARD_HEIGHT);
+                let _ = a_fade_alpha;
+            }
+        }
+    }
     pub fn update_movie(&mut self) {
         // 对应 C++ UpdateMovie：片尾动画推进与阶段切换
         self.update_blink();
@@ -431,12 +463,25 @@ pub struct CreditsOverlay {
 
 impl CreditsOverlay {
     pub fn new() -> Self { CreditsOverlay { parent: None } }
-    pub fn draw(&self, _g: &mut Graphics) { /* TODO */ }
+    pub fn draw(&self, g: &mut Graphics) {
+        // 对应 C++ CreditsOverlay::Draw
+        // [TRANSLATION_NOTE]: C++ 中绘制附加叠加效果（脑/灯光等）；Rust 侧图片资源未接入
+        if let Some(p) = self.parent {
+            unsafe { (*p).draw_overlay(g); }
+        }
+    }
 }
 
 // --- 自由函数 ---
 pub fn draw_disco(_g: &mut Graphics, _center_x: f32, _center_y: f32, _time: f32) { /* TODO */ }
-pub fn draw_reanim_to_preload(_g: &mut Graphics, _reanim_type: ReanimationType) { /* TODO */ }
+pub fn draw_reanim_to_preload(_g: &mut Graphics, the_reanim_type: ReanimationType) {
+        // 对应 C++ DrawReanimToPreload：创建指定动画并绘制（预加载用途）
+        // [TRANSLATION_NOTE]: C++ 中 CREDIT_SCREEN_ANIM_RATE = 0.3f
+        let mut a_reanim = crate::todlib::reanimator::Reanimation::new();
+        a_reanim.m_anim_rate = 0.3;
+        a_reanim.reanimation_initialize_type(0.0, 0.0, the_reanim_type);
+        a_reanim.draw(_g);
+    }
 
 /// 绘制制作人员名单内容（对应 C++ DrawCreditsContent）
 pub fn draw_credits_content(g: &mut Graphics, y_pos: i32, do_draw: bool) -> i32 {
