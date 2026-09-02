@@ -47,16 +47,122 @@ impl ReanimatorCache {
         // TODO: 从 ReanimationLawn.cpp 翻译
     }
 
+    pub fn update_reanimation_for_variation(&self, reanim: &mut Reanimation, draw_variation: DrawVariation) {
+        // 对应 C++ UpdateReanimationForVariation
+        let dv = draw_variation as i32;
+        if dv >= DrawVariation::MarigoldWhite as i32 && dv <= DrawVariation::MarigoldLightGreen as i32 {
+            let a_variation_index = (dv - DrawVariation::MarigoldWhite as i32) as usize;
+            let marigold_variations = [
+                crate::framework::color::Color::new(255, 255, 255, 255),
+                crate::framework::color::Color::new(230, 30, 195, 255),
+                crate::framework::color::Color::new(250, 125, 5, 255),
+                crate::framework::color::Color::new(255, 145, 215, 255),
+                crate::framework::color::Color::new(160, 255, 245, 255),
+                crate::framework::color::Color::new(230, 30, 30, 255),
+                crate::framework::color::Color::new(5, 130, 255, 255),
+                crate::framework::color::Color::new(195, 55, 235, 255),
+                crate::framework::color::Color::new(235, 210, 255, 255),
+                crate::framework::color::Color::new(255, 245, 55, 255),
+                crate::framework::color::Color::new(180, 255, 105, 255),
+            ];
+            if a_variation_index < marigold_variations.len() {
+                reanim.m_color_override = marigold_variations[a_variation_index];
+            }
+        } else {
+            match draw_variation {
+                DrawVariation::Imitater => {
+                    // [TRANSLATION_NOTE]: FILTER_EFFECT_WASHED_OUT 依赖滤镜系统，暂以颜色近似
+                    reanim.m_color_override = crate::framework::color::Color::new(200, 200, 200, 255);
+                }
+                DrawVariation::ImitaterLess => {
+                    reanim.m_color_override = crate::framework::color::Color::new(220, 220, 220, 255);
+                }
+                DrawVariation::ZenGarden => {
+                    reanim.set_frames_for_layer("anim_zengarden");
+                }
+                DrawVariation::ZenGardenWater => {
+                    reanim.set_frames_for_layer("anim_waterplants");
+                }
+                DrawVariation::Aquarium => {
+                    reanim.set_frames_for_layer("anim_idle_aquarium");
+                }
+                DrawVariation::SproutNoFlower => {
+                    reanim.set_frames_for_layer("anim_idle_noflower");
+                }
+                _ => {}
+            }
+        }
+    }
+
+    pub fn draw_reanimator_frame(&self, g: &mut Graphics, pos_x: f32, pos_y: f32, reanimation_type: ReanimationType, track_name: &str, draw_variation: DrawVariation) {
+        // 对应 C++ DrawReanimatorFrame（实时创建 reanim 绘制，绕过内存缓存）
+        let mut a_reanim = Reanimation::new();
+        a_reanim.reanimation_initialize_type(pos_x, pos_y, reanimation_type);
+        if !track_name.is_empty() && a_reanim.track_exists(track_name) {
+            a_reanim.set_frames_for_layer(track_name);
+        }
+        if reanimation_type == ReanimationType::Sunflower {
+            a_reanim.m_anim_time = 0.15;
+        }
+        a_reanim.assign_render_group_to_track("anim_waterline", -1); // RENDER_GROUP_HIDDEN
+        if draw_variation != DrawVariation::Normal {
+            self.update_reanimation_for_variation(&mut a_reanim, draw_variation);
+        }
+        a_reanim.draw(g);
+    }
+
     pub fn draw_cached_plant(&self, g: &mut Graphics, pos_x: f32, pos_y: f32, seed_type: SeedType, draw_variation: DrawVariation) {
-        // TODO: 从 ReanimationLawn.cpp 翻译
+        // 对应 C++ DrawCachedPlant：实时绘制而非缓存内存图
+        let a_plant_def = crate::lawn::plant::get_plant_definition(seed_type);
+        let a_offset_x = -20;
+        let a_offset_y = -20;
+        let track = if seed_type == SeedType::PotatoMine { "anim_armed" } else { "anim_idle" };
+        let mut a_reanim = Reanimation::new();
+        a_reanim.reanimation_initialize_type(pos_x + a_offset_x as f32, pos_y + a_offset_y as f32, a_plant_def.reanimation_type);
+        if a_reanim.track_exists(track) {
+            a_reanim.set_frames_for_layer(track);
+        }
+        if draw_variation != DrawVariation::Normal {
+            self.update_reanimation_for_variation(&mut a_reanim, draw_variation);
+        }
+        a_reanim.draw(g);
     }
 
     pub fn draw_cached_mower(&self, g: &mut Graphics, pos_x: f32, pos_y: f32, mower_type: LawnMowerType) {
-        // TODO: 从 ReanimationLawn.cpp 翻译
+        // 对应 C++ DrawCachedMower：实时绘制割草机
+        let a_reanim_type = match mower_type {
+            LawnMowerType::Lawn => ReanimationType::Lawnmower,
+            LawnMowerType::Pool => ReanimationType::PoolCleaner,
+            LawnMowerType::Roof => ReanimationType::RoofCleaner,
+            LawnMowerType::SuperMower => ReanimationType::Lawnmower,
+            _ => return,
+        };
+        let mut a_reanim = Reanimation::new();
+        a_reanim.reanimation_initialize_type(pos_x - 20.0, pos_y, a_reanim_type);
+        if a_reanim.track_exists("anim_normal") {
+            a_reanim.set_frames_for_layer("anim_normal");
+        }
+        a_reanim.draw(g);
     }
 
     pub fn draw_cached_zombie(&self, g: &mut Graphics, pos_x: f32, pos_y: f32, zombie_type: ZombieType) {
-        // TODO: 从 ReanimationLawn.cpp 翻译
+        // 对应 C++ DrawCachedZombie：实时绘制僵尸缓存图（Boss 用头、普通用 anim_idle）
+        let a_zombie_def = crate::lawn::zombie::get_zombie_definition(zombie_type);
+        if a_zombie_def.reanimation_type == ReanimationType::None {
+            return;
+        }
+        let mut a_reanim = Reanimation::new();
+        let (a_pos_x, a_pos_y) = if a_zombie_def.reanimation_type == ReanimationType::Boss {
+            (-524.0, -88.0)
+        } else {
+            (40.0, 40.0)
+        };
+        a_reanim.reanimation_initialize_type(pos_x + a_pos_x, pos_y + a_pos_y, a_zombie_def.reanimation_type);
+        let track = if zombie_type == ZombieType::Pogo { "anim_pogo" } else { "anim_idle" };
+        if a_reanim.track_exists(track) {
+            a_reanim.set_frames_for_layer(track);
+        }
+        a_reanim.draw(g);
     }
 
     pub fn make_blank_memory_image(&self, width: i32, height: i32) -> Option<*mut MemoryImage> {
@@ -80,14 +186,6 @@ impl ReanimatorCache {
     }
 
     pub fn get_plant_image_size(&self, seed_type: SeedType, offset_x: &mut i32, offset_y: &mut i32, width: &mut i32, height: &mut i32) {
-        // TODO: 从 ReanimationLawn.cpp 翻译
-    }
-
-    pub fn draw_reanimator_frame(&self, g: &mut Graphics, pos_x: f32, pos_y: f32, reanimation_type: ReanimationType, track_name: &str, draw_variation: DrawVariation) {
-        // TODO: 从 ReanimationLawn.cpp 翻译
-    }
-
-    pub fn update_reanimation_for_variation(&self, reanim: &mut Reanimation, draw_variation: DrawVariation) {
         // TODO: 从 ReanimationLawn.cpp 翻译
     }
 }
