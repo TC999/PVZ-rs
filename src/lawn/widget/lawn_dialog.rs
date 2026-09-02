@@ -212,9 +212,95 @@ impl LawnDialog {
         self.height = height;
     }
 
-    pub fn draw(&self, _g: &mut Graphics) {
-        // [TRANSLATION_NOTE]: C++ 用 9 张对话框组件图（IMAGE_DIALOG_*）平铺绘制；
-        // Rust 图片资源未接入，留待对话框绘图系统
+    pub fn draw(&self, g: &mut Graphics) {
+        // 对应 C++ LawnDialog::Draw：九宫格组件图平铺 + 标题 + 正文
+        if !self.draw_standard_back {
+            return;
+        }
+        // 底部图：普通或高底（mTallBottom）
+        let (bottom_left, bottom_middle, bottom_right) = if self.tall_bottom {
+            ("dialog_bigbottomleft", "dialog_bigbottommiddle", "dialog_bigbottomright")
+        } else {
+            ("dialog_bottomleft", "dialog_bottommiddle", "dialog_bottomright")
+        };
+        let top_left = self.get_image("dialog_topleft");
+        let top_middle = self.get_image("dialog_topmiddle");
+        let top_right = self.get_image("dialog_topright");
+        let center_left = self.get_image("dialog_centerleft");
+        let center_middle = self.get_image("dialog_centermiddle");
+        let center_right = self.get_image("dialog_centerright");
+        let bottom_left_img = self.get_image(bottom_left);
+        let bottom_middle_img = self.get_image(bottom_middle);
+        let bottom_right_img = self.get_image(bottom_right);
+        let header_img = self.get_image("dialog_header");
+        if top_left.is_none() || top_middle.is_none() || top_right.is_none()
+            || center_left.is_none() || center_middle.is_none() || center_right.is_none()
+            || bottom_left_img.is_none() || bottom_middle_img.is_none() || bottom_right_img.is_none()
+        {
+            // [TRANSLATION_NOTE]: 对话框组件图未加载，回退为半透明背景矩形
+            g.set_color(&Color::new(40, 40, 40, 230));
+            g.fill_rect_xywh(self.x, self.y, self.width, self.height);
+            return;
+        }
+        let (tl, tm, tr) = (top_left.unwrap(), top_middle.unwrap(), top_right.unwrap());
+        let (cl, cm, cr) = (center_left.unwrap(), center_middle.unwrap(), center_right.unwrap());
+        let (bl, bm, br) = (bottom_left_img.unwrap(), bottom_middle_img.unwrap(), bottom_right_img.unwrap());
+
+        let a_repeat_x = (self.width - tr.width - tl.width) / tm.width.max(1);
+        let a_repeat_y = (self.height - tl.height - bl.height - DIALOG_HEADER_OFFSET) / cl.height.max(1);
+
+        let mut a_pos_x = 0;
+        let mut a_pos_y = DIALOG_HEADER_OFFSET;
+        g.draw_image_f_xy(tl, a_pos_x as f32, a_pos_y as f32);
+        a_pos_x += tl.width;
+        for _ in 0..a_repeat_x {
+            g.draw_image_f_xy(tm, a_pos_x as f32, a_pos_y as f32);
+            a_pos_x += tm.width;
+        }
+        g.draw_image_f_xy(tr, a_pos_x as f32, a_pos_y as f32);
+
+        a_pos_y += tr.height;
+        for _ in 0..a_repeat_y {
+            a_pos_x = 0;
+            g.draw_image_f_xy(cl, a_pos_x as f32, a_pos_y as f32);
+            a_pos_x += cl.width;
+            for _ in 0..a_repeat_x {
+                g.draw_image_f_xy(cm, a_pos_x as f32, a_pos_y as f32);
+                a_pos_x += cm.width;
+            }
+            g.draw_image_f_xy(cr, a_pos_x as f32, a_pos_y as f32);
+            a_pos_y += cl.height;
+        }
+
+        a_pos_x = 0;
+        g.draw_image_f_xy(bl, a_pos_x as f32, a_pos_y as f32);
+        a_pos_x += bl.width;
+        for _ in 0..a_repeat_x {
+            g.draw_image_f_xy(bm, a_pos_x as f32, a_pos_y as f32);
+            a_pos_x += bm.width;
+        }
+        g.draw_image_f_xy(br, a_pos_x as f32, a_pos_y as f32);
+        if let Some(hd) = header_img {
+            g.draw_image_f_xy(hd, ((self.width - hd.width) / 2 - 5) as f32, 0.0);
+        }
+        // [TRANSLATION_NOTE]: 标题与正文文字依赖字体/换行系统，后续补全
+    }
+
+    /// 按小写 id 获取对话框图片（经 resource_manager）
+    fn get_image(&self, id: &str) -> Option<&crate::framework::graphics::image::Image> {
+        let app = self.app?;
+        let app_ref = unsafe { &*app };
+        let rm = app_ref.base.resource_manager?;
+        let shared = unsafe { (*rm).get_image(id) };
+        unsafe {
+            if !shared.unshared_image.is_null() {
+                return Some(&(*(shared.unshared_image)).base);
+            }
+            if !shared.shared_image.is_null() {
+                return Some(&(*(*(shared.shared_image)).image).base.base);
+            }
+        }
+        None
     }
 
     /// 计算对话框尺寸（对应 C++ CalcSize）
