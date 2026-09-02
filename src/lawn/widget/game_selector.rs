@@ -549,7 +549,39 @@ impl GameSelectorImpl {
 
     /// 更新工具提示（对应 C++ UpdateTooltip）
     pub fn update_tooltip(&mut self) {
-        // TODO: 实现基于鼠标位置的提示更新
+        unsafe {
+            if !(*self.app).has_finished_adventure()
+                || (*self.app).base.dialog_map.contains_key(&(Dialogs::Message as i32))
+            {
+                return;
+            }
+
+            if self.has_trophy {
+                if self.mouse_x >= 50 && self.mouse_x < 135 && self.mouse_y >= 275 && self.mouse_y < 500 {
+                    if (*self.app).earned_gold_trophy() {
+                        let finished = (*self.app).player_info.as_ref().map_or(0, |p| p.m_finished_adventure);
+                        let label = crate::lawn::lawn_app::LawnApp::pluralize(
+                            finished,
+                            "[GOLD_SUNFLOWER_TOOLTIP]",
+                            "[GOLD_SUNFLOWER_TOOLTIP_PLURAL]",
+                        );
+                        self.tool_tip.set_label(&label);
+                        self.tool_tip.m_x = 32;
+                        self.tool_tip.m_y = 510;
+                        self.tool_tip.m_visible = true;
+                    } else {
+                        self.tool_tip.set_label("[SILVER_SUNFLOWER_TOOLTIP]");
+                        self.tool_tip.m_x = 20;
+                        self.tool_tip.m_y = 495;
+                        self.tool_tip.m_visible = true;
+                    }
+                    return;
+                }
+            }
+
+            self.tool_tip.m_visible = false;
+            self.tool_tip.update();
+        }
     }
 
     /// 跟踪按钮位置（对应 C++ TrackButton）
