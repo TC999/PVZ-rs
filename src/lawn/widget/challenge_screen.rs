@@ -52,8 +52,22 @@ impl ChallengeScreen {
         }
     }
 
-    pub fn set_unlock_challenge_index(&mut self, _page: ChallengePage, _is_i_zombie: bool) {
-        // TODO: 从 ChallengeScreen.cpp 翻译
+    pub fn set_unlock_challenge_index(&mut self, page: ChallengePage, is_i_zombie: bool) {
+        // 对应 C++ SetUnlockChallengeIndex：查找当前页未锁定且可解锁的最后一个挑战
+        self.unlock_state = UnlockingState::Shaking;
+        self.unlock_state_counter = 100;
+        self.unlock_challenge_index = 0;
+        for a_challenge_mode in 0..72 { // NUM_CHALLENGE_MODES
+            let Some(a_def) = get_challenge_definition(a_challenge_mode) else { continue };
+            if a_def.page == page {
+                let page_ok = page != ChallengePage::Puzzle
+                    || (!is_i_zombie && Self::is_scary_potter_level(a_def.challenge_mode))
+                    || (is_i_zombie && Self::is_i_zombie_level(a_def.challenge_mode));
+                if page_ok && self.accomplishments_needed(a_challenge_mode) <= 0 {
+                    self.unlock_challenge_index = a_challenge_mode;
+                }
+            }
+        }
     }
 
     pub fn more_trophies_needed(&self, challenge_index: i32) -> i32 {
