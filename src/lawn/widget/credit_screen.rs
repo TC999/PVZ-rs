@@ -304,7 +304,21 @@ impl CreditScreen {
         self.credits_phase = the_phase;
     }
     pub fn draw_fog_effect(&self, _g: &mut Graphics, _time: f32) { /* TODO */ }
-    pub fn update_blink(&mut self) { /* TODO */ }
+    pub fn update_blink(&mut self) {
+        // 对应 C++ UpdateBlink：向日葵眨眼动画定时重创建
+        self.blink_countdown -= 1;
+        if self.blink_countdown > 0 {
+            return;
+        }
+
+        self.blink_countdown = 700;
+        // [TRANSLATION_NOTE]: C++ 中 FindSubReanim(REANIM_SUNFLOWER) 查找子动画并
+        // 创建眨眼动画 AttachToAnotherReanimation；Rust 侧 FindSubReanim/
+        // AttachToAnotherReanimation 未接入，仅推进计数
+        if let Some(app) = self.app {
+            let _ = unsafe { (*app).add_reanimation(0.0, 0.0, 0, ReanimationType::Sunflower as i32) };
+        }
+    }
     pub fn draw_final_credits(&self, _g: &mut Graphics) { /* TODO */ }
     pub fn draw_overlay(&self, _g: &mut Graphics) { /* TODO */ }
     pub fn update_movie(&mut self) { /* TODO */ }
