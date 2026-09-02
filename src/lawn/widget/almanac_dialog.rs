@@ -132,7 +132,20 @@ impl AlmanacDialog {
         }
         ZombieType::Invalid
     }
-    pub fn mouse_up(&mut self, _x: i32, _y: i32, _click_count: i32) { /* TODO */ }
+    pub fn mouse_up(&mut self, _x: i32, _y: i32, _click_count: i32) {
+        // 对应 C++ MouseUp：按钮悬停时切换页面/关闭
+        if self.plant_button.map_or(false, |p| unsafe { (*p).is_over }) {
+            self.set_page(AlmanacPage::Plants);
+        } else if self.zombie_button.map_or(false, |p| unsafe { (*p).is_over }) {
+            self.set_page(AlmanacPage::Zombies);
+        } else if self.close_button.map_or(false, |p| unsafe { (*p).is_over }) {
+            if let Some(app) = self.app {
+                unsafe { (*app).kill_almanac_dialog(); }
+            }
+        } else if self.index_button.map_or(false, |p| unsafe { (*p).is_over }) {
+            self.set_page(AlmanacPage::Index);
+        }
+    }
     pub fn mouse_down(&mut self, x: i32, y: i32, _click_count: i32) {
         let seed = self.seed_hit_test(x, y);
         if seed != SeedType::None { self.show_plant(seed); return; }
