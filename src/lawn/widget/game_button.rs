@@ -20,6 +20,10 @@ pub struct GameButton {
     pub colors: [Color; 6],
     pub text_offset_x: i32,
     pub text_offset_y: i32,
+    // 对应 C++ mOverAlpha/mOverAlphaSpeed/mOverAlphaFadeInSpeed（悬停渐变）
+    pub over_alpha: f32,
+    pub over_alpha_speed: f32,
+    pub over_alpha_fade_in_speed: f32,
 }
 
 impl GameButton {
@@ -44,6 +48,9 @@ impl GameButton {
             colors: [Color::new(0, 0, 0, 0); 6],
             text_offset_x: 0,
             text_offset_y: 0,
+            over_alpha: 0.0,
+            over_alpha_speed: 0.05,
+            over_alpha_fade_in_speed: 0.15,
         }
     }
     pub fn resize(&mut self, x: i32, y: i32, w: i32, h: i32) { self.x = x; self.y = y; self.width = w; self.height = h; }
@@ -95,6 +102,41 @@ impl GameButton {
     pub fn mouse_up_btn(&mut self, _x: i32, _y: i32, _b: i32, _c: i32) { self.is_down = false; }
     pub fn mouse_enter(&mut self) { self.is_over = true; }
     pub fn mouse_leave(&mut self) { self.is_over = false; }
+
+    /// 设置标签（对应 C++ SetLabel）
+    pub fn set_label(&mut self, the_label: &str) {
+        self.label = crate::todlib::tod_common::tod_string_translate(the_label);
+    }
+
+    /// 设置禁用（对应 C++ SetDisabled）
+    pub fn set_disabled(&mut self, the_disabled: bool) {
+        self.disabled = the_disabled;
+    }
+
+    /// 更新按钮（对应 C++ Update：悬停渐变）
+    pub fn update(&mut self) {
+        // [TRANSLATION_NOTE]: C++ 中 mIsOver = IsMouseOver() 且 mIsDown 由
+        // WidgetManager::mDownButtons 驱动；Rust 侧 is_over 由 mouse_enter/leave 维护。
+        if !self.is_down && !self.is_over && self.over_alpha > 0.0 {
+            if self.over_alpha_speed < 0.0 {
+                self.over_alpha = 0.0;
+                return;
+            }
+            self.over_alpha -= self.over_alpha_speed;
+            if self.over_alpha < 0.0 {
+                self.over_alpha = 0.0;
+            }
+        } else if self.is_over && self.over_alpha_fade_in_speed > 0.0 && self.over_alpha < 1.0 {
+            if self.over_alpha_fade_in_speed > 0.0 {
+                self.over_alpha += self.over_alpha_fade_in_speed;
+                if self.over_alpha > 1.0 {
+                    self.over_alpha = 1.0;
+                }
+            } else {
+                self.over_alpha = 1.0;
+            }
+        }
+    }
 }
 
 /// 石头风格按钮（对应 C++ LawnStoneButton : DialogButton）
