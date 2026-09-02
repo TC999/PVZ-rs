@@ -25,6 +25,9 @@ pub enum ReanimLoopType {
     LoopFullOffset,
     PlayOnceAndReturnToZero,
     PlayOnceAndReturnToZeroHoldLastFrame,
+    // C++ ConstEnums.h ReanimLoopType 追加（Boss 火焰球等使用）
+    PlayOnceFullLastFrame,
+    PlayOnceFullLastFrameAndHold,
 }
 
 /// 动画实例
@@ -54,6 +57,18 @@ pub struct Reanimation {
     pub m_anim_rate: f32,
     pub m_is_attachment: bool,
     pub m_frame_base_pose: i32,
+    // 对应 C++ mExtraAdditiveColor（附加加法混合颜色，DrawReanim 使用）
+    pub m_extra_additive_color: Color,
+    // 对应 C++ mEnableExtraAdditiveDraw（是否启用附加加法绘制）
+    pub m_enable_extra_additive_draw: bool,
+    // 对应 C++ mLastFrameTime（上一帧动画时间，用于 ShouldTriggerTimedEvent）
+    pub m_last_anim_time: f32,
+    // 对应 C++ mRenderOrder（渲染顺序）
+    pub m_render_order: i32,
+    // 对应 C++ mDead（动画是否已请求销毁）
+    pub m_dead: bool,
+    // 对应 C++ 的轨道图片覆盖表（trackName -> Image）
+    pub m_image_overrides: Vec<(String, *mut Image)>,
 }
 
 impl Reanimation {
@@ -81,12 +96,19 @@ impl Reanimation {
             m_anim_rate: 12.0,
             m_is_attachment: false,
             m_frame_base_pose: 0,
+            m_extra_additive_color: Color::BLACK,
+            m_enable_extra_additive_draw: false,
+            m_last_anim_time: 0.0,
+            m_render_order: 0,
+            m_dead: false,
+            m_image_overrides: Vec::new(),
         }
     }
 
     /// 更新动画
     pub fn update(&mut self) {
         if self.m_paused { return; }
+        self.m_last_anim_time = self.m_anim_time;
         self.m_anim_time += 1.0 / self.m_fps;
 
         // 检查是否到达结束
@@ -114,8 +136,14 @@ impl Reanimation {
         }
     }
 
-    /// 绘制
+    /// 绘制全部轨道（对应 C++ Reanimation::Draw = DrawRenderGroup(NORMAL)）
     pub fn draw(&self, g: &mut Graphics) {
+        self.draw_render_group(g, 0); // RENDER_GROUP_NORMAL
+    }
+
+    /// 按渲染组绘制（对应 C++ Reanimation::DrawRenderGroup）
+    /// 只绘制 mRenderGroup == theRenderGroup 的轨道；附加加法颜色覆盖通过颜色近似
+    pub fn draw_render_group(&self, g: &mut Graphics, the_render_group: i32) {
         let Some(def_ptr) = self.m_definition else { return };
         unsafe {
             let def = &*def_ptr;
@@ -128,6 +156,9 @@ impl Reanimation {
                     Some(t) => t,
                     None => continue,
                 };
+                if ti.m_render_group != the_render_group {
+                    continue;
+                }
                 if !ti.m_last_visible {
                     continue;
                 }
@@ -230,6 +261,9 @@ impl Reanimation {
     }
 
     pub fn is_completely_done(&self) -> bool {
+        if self.m_dead {
+            return true;
+        }
         if let Some(def) = self.m_definition {
             unsafe {
                 return self.m_anim_time >= (*def).m_fps;
@@ -315,6 +349,158 @@ impl Reanimation {
     /// 设置帧层（对应 C++ SetFramesForLayer）
     pub fn set_frames_for_layer(&mut self, _layer: &str) {
         // [TRANSLATION_NOTE]: 完整实现需要 layer 帧区间计算，当前为骨架
+    }
+
+    /// 给前缀分配渲染组（对应 C++ AssignRenderGroupToPrefix）
+    pub fn assign_render_group_to_prefix(&mut self, track_prefix: &str, render_group: i32) {
+        if let Some(def) = self.m_definition {
+            unsafe {
+                for (i, track_def) in (*def).m_tracks.iter().enumerate() {
+                    // C++: strcasecmp 前缀匹配
+                    if track_def.m_name.len() >= track_prefix.len()
+                        && track_def.m_name[..track_prefix.len()].eq_ignore_ascii_case(track_prefix)
+                    {
+                        if let Some(ti) = self.m_track_instances.get_mut(i) {
+                            ti.m_render_group = render_group;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// 给指定轨道分配渲染组（对应 C++ AssignRenderGroupToTrack，仅第一个精确匹配）
+    pub fn assign_render_group_to_track(&mut self, track_name: &str, render_group: i32) {
+        if let Some(def) = self.m_definition {
+            unsafe {
+                for (i, track_def) in (*def).m_tracks.iter().enumerate() {
+                    if track_def.m_name.eq_ignore_ascii_case(track_name) {
+                        if let Some(ti) = self.m_track_instances.get_mut(i) {
+                            ti.m_render_group = render_group;
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    /// 获取轨道图片覆盖（对应 C++ GetImageOverride）
+    pub fn get_image_override(&self, track_name: &str) -> *mut Image {
+        for (name, img) in &self.m_image_overrides {
+            if name.eq_ignore_ascii_case(track_name) {
+                return *img;
+            }
+        }
+        std::ptr::null_mut()
+    }
+
+    /// 设置轨道图片覆盖（对应 C++ SetImageOverride，nullptr 表示清除覆盖）
+    pub fn set_image_override(&mut self, track_name: &str, image: *mut Image) {
+        if image.is_null() {
+            self.m_image_overrides.retain(|(n, _)| !n.eq_ignore_ascii_case(track_name));
+            return;
+        }
+        for (name, img) in self.m_image_overrides.iter_mut() {
+            if name.eq_ignore_ascii_case(track_name) {
+                *img = image;
+                return;
+            }
+        }
+        self.m_image_overrides.push((track_name.to_string(), image));
+    }
+
+    /// 触发定时事件判定（对应 C++ ShouldTriggerTimedEvent）
+    /// 判断动画时间是否在本帧内越过 theEventTime（0~1 归一化时间）
+    pub fn should_trigger_timed_event(&self, event_time: f32) -> bool {
+        let _ = event_time;
+        if self.m_loop_count == 0 && self.m_last_anim_time <= 0.0 {
+            return false;
+        }
+        if self.m_anim_rate <= 0.0 {
+            return false;
+        }
+        let total_time = if let Some(def) = self.m_definition {
+            unsafe { (*def).m_fps }
+        } else { 1.0 };
+        if total_time <= 0.0 { return false; }
+        let cur = self.m_anim_time % total_time / total_time;
+        let last = self.m_last_anim_time % total_time / total_time;
+        if cur >= last {
+            return event_time >= last && event_time < cur;
+        }
+        event_time >= last || event_time < cur
+    }
+
+    /// 销毁动画（对应 C++ ReanimationDie）
+    pub fn reanimation_die(&mut self) {
+        self.m_dead = true;
+    }
+
+    /// 查找轨道索引（对应 C++ FindTrackIndex，找不到返回 -1）
+    pub fn find_track_index(&self, track_name: &str) -> i32 {
+        if let Some(def) = self.m_definition {
+            unsafe {
+                for (i, track) in (*def).m_tracks.iter().enumerate() {
+                    if track.m_name.eq_ignore_ascii_case(track_name) {
+                        return i as i32;
+                    }
+                }
+            }
+        }
+        -1
+    }
+
+    /// 获取当前变换（对应 C++ GetCurrentTransform，简化版：取当前帧索引）
+    pub fn get_current_transform(&self, track_index: i32, out: &mut crate::todlib::definition::ReanimatorTransform) -> bool {
+        if let Some(def) = self.m_definition {
+            unsafe {
+                let def_ref = &*def;
+                if track_index < 0 || track_index as usize >= def_ref.m_tracks.len() {
+                    return false;
+                }
+                let track = &def_ref.m_tracks[track_index as usize];
+                if track.m_transforms.is_empty() {
+                    return false;
+                }
+                let total_time = if def_ref.m_fps > 0.0 { def_ref.m_fps } else { 1.0 };
+                let frame_idx = ((self.get_frame_time() % total_time) / total_time * track.m_transforms.len() as f32) as usize;
+                let idx = frame_idx.min(track.m_transforms.len() - 1);
+                *out = track.m_transforms[idx];
+                return true;
+            }
+        }
+        false
+    }
+
+    /// 获取轨道速度（对应 C++ GetTrackVelocity，基于相邻帧 x 位移 * 帧时长 * 速率）
+    pub fn get_track_velocity(&self, track_name: &str) -> f32 {
+        const SECONDS_PER_UPDATE: f32 = 0.02; // C++ SECONDS_PER_UPDATE
+        let track_index = self.find_track_index(track_name);
+        if track_index < 0 { return 0.0; }
+        if let Some(def) = self.m_definition {
+            unsafe {
+                let def_ref = &*def;
+                if track_index as usize >= def_ref.m_tracks.len() { return 0.0; }
+                let track = &def_ref.m_tracks[track_index as usize];
+                if track.m_transforms.len() < 2 { return 0.0; }
+                let total_time = if def_ref.m_fps > 0.0 { def_ref.m_fps } else { 1.0 };
+                let frame_time = self.get_frame_time();
+                let f = (frame_time % total_time) / total_time * track.m_transforms.len() as f32;
+                let after = (f as usize).min(track.m_transforms.len() - 1);
+                let before = if after == 0 { track.m_transforms.len() - 1 } else { after - 1 };
+                let a_dis = track.m_transforms[after].m_trans_x - track.m_transforms[before].m_trans_x;
+                return a_dis * SECONDS_PER_UPDATE * self.m_anim_rate;
+            }
+        }
+        0.0
+    }
+
+    /// 按名称获取轨道实例（对应 C++ GetTrackInstanceByName）
+    pub fn get_track_instance_by_name(&mut self, track_name: &str) -> Option<&mut crate::todlib::definition::ReanimatorTrackInstance> {
+        let idx = self.find_track_index(track_name);
+        if idx < 0 { return None; }
+        self.m_track_instances.get_mut(idx as usize)
     }
 }
 

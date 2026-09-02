@@ -57,6 +57,8 @@ pub struct ReanimatorTrackInstance {
     pub m_temp_offset_y: f32,
     pub m_cached_center_x: f32,
     pub m_cached_center_y: f32,
+    // 对应 C++ mRenderGroup（默认 RENDER_GROUP_NORMAL=0）
+    pub m_render_group: i32,
 }
 
 impl ReanimatorTrackInstance {
@@ -73,6 +75,7 @@ impl ReanimatorTrackInstance {
             m_temp_offset_y: 0.0,
             m_cached_center_x: 0.0,
             m_cached_center_y: 0.0,
+            m_render_group: 0,
         }
     }
 }
