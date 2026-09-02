@@ -36,19 +36,40 @@ impl ReanimationWidget {
     }
 
     pub fn dispose(&mut self) {
-        // TODO: 从 LawnDialog.cpp 翻译
+        // 对应 C++ Dispose：释放并清空动画
+        self.reanim = None;
     }
 
-    pub fn draw(&self, _g: &mut Graphics) {
-        // TODO: 从 LawnDialog.cpp 翻译
+    pub fn draw(&self, g: &mut Graphics) {
+        // 对应 C++ Draw
+        if let Some(r) = self.reanim {
+            unsafe { (*r).draw(g); }
+        }
     }
 
     pub fn update(&mut self) {
-        // TODO: 从 LawnDialog.cpp 翻译
+        // 对应 C++ Update
+        if let Some(r) = self.reanim {
+            unsafe { (*r).update(); }
+        }
     }
 
     pub fn add_reanimation(&mut self, x: f32, y: f32, reanimation_type: ReanimationType) {
-        // TODO: 从 LawnDialog.cpp 翻译
+        // 对应 C++ AddReanimation
+        self.reanim = None;
+        self.pos_x = x;
+        self.pos_y = y;
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(r) = (*app).add_reanimation(x, y, 0, reanimation_type as i32) {
+                    (*r).m_loop_type = crate::todlib::reanimator::ReanimLoopType::Loop;
+                    (*r).m_is_attachment = true;
+                    // C++ 中 TrackExists("anim_idle") 时设置该层帧
+                    (*r).set_frames_for_layer("anim_idle");
+                    self.reanim = Some(r);
+                }
+            }
+        }
     }
 }
 
