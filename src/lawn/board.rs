@@ -650,7 +650,8 @@ impl Board {
 
     /// 设置波次
     fn setup_waves(&mut self) {
-        // 根据关卡设置僵尸波次
+        // 对应 C++ InitZombieWaves：按关卡设置僵尸波次（允许列表 + 波次数据）
+        self.init_zombie_waves();
     }
 
     /// 主更新循环
@@ -4743,8 +4744,30 @@ impl Board {
 
     /// 更新火焰扫荡效果（对应 C++ UpdateFwoosh 简化版）
     fn update_fwoosh(&mut self) {
-        // 火焰扫荡效果与 Reanimation 系统绑定，暂不实现完整逻辑
-        // 完整版需要管理 mFwooshID 二维数组和 mFwooshCountDown
+        // 对应 C++ UpdateFwoosh：火焰扫荡动画按倒计时推进
+        if self.m_fwoosh_count_down == 0 {
+            return;
+        }
+        self.m_fwoosh_count_down -= 1;
+        let a_fwoosh_remaining = crate::todlib::tod_common::tod_animate_curve(
+            50, 0, self.m_fwoosh_count_down, 12, 0,
+            crate::lawn::game_enums::TodCurves::Linear,
+        );
+        for a_row in 0..MAX_GRID_SIZE_Y {
+            for i in 0..(12 - a_fwoosh_remaining) {
+                let fwoosh_id = self.m_fwoosh_id[a_row][i as usize];
+                if let Some(app) = self.app {
+                    unsafe {
+                        if let Some(fwoosh) = (*app).reanimation_get_mut(fwoosh_id) {
+                            fwoosh.set_frames_for_layer("anim_done");
+                            fwoosh.m_anim_rate = 15.0;
+                            fwoosh.m_loop_type = crate::todlib::reanimator::ReanimLoopType::PlayOnceFullLastFrame;
+                        }
+                    }
+                }
+                self.m_fwoosh_id[a_row][i as usize] = REANIMATIONID_NULL;
+            }
+        }
     }
 
     // ========== 特殊格子操作 ==========
