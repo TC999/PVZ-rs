@@ -89,9 +89,65 @@ impl AwardScreen {
     }
 
     pub fn start_button_pressed(&mut self) {
-        if let Some(app) = self.app { unsafe {
-            (*app).kill_award_screen();
-        } }
+        // 对应 C++ StartButtonPressed：按奖励类型/模式/等级跳转
+        let Some(app) = self.app else { return };
+        unsafe {
+            if (*app).base.dialog_map.contains_key(&(Dialogs::Store as i32)) {
+                return;
+            }
+
+            if self.award_type == AwardType::CreditsZombieNote {
+                (*app).kill_award_screen();
+                (*app).show_credit_screen();
+            } else if self.award_type == AwardType::HelpZombieNote {
+                (*app).kill_award_screen();
+                (*app).show_game_selector();
+            } else if (*app).is_survival_mode() {
+                (*app).kill_award_screen();
+                (*app).show_challenge_screen(ChallengePage::Survival as i32);
+            } else if (*app).is_puzzle_mode() {
+                (*app).kill_award_screen();
+                (*app).show_challenge_screen(ChallengePage::Puzzle as i32);
+            } else if (*app).is_challenge_mode() {
+                (*app).kill_award_screen();
+                (*app).show_challenge_screen(ChallengePage::Challenge as i32);
+            } else {
+                let a_level = (*app).player_info.as_ref().map_or(0, |pi| pi.get_level());
+                if a_level == 1 {
+                    (*app).kill_award_screen();
+                    if (*app).has_finished_adventure() {
+                        (*app).show_award_screen(AwardType::CreditsZombieNote as i32, false);
+                    } else {
+                        (*app).pre_new_game(GameMode::Adventure, false);
+                    }
+                } else {
+                    if a_level == 15 {
+                        (*app).do_almanac_dialog(SeedType::None, ZombieType::Invalid);
+                    } else if a_level == 25 {
+                        // [TRANSLATION_NOTE]: C++ 中 ShowStoreScreen + SetupForIntro(301) + WaitForResult，
+                        // 并处理 mPurchasedFullVersion / IsTrialStageLocked 升级分支；Rust 侧 StoreScreen
+                        // 交互未接入，仅创建商店
+                        let _store = crate::lawn::lawn_app::LawnApp::show_store_screen(Some(app));
+                    } else if a_level == 35 {
+                        let _store = crate::lawn::lawn_app::LawnApp::show_store_screen(Some(app));
+                        // C++ 中 SetupForIntro(601) + WaitForResult(true)
+                    } else if a_level == 42 {
+                        let _store = crate::lawn::lawn_app::LawnApp::show_store_screen(Some(app));
+                        // C++ 中 SetupForIntro(3100) + WaitForResult(true)
+                    } else if a_level == 45 {
+                        (*app).kill_award_screen();
+                        (*app).pre_new_game(GameMode::ChallengeZenGarden, false);
+                        if let Some(zg) = (*app).zen_garden {
+                            (*zg).setup_for_zen_tutorial();
+                        }
+                        return;
+                    }
+
+                    (*app).kill_award_screen();
+                    (*app).pre_new_game(GameMode::Adventure, false);
+                }
+            }
+        }
     }
 
     pub fn mouse_down(&mut self, _x: i32, _y: i32, _click_count: i32) {}
