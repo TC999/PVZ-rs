@@ -154,7 +154,37 @@ impl CreditScreen {
         self.last_draw_count = self.draw_count;
     }
     pub fn draw(&self, _g: &mut Graphics) { /* TODO: CreditScreen.cpp */ }
-    pub fn key_char(&mut self, _c: char) { /* TODO: CreditScreen.cpp */ }
+    pub fn key_char(&mut self, c: char) {
+        // 对应 C++ KeyChar：调试键跳帧
+        if self.credits_paused {
+            return;
+        }
+        let debug_enabled = self.app.map_or(false, |app| unsafe { (*app).m_debug_keys_enabled });
+        if !debug_enabled {
+            return;
+        }
+        match c {
+            '1' => self.jump_to_frame(CreditsPhase::Main1, 0.0),
+            '2' => self.jump_to_frame(CreditsPhase::Main1, 128.0),
+            '3' => self.jump_to_frame(CreditsPhase::Main1, 144.0),
+            '4' => self.jump_to_frame(CreditsPhase::Main1, 272.0),
+            '5' => self.jump_to_frame(CreditsPhase::Main1, 304.0),
+            '6' => self.jump_to_frame(CreditsPhase::Main1, 340.0),
+            '7' => self.jump_to_frame(CreditsPhase::Main1, 368.0),
+            'q' => self.jump_to_frame(CreditsPhase::Main2, 0.0),
+            'w' => self.jump_to_frame(CreditsPhase::Main2, 124.0),
+            'e' => self.jump_to_frame(CreditsPhase::Main2, 188.0),
+            'r' => self.jump_to_frame(CreditsPhase::Main2, 248.0),
+            't' => self.jump_to_frame(CreditsPhase::Main2, 320.0),
+            'a' => self.jump_to_frame(CreditsPhase::Main3, 0.0),
+            's' => self.jump_to_frame(CreditsPhase::Main3, 124.0),
+            'd' => self.jump_to_frame(CreditsPhase::Main3, 216.0),
+            'f' => self.jump_to_frame(CreditsPhase::Main3, 240.0),
+            'g' => self.jump_to_frame(CreditsPhase::Main3, 324.0),
+            'n' => { self.dont_sync = !self.dont_sync; }
+            _ => {}
+        }
+    }
     pub fn key_down(&mut self, key: KeyCode) {
         // 对应 C++ KeyDown：空格/回车/ESC 暂停片尾
         if key == crate::framework::key_codes::KEYCODE_SPACE
