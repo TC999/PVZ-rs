@@ -483,3 +483,36 @@ pub fn sexy_dump_unfreed() {
         // 无操作
     }
 }
+
+/// 获取当前 Unix 时间戳（秒，对应 C++ time(nullptr)）
+pub fn now_time() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(d) => d.as_secs() as i64,
+        Err(_) => 0,
+    }
+}
+
+/// 获取本地时间结构（对应 C++ localtime），返回 tm 元组简化版
+/// (年, 月, 日, 时, 分, 秒, 周几, 一年中第几天, 夏令时)
+pub fn local_time() -> (i32, i32, i32, i32, i32, i32, i32, i32, i32) {
+    let t = now_time();
+    let days = t.div_euclid(86400);
+    let rem = t.rem_euclid(86400);
+    let sec = (rem % 60) as i32;
+    let min = ((rem / 60) % 60) as i32;
+    let hour = (rem / 3600) as i32;
+    // civil_from_days（Howard Hinnant 算法）
+    let z = days + 719468;
+    let era = if z >= 0 { z } else { z - 146096 } / 146097;
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = if m <= 2 { y + 1 } else { y };
+    let wday = (days + 4).rem_euclid(7) as i32; // 1970-01-01 是周四
+    (year as i32, m as i32, d as i32, hour, min, sec, wday, doy as i32, 0)
+}

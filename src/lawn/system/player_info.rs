@@ -2,6 +2,9 @@
 
 use crate::lawn::game_enums::*;
 
+/// 最大盆栽植物数量（对应 C++ MAX_POTTED_PLANTS）
+pub const MAX_POTTED_PLANTS: usize = 48;
+
 /// 盆栽植物面朝方向
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FacingDirection {
@@ -72,10 +75,14 @@ pub struct PlayerInfo {
     pub m_needs_magic_taco_reward: bool,
     /// 对应 C++ PlayerInfo::mHasSeenUpsell
     pub m_has_seen_upsell: i32,
+    /// 对应 C++ PlayerInfo::mDidntPurchasePacketUpgrade
+    pub m_didnt_purchase_packet_upgrade: i32,
     pub m_num_potted_plants: i32,
     pub m_coins: i32,
     pub m_purchases: Vec<i32>,
     pub m_challenge_records: Vec<i32>,
+    /// 对应 C++ PlayerInfo::mPottedPlant[MAX_POTTED_PLANTS]
+    pub m_potted_plant: Vec<PottedPlant>,
 }
 
 impl PlayerInfo {
@@ -92,10 +99,12 @@ impl PlayerInfo {
             m_has_used_cheat_keys: false,
             m_needs_magic_taco_reward: false,
             m_has_seen_upsell: 0,
+            m_didnt_purchase_packet_upgrade: 0,
             m_num_potted_plants: 0,
             m_coins: 0,
             m_purchases: vec![0; 200],
             m_challenge_records: vec![0; 200],
+            m_potted_plant: Vec::new(),
         }
     }
 
