@@ -56,8 +56,39 @@ impl ChallengeScreen {
         // TODO: 从 ChallengeScreen.cpp 翻译
     }
 
-    pub fn more_trophies_needed(&self, _challenge_index: i32) -> i32 {
-        // TODO: 从 ChallengeScreen.cpp 翻译
+    pub fn more_trophies_needed(&self, challenge_index: i32) -> i32 {
+        // 对应 C++ MoreTrophiesNeeded（简化版）
+        // [TRANSLATION_NOTE]: 依赖 gChallengeDefs 静态定义表（mRow/mCol/mPage）与 GetNumTrophies，
+        // Rust 侧暂无定义表，按模式区间近似
+        let a_def = get_challenge_definition(challenge_index);
+        let a_mode = a_def.map_or(GameMode::Adventure, |d| d.challenge_mode);
+
+        if let Some(app) = self.app {
+            unsafe {
+                let app = &*app;
+                if app.has_finished_adventure() {
+                    // 冒险完成后：挑战页第 4 项起按奖杯数（简化）
+                    if a_def.map_or(false, |d| d.page == ChallengePage::Survival) {
+                        return 0;
+                    }
+                } else if Self::is_scary_potter_level(a_mode) || Self::is_i_zombie_level(a_mode) {
+                    // 未通关冒险：解谜页按已过关数
+                    let mut a_levels_completed = 0;
+                    let base = if Self::is_scary_potter_level(a_mode) {
+                        GameMode::ScaryPotter1 as i32
+                    } else {
+                        GameMode::PuzzleIZombie1 as i32
+                    };
+                    for offset in 0..9 {
+                        let m = unsafe { std::mem::transmute::<i32, GameMode>(base + offset) };
+                        if app.has_beaten_challenge(m) {
+                            a_levels_completed += 1;
+                        }
+                    }
+                    return (a_mode as i32 - base - a_levels_completed).clamp(0, 9);
+                }
+            }
+        }
         0
     }
 
@@ -112,13 +143,15 @@ impl ChallengeScreen {
     }
 
     pub fn is_scary_potter_level(game_mode: GameMode) -> bool {
-        // TODO: 从 ChallengeScreen.cpp 翻译
-        false
+        // 对应 C++ IsScaryPotterLevel：GAMEMODE_SCARY_POTTER_1 .. ENDLESS
+        let m = game_mode as i32;
+        m >= GameMode::ScaryPotter1 as i32 && m <= GameMode::ScaryPotterEndless as i32
     }
 
     pub fn is_i_zombie_level(game_mode: GameMode) -> bool {
-        // TODO: 从 ChallengeScreen.cpp 翻译
-        false
+        // 对应 C++ IsIZombieLevel：GAMEMODE_PUZZLE_I_ZOMBIE_1 .. ENDLESS
+        let m = game_mode as i32;
+        m >= GameMode::PuzzleIZombie1 as i32 && m <= GameMode::PuzzleIZombieEndless as i32
     }
 }
 
