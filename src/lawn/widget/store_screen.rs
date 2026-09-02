@@ -265,5 +265,8 @@ pub struct StoreScreenOverlay {
 
 impl StoreScreenOverlay {
     pub fn new() -> Self { StoreScreenOverlay { parent: None } }
-    pub fn draw(&self, _g: &mut Graphics) { /* TODO */ }
+    pub fn draw(&self, _g: &mut Graphics) {
+        // 对应 C++ Draw：绘制商店背景/商品列表
+        // [TRANSLATION_NOTE]: C++ 中绘制 IMAGE_STORE 背景与商品图标；Rust 侧图片资源未接入，暂略
+    }
 }

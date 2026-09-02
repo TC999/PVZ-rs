@@ -314,7 +314,12 @@ impl CreditScreen {
         // C++ 中设置动画时间（aFrameFactor * theFrame 或 1.0）
         self.credits_phase = the_phase;
     }
-    pub fn draw_fog_effect(&self, _g: &mut Graphics, _time: f32) { /* TODO */ }
+    pub fn draw_fog_effect(&self, g: &mut Graphics, time: f32) {
+        // 对应 C++ DrawFogEffect：雾效滚动
+        // [TRANSLATION_NOTE]: C++ 中按 reanim 定义轨道时间与 IMAGE_FOG 图片逐格
+        // 绘制雾色循环；Rust 侧 reanim 轨道计数/雾图片未接入，暂略
+        let _ = (g, time);
+    }
     pub fn update_blink(&mut self) {
         // 对应 C++ UpdateBlink：向日葵眨眼动画定时重创建
         self.blink_countdown -= 1;
@@ -473,7 +478,12 @@ impl CreditsOverlay {
 }
 
 // --- 自由函数 ---
-pub fn draw_disco(_g: &mut Graphics, _center_x: f32, _center_y: f32, _time: f32) { /* TODO */ }
+pub fn draw_disco(g: &mut Graphics, center_x: f32, center_y: f32, time: f32) {
+        // 对应 C++ DrawDisco：3D 加速时的迪斯科灯光三角带
+        // [TRANSLATION_NOTE]: C++ 中按 cos/sin 计算三角顶点并 DrawTriangles；
+        // Rust 侧 Graphics 无三角带绘制接口，暂略
+        let _ = (g, center_x, center_y, time);
+    }
 pub fn draw_reanim_to_preload(_g: &mut Graphics, the_reanim_type: ReanimationType) {
         // 对应 C++ DrawReanimToPreload：创建指定动画并绘制（预加载用途）
         // [TRANSLATION_NOTE]: C++ 中 CREDIT_SCREEN_ANIM_RATE = 0.3f

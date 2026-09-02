@@ -208,7 +208,11 @@ impl SeedChooserScreen {
         self.app.map_or(false, |app| unsafe { (*app).is_trial_stage_locked() })
             && (t == SeedType::Squash || t == SeedType::Threepeater)
     }
-    pub fn draw(&self, _g: &mut Graphics) { /* TODO */ }
+    pub fn draw(&self, _g: &mut Graphics) {
+        // 对应 C++ Draw：绘制种子选择器背景/按钮/飞入种子
+        // [TRANSLATION_NOTE]: C++ 中绘制 IMAGE_SEEDCHOOSER_BACKGROUND 等图片资源；
+        // Rust 侧图片资源未接入，暂略
+    }
     pub fn update_view_lawn(&mut self) {
         if self.choose_state != SeedChooserState::ViewLawn { return; }
         self.view_lawn_time += 1;
