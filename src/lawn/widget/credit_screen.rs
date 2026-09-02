@@ -216,7 +216,60 @@ impl CreditScreen {
         }
     }
     pub fn play_reanim(&self, _index: i32) -> Option<*mut Reanimation> { None /* TODO */ }
-    pub fn jump_to_frame(&self, _phase: CreditsPhase, _frame: f32) { /* TODO: CreditScreen.cpp */ }
+    pub fn jump_to_frame(&mut self, the_phase: CreditsPhase, the_frame: f32) {
+        // 对应 C++ JumpToFrame：跳转片尾指定帧并计算音乐偏移
+        if let Some(btn) = self.main_menu_button {
+            unsafe { (*btn).visible = false; }
+        }
+        if let Some(btn) = self.replay_button {
+            unsafe { (*btn).visible = false; }
+        }
+        self.credits_phase_counter = 0;
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(es) = (*app).effect_system.as_mut() {
+                    es.effect_system_free_all();
+                }
+            }
+        }
+
+        // C++ 中 PlayReanim(3) 或 PlayReanim(phase+1) 返回动画
+        let _reanim = self.play_reanim(if the_phase == CreditsPhase::End { 3 } else { (the_phase as i32) + 1 });
+
+        // [TRANSLATION_NOTE]: C++ 中 aFrameFactor = 1/(轨道数-1)；Rust 侧轨道计数未接入，以 1/384 近似
+        let a_frame_factor = 1.0f32 / 384.0f32;
+        let mut a_music_offset = the_frame * 12142.0;
+        let mut a_jump_milliseconds = the_frame * 1000.0 / 7.0;
+        if the_phase == CreditsPhase::Main1 {
+            if the_frame >= 368.0 { a_music_offset = 12142.0 * (the_frame - 368.0) + 4634474.0; }
+            else if the_frame >= 340.0 { a_music_offset = 12142.0 * (the_frame - 340.0) + 4280738.0; }
+            else if the_frame >= 304.0 { a_music_offset = 12142.0 * (the_frame - 304.0) + 3825710.0; }
+            else if the_frame >= 272.0 { a_music_offset = 12142.0 * (the_frame - 272.0) + 3421764.0; }
+            else if the_frame >= 144.0 { a_music_offset = 12142.0 * (the_frame - 144.0) + 1805688.0; }
+            else if the_frame >= 128.0 { a_music_offset = 12142.0 * (the_frame - 128.0) + 1603662.0; }
+        } else if the_phase == CreditsPhase::Main2 {
+            if the_frame >= 320.0 { a_music_offset = 12142.0 * (the_frame - 320.0) + 9069118.0; a_jump_milliseconds += 57142.0; }
+            else if the_frame >= 248.0 { a_music_offset = 12142.0 * (the_frame - 248.0) + 8159850.0; a_jump_milliseconds += 57142.0; }
+            else if the_frame >= 188.0 { a_music_offset = 12142.0 * (the_frame - 188.0) + 7401454.0; a_jump_milliseconds += 57142.0; }
+            else if the_frame >= 124.0 { a_music_offset = 12142.0 * (the_frame - 124.0) + 6593548.0; a_jump_milliseconds += 57142.0; }
+            else { a_music_offset = 12142.0 * the_frame + 5026370.0; a_jump_milliseconds += 57142.0; }
+        } else if the_phase == CreditsPhase::Main3 {
+            if the_frame >= 240.0 { a_music_offset = 12142.0 * (the_frame - 240.0) + 12897822.0; a_jump_milliseconds += 112000.0; }
+            else if the_frame >= 216.0 { a_music_offset = 12142.0 * (the_frame - 216.0) + 12594510.0; a_jump_milliseconds += 112000.0; }
+            else if the_frame >= 124.0 { a_music_offset = 12142.0 * (the_frame - 124.0) + 11434414.0; a_jump_milliseconds += 112000.0; }
+            else { a_music_offset = 12142.0 * the_frame + 9864866.0; a_jump_milliseconds += 112000.0; }
+        } else if the_phase == CreditsPhase::End {
+            a_music_offset = 14047138.0;
+            a_jump_milliseconds += 159142.0;
+        }
+
+        // [TRANSLATION_NOTE]: C++ 中 mMusic->PlayFromOffset(MUSIC_FILE_CREDITS_ZOMBIES_ON_YOUR_LAWN,
+        // aMusicOffset - 900, 1.0f)；Rust 侧 music 无 PlayFromOffset 等价接入
+        let _ = (a_music_offset, a_jump_milliseconds);
+
+        // C++ 中设置动画时间（aFrameFactor * theFrame 或 1.0）
+        self.credits_phase = the_phase;
+    }
     pub fn draw_fog_effect(&self, _g: &mut Graphics, _time: f32) { /* TODO */ }
     pub fn update_blink(&mut self) { /* TODO */ }
     pub fn draw_final_credits(&self, _g: &mut Graphics) { /* TODO */ }
