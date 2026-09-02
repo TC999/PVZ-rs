@@ -321,7 +321,46 @@ impl CreditScreen {
     }
     pub fn draw_final_credits(&self, _g: &mut Graphics) { /* TODO */ }
     pub fn draw_overlay(&self, _g: &mut Graphics) { /* TODO */ }
-    pub fn update_movie(&mut self) { /* TODO */ }
+    pub fn update_movie(&mut self) {
+        // 对应 C++ UpdateMovie：片尾动画推进与阶段切换
+        self.update_blink();
+
+        let mut loop_count = 0i32;
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(r) = (*app).reanimation_get(self.credits_reanim_id) {
+                    loop_count = r.m_loop_count;
+                    // C++ 中 aCreditsReanim->Update() + mEffectSystem->Update() +
+                    // mPoolEffect->PoolEffectUpdate()；Rust 侧 effect_system 由外部更新
+                    let _ = r;
+                }
+                // [TRANSLATION_NOTE]: C++ 中 TurnOffTongues(aCreditsReanim, 0)；Rust 侧未接入
+            }
+        }
+
+        if self.credits_phase == CreditsPhase::Main1 && loop_count > 0 {
+            let _ = self.play_reanim(2);
+            self.credits_phase = CreditsPhase::Main2;
+        } else if self.credits_phase == CreditsPhase::Main2 && loop_count > 0 {
+            let _ = self.play_reanim(3);
+            self.credits_phase = CreditsPhase::Main3;
+        } else if self.credits_phase == CreditsPhase::Main3 && loop_count > 0 {
+            self.credits_phase = CreditsPhase::End;
+        } else if self.credits_phase == CreditsPhase::End {
+            self.credits_phase_counter += 1;
+            if self.credits_phase_counter == 50 {
+                if let Some(btn) = self.main_menu_button {
+                    unsafe { (*btn).visible = true; }
+                }
+                if let Some(btn) = self.replay_button {
+                    unsafe { (*btn).visible = true; }
+                }
+            }
+        }
+
+        // [TRANSLATION_NOTE]: C++ 中按 ShouldTriggerTimedEvent 触发各阶段事件
+        //（嘴巴/肢体动画等）；Rust 侧 reanim 事件系统未接入
+    }
     pub fn pause_credits(&mut self) {
         // 对应 C++ PauseCredits：停止音效/音乐并弹出暂停菜单
         if self.credits_paused {
