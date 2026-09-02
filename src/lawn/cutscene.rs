@@ -3,14 +3,18 @@
 
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::key_codes::KeyCode;
-use crate::lawn::board::{self, Board, MAX_GRID_SIZE_Y};
+use crate::lawn::board::{self, Board, MAX_GRID_SIZE_Y, MAX_ZOMBIES_IN_WAVE};
 use crate::lawn::game_enums::{
-    GameMode, NUM_ZOMBIE_TYPES, PlantingReason, ReanimationID, REANIMATIONID_NULL,
-    SeedType, StoreItem, TutorialState, ZombieType,
+    AdviceType, BackgroundType, ChallengePage, ChallengeState, CrazyDaveState, GameMode,
+    GridSquareType, NUM_ZOMBIE_TYPES, ParticleEffect, PlantRowType, PlantingReason,
+    ReanimationID, ReanimationType, REANIMATIONID_NULL, SeedType, StoreItem, TutorialState,
+    ZombieType,
 };
 use crate::lawn::lawn_app::LawnApp;
 use crate::lawn::widget::challenge_screen::ChallengeScreen;
+use crate::lawn::system::music::MusicTune;
 use crate::todlib::tod_common::rand_range_float;
+use crate::todlib::tod_foley::FoleyType;
 
 /// 过场动画场景管理（对应 C++ CutScene）
 #[derive(Debug)]
@@ -249,8 +253,115 @@ impl CutScene {
 
     /// 取消入场动画
     pub fn cancel_intro(&mut self) {
-        // [TRANSLATION_NOTE]: CancelIntro — 跳过入场动画，直接进入游戏
-        // 预加载资源、放置僵尸、放置草坪物品、跳过时间到入场结束
+        // 对应 C++ CancelIntro：跳过入场动画直接进入游戏
+        const TIME_PAN_RIGHT_END: i32 = 3500;
+        const TIME_SEED_CHOSER_SLIDE_ON_END: i32 = 4250;
+        const TIME_PAN_LEFT_START: i32 = 4500;
+        const TIME_INTRO_END: i32 = 6000;
+
+        self.preload_resources();
+        self.place_street_zombies();
+
+        if self.m_cutscene_time < self.m_crazy_dave_time + TIME_PAN_RIGHT_END {
+            self.m_cutscene_time = TIME_SEED_CHOSER_SLIDE_ON_END + self.m_crazy_dave_time - 20;
+
+            if !self.is_non_scrolling_cutscene() {
+                // [TRANSLATION_NOTE]: C++ 中 mBoard->Move(mApp->mWidth - BOARD_IMAGE_WIDTH_OFFSET, 0)；
+                // Rust 侧 board 无偏移字段，暂略
+            }
+
+            if let Some(board) = self.board {
+                // C++ 中 mBoard->mAdvice->mMessageStyle == MESSAGE_STYLE_HOUSE_NAME 时清空提示；
+                // Rust 侧 m_advice 无 style，直接清理
+                unsafe { (*board).clear_advice(AdviceType::None); }
+            }
+
+            if self.m_crazy_dave_dialog_start != -1 {
+                if let Some(app) = self.app {
+                    unsafe {
+                        if (*app).m_crazy_dave_state == CrazyDaveState::Off {
+                            (*app).crazy_dave_enter();
+                        }
+                        (*app).m_crazy_dave_message_index = self.m_crazy_dave_dialog_start;
+                    }
+                }
+            }
+            while self.app.map_or(false, |app| unsafe { (*app).m_crazy_dave_message_index != -1 }) {
+                self.advance_crazy_dave_dialog(true);
+            }
+
+            if let Some(board) = self.board {
+                unsafe {
+                    let level = (*board).level;
+                    if level == 5 {
+                        for i in 0..(*board).plants.len() {
+                            let b = &mut *board;
+                            if b.plants[i].dead {
+                                continue;
+                            }
+                            b.plants[i].die();
+                        }
+                        if let Some(ch) = (*board).challenge.as_mut() {
+                            ch.show_bowling_line = 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(app) = self.app {
+            unsafe { (*app).crazy_dave_die(); }
+        }
+
+        let choose_seeds = self.board.map_or(false, |b| unsafe { (*b).choose_seeds_on_current_level() });
+        if self.m_cutscene_time > self.m_crazy_dave_time + TIME_PAN_LEFT_START || !choose_seeds {
+            self.m_cutscene_time = TIME_INTRO_END + self.m_lawn_mower_time + self.m_sod_time
+                + self.m_grave_stone_time + self.m_crazy_dave_time + self.m_fog_time
+                + self.m_boss_time + self.m_ready_set_plant_time - 20;
+
+            self.place_lawn_items();
+
+            if let Some(board) = self.board {
+                unsafe {
+                    if let Some(app) = self.app {
+                        if (*app).is_stormy_night_level() {
+                            if let Some(ch) = (*board).challenge.as_mut() {
+                                ch.challenge_state_counter = 0;
+                            }
+                        }
+                        if (*app).is_final_boss_level() {
+                            (*board).challenge.as_ref().map(|c| c.play_boss_enter());
+                        }
+                    }
+                    // [TRANSLATION_NOTE]: C++ 中 !IsChallengeWithoutSeedBank() 时
+                    // mSeedBank->Move(SEED_BANK_OFFSET_X_END, 0)；Rust 侧 board 无 seed_bank 字段
+
+                    (*board).m_enable_grave_stones = true;
+                }
+            }
+
+            self.show_shovel();
+
+            if let Some(app) = self.app {
+                unsafe {
+                    if (*app).is_final_boss_level() {
+                        if let Some(music) = (*app).music.as_mut() {
+                            music.start_game_music();
+                        }
+                    }
+                    if let Some(board) = self.board {
+                        if (*board).m_fog_blown_count_down > 0 {
+                            (*board).m_fog_blown_count_down = 0;
+                            (*board).m_fog_offset = 0.0;
+                        }
+                        // [TRANSLATION_NOTE]: C++ 中 mMenuButton->mBtnNoDraw = false（非教程水壶状态）
+                        if let Some(ss) = (*app).sound_system.as_ref() {
+                            ss.stop_foley(FoleyType::Digger);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// 逐帧更新过场动画状态
@@ -343,7 +454,310 @@ impl CutScene {
 
     /// 动画板块移动
     pub fn animate_board(&mut self) {
-        // 对应 C++ AnimateBoard — 板车、草坪等动画
+        // 对应 C++ AnimateBoard：入场动画逐帧推进
+        const TIME_PAN_RIGHT_START: i32 = 1500;
+        const TIME_PAN_RIGHT_END: i32 = 3500;
+        const TIME_EARLY_DAVE_ENTER_START: i32 = 2000;
+        const TIME_EARLY_DAVE_ENTER_END: i32 = 2750;
+        const TIME_EARLY_DAVE_LEAVE_END: i32 = 4000;
+        const TIME_SEED_CHOSER_SLIDE_ON_START: i32 = 4000;
+        const TIME_SEED_CHOSER_SLIDE_ON_END: i32 = 4250;
+        const TIME_SEED_CHOSER_SLIDE_OFF_START: i32 = 4500;
+        const TIME_SEED_CHOSER_SLIDE_OFF_END: i32 = 4750;
+        const TIME_PAN_LEFT_START: i32 = 4500;
+        const TIME_PAN_LEFT_END: i32 = 6000;
+        const TIME_SEED_BANK_ON_START: i32 = 4000;
+        const TIME_SEED_BANK_ON_END: i32 = 4250;
+        const TIME_SEED_BANK_RIGHT_START: i32 = 4750;
+        const TIME_SEED_BANK_RIGHT_END: i32 = 6000;
+        const TIME_ROLL_SOD_START: i32 = 6000;
+        const TIME_ROLL_SOD_END: i32 = 8000;
+        const TIME_GRAVE_STONE_START: i32 = 6000;
+        const TIME_READY_SET_PLANT_START: i32 = 6000;
+        const TIME_FOG_ROLL_IN: i32 = 5950;
+        const TIME_LAWN_MOWER_DURATION: i32 = 250;
+        const TIME_LAWN_MOWER_START: [i32; 6] = [6300, 6250, 6200, 6150, 6100, 6050];
+        const BOARD_OFFSET: i32 = 220;
+        const BOARD_IMAGE_WIDTH_OFFSET: i32 = 1180;
+        const SEED_BANK_OFFSET_X: i32 = 0;
+        const SEED_BANK_OFFSET_X_END: i32 = 10;
+        const SEED_CHOOSER_OFFSET_Y: i32 = 516;
+
+        let a_time_pan_right_start = TIME_PAN_RIGHT_START + self.m_crazy_dave_time;
+        let a_time_pan_right_end = TIME_PAN_RIGHT_END + self.m_crazy_dave_time;
+        let a_time_pan_left_start = TIME_PAN_LEFT_START + self.m_crazy_dave_time;
+        let a_time_pan_left_end = TIME_PAN_LEFT_END + self.m_crazy_dave_time;
+
+        let app_width = self.app.map_or(0, |app| unsafe { (*app).base.width });
+
+        // Crazy Dave 动画
+        if self.m_crazy_dave_time > 0 {
+            if self.m_cutscene_time == TIME_EARLY_DAVE_ENTER_START {
+                if let Some(app) = self.app {
+                    unsafe {
+                        (*app).crazy_dave_enter();
+                        if (*app).game_mode == GameMode::Upsell {
+                            if let Some(r) = (*app).reanimation_get_mut((*app).m_crazy_dave_reanim_id) {
+                                r.play_reanim("anim_enterup", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, 0, 12.0);
+                                r.set_position(150.0, 70.0);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if self.m_cutscene_time == TIME_EARLY_DAVE_ENTER_END
+                && self.m_crazy_dave_dialog_start != -1
+                && self.app.map_or(false, |app| unsafe { (*app).game_mode != GameMode::Upsell })
+            {
+                if let Some(app) = self.app {
+                    unsafe { (*app).crazy_dave_talk_index(self.m_crazy_dave_dialog_start); }
+                }
+                self.m_crazy_dave_dialog_start = -1;
+            }
+
+            if self.m_cutscene_time == TIME_EARLY_DAVE_LEAVE_END && self.is_non_scrolling_cutscene() {
+                self.m_cutscene_time = a_time_pan_left_end;
+            }
+        }
+
+        // 向右平移棋盘
+        let a_board_offset = if self.is_scrolled_left_at_start() { BOARD_OFFSET } else { 0 };
+        if let Some(board) = self.board {
+            unsafe {
+                let b = &mut *board;
+                if self.m_cutscene_time <= a_time_pan_right_start {
+                    b.move_by(a_board_offset, 0);
+                } else if self.m_cutscene_time <= a_time_pan_right_end {
+                    let a_pan_offset = self.calc_position(
+                        a_time_pan_right_start, a_time_pan_right_end,
+                        -a_board_offset, BOARD_IMAGE_WIDTH_OFFSET - app_width,
+                    );
+                    b.move_by(-a_pan_offset, 0);
+                }
+            }
+        }
+
+        // 种子选择器滑入/滑出（C++ 中 aSeedChoser->Move + mMenuButton）
+        // [TRANSLATION_NOTE]: C++ 中依赖 mSeedChooserScreen 的 Move/mMenuButton；
+        // Rust 侧 seed_chooser 为 Option<*mut ()> 且无移动接口，暂略
+
+        // 向左平移棋盘
+        if self.m_cutscene_time > a_time_pan_left_start {
+            let a_pan_offset = self.calc_position(
+                a_time_pan_left_start, a_time_pan_left_end,
+                BOARD_IMAGE_WIDTH_OFFSET - app_width, 0,
+            );
+            if let Some(board) = self.board {
+                unsafe { (*board).move_by(-a_pan_offset, 0); }
+            }
+        }
+
+        // 种子银行动画
+        let a_time_prepare_end = if self.board.map_or(false, |b| unsafe { (*b).choose_seeds_on_current_level() }) {
+            0
+        } else {
+            self.m_boss_time + self.m_fog_time + self.m_grave_stone_time + self.m_sod_time
+                - TIME_SEED_CHOSER_SLIDE_ON_START + TIME_PAN_LEFT_END
+        };
+        let a_time_seed_bank_on_start = TIME_SEED_BANK_ON_START + a_time_prepare_end + self.m_crazy_dave_time;
+        let a_time_seed_bank_on_end = TIME_SEED_BANK_ON_END + a_time_prepare_end + self.m_crazy_dave_time;
+        let no_seed_bank = self.app.map_or(false, |app| unsafe { (*app).is_challenge_without_seed_bank() });
+        if !no_seed_bank && self.m_cutscene_time > a_time_seed_bank_on_start && self.m_cutscene_time <= a_time_seed_bank_on_end {
+            // [TRANSLATION_NOTE]: C++ 中 aSeedBankY = CalcPosition(..., -IMAGE_SEEDBANK->GetHeight(), 0)
+            if let Some(board) = self.board {
+                unsafe { (*board).move_seed_bank(SEED_BANK_OFFSET_X); }
+            }
+        }
+        let a_time_seed_bank_right_start = TIME_SEED_BANK_RIGHT_START + self.m_crazy_dave_time;
+        let a_time_seed_bank_right_end = TIME_SEED_BANK_RIGHT_END + self.m_crazy_dave_time;
+        if self.m_cutscene_time > a_time_seed_bank_right_start {
+            let a_seed_bank_x = self.calc_position(
+                a_time_seed_bank_right_start, a_time_seed_bank_right_end,
+                SEED_BANK_OFFSET_X, SEED_BANK_OFFSET_X_END,
+            );
+            let a_darken = crate::todlib::tod_common::tod_animate_curve(
+                a_time_seed_bank_right_start, a_time_seed_bank_right_end, self.m_cutscene_time,
+                255, 128, crate::lawn::game_enums::TodCurves::EaseOut,
+            );
+            if let Some(board) = self.board {
+                unsafe {
+                    (*board).move_seed_bank(a_seed_bank_x);
+                    (*board).m_seed_bank_darken = a_darken;
+                }
+            }
+        }
+
+        // 早期冒险关卡草皮滚动
+        if self.m_sod_time > 0 {
+            let a_time_roll_sod_start = TIME_ROLL_SOD_START + self.m_crazy_dave_time;
+            let a_time_roll_sod_end = TIME_ROLL_SOD_END + self.m_crazy_dave_time;
+            let a_sod_position = crate::todlib::tod_common::tod_animate_curve(
+                a_time_roll_sod_start, a_time_roll_sod_end, self.m_cutscene_time,
+                0, 1000, crate::lawn::game_enums::TodCurves::Linear,
+            );
+            if let Some(board) = self.board {
+                unsafe { (*board).m_sod_position = a_sod_position; }
+            }
+
+            if self.m_cutscene_time == a_time_roll_sod_start {
+                if let Some(app) = self.app {
+                    unsafe {
+                        (*app).play_foley(FoleyType::Digger as i32);
+                        let render_order = crate::lawn::board::make_render_order(crate::lawn::game_enums::RENDER_LAYER_TOP, 0, 0);
+                        let board_level = self.board.map_or(0, |b| unsafe { (*b).level });
+                        if board_level == 1 {
+                        (*app).add_reanimation(0.0, 0.0, render_order, ReanimationType::Sodroll as i32);
+                        (*app).add_tod_particle(35.0, 348.0, crate::lawn::board::make_render_order(crate::lawn::game_enums::RENDER_LAYER_TOP, 0, 1), crate::lawn::game_enums::ParticleEffect::SodRoll as i32);
+                    } else if board_level == 2 {
+                        (*app).add_reanimation(0.0, -102.0, render_order, ReanimationType::Sodroll as i32);
+                        (*app).add_reanimation(0.0, 111.0, render_order, ReanimationType::Sodroll as i32);
+                        (*app).add_tod_particle(35.0, 246.0, crate::lawn::board::make_render_order(crate::lawn::game_enums::RENDER_LAYER_TOP, 0, 1), crate::lawn::game_enums::ParticleEffect::SodRoll as i32);
+                        (*app).add_tod_particle(35.0, 459.0, crate::lawn::board::make_render_order(crate::lawn::game_enums::RENDER_LAYER_TOP, 0, 1), crate::lawn::game_enums::ParticleEffect::SodRoll as i32);
+                    } else if board_level == 4 {
+                        (*app).add_reanimation(-3.0, -198.0, render_order, ReanimationType::Sodroll as i32);
+                        (*app).add_reanimation(-3.0, 203.0, render_order, ReanimationType::Sodroll as i32);
+                        (*app).add_tod_particle(32.0, 150.0, crate::lawn::board::make_render_order(crate::lawn::game_enums::RENDER_LAYER_TOP, 0, 1), crate::lawn::game_enums::ParticleEffect::SodRoll as i32);
+                        (*app).add_tod_particle(32.0, 511.0, crate::lawn::board::make_render_order(crate::lawn::game_enums::RENDER_LAYER_TOP, 0, 1), crate::lawn::game_enums::ParticleEffect::SodRoll as i32);
+                        }
+                    }
+                }
+            }
+
+            if self.m_cutscene_time == a_time_roll_sod_end {
+                if let Some(app) = self.app {
+                    unsafe {
+                        if let Some(ss) = (*app).sound_system.as_ref() {
+                            ss.stop_foley(FoleyType::Digger);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 夜间关卡墓碑浮现
+        if self.m_grave_stone_time > 0 {
+            let a_time_grave_stone_start = self.m_sod_time + TIME_GRAVE_STONE_START + self.m_crazy_dave_time;
+            if self.m_cutscene_time == a_time_grave_stone_start {
+                if let Some(board) = self.board {
+                    unsafe { (*board).m_enable_grave_stones = true; }
+                }
+                self.add_grave_stone_particles();
+            }
+        }
+
+        // 棋盘开始左移时放置草坪物品
+        if self.m_cutscene_time == a_time_pan_left_start {
+            self.place_lawn_items();
+        }
+
+        // 割草机驶入
+        if !self.is_survival_repick() {
+            if let Some(board) = self.board {
+                unsafe {
+                    let b = &mut *board;
+                    for a_grid_y in 0..MAX_GRID_SIZE_Y {
+                        let a_time_lawn_mower_start = TIME_LAWN_MOWER_START[a_grid_y] + self.m_sod_time
+                            + self.m_grave_stone_time + self.m_crazy_dave_time;
+                        if self.m_cutscene_time > a_time_lawn_mower_start {
+                            // [TRANSLATION_NOTE]: C++ 中 FindLawnMowerInRow 查找该行割草机并
+                            // 设置 visible/posX；Rust 侧割草机无 row 字段，遍历全部设置
+                            for mower in b.lawn_mowers.iter_mut() {
+                                mower.visible = true;
+                                mower.pos_x = self.calc_position(
+                                    a_time_lawn_mower_start,
+                                    a_time_lawn_mower_start + TIME_LAWN_MOWER_DURATION,
+                                    -80, -21,
+                                ) as f32;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 迷雾滚入
+        if let Some(board) = self.board {
+            unsafe {
+                if (*board).m_fog_blown_count_down > 0 {
+                    let a_time_fog_roll_in = TIME_FOG_ROLL_IN + self.m_sod_time + self.m_grave_stone_time + self.m_crazy_dave_time;
+                    if self.m_cutscene_time > a_time_fog_roll_in {
+                        if (*board).m_fog_blown_count_down > 200 {
+                            (*board).m_fog_blown_count_down = 200;
+                        }
+                        (*board).m_fog_blown_count_down -= 1;
+                    }
+                }
+            }
+        }
+
+        // 暴风雨闪电
+        let is_stormy = self.app.map_or(false, |app| unsafe { (*app).is_stormy_night_level() });
+        if is_stormy
+            && (self.m_cutscene_time == a_time_pan_right_end - 1000 || self.m_cutscene_time == a_time_pan_left_end)
+        {
+            if let Some(board) = self.board {
+                unsafe {
+                    if let Some(ch) = (*board).challenge.as_mut() {
+                        ch.challenge_state = ChallengeState::StormFlash2;
+                        ch.challenge_state_counter = 310;
+                    }
+                }
+            }
+        }
+
+        // 僵尸王入场
+        if self.m_boss_time > 0 {
+            let a_time_boss_enter = TIME_READY_SET_PLANT_START + self.m_lawn_mower_time + self.m_crazy_dave_time;
+            if self.m_cutscene_time == a_time_boss_enter {
+                if let Some(board) = self.board {
+                    unsafe { (*board).challenge.as_ref().map(|c| c.play_boss_enter()); }
+                }
+            }
+        }
+
+        // Boss 关音乐
+        let is_final_boss = self.app.map_or(false, |app| unsafe { (*app).is_final_boss_level() });
+        if is_final_boss && self.m_cutscene_time == a_time_seed_bank_on_start {
+            if let Some(app) = self.app {
+                unsafe {
+                    if let Some(music) = (*app).music.as_mut() {
+                        music.start_game_music();
+                    }
+                }
+            }
+        }
+
+        // Ready Set Plant 动画
+        let a_time_ready_set_plant = TIME_READY_SET_PLANT_START + self.m_lawn_mower_time + self.m_sod_time
+            + self.m_grave_stone_time + self.m_crazy_dave_time + self.m_fog_time + self.m_boss_time;
+        if self.m_ready_set_plant_time > 0 && self.m_cutscene_time == a_time_ready_set_plant {
+            if let Some(app) = self.app {
+                let render_order = crate::lawn::board::make_render_order(crate::lawn::game_enums::RENDER_LAYER_SCREEN_FADE, 0, 0);
+                unsafe {
+                    (*app).add_reanimation(400.0, 324.0, render_order, ReanimationType::Readysetplant as i32);
+                    if !is_final_boss {
+                        if let Some(music) = (*app).music.as_mut() {
+                            music.fade_out(150);
+                        }
+                    }
+                }
+            }
+        }
+        if self.m_ready_set_plant_time == 0 && self.m_cutscene_time == a_time_ready_set_plant - 2000 {
+            if !is_final_boss {
+                if let Some(app) = self.app {
+                    unsafe {
+                        if let Some(music) = (*app).music.as_mut() {
+                            music.fade_out(200);
+                        }
+                    }
+                }
+            }
+        }
+
+        // [TRANSLATION_NOTE]: C++ 中 mSeedChooserScreen->mParent->BringToFront(mSeedChooserScreen)；
+        // Rust 侧 seed_chooser 无 widget 层次接口，暂略
     }
 
     /// 开始选择种子
@@ -931,7 +1345,167 @@ impl CutScene {
 
     /// 预加载资源
     pub fn preload_resources(&mut self) {
-        // TODO: 实现完整逻辑（对应 C++ PreloadResources）
+        // 对应 C++ PreloadResources：按关卡内容预加载僵尸/植物 reanim 与资源组
+        if self.m_preloaded {
+            return;
+        }
+        self.m_preloaded = true;
+        self.m_loaded_resource_names.clear();
+
+        if let Some(board) = self.board {
+            unsafe {
+                for a_wave in 0..(*board).m_num_waves {
+                    for a_zombie_index in 0..MAX_ZOMBIES_IN_WAVE {
+                        let a_zombie_type = (*board).m_zombies_in_wave[a_wave as usize][a_zombie_index];
+                        if a_zombie_type == ZombieType::Invalid {
+                            break;
+                        }
+                        crate::lawn::zombie::Zombie::preload_zombie_resources(a_zombie_type);
+                    }
+                }
+            }
+        }
+
+        if let Some(app) = self.get_app() {
+            for seed_index in 0..crate::lawn::game_enums::NUM_SEED_TYPES {
+                let a_seed_type = unsafe { std::mem::transmute::<i32, SeedType>(seed_index as i32) };
+                if app.has_seed_type(a_seed_type) {
+                    crate::lawn::plant::Plant::preload_plant_resources(a_seed_type);
+                }
+            }
+            if app.is_first_time_adventure_mode() {
+                let board_level = self.board.map_or(0, |b| unsafe { (*b).level });
+                if board_level <= 50 {
+                    let award_seed = LawnApp::get_award_seed_for_level(board_level);
+                    crate::lawn::plant::Plant::preload_plant_resources(award_seed);
+                }
+            }
+        }
+
+        if self.m_crazy_dave_dialog_start != -1 {
+            crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::CrazyDave);
+        }
+        if let Some(app) = self.get_app() {
+            let has_rake = app.player_info.as_ref().map_or(false, |info| {
+                info.m_purchases.get(StoreItem::Rake as usize).copied().unwrap_or(0) != 0
+            });
+            if has_rake {
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::Rake);
+            }
+            if app.game_mode == GameMode::ChallengeZenGarden {
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Sprout);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Marigold);
+            }
+        }
+
+        if let Some(board) = self.get_board() {
+            if board.stage_has_roof() {
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::RoofCleaner);
+            } else {
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::Lawnmower);
+            }
+            if board.stage_has_pool() {
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::Splash);
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::PoolCleaner);
+            }
+            if board.can_drop_loot() {
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::CoinSilver);
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::CoinGold);
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::Diamond);
+            }
+        }
+
+        if self.m_sod_time > 0 {
+            crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::Sodroll);
+        }
+        if let Some(app_ptr) = self.app {
+            let app = unsafe { &*app_ptr };
+            if app.game_mode == GameMode::ChallengePortalCombat {
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::PortalCircle);
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::PortalSquare);
+            }
+            if app.is_whack_a_zombie_level() || app.is_scary_potter_level() {
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::Hammer);
+            }
+            if app.is_stormy_night_level() || app.game_mode == GameMode::ChallengeRainingSeeds {
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::RainCircle);
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::RainSplash);
+            }
+            if app.game_mode == GameMode::ChallengeZenGarden {
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::ZengardenWateringcan);
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::ZengardenFertilizer);
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::ZengardenBugspray);
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::ZengardenPhonograph);
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::Stinky);
+            }
+            if app.game_mode == GameMode::ChallengeTreeOfWisdom {
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::ZengardenFertilizer);
+            }
+            if app.game_mode == GameMode::Upsell {
+                self.m_loaded_resource_names.push("DelayLoad_Background3".to_string());
+                self.m_loaded_resource_names.push("DelayLoad_Background4".to_string());
+                self.m_loaded_resource_names.push("DelayLoad_Background5".to_string());
+                self.m_loaded_resource_names.push("DelayLoad_ChallengeScreen".to_string());
+                crate::lawn::zombie::Zombie::preload_zombie_resources(ZombieType::Normal);
+                crate::lawn::zombie::Zombie::preload_zombie_resources(ZombieType::TrafficCone);
+                crate::lawn::zombie::Zombie::preload_zombie_resources(ZombieType::Pail);
+                crate::lawn::zombie::Zombie::preload_zombie_resources(ZombieType::Zamboni);
+                crate::lawn::zombie::Zombie::preload_zombie_resources(ZombieType::Pogo);
+                crate::lawn::zombie::Zombie::preload_zombie_resources(ZombieType::Balloon);
+                crate::lawn::zombie::Zombie::preload_zombie_resources(ZombieType::Catapult);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Squash);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Threepeater);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Magnetshroom);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Lilypad);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Torchwood);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Spikeweed);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Tanglekelp);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Sunflower);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Peashooter);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Sunshroom);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Sunshroom); // 故意加载两次（对应 C++）
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Flowerpot);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Plantern);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Fumeshroom);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Cactus);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Puffshroom);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Seashroom);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Cabbagepult);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Wallnut);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Chomper);
+            }
+            if app.game_mode == GameMode::Intro {
+                self.m_loaded_resource_names.push("DelayLoad_Background3".to_string());
+                self.m_loaded_resource_names.push("DelayLoad_Credits".to_string());
+                crate::lawn::zombie::Zombie::preload_zombie_resources(ZombieType::Normal);
+                crate::lawn::zombie::Zombie::preload_zombie_resources(ZombieType::TrafficCone);
+                crate::lawn::zombie::Zombie::preload_zombie_resources(ZombieType::Pail);
+                crate::lawn::zombie::Zombie::preload_zombie_resources(ZombieType::Zamboni);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Sunflower);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Peashooter);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Squash);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Threepeater);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Lilypad);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Torchwood);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Spikeweed);
+                crate::lawn::plant::Plant::preload_plant_resources(SeedType::Tanglekelp);
+            }
+        }
+
+        if let Some(app_ptr) = self.app {
+            unsafe {
+                if let Some(rm) = (*app_ptr).base.resource_manager.as_mut() {
+                    for resource in &self.m_loaded_resource_names {
+                        let _ = (**rm).load_resources(resource);
+                    }
+                }
+            }
+        }
+
+        self.place_street_zombies();
+
+        // [TRANSLATION_NOTE]: C++ 中 mBoard->mPreloadTime = aTimer.GetDuration() 记录预加载耗时
+        //（用于进度条）；Rust 侧 board 无 m_preload_time 字段
     }
 
     /// 预加载前检查
@@ -1105,47 +1679,542 @@ impl CutScene {
 
     /// 清除升级面板
     pub fn clear_upsell_board(&mut self) {
-        // TODO: 实现完整逻辑（对应 C++ ClearUpsellBoard）
+        // 对应 C++ ClearUpsellBoard：重置冰面/清空实体并销毁粒子与动画
+        if let Some(board) = self.board {
+            unsafe {
+                for i in 0..MAX_GRID_SIZE_Y {
+                    (*board).m_ice_timer[i] = 0;
+                    (*board).m_ice_min_x[i] = crate::lawn::game_enums::BOARD_WIDTH;
+                }
+                (*board).zombies.clear();
+                (*board).plants.clear();
+                (*board).coins.clear();
+                (*board).projectiles.clear();
+                (*board).grid_items.clear();
+                (*board).lawn_mowers.clear();
+                // [TRANSLATION_NOTE]: C++ 中 mPoolSparklyParticleID = PARTICLESYSTEMID_NULL；
+                // Rust 侧 board 无该字段
+            }
+        }
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(es) = (*app).effect_system.as_mut() {
+                    // C++ 中遍历粒子系统调用 ParticleSystemDie（跳过已死）
+                    for ps in es.particle_systems.iter_mut() {
+                        if !ps.dead {
+                            ps.particle_system_die();
+                        }
+                    }
+                    // C++ 中保留 CrazyDave 与其眨眼动画，其余全部 ReanimationDie
+                    let dave_id = (*app).m_crazy_dave_reanim_id;
+                    let blink_id = (*app).m_crazy_dave_blink_reanim_id;
+                    for reanim in es.reanimations.iter_mut() {
+                        if !reanim.m_dead && reanim.id != dave_id && reanim.id != blink_id {
+                            reanim.reanimation_die();
+                        }
+                    }
+                }
+            }
+        }
+        self.m_upsell_challenge_screen = None;
     }
 
     /// 加载入场面板
     pub fn load_intro_board(&mut self) {
-        // TODO: 实现完整逻辑（对应 C++ LoadIntroBoard）
+        // 对应 C++ LoadIntroBoard：布置演示植物与僵尸并预演 100 帧
+        self.clear_upsell_board();
+        if let Some(app) = self.app {
+            unsafe { (*app).m_mute_sounds_for_cutscene = true; }
+        }
+
+        if let Some(board) = self.board {
+            unsafe {
+                let b = &mut *board;
+                let _ = b.new_plant(0, 1, SeedType::Threepeater, SeedType::None);
+                let _ = b.new_plant(0, 2, SeedType::Lilypad, SeedType::None);
+                let _ = b.new_plant(0, 2, SeedType::Peashooter, SeedType::None);
+                let _ = b.new_plant(0, 3, SeedType::Lilypad, SeedType::None);
+                let _ = b.new_plant(0, 3, SeedType::Peashooter, SeedType::None);
+                let _ = b.new_plant(0, 4, SeedType::Sunflower, SeedType::None);
+                let _ = b.new_plant(1, 0, SeedType::Threepeater, SeedType::None);
+                let _ = b.new_plant(1, 1, SeedType::Sunflower, SeedType::None);
+                let _ = b.new_plant(1, 2, SeedType::Lilypad, SeedType::None);
+                let _ = b.new_plant(1, 2, SeedType::Sunflower, SeedType::None);
+                let _ = b.new_plant(1, 4, SeedType::Threepeater, SeedType::None);
+                let _ = b.new_plant(1, 5, SeedType::Threepeater, SeedType::None);
+                let _ = b.new_plant(2, 0, SeedType::Sunflower, SeedType::None);
+                let _ = b.new_plant(2, 1, SeedType::Peashooter, SeedType::None);
+                let _ = b.new_plant(2, 3, SeedType::Lilypad, SeedType::None);
+                let _ = b.new_plant(2, 3, SeedType::Peashooter, SeedType::None);
+                let _ = b.new_plant(2, 4, SeedType::Sunflower, SeedType::None);
+                let _ = b.new_plant(2, 5, SeedType::Sunflower, SeedType::None);
+                let _ = b.new_plant(3, 0, SeedType::Torchwood, SeedType::None);
+                let _ = b.new_plant(3, 4, SeedType::Threepeater, SeedType::None);
+                let _ = b.new_plant(4, 2, SeedType::Lilypad, SeedType::None);
+                let _ = b.new_plant(4, 2, SeedType::Torchwood, SeedType::None);
+                let _ = b.new_plant(5, 1, SeedType::Torchwood, SeedType::None);
+                let _ = b.new_plant(5, 4, SeedType::Torchwood, SeedType::None);
+                let _ = b.new_plant(5, 5, SeedType::Torchwood, SeedType::None);
+                let _ = b.new_plant(6, 0, SeedType::Spikeweed, SeedType::None);
+                let _ = b.new_plant(6, 4, SeedType::Spikeweed, SeedType::None);
+                let _ = b.new_plant(7, 1, SeedType::Spikeweed, SeedType::None);
+            }
+        }
+        self.add_upsell_zombie(ZombieType::Normal, 460, 0);
+        self.add_upsell_zombie(ZombieType::Football, 680, 0);
+        self.add_upsell_zombie(ZombieType::TrafficCone, 730, 0);
+        self.add_upsell_zombie(ZombieType::Normal, 810, 0);
+        self.add_upsell_zombie(ZombieType::TrafficCone, 670, 1);
+        self.add_upsell_zombie(ZombieType::Normal, 740, 1);
+        self.add_upsell_zombie(ZombieType::Normal, 880, 1);
+        self.add_upsell_zombie(ZombieType::Normal, 500, 2);
+        self.add_upsell_zombie(ZombieType::TrafficCone, 680, 2);
+        self.add_upsell_zombie(ZombieType::Pail, 604, 3);
+        self.add_upsell_zombie(ZombieType::Snorkel, 880, 3);
+        self.add_upsell_zombie(ZombieType::Normal, 600, 4);
+        self.add_upsell_zombie(ZombieType::Pail, 690, 4);
+        self.add_upsell_zombie(ZombieType::Normal, 780, 4);
+        self.add_upsell_zombie(ZombieType::Catapult, 730, 5);
+        self.add_upsell_zombie(ZombieType::Normal, 590, 5);
+
+        self.m_pre_updating_board = true;
+        if let Some(board) = self.board {
+            for _ in 0..100 {
+                unsafe { (*board).update(); }
+            }
+        }
+        self.m_pre_updating_board = false;
     }
 
     /// 添加升级僵尸
-    pub fn add_upsell_zombie(&mut self, _zombie_type: ZombieType, _pixel_x: i32, _grid_y: i32) {
-        // 内联函数
+    pub fn add_upsell_zombie(&mut self, zombie_type: ZombieType, pixel_x: i32, grid_y: i32) {
+        // 对应 C++ AddUpsellZombie
+        if let Some(board) = self.board {
+            unsafe {
+                let b = &mut *board;
+                let idx = b.add_zombie_in_row(zombie_type, grid_y, 0);
+                let zombie = &mut b.zombies[idx];
+                zombie.pos_x = pixel_x as f32;
+                zombie.pos_y = zombie.get_pos_y_based_on_row(grid_y);
+                zombie.set_row(grid_y);
+                // [TRANSLATION_NOTE]: C++ 中 mX/mY = (int)mPosX/mPosY；Rust 侧 zombie 无 x/y 字段
+            }
+        }
     }
 
     /// 加载升级面板（泳池）
     pub fn load_upsell_board_pool(&mut self) {
-        // TODO: 实现完整逻辑（对应 C++ LoadUpsellBoardPool）
+        // 对应 C++ LoadUpsellBoardPool
+        self.clear_upsell_board();
+        if let Some(app) = self.app {
+            unsafe { (*app).m_mute_sounds_for_cutscene = true; }
+        }
+
+        if let Some(board) = self.board {
+            unsafe {
+                let b = &mut *board;
+                let _ = b.new_plant(0, 1, SeedType::Threepeater, SeedType::None);
+                let _ = b.new_plant(0, 2, SeedType::Lilypad, SeedType::None);
+                let _ = b.new_plant(0, 2, SeedType::Peashooter, SeedType::None);
+                let _ = b.new_plant(0, 3, SeedType::Lilypad, SeedType::None);
+                let _ = b.new_plant(0, 3, SeedType::Peashooter, SeedType::None);
+                let _ = b.new_plant(0, 4, SeedType::Sunflower, SeedType::None);
+                let _ = b.new_plant(1, 0, SeedType::Threepeater, SeedType::None);
+                let _ = b.new_plant(1, 1, SeedType::Sunflower, SeedType::None);
+                let _ = b.new_plant(1, 2, SeedType::Lilypad, SeedType::None);
+                let _ = b.new_plant(1, 2, SeedType::Sunflower, SeedType::None);
+                let _ = b.new_plant(1, 4, SeedType::Threepeater, SeedType::None);
+                let _ = b.new_plant(1, 5, SeedType::Threepeater, SeedType::None);
+                let _ = b.new_plant(2, 0, SeedType::Sunflower, SeedType::None);
+                let _ = b.new_plant(2, 1, SeedType::Peashooter, SeedType::None);
+                let _ = b.new_plant(2, 3, SeedType::Lilypad, SeedType::None);
+                let _ = b.new_plant(2, 3, SeedType::Peashooter, SeedType::None);
+                let _ = b.new_plant(2, 4, SeedType::Sunflower, SeedType::None);
+                let _ = b.new_plant(2, 5, SeedType::Sunflower, SeedType::None);
+                let _ = b.new_plant(3, 4, SeedType::Threepeater, SeedType::None);
+                let _ = b.new_plant(4, 0, SeedType::Torchwood, SeedType::None);
+                let _ = b.new_plant(4, 2, SeedType::Lilypad, SeedType::None);
+                let _ = b.new_plant(4, 2, SeedType::Torchwood, SeedType::None);
+                let _ = b.new_plant(5, 1, SeedType::Torchwood, SeedType::None);
+                let _ = b.new_plant(5, 4, SeedType::Torchwood, SeedType::None);
+                let _ = b.new_plant(5, 5, SeedType::Torchwood, SeedType::None);
+                let _ = b.new_plant(6, 0, SeedType::Spikeweed, SeedType::None);
+                let _ = b.new_plant(6, 3, SeedType::Tanglekelp, SeedType::None);
+                let _ = b.new_plant(6, 4, SeedType::Spikeweed, SeedType::None);
+                let _ = b.new_plant(6, 5, SeedType::Squash, SeedType::None);
+                let _ = b.new_plant(7, 1, SeedType::Spikeweed, SeedType::None);
+            }
+        }
+        self.add_upsell_zombie(ZombieType::Normal, 460, 0);
+        self.add_upsell_zombie(ZombieType::Zamboni, 680, 0);
+        self.add_upsell_zombie(ZombieType::TrafficCone, 670, 1);
+        self.add_upsell_zombie(ZombieType::Normal, 740, 1);
+        self.add_upsell_zombie(ZombieType::Normal, 500, 2);
+        self.add_upsell_zombie(ZombieType::TrafficCone, 680, 2);
+        self.add_upsell_zombie(ZombieType::Normal, 604, 3);
+        self.add_upsell_zombie(ZombieType::Normal, 690, 4);
+        self.add_upsell_zombie(ZombieType::Normal, 740, 4);
+        self.add_upsell_zombie(ZombieType::Pail, 730, 5);
+        self.add_upsell_zombie(ZombieType::Normal, 590, 5);
+
+        self.m_pre_updating_board = true;
+        if let Some(board) = self.board {
+            for _ in 0..100 {
+                unsafe { (*board).update(); }
+            }
+        }
+        self.m_pre_updating_board = false;
+        if let Some(app) = self.app {
+            unsafe { (*app).m_mute_sounds_for_cutscene = false; }
+        }
     }
 
     /// 加载升级面板（雾）
     pub fn load_upsell_board_fog(&mut self) {
-        // TODO: 实现完整逻辑（对应 C++ LoadUpsellBoardFog）
+        // 对应 C++ LoadUpsellBoardFog
+        self.clear_upsell_board();
+        if let Some(app) = self.app {
+            unsafe { (*app).m_mute_sounds_for_cutscene = true; }
+        }
+
+        if let Some(board) = self.board {
+            unsafe {
+                // [TRANSLATION_NOTE]: C++ 中 BackgroundType::BACKGROUND_4_FOG；Rust 用 Fog 近似
+                (*board).m_background_type = BackgroundType::Fog;
+                (*board).load_background_images(self.app.unwrap());
+            }
+        }
+
+        if let Some(board) = self.board {
+            unsafe {
+                let b = &mut *board;
+                let _ = b.new_plant(0, 1, SeedType::Sunshroom, SeedType::None);
+                let _ = b.new_plant(0, 4, SeedType::Sunshroom, SeedType::None);
+                let _ = b.new_plant(1, 0, SeedType::Sunshroom, SeedType::None);
+                let _ = b.new_plant(1, 1, SeedType::Sunshroom, SeedType::None);
+                let _ = b.new_plant(1, 2, SeedType::Lilypad, SeedType::None);
+                let _ = b.new_plant(1, 2, SeedType::Cactus, SeedType::None);
+                let _ = b.new_plant(1, 4, SeedType::Sunshroom, SeedType::None);
+                let _ = b.new_plant(1, 5, SeedType::Sunshroom, SeedType::None);
+                let _ = b.new_plant(2, 0, SeedType::Cactus, SeedType::None);
+                let _ = b.new_plant(2, 4, SeedType::Cactus, SeedType::None);
+                let _ = b.new_plant(2, 5, SeedType::Fumeshroom, SeedType::None);
+                let _ = b.new_plant(3, 1, SeedType::Fumeshroom, SeedType::None);
+                let _ = b.new_plant(3, 2, SeedType::Lilypad, SeedType::None);
+                let _ = b.new_plant(3, 3, SeedType::Lilypad, SeedType::None);
+                let _ = b.new_plant(3, 3, SeedType::Cactus, SeedType::None);
+                let _ = b.new_plant(3, 5, SeedType::Puffshroom, SeedType::None);
+                let _ = b.new_plant(4, 0, SeedType::Puffshroom, SeedType::None);
+                let _ = b.new_plant(4, 1, SeedType::Magnetshroom, SeedType::None);
+                let _ = b.new_plant(4, 2, SeedType::Seashroom, SeedType::None);
+                let _ = b.new_plant(4, 5, SeedType::Puffshroom, SeedType::None);
+                let _ = b.new_plant(5, 1, SeedType::Puffshroom, SeedType::None);
+                let _ = b.new_plant(5, 2, SeedType::Lilypad, SeedType::None);
+                let _ = b.new_plant(5, 2, SeedType::Plantern, SeedType::None);
+                let _ = b.new_plant(5, 3, SeedType::Seashroom, SeedType::None);
+                let _ = b.new_plant(6, 2, SeedType::Seashroom, SeedType::None);
+                let _ = b.new_plant(6, 3, SeedType::Seashroom, SeedType::None);
+            }
+        }
+        self.add_upsell_zombie(ZombieType::Normal, 460, 0);
+        self.add_upsell_zombie(ZombieType::Normal, 680, 0);
+        self.add_upsell_zombie(ZombieType::Balloon, 780, 0);
+        self.add_upsell_zombie(ZombieType::TrafficCone, 670, 1);
+        self.add_upsell_zombie(ZombieType::Balloon, 640, 1);
+        self.add_upsell_zombie(ZombieType::Pail, 640, 2);
+        self.add_upsell_zombie(ZombieType::TrafficCone, 780, 3);
+        self.add_upsell_zombie(ZombieType::Balloon, 704, 4);
+        self.add_upsell_zombie(ZombieType::Normal, 690, 4);
+        self.add_upsell_zombie(ZombieType::Pail, 590, 5);
+        self.add_upsell_zombie(ZombieType::Normal, 740, 5);
+
+        self.m_pre_updating_board = true;
+        if let Some(board) = self.board {
+            for _ in 0..100 {
+                unsafe { (*board).update(); }
+            }
+        }
+        self.m_pre_updating_board = false;
+        if let Some(app) = self.app {
+            unsafe { (*app).m_mute_sounds_for_cutscene = false; }
+        }
     }
 
     /// 加载挑战升级面板
     pub fn load_upsell_challenge_screen(&mut self) {
-        // TODO: 实现完整逻辑（对应 C++ LoadUpsellChallengeScreen）
+        // 对应 C++ LoadUpsellChallengeScreen：创建挑战选择界面
+        self.clear_upsell_board();
+        let mut screen = Box::new(crate::lawn::widget::challenge_screen::ChallengeScreen::new());
+        screen.app = self.app;
+        screen.page_index = ChallengePage::Challenge;
+        self.m_upsell_challenge_screen = Some(Box::into_raw(screen));
     }
 
     /// 加载升级面板（屋顶）
     pub fn load_upsell_board_roof(&mut self) {
-        // TODO: 实现完整逻辑（对应 C++ LoadUpsellBoardRoof）
+        // 对应 C++ LoadUpsellBoardRoof
+        self.clear_upsell_board();
+        if let Some(app) = self.app {
+            unsafe { (*app).m_mute_sounds_for_cutscene = true; }
+        }
+
+        if let Some(board) = self.board {
+            unsafe {
+                // [TRANSLATION_NOTE]: C++ 中 BackgroundType::BACKGROUND_5_ROOF；Rust 用 Roof 近似
+                (*board).m_background_type = BackgroundType::Roof;
+                (*board).load_background_images(self.app.unwrap());
+                for y in 0..MAX_GRID_SIZE_Y {
+                    (*board).m_plant_row[y] = PlantRowType::Normal;
+                }
+                (*board).m_plant_row[5] = PlantRowType::Dirt;
+                for x in 0..crate::lawn::board::MAX_GRID_SIZE_X {
+                    for y in 0..MAX_GRID_SIZE_Y {
+                        // C++ 中 mGridSquareType[x][y]；Rust 侧 grid_square_type 为 [y][x]
+                        if (*board).m_plant_row[y] == PlantRowType::Dirt {
+                            (*board).grid_square_type[y][x] = GridSquareType::Dirt;
+                        } else {
+                            (*board).grid_square_type[y][x] = GridSquareType::Grass;
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(board) = self.board {
+            unsafe {
+                let b = &mut *board;
+                let _ = b.new_plant(0, 0, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(0, 0, SeedType::Cabbagepult, SeedType::None);
+                let _ = b.new_plant(0, 1, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(0, 1, SeedType::Cabbagepult, SeedType::None);
+                let _ = b.new_plant(0, 2, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(0, 2, SeedType::Sunflower, SeedType::None);
+                let _ = b.new_plant(0, 3, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(0, 3, SeedType::Sunflower, SeedType::None);
+                let _ = b.new_plant(0, 4, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(0, 4, SeedType::Cabbagepult, SeedType::None);
+                let _ = b.new_plant(1, 0, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(1, 0, SeedType::Cabbagepult, SeedType::None);
+                let _ = b.new_plant(1, 1, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(1, 1, SeedType::Sunflower, SeedType::None);
+                let _ = b.new_plant(1, 2, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(1, 2, SeedType::Cabbagepult, SeedType::None);
+                let _ = b.new_plant(1, 3, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(1, 3, SeedType::Cabbagepult, SeedType::None);
+                let _ = b.new_plant(1, 4, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(1, 4, SeedType::Sunflower, SeedType::None);
+                let _ = b.new_plant(2, 0, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(2, 0, SeedType::Cabbagepult, SeedType::None);
+                let _ = b.new_plant(2, 1, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(2, 1, SeedType::Cabbagepult, SeedType::None);
+                let _ = b.new_plant(2, 2, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(2, 2, SeedType::Cabbagepult, SeedType::None);
+                let _ = b.new_plant(2, 3, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(2, 3, SeedType::Sunflower, SeedType::None);
+                let _ = b.new_plant(2, 4, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(2, 4, SeedType::Cabbagepult, SeedType::None);
+                let _ = b.new_plant(3, 1, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(3, 1, SeedType::Cabbagepult, SeedType::None);
+                let _ = b.new_plant(3, 2, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(3, 2, SeedType::Cabbagepult, SeedType::None);
+                let _ = b.new_plant(3, 3, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(3, 3, SeedType::Sunflower, SeedType::None);
+                let _ = b.new_plant(3, 4, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(3, 4, SeedType::Cabbagepult, SeedType::None);
+                let _ = b.new_plant(4, 0, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(4, 0, SeedType::Chomper, SeedType::None);
+                let _ = b.new_plant(4, 1, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(4, 1, SeedType::Chomper, SeedType::None);
+                let _ = b.new_plant(4, 2, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(4, 2, SeedType::Repeater, SeedType::None);
+                let _ = b.new_plant(4, 3, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(5, 2, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(5, 2, SeedType::Wallnut, SeedType::None);
+                let _ = b.new_plant(5, 3, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(5, 3, SeedType::Threepeater, SeedType::None);
+                let _ = b.new_plant(5, 4, SeedType::Flowerpot, SeedType::None);
+                let _ = b.new_plant(5, 4, SeedType::Wallnut, SeedType::None);
+            }
+        }
+        self.add_upsell_zombie(ZombieType::Normal, 460, 0);
+        self.add_upsell_zombie(ZombieType::Normal, 680, 0);
+        self.add_upsell_zombie(ZombieType::Catapult, 780, 1);
+        self.add_upsell_zombie(ZombieType::TrafficCone, 670, 1);
+        self.add_upsell_zombie(ZombieType::Normal, 580, 0);
+        self.add_upsell_zombie(ZombieType::Normal, 540, 1);
+        self.add_upsell_zombie(ZombieType::Pail, 500, 1);
+        self.add_upsell_zombie(ZombieType::Pail, 640, 2);
+        self.add_upsell_zombie(ZombieType::TrafficCone, 780, 3);
+        self.add_upsell_zombie(ZombieType::Normal, 380, 3);
+        self.add_upsell_zombie(ZombieType::Catapult, 704, 4);
+        self.add_upsell_zombie(ZombieType::Normal, 690, 4);
+        self.add_upsell_zombie(ZombieType::Normal, 590, 4);
+
+        self.m_pre_updating_board = true;
+        if let Some(board) = self.board {
+            for _ in 0..100 {
+                unsafe { (*board).update(); }
+            }
+        }
+        self.m_pre_updating_board = false;
+        if let Some(app) = self.app {
+            unsafe { (*app).m_mute_sounds_for_cutscene = false; }
+        }
     }
 
     /// 更新升级
     pub fn update_upsell(&mut self) {
-        // TODO: 实现完整逻辑（对应 C++ UpdateUpsell）
+        // 对应 C++ UpdateUpsell
+        // 光标：按钮未悬停时恢复指针（C++ CURSOR_POINTER）
+        if let Some(board) = self.board {
+            unsafe {
+                let menu_over = (*board).menu_button.map_or(false, |p| unsafe { (*p).is_over });
+                let store_over = (*board).store_button.map_or(false, |p| unsafe { (*p).is_over });
+                if !menu_over && !store_over {
+                    if let Some(app) = self.app {
+                        // [TRANSLATION_NOTE]: C++ 中 mApp->SetCursor(CURSOR_POINTER)；Rust 侧基类光标未接入
+                        let _ = app;
+                    }
+                }
+            }
+        }
+
+        let dave_state = self.app.map_or(CrazyDaveState::Off, |app| unsafe { (*app).m_crazy_dave_state });
+        if dave_state == CrazyDaveState::Off || dave_state == CrazyDaveState::Entering {
+            return;
+        }
+
+        if self.m_crazy_dave_last_talk_index == -1 {
+            if let Some(app) = self.app {
+                unsafe { (*app).crazy_dave_talk_index(self.m_crazy_dave_dialog_start); }
+            }
+            self.m_crazy_dave_last_talk_index = self.m_crazy_dave_dialog_start;
+            self.m_crazy_dave_dialog_start = -1;
+            self.m_crazy_dave_count_down = self.parse_talk_time_from_message();
+            return;
+        }
+
+        if self.m_crazy_dave_count_down > 0 {
+            self.m_crazy_dave_count_down -= 1;
+        }
+
+        // "Uh, what are you waiting for?"
+        if self.m_crazy_dave_last_talk_index == 3317 {
+            if self.m_crazy_dave_count_down == 0 {
+                if let Some(board) = self.board {
+                    unsafe {
+                        if let Some(store) = (*board).get_store_button_mut() {
+                            store.resize(510, 420, 210, 46);
+                            store.btn_no_draw = false;
+                        }
+                        if let Some(menu) = (*board).get_menu_button_mut() {
+                            menu.resize(510, 480, 210, 46);
+                            menu.btn_no_draw = false;
+                        }
+                    }
+                }
+            }
+            return;
+        }
+        // "You want to take action?"
+        if self.m_crazy_dave_last_talk_index == 3311 && self.m_crazy_dave_count_down == 90 {
+            if let Some(app) = self.app {
+                unsafe {
+                    if let Some(music) = (*app).music.as_mut() {
+                        music.make_sure_music_is_playing(MusicTune::MinigameLoonboon);
+                    }
+                }
+            }
+        }
+
+        if self.m_crazy_dave_count_down != 0 {
+            return;
+        }
+
+        let dave_message = self.app.map_or(-1, |app| unsafe { (*app).m_crazy_dave_message_index });
+        if dave_message != -1 {
+            self.m_crazy_dave_count_down = self.parse_delay_time_from_message();
+            if let Some(app) = self.app {
+                unsafe { (*app).crazy_dave_stop_talking(); }
+            }
+            return;
+        }
+
+        if let Some(app) = self.app {
+            unsafe { (*app).crazy_dave_talk_index(self.m_crazy_dave_last_talk_index + 1); }
+        }
+        self.m_crazy_dave_last_talk_index += 1;
+        self.m_crazy_dave_count_down = self.parse_talk_time_from_message();
+
+        // [TRANSLATION_NOTE]: C++ 中 3305/3306/3307/3309 分支使用 AttachReanim 悬挂
+        // 植物/磁力菇动画到戴夫身上（Rust attachment 系统为骨架），此处省略具体悬挂。
+        // 3312/3313/3314/3315/3316/3317 分支加载各升级面板。
+        match self.m_crazy_dave_last_talk_index {
+            3312 | 3313 | 3314 | 3316 => {
+                if let Some(app) = self.app {
+                    unsafe {
+                        if let Some(music) = (*app).music.as_mut() {
+                            music.make_sure_music_is_playing(MusicTune::MinigameLoonboon);
+                        }
+                    }
+                }
+                match self.m_crazy_dave_last_talk_index {
+                    3312 => self.load_upsell_board_pool(),
+                    3313 => self.load_upsell_board_fog(),
+                    3314 => self.load_upsell_challenge_screen(),
+                    _ => self.load_upsell_board_roof(),
+                }
+                // [TRANSLATION_NOTE]: C++ 中 PlaySample(SOUND_FINALWAVE/SOUND_HUGE_WAVE)
+                self.m_upsell_hide_board = false;
+            }
+            3315 => {
+                // "Terra cotta!!!"
+                self.clear_upsell_board();
+                // [TRANSLATION_NOTE]: C++ 中 PlaySample(SOUND_FINALWAVE)
+                self.m_upsell_hide_board = true;
+                if let Some(app) = self.app {
+                    let render_position = crate::lawn::board::make_render_order(
+                        crate::lawn::game_enums::RENDER_LAYER_SCREEN_FADE, 0, 0,
+                    );
+                    unsafe {
+                        (*app).add_tod_particle(592.0, 240.0, render_position, ParticleEffect::PresentPickUpArrow as i32);
+                    }
+                }
+            }
+            3317 => {
+                // "Uh, what are you waiting for?"
+                self.clear_upsell_board();
+                if let Some(board) = self.board {
+                    unsafe {
+                        if let Some(menu) = (*board).get_menu_button_mut() {
+                            menu.btn_no_draw = true;
+                        }
+                    }
+                }
+                self.m_upsell_hide_board = true;
+            }
+            _ => {}
+        }
     }
 
     /// 绘制升级
-    pub fn draw_upsell(&mut self, _g: &mut Graphics) {
-        // TODO: 实现完整逻辑（对应 C++ DrawUpsell）
+    pub fn draw_upsell(&mut self, g: &mut Graphics) {
+        // 对应 C++ DrawUpsell
+        if self.m_crazy_dave_last_talk_index == 3315 {
+            // "Terra cotta!"：绘制花盆动画 + 菜单按钮
+            let mut a_reanim = crate::todlib::reanimator::Reanimation::new();
+            a_reanim.reanimation_initialize_type(565.0, 360.0, ReanimationType::FlowerPot);
+            a_reanim.set_frames_for_layer("anim_zengarden");
+            a_reanim.override_scale(1.3, 1.3);
+            a_reanim.draw(g);
+            // [TRANSLATION_NOTE]: C++ 中 mBoard->mMenuButton->Draw(g)；Rust 侧按钮为 Option<i32>
+            a_reanim.reanimation_die();
+        }
+
+        if let Some(s) = self.m_upsell_challenge_screen {
+            unsafe { (*s).draw(g); }
+            // [TRANSLATION_NOTE]: C++ 中 mBoard->mMenuButton->Draw(g)
+        }
     }
 
     /// 更新入场动画
@@ -1197,8 +2266,71 @@ impl CutScene {
     }
 
     /// 绘制入场动画
-    pub fn draw_intro(&mut self, _g: &mut Graphics) {
-        // TODO: 实现完整逻辑（对应 C++ DrawIntro）
+    pub fn draw_intro(&mut self, g: &mut Graphics) {
+        // 对应 C++ DrawIntro
+        const TIME_INTRO_PRESENTS_FADE_IN: i32 = 1000;
+        const TIME_INTRO_LOGO_START: i32 = 5500;
+        const TIME_INTRO_LOGO_END: i32 = 5900;
+        const TIME_INTRO_PAN_RIGHT_START: i32 = 5890;
+        const TIME_INTRO_PAN_RIGHT_END: i32 = 11890;
+        const TIME_INTRO_FADE_OUT: i32 = 10890;
+        const TIME_INTRO_FADE_OUT_END: i32 = 11890;
+
+        let scene_time = self.m_cutscene_time;
+        // [TRANSLATION_NOTE]: C++ 中 mBoard->mX/mY 为棋盘偏移；Rust 侧 board 无偏移字段，以 0 近似
+        let board_offset_x = 0;
+        let board_offset_y = 0;
+
+        if scene_time <= TIME_INTRO_PAN_RIGHT_START || scene_time > TIME_INTRO_FADE_OUT_END {
+            g.set_color(&crate::framework::color::Color::from_rgb(0, 0, 0));
+            g.fill_rect_xywh(-board_offset_x, -board_offset_y, crate::lawn::game_enums::BOARD_WIDTH, crate::lawn::game_enums::BOARD_HEIGHT);
+        }
+
+        // "PopCap Games presents" 文字
+        let a_time_pan_right_start = TIME_INTRO_PAN_RIGHT_START - TIME_INTRO_PRESENTS_FADE_IN;
+        if scene_time > TIME_INTRO_PRESENTS_FADE_IN && scene_time <= a_time_pan_right_start {
+            let an_alpha = if scene_time < a_time_pan_right_start - 600 {
+                crate::todlib::tod_common::tod_animate_curve(
+                    TIME_INTRO_PRESENTS_FADE_IN, TIME_INTRO_PRESENTS_FADE_IN + 300, scene_time, 0, 255,
+                    crate::lawn::game_enums::TodCurves::Linear,
+                )
+            } else {
+                crate::todlib::tod_common::tod_animate_curve(
+                    a_time_pan_right_start - 600, a_time_pan_right_start - 300, scene_time, 255, 0,
+                    crate::lawn::game_enums::TodCurves::Linear,
+                )
+            };
+            // [TRANSLATION_NOTE]: C++ 中 PvzpDrawString(FONT_BRIANNETOD32, Color(255,255,255,anAlpha))；
+            // Rust 侧字体/alpha 未接入，以 draw_string 近似
+            let _alpha = an_alpha;
+            g.draw_string("[INTRO_PRESENTS]", crate::lawn::game_enums::BOARD_WIDTH / 2 - board_offset_x, 310 - board_offset_y);
+        }
+
+        // "Plants Vs Zombies" 标志
+        if scene_time > TIME_INTRO_LOGO_START && scene_time <= TIME_INTRO_PAN_RIGHT_END {
+            let a_scale = crate::todlib::tod_common::tod_animate_curve_float(
+                TIME_INTRO_LOGO_START, TIME_INTRO_LOGO_END, scene_time, 5.0, 1.0,
+                crate::lawn::game_enums::TodCurves::EaseOut,
+            );
+            let a_center = a_scale * 0.5;
+            let a_offset_x = crate::lawn::game_enums::BOARD_WIDTH / 2 - board_offset_x;
+            let a_offset_y = crate::lawn::game_enums::BOARD_HEIGHT / 2 - board_offset_y;
+            let a_rect = crate::framework::rect::Rect::new(
+                a_offset_x - (crate::lawn::game_enums::BOARD_WIDTH as f32 * a_center) as i32,
+                a_offset_y - (75.0 * a_scale) as i32,
+                (crate::lawn::game_enums::BOARD_WIDTH as f32 * a_scale) as i32,
+                (150.0 * a_scale) as i32,
+            );
+            g.set_color(&crate::framework::color::Color::from_rgb(0, 0, 0));
+            g.fill_rect(&a_rect);
+            // [TRANSLATION_NOTE]: C++ 中 PvzpDrawImageScaledF(g, IMAGE_PVZ_LOGO, ...) 绘制 Logo；
+            // Rust 侧图片资源未接入，暂略
+        }
+
+        if scene_time > TIME_INTRO_FADE_OUT && scene_time <= TIME_INTRO_FADE_OUT_END {
+            g.set_color(&crate::framework::color::Color::from_rgb(0, 0, 0));
+            g.fill_rect_xywh(-board_offset_x, -board_offset_y, crate::lawn::game_enums::BOARD_WIDTH, crate::lawn::game_enums::BOARD_HEIGHT);
+        }
     }
 
     /// 是否应该运行升级面板

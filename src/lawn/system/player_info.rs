@@ -77,6 +77,16 @@ pub struct PlayerInfo {
     pub m_has_seen_upsell: i32,
     /// 对应 C++ PlayerInfo::mDidntPurchasePacketUpgrade
     pub m_didnt_purchase_packet_upgrade: i32,
+    /// 对应 C++ PlayerInfo::mNeedsMessageOnGameSelector
+    pub m_needs_message_on_game_selector: i32,
+    /// 对应 C++ PlayerInfo::mHasNewMiniGame
+    pub m_has_new_mini_game: i32,
+    /// 对应 C++ PlayerInfo::mHasNewScaryPotter
+    pub m_has_new_scary_potter: i32,
+    /// 对应 C++ PlayerInfo::mHasNewIZombie
+    pub m_has_new_izombie: i32,
+    /// 对应 C++ PlayerInfo::mHasNewSurvival
+    pub m_has_new_survival: i32,
     pub m_num_potted_plants: i32,
     pub m_coins: i32,
     pub m_purchases: Vec<i32>,
@@ -89,6 +99,13 @@ pub struct PlayerInfo {
     pub m_last_stinky_chocolate_time: u32,
     /// 对应 C++ PlayerInfo::mHasSeenStinky
     pub m_has_seen_stinky: i32,
+    /// 对应 C++ PlayerInfo::mStinkyPosX / mStinkyPosY
+    pub stinky_pos_x: i32,
+    pub stinky_pos_y: i32,
+    /// 对应 C++ PlayerInfo::mEarnedAchievements[MAX_ACHIEVEMENTS]
+    pub m_earned_achievements: Vec<bool>,
+    /// 对应 C++ PlayerInfo::mShownAchievements[MAX_ACHIEVEMENTS]
+    pub m_shown_achievements: Vec<bool>,
 }
 
 impl PlayerInfo {
@@ -106,6 +123,11 @@ impl PlayerInfo {
             m_needs_magic_taco_reward: false,
             m_has_seen_upsell: 0,
             m_didnt_purchase_packet_upgrade: 0,
+            m_needs_message_on_game_selector: 0,
+            m_has_new_mini_game: 0,
+            m_has_new_scary_potter: 0,
+            m_has_new_izombie: 0,
+            m_has_new_survival: 0,
             m_num_potted_plants: 0,
             m_coins: 0,
             m_purchases: vec![0; 200],
@@ -114,11 +136,20 @@ impl PlayerInfo {
             m_has_woken_stinky: 0,
             m_last_stinky_chocolate_time: 0,
             m_has_seen_stinky: 0,
+            stinky_pos_x: 0,
+            stinky_pos_y: 0,
+            m_earned_achievements: vec![false; crate::lawn::widget::achievements_screen::MAX_ACHIEVEMENTS],
+            m_shown_achievements: vec![false; crate::lawn::widget::achievements_screen::MAX_ACHIEVEMENTS],
         }
     }
 
     pub fn get_level(&self) -> i32 {
         self.m_level
+    }
+
+    /// 设置等级（对应 C++ PlayerInfo::SetLevel）
+    pub fn set_level(&mut self, the_level: i32) {
+        self.m_level = the_level;
     }
 
     /// 增加金币（对应 C++ PlayerInfo::AddCoins）

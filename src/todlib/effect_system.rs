@@ -82,6 +82,13 @@ impl EffectSystem {
     pub fn remove_particle_system(&mut self, _id: ParticleID) {
         // 找到并移除
     }
+
+    /// 清空全部特效（对应 C++ EffectSystemFreeAll）
+    pub fn effect_system_free_all(&mut self) {
+        self.particle_systems.clear();
+        self.reanimations.clear();
+        self.attachments.clear();
+    }
 }
 
 impl Default for EffectSystem {

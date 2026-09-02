@@ -8,10 +8,11 @@ use crate::lawn::game_enums::*;
 use crate::lawn::board::Board;
 use crate::lawn::zen_garden::ZenGarden;
 use crate::framework::sexy_app_base::SexyAppBase;
-use crate::framework::common::string_to_lower;
+use crate::framework::common::{file_exists, string_to_lower};
+use crate::lawn::system::save_game::lawn_save_game;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
-use crate::framework::widget::dialog::Dialog;
+use crate::framework::widget::dialog::{Dialog, BUTTONS_FOOTER, BUTTONS_OK_CANCEL};
 use crate::framework::widget::button_widget::ButtonWidget;
 use crate::framework::widget::widget::{Widget, WidgetImpl};
 use crate::framework::widget::widget_manager::WidgetManager;
@@ -19,7 +20,7 @@ use crate::lawn::widget::title_screen::{TitleScreenImpl, TitleState};
 use crate::lawn::widget::game_selector::GameSelectorImpl;
 use crate::todlib::reanimator::Reanimation;
 use crate::todlib::tod_particle::TodParticleSystem;
-use crate::todlib::tod_foley::FoleyManager;
+use crate::todlib::tod_foley::{FoleyManager, FoleyType};
 use crate::todlib::effect_system::EffectSystem;
 use crate::lawn::system::reanimation_lawn::ReanimatorCache;
 use crate::lawn::game_enums::TrialType;
@@ -69,6 +70,7 @@ pub struct LawnApp {
     pub award_screen: Option<*mut ()>,
     pub credit_screen: Option<*mut ()>,
     pub challenge_screen: Option<*mut ()>,
+    pub store_screen: Option<*mut ()>,
     pub zen_garden: Option<*mut ZenGarden>,
 
     // ---- 系统/管理器 ----
@@ -172,6 +174,11 @@ pub struct LawnApp {
 /// 全局游戏实例
 static mut G_LAWN_APP_INSTANCE: Option<*mut LawnApp> = None;
 
+/// 慢速/快速模式全局开关（对应 C++ LawnApp.h 的 extern bool gSlowMo/gFastMo/gSlowMoCounter）
+pub static mut G_SLOW_MO: bool = false;
+pub static mut G_FAST_MO: bool = false;
+pub static mut G_SLOW_MO_COUNTER: i32 = 0;
+
 impl LawnApp {
     pub fn new() -> Self {
         LawnApp {
@@ -179,6 +186,7 @@ impl LawnApp {
             board: None, title_screen: None, game_selector: None,
             seed_chooser_screen: None, award_screen: None,
             credit_screen: None, challenge_screen: None, zen_garden: None,
+            store_screen: None,
             sound_system: None, effect_system: None,
             profile_mgr: None, player_info: None, music: None, pool_effect: None,
             control_button_list: LinkedList::new(),
@@ -191,7 +199,7 @@ impl LawnApp {
             m_debug_keys_enabled: false, m_cheat_keys_used: false,
             m_tod_cheat_keys: false, m_easy_planting_cheat: false,
             m_crazy_dave_reanim_id: REANIMATIONID_NULL,
-            m_crazy_dave_state: CrazyDaveState::NotHere,
+            m_crazy_dave_state: CrazyDaveState::Off,
             m_crazy_dave_blink_counter: 0,
             m_crazy_dave_blink_reanim_id: REANIMATIONID_NULL,
             m_crazy_dave_message_index: 0,
@@ -325,21 +333,40 @@ impl LawnApp {
 
     /// 开始新游戏（对应 C++ NewGame）
     pub fn new_game(&mut self) {
-        // [TRANSLATION_NOTE]: 完整实现对应 C++ NewGame
-        // mFirstTimeGameSelector = false;
-        // MakeNewBoard();
-        // mBoard->InitLevel();
-        // mBoardResult = BOARDRESULT_NONE;
-        // mGameScene = SCENE_LEVEL_INTRO;
-        // ShowSeedChooserScreen();
-        // mBoard->mCutScene->StartLevelIntro();
-        self.m_level = 1;
-        self.pre_new_game(self.game_mode, true);
+        self.m_first_time_game_selector = false;
+
+        self.make_new_board();
+        if let Some(board) = self.board {
+            unsafe {
+                (*board).init_level();
+            }
+        }
+        self.board_result = BoardResult::None;
+        self.game_scene = GameScenes::LevelIntro;
+
+        self.show_seed_chooser_screen();
+        if let Some(board) = self.board {
+            unsafe {
+                if let Some(cut_scene) = (*board).m_cut_scene {
+                    (*cut_scene).start_level_intro();
+                }
+            }
+        }
     }
 
     /// 预新建游戏（对应 C++ PreNewGame）
-    pub fn pre_new_game(&mut self, _mode: GameMode, _look_for_saved: bool) {
-        // [TRANSLATION_NOTE]: 完整实现设置 GameMode、尝试加载存档、删除旧存档、调用 NewGame
+    pub fn pre_new_game(&mut self, mode: GameMode, look_for_saved: bool) {
+        self.game_mode = mode;
+        if look_for_saved && self.try_load_game() {
+            return;
+        }
+
+        let profile_id = self.player_info.as_ref().map_or(0, |p| p.m_id) as i32;
+        let file_name = crate::lawn::lawn_common::get_saved_game_name(mode, profile_id);
+        let _ = std::fs::remove_file(&file_name);
+        let legacy_file_name = crate::lawn::lawn_common::get_legacy_saved_game_name(mode, profile_id);
+        let _ = std::fs::remove_file(&legacy_file_name);
+        self.new_game();
     }
 
     /// 开始关卡
@@ -385,14 +412,181 @@ impl LawnApp {
         }
     }
     /// 结束关卡（对应 C++ EndLevel）
-    pub fn end_level(&mut self) {}
+    pub fn end_level(&mut self) {
+        self.kill_board();
+        if self.is_adventure_mode() {
+            self.new_game();
+        }
 
+        self.m_first_time_game_selector = true;
+
+        self.make_new_board();
+        if let Some(board) = self.board {
+            unsafe {
+                (*board).init_level();
+            }
+        }
+        self.board_result = BoardResult::None;
+        self.game_scene = GameScenes::LevelIntro;
+        self.show_seed_chooser_screen();
+        if let Some(board) = self.board {
+            unsafe {
+                if let Some(cut_scene) = (*board).m_cut_scene {
+                    (*cut_scene).start_level_intro();
+                }
+            }
+        }
+    }
+
+    // [TRANSLATION_NOTE]: 对应 C++ TryLoadGame 依赖的 DoContinueDialog。
+    // ContinueDialog 尚未继承 Dialog/Widget 接口，暂以对象创建替代 widget 接入
+    //（CenterDialog/AddDialog/SetFocus 待 widget 层翻译后接入）。
+    pub fn do_continue_dialog(&mut self) {
+        let _dialog = Box::new(
+            crate::lawn::widget::continue_dialog::ContinueDialog::new(Some(self as *mut LawnApp)),
+        );
+    }
 
     /// 尝试加载游戏（对应 C++ TryLoadGame）
-    pub fn try_load_game(&mut self) -> bool { false }
+    pub fn try_load_game(&mut self) -> bool {
+        let profile_id = self.player_info.as_ref().map_or(0, |p| p.m_id) as i32;
+        let save_name = crate::lawn::lawn_common::get_saved_game_name(self.game_mode, profile_id);
+        let legacy_save_name = crate::lawn::lawn_common::get_legacy_saved_game_name(self.game_mode, profile_id);
+        if let Some(music) = &mut self.music {
+            music.stop_all_music();
+        }
+
+        if file_exists(&save_name) {
+            self.make_new_board();
+            if let Some(board) = self.board {
+                let ok = unsafe { (*board).load_game(&save_name) };
+                if ok {
+                    self.m_first_time_game_selector = false;
+                    if unsafe { (*board).m_level_award_spawned } {
+                        self.board_result = BoardResult::Won;
+                    }
+                    self.do_continue_dialog();
+                    return true;
+                }
+            }
+            self.kill_board();
+        }
+
+        if file_exists(&legacy_save_name) {
+            self.make_new_board();
+            if let Some(board) = self.board {
+                let ok = unsafe { (*board).load_game(&legacy_save_name) };
+                if ok {
+                    if lawn_save_game(self.board, &save_name) {
+                        let _ = std::fs::remove_file(&legacy_save_name);
+                    }
+                    self.m_first_time_game_selector = false;
+                    if unsafe { (*board).m_level_award_spawned } {
+                        self.board_result = BoardResult::Won;
+                    }
+                    self.do_continue_dialog();
+                    return true;
+                }
+            }
+            self.kill_board();
+        }
+
+        false
+    }
+
+    /// 是否存在未展示的成就（对应 C++ 静态函数 HasUnshownAchievements）
+    fn has_unshown_achievements(&self) -> bool {
+        let Some(player_info) = &self.player_info else {
+            return false;
+        };
+        for i in 0..crate::lawn::widget::achievements_screen::MAX_ACHIEVEMENTS {
+            if player_info.m_earned_achievements[i] && !player_info.m_shown_achievements[i] {
+                return true;
+            }
+        }
+        false
+    }
 
     /// 检查游戏结束（对应 C++ CheckForGameEnd）
-    pub fn check_for_game_end(&mut self) {}
+    pub fn check_for_game_end(&mut self) {
+        if self.board.is_none() {
+            return;
+        }
+        let board = unsafe { &*self.board.unwrap() };
+        if !board.m_level_complete {
+            return;
+        }
+
+        let unlocked_new_challenge = self.update_player_profile_for_finishing_level();
+        let adventure_level = board.level;
+
+        if self.is_adventure_mode() {
+            self.kill_board();
+
+            if self.is_first_time_adventure_mode() && adventure_level < 50 {
+                self.show_award_screen(AwardType::ForLevel as i32, true);
+            } else if adventure_level == FINAL_LEVEL {
+                let finished = self.player_info.as_ref().map_or(0, |p| p.m_finished_adventure);
+                if finished == 1 {
+                    self.show_award_screen(AwardType::ForLevel as i32, true);
+                } else {
+                    self.show_award_screen(AwardType::CreditsZombieNote as i32, true);
+                }
+            } else if adventure_level == 9 || adventure_level == 19
+                || adventure_level == 29 || adventure_level == 39 || adventure_level == 49
+            {
+                self.show_award_screen(AwardType::ForLevel as i32, true);
+            } else if self.has_unshown_achievements() {
+                self.show_award_screen(AwardType::AchievementOnly as i32, true);
+            } else {
+                self.pre_new_game(self.game_mode, false);
+            }
+        } else if self.is_survival_mode() {
+            let mut show_challenge = false;
+            {
+                let board_ref = unsafe { &mut *self.board.unwrap() };
+                if board_ref.is_final_survival_stage() {
+                    show_challenge = true;
+                } else {
+                    if let Some(challenge) = board_ref.challenge.as_mut() {
+                        challenge.survival_stage += 1;
+                    }
+                    self.kill_game_selector();
+                    board_ref.init_survival_stage();
+                }
+            }
+            if show_challenge {
+                self.kill_board();
+                if unlocked_new_challenge && self.has_finished_adventure() {
+                    self.show_award_screen(AwardType::ForLevel as i32, true);
+                } else if self.has_unshown_achievements() {
+                    self.show_award_screen(AwardType::AchievementOnly as i32, true);
+                } else {
+                    self.show_challenge_screen(ChallengePage::Survival as i32);
+                }
+            }
+        } else if self.is_puzzle_mode() {
+            self.kill_board();
+
+            if unlocked_new_challenge {
+                self.show_award_screen(AwardType::ForLevel as i32, true);
+            } else if self.has_unshown_achievements() {
+                self.show_award_screen(AwardType::AchievementOnly as i32, true);
+            } else {
+                self.show_challenge_screen(ChallengePage::Puzzle as i32);
+            }
+        } else {
+            self.kill_board();
+
+            if unlocked_new_challenge && self.has_finished_adventure() {
+                self.show_award_screen(AwardType::ForLevel as i32, true);
+            } else if self.has_unshown_achievements() {
+                self.show_award_screen(AwardType::AchievementOnly as i32, true);
+            } else {
+                self.show_challenge_screen(ChallengePage::Challenge as i32);
+            }
+        }
+    }
 
     // ==================== 屏幕管理 ====================
 
@@ -441,53 +635,196 @@ impl LawnApp {
     }
 
     /// 显示奖励屏幕（对应 C++ ShowAwardScreen）
-    pub fn show_award_screen(&mut self, _award: i32, _show_achievements: bool) {}
-    pub fn kill_award_screen(&mut self) {}
+    pub fn show_award_screen(&mut self, award: i32, show_achievements: bool) {
+        self.game_scene = GameScenes::Award;
+        let mut screen = Box::new(crate::lawn::widget::award_screen::AwardScreen::new());
+        screen.app = Some(self as *mut LawnApp);
+        screen.award_type = unsafe { std::mem::transmute::<i32, AwardType>(award) };
+        screen.showing_achievements = show_achievements;
+        // [TRANSLATION_NOTE]: C++ 中随后执行 Resize/BringToBack/SetFocus 与
+        // AddWidget(mAwardScreen)，待 widget 层实现 WidgetImpl 后接入
+        self.award_screen = Some(Box::into_raw(screen) as *mut ());
+    }
 
-    /// 显示种子选择器
+    /// 销毁奖励屏幕（对应 C++ KillAwardScreen）
+    pub fn kill_award_screen(&mut self) {
+        if let Some(screen) = self.award_screen.take() {
+            unsafe {
+                let _ = Box::from_raw(screen as *mut crate::lawn::widget::award_screen::AwardScreen);
+            }
+        }
+    }
+
+    /// 显示种子选择器（对应 C++ ShowSeedChooserScreen）
     pub fn show_seed_chooser_screen(&mut self) {
-        // [TRANSLATION_NOTE]: 创建 SeedChooserScreen 并添加到 WidgetManager
+        // [TRANSLATION_NOTE]: C++ 中创建 SeedChooserScreen 并 Resize/AddWidget/BringToBack，
+        // 待 widget 层实现 WidgetImpl 后接入
+        let mut screen = Box::new(crate::lawn::widget::seed_chooser_screen::SeedChooserScreen::new());
+        screen.app = Some(self as *mut LawnApp);
+        self.seed_chooser_screen = Some(Box::into_raw(screen) as *mut ());
     }
 
     pub fn kill_seed_chooser_screen(&mut self) {
-        // [TRANSLATION_NOTE]: 从 WidgetManager 移除并销毁 SeedChooserScreen
+        if let Some(screen) = self.seed_chooser_screen.take() {
+            unsafe {
+                let _ = Box::from_raw(screen as *mut crate::lawn::widget::seed_chooser_screen::SeedChooserScreen);
+            }
+        }
     }
 
     /// 显示商店（对应 C++ ShowStoreScreen）
-    pub fn show_store_screen() {}
-    pub fn kill_store_screen() {}
-
-    /// 显示挑战选择
-    pub fn show_challenge_screen(&mut self, _page: i32) {
-        // 简化版本：仅记录日志
-        eprintln!("[LawnApp] 显示挑战选择页 {}", _page);
+    pub fn show_store_screen(app: Option<*mut LawnApp>) -> Option<*mut ()> {
+        let app_ref = unsafe { app?.as_mut()? };
+        // [TRANSLATION_NOTE]: C++ 中通过 AddDialog(aStoreScreen) + SetFocus 注册，
+        // 待 widget 层实现 WidgetImpl 后接入
+        let mut screen = Box::new(crate::lawn::widget::store_screen::StoreScreen::new());
+        screen.app = app;
+        let ptr = Box::into_raw(screen) as *mut ();
+        app_ref.store_screen = Some(ptr);
+        Some(ptr)
     }
-    pub fn kill_challenge_screen(&mut self) {}
 
-    /// 显示制作人员
+    /// 销毁商店（对应 C++ KillStoreScreen）
+    pub fn kill_store_screen(&mut self) {
+        if let Some(screen) = self.store_screen.take() {
+            unsafe {
+                let _ = Box::from_raw(screen as *mut crate::lawn::widget::store_screen::StoreScreen);
+            }
+        }
+    }
+
+    /// 显示挑战选择（对应 C++ ShowChallengeScreen）
+    pub fn show_challenge_screen(&mut self, page: i32) {
+        self.game_scene = GameScenes::Challenge;
+        let mut screen = Box::new(crate::lawn::widget::challenge_screen::ChallengeScreen::new());
+        screen.app = Some(self as *mut LawnApp);
+        screen.page_index = unsafe { std::mem::transmute::<i32, ChallengePage>(page) };
+        // [TRANSLATION_NOTE]: C++ 中随后执行 Resize/AddWidget/BringToBack/SetFocus，
+        // 待 widget 层实现 WidgetImpl 后接入
+        self.challenge_screen = Some(Box::into_raw(screen) as *mut ());
+    }
+
+    /// 销毁挑战选择（对应 C++ KillChallengeScreen）
+    pub fn kill_challenge_screen(&mut self) {
+        if let Some(screen) = self.challenge_screen.take() {
+            unsafe {
+                let _ = Box::from_raw(screen as *mut crate::lawn::widget::challenge_screen::ChallengeScreen);
+            }
+        }
+    }
+
+    /// 显示制作人员（对应 C++ ShowCreditScreen）
     pub fn show_credit_screen(&mut self) {
-        eprintln!("[LawnApp] 显示制作人员");
+        let mut screen = Box::new(crate::lawn::widget::credit_screen::CreditScreen::new());
+        screen.app = Some(self as *mut LawnApp);
+        // [TRANSLATION_NOTE]: C++ 中随后执行 Resize/AddWidget/BringToBack/SetFocus，
+        // 待 widget 层实现 WidgetImpl 后接入
+        self.credit_screen = Some(Box::into_raw(screen) as *mut ());
     }
-    pub fn kill_credit_screen(&mut self) {}
+
+    /// 销毁制作人员（对应 C++ KillCreditScreen）
+    pub fn kill_credit_screen(&mut self) {
+        if let Some(screen) = self.credit_screen.take() {
+            unsafe {
+                let _ = Box::from_raw(screen as *mut crate::lawn::widget::credit_screen::CreditScreen);
+            }
+        }
+    }
 
     /// 显示图鉴（对应 C++ DoAlmanacDialog）
-    pub fn do_almanac_dialog(&mut self, _seed: SeedType, _zombie: ZombieType) {}
-    pub fn kill_almanac_dialog(&mut self) -> bool { false }
+    pub fn do_almanac_dialog(&mut self, _seed: SeedType, _zombie: ZombieType) {
+        // [TRANSLATION_NOTE]: C++ 中创建 AlmanacDialog 并 AddDialog(DIALOG_ALMANAC)+SetFocus，
+        // 若 seed != SEED_NONE 调 ShowPlant(seed)，否则 zombie != ZOMBIE_INVALID 调 ShowZombie(zombie)。
+        // Rust 侧 AlmanacDialog 尚未接入 Widget/Dialog 体系，此处暂不创建。
+    }
+    pub fn kill_almanac_dialog(&mut self) -> bool {
+        // [TRANSLATION_NOTE]: 对应 C++ KillAlmanacDialog — GetDialog(DIALOG_ALMANAC) 非空则 KillDialog
+        self.base.kill_dialog(Dialogs::Almanac as i32)
+    }
 
     /// 返回主菜单（对应 C++ DoBackToMain）
-    pub fn do_back_to_main(&mut self) {}
+    pub fn do_back_to_main(&mut self) {
+        if let Some(music) = &mut self.music {
+            music.stop_all_music();
+        }
+        if let Some(ss) = &self.sound_system {
+            ss.cancel_paused_foley();
+        }
+        self.write_current_user_config();
+        self.kill_new_options_dialog();
+        self.kill_board();
+        self.show_game_selector();
+    }
 
-    /// 暂停
-    pub fn do_pause_dialog(&mut self) {}
+    /// 移除新选项对话框（对应 C++ KillNewOptionsDialog）
+    pub fn kill_new_options_dialog(&mut self) -> bool {
+        if !self.base.dialog_map.contains_key(&(Dialogs::NewOptions as i32)) {
+            return false;
+        }
+        // [TRANSLATION_NOTE]: C++ 中由全屏/硬件加速复选框状态调用
+        // SwitchScreenMode(wantWindowed, want3D, false)；Rust 侧 NewOptionsDialog
+        // 尚无复选框字段，略过屏幕模式切换（switch_screen_mode 为空实现）。
+        self.base.kill_dialog(Dialogs::NewOptions as i32);
+        true
+    }
 
-    /// 对话框（对应 C++ DoDialog）
-    pub fn do_dialog(&mut self, _id: i32, _modal: bool, _header: &str, _lines: &str, _footer: &str, _btn_mode: i32) -> Option<*mut Dialog> { None }
+    /// 暂停（对应 C++ DoPauseDialog）
+    pub fn do_pause_dialog(&mut self) {
+        if let Some(board) = self.board {
+            unsafe { (*board).pause(true); }
+        }
+
+        let the_dialog = self.do_dialog(
+            Dialogs::Paused as i32,
+            true,
+            "GAME PAUSED",
+            "Click to resume game",
+            "Resume Game",
+            BUTTONS_FOOTER,
+        );
+        if let Some(dialog) = the_dialog {
+            unsafe {
+                (*dialog).space_after_header = 155;
+            }
+            // [TRANSLATION_NOTE]: C++ 中随后执行 LawnDialog 的
+            // mReanimation->AddReanimation(72,42,REANIM_ZOMBIE_NEWSPAPER)、
+            // CalcSize(0,10)、CenterDialog(aDialog, w, h)；前两者依赖
+            // LawnDialog 专有成员（framework Dialog 无），CenterDialog 待
+            // widget 层接入后补齐。
+        }
+    }
+
+    /// 对话框（对应 C++ DoDialog — NewDialog + AddDialog）
+    pub fn do_dialog(&mut self, the_dialog_id: i32, is_modal: bool, the_dialog_header: &str, the_dialog_lines: &str, the_dialog_footer: &str, the_button_mode: i32) -> Option<*mut Dialog> {
+        // C++ 中若当前已有模态对话框（GetModalDialog() != nullptr）则不 AddDialog
+        let is_in_modal = self.base.dialog_map.values().any(|d| unsafe { (**d).is_modal });
+        let mut a_dialog = Box::new(Dialog::new(
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            the_dialog_id,
+            is_modal,
+            the_dialog_header,
+            the_dialog_lines,
+            the_dialog_footer,
+            the_button_mode,
+        ));
+        let a_dialog_ptr = Box::into_raw(a_dialog);
+        if !is_in_modal {
+            self.base.add_dialog(the_dialog_id, a_dialog_ptr);
+        }
+        Some(a_dialog_ptr)
+    }
 
     /// 延迟创建对话框（对应 C++ DoDialogDelay）
     /// 创建对话框并设置按钮延迟
     pub fn do_dialog_delay(&mut self, id: i32, modal: bool, header: &str, lines: &str, footer: &str, btn_mode: i32) -> Option<*mut Dialog> {
         let dialog = self.do_dialog(id, modal, header, lines, footer, btn_mode);
-        // C++ 中设置 30 帧按钮延迟
+        if let Some(d) = dialog {
+            unsafe {
+                // C++ 中 aDialog->WaitForResult(false); aDialog->SetButtonDelay(30);
+                (*d).wait_for_result(false);
+            }
+        }
         dialog
     }
 
@@ -578,18 +915,34 @@ impl LawnApp {
     }
 
     /// 播放音效（对应 C++ PlayFoley）
-    pub fn play_foley(&self, _type: i32) {
-        // [TRANSLATION_NOTE]: 完整实现需要 SoundSystem::PlayFoley
-        // if !self.m_mute_sounds_for_cutscene { self.sound_system.PlayFoley(type); }
+    pub fn play_foley(&self, foley_type: i32) {
+        if !self.m_mute_sounds_for_cutscene {
+            if let Some(ss) = &self.sound_system {
+                let ft = unsafe { std::mem::transmute::<i32, FoleyType>(foley_type) };
+                ss.play_foley(ft);
+            }
+        }
     }
 
-    pub fn play_foley_pitch(&self, _type: i32, _pitch: f32) {
-        // [TRANSLATION_NOTE]: 完整实现需要 SoundSystem::PlayFoleyPitch
+    /// 播放指定音调的音效（对应 C++ PlayFoleyPitch）
+    pub fn play_foley_pitch(&self, foley_type: i32, pitch: f32) {
+        if !self.m_mute_sounds_for_cutscene {
+            if let Some(ss) = &self.sound_system {
+                let ft = unsafe { std::mem::transmute::<i32, FoleyType>(foley_type) };
+                ss.play_foley_pitch(ft, pitch);
+            }
+        }
     }
 
-    /// 播放采样音效（对应 C++ PlaySample）
-    pub fn play_sample(&self, _sound_type: i32) {
-        // [TRANSLATION_NOTE]: 完整实现需要 SoundManager::PlaySample
+    /// 播放采样音效（对应 C++ PlaySample，经 SexyAppBase::PlaySample 播放）
+    pub fn play_sample(&self, sound_num: i32) {
+        if !self.m_mute_sounds_for_cutscene {
+            unsafe {
+                if let Some(sm) = self.base.sound_manager {
+                    (*sm).play_sound(sound_num);
+                }
+            }
+        }
     }
 
     // ==================== 状态查询 ====================
@@ -769,6 +1122,36 @@ impl LawnApp {
         }
         self.has_finished_adventure() || self.player_info.as_ref().unwrap().m_level >= 45
     }
+    /// 能否使用彩带模式（对应 C++ CanDoPinataMode：智慧树记录 >= 1000）
+    pub fn can_do_pinata_mode(&self) -> bool {
+        if self.player_info.is_none() {
+            return false;
+        }
+        let index = (GameMode::ChallengeTreeOfWisdom as i32 - GameMode::SurvivalNormalStage1 as i32) as usize;
+        self.player_info.as_ref().map_or(0, |info| {
+            info.m_challenge_records.get(index).copied().unwrap_or(0)
+        }) >= 1000
+    }
+    /// 能否使用舞蹈模式（对应 C++ CanDoDanceMode：智慧树记录 >= 500）
+    pub fn can_do_dance_mode(&self) -> bool {
+        if self.player_info.is_none() {
+            return false;
+        }
+        let index = (GameMode::ChallengeTreeOfWisdom as i32 - GameMode::SurvivalNormalStage1 as i32) as usize;
+        self.player_info.as_ref().map_or(0, |info| {
+            info.m_challenge_records.get(index).copied().unwrap_or(0)
+        }) >= 500
+    }
+    /// 能否使用雏菊模式（对应 C++ CanDoDaisyMode：智慧树记录 >= 100）
+    pub fn can_do_daisy_mode(&self) -> bool {
+        if self.player_info.is_none() {
+            return false;
+        }
+        let index = (GameMode::ChallengeTreeOfWisdom as i32 - GameMode::SurvivalNormalStage1 as i32) as usize;
+        self.player_info.as_ref().map_or(0, |info| {
+            info.m_challenge_records.get(index).copied().unwrap_or(0)
+        }) >= 100
+    }
     pub fn can_pause_now(&self) -> bool { true }
     pub fn can_spawn_yetis(&self) -> bool {
         // [TRANSLATION_NOTE]: 对应 C++ CanSpawnYetis，需要 get_zombie_definition 的 mStartingLevel
@@ -887,15 +1270,402 @@ impl LawnApp {
 
     // ==================== 疯狂戴夫 ====================
 
-    pub fn crazy_dave_enter(&mut self) {}
-    pub fn update_crazy_dave(&mut self) {}
-    pub fn crazy_dave_talk_index(&mut self, _idx: i32) {}
-    pub fn crazy_dave_talk_message(&mut self, _msg: &str) {}
-    pub fn crazy_dave_leave(&mut self) {}
-    pub fn draw_crazy_dave(&self, _g: &mut Graphics) {}
-    pub fn crazy_dave_die(&mut self) {}
-    pub fn crazy_dave_stop_talking(&mut self) {}
-    pub fn advance_crazy_dave_text(&mut self) -> bool { false }
+    /// 疯狂戴夫入场（对应 C++ CrazyDaveEnter）
+    pub fn crazy_dave_enter(&mut self) {
+        // C++ 中 PVZP_ASSERT(mCrazyDaveState == CRAZY_DAVE_OFF) 且当前无戴夫动画
+        let reanim_ptr = self.add_reanimation(0.0, 0.0, 0, ReanimationType::CrazyDave as i32);
+        if let Some(rp) = reanim_ptr {
+            unsafe {
+                (*rp).m_is_attachment = true;
+                // [TRANSLATION_NOTE]: C++ 中 SetBasePoseFromAnim("anim_idle_handing")；Rust 侧无对应
+                (*rp).play_reanim("anim_enter", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, 0, 24.0);
+            }
+            self.m_crazy_dave_reanim_id = self.reanimation_get_id(rp);
+        }
+
+        self.m_crazy_dave_state = CrazyDaveState::Entering;
+        self.m_crazy_dave_message_index = -1;
+        self.m_crazy_dave_message_text.clear();
+        self.m_crazy_dave_blink_counter = crate::todlib::tod_common::rand_range_int(400, 800);
+
+        if self.game_scene == GameScenes::LevelIntro && self.is_stormy_night_level() {
+            if let Some(rp) = self.reanimation_get_mut(self.m_crazy_dave_reanim_id) {
+                rp.m_color_override = crate::framework::color::Color::from_rgb(64, 64, 64);
+            }
+        }
+    }
+
+    /// 疯狂戴夫死亡（对应 C++ CrazyDaveDie）
+    pub fn crazy_dave_die(&mut self) {
+        if let Some(r) = self.reanimation_get_mut(self.m_crazy_dave_reanim_id) {
+            r.reanimation_die();
+        }
+        self.m_crazy_dave_state = CrazyDaveState::Off;
+        self.m_crazy_dave_reanim_id = REANIMATIONID_NULL;
+        self.m_crazy_dave_blink_reanim_id = REANIMATIONID_NULL;
+        self.m_crazy_dave_message_index = -1;
+        self.m_crazy_dave_message_text.clear();
+        self.crazy_dave_stop_sound();
+    }
+
+    /// 停止戴夫音效（对应 C++ CrazyDaveStopSound）
+    fn crazy_dave_stop_sound(&mut self) {
+        if let Some(ss) = &self.sound_system {
+            ss.stop_foley(FoleyType::CrazyDaveShort);
+            ss.stop_foley(FoleyType::CrazyDaveLong);
+            ss.stop_foley(FoleyType::CrazyDaveExtraLong);
+            ss.stop_foley(FoleyType::CrazyDaveCrazy);
+        }
+    }
+
+    /// 结束"递物"动作（对应 C++ CrazyDaveDoneHanding）
+    fn crazy_dave_done_handing(&mut self) {
+        // [TRANSLATION_NOTE]: C++ 中 ReanimationGet(...)->GetTrackInstanceByName("Dave_handinghand")
+        // ->mAttachmentID 后 AttachmentDie(...)；Rust 侧 ReanimatorTrackInstance 无
+        // m_attachment_id 且 attachment 系统为骨架（attach_reanim 返回 None），暂不处理。
+        let _ = self.reanimation_get_mut(self.m_crazy_dave_reanim_id);
+    }
+
+    /// 疯狂戴夫离开（对应 C++ CrazyDaveLeave）
+    pub fn crazy_dave_leave(&mut self) {
+        if self.m_crazy_dave_state == CrazyDaveState::HandingTalking || self.m_crazy_dave_state == CrazyDaveState::HandingIdling {
+            self.crazy_dave_done_handing();
+        }
+
+        let reanim_ptr: *mut Reanimation = {
+            let r = self.reanimation_get_mut(self.m_crazy_dave_reanim_id);
+            match r {
+                Some(r) => r as *mut Reanimation,
+                None => return,
+            }
+        };
+        unsafe {
+            (*reanim_ptr).play_reanim("anim_leave", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, 20, 24.0);
+            (*reanim_ptr).set_image_override("Dave_mouths", std::ptr::null_mut());
+        }
+        self.m_crazy_dave_state = CrazyDaveState::Leaving;
+        self.m_crazy_dave_message_index = -1;
+        self.m_crazy_dave_message_text.clear();
+        self.crazy_dave_stop_sound();
+    }
+
+    /// 切换到指定戴夫台词（对应 C++ CrazyDaveTalkIndex）
+    pub fn crazy_dave_talk_index(&mut self, the_message_index: i32) {
+        self.m_crazy_dave_message_index = the_message_index;
+        let a_message_text = self.get_crazy_dave_text(the_message_index);
+        self.crazy_dave_talk_message(&a_message_text);
+    }
+
+    /// 获取戴夫台词（对应 C++ GetCrazyDaveText）
+    pub(crate) fn get_crazy_dave_text(&self, the_message_index: i32) -> String {
+        let mut a_message = format!("[CRAZY_DAVE_{}]", the_message_index);
+        let player_name = self.player_info.as_ref().map_or("", |p| p.name.as_str());
+        a_message = a_message.replace("{PLAYER_NAME}", player_name);
+        let money = Self::get_money_string(self.player_info.as_ref().map_or(0, |p| p.m_coins));
+        a_message = a_message.replace("{MONEY}", &money);
+        let a_cost = crate::lawn::widget::store_screen::StoreScreen::get_item_cost(StoreItem::PacketUpgrade);
+        let upgrade_cost = Self::get_money_string(a_cost);
+        a_message = a_message.replace("{UPGRADE_COST}", &upgrade_cost);
+        a_message
+    }
+
+    /// 戴夫说话（对应 C++ CrazyDaveTalkMessage）
+    pub fn crazy_dave_talk_message(&mut self, the_message: &str) {
+        let reanim_ptr: *mut Reanimation = {
+            let r = self.reanimation_get_mut(self.m_crazy_dave_reanim_id);
+            match r {
+                Some(r) => r as *mut Reanimation,
+                None => return,
+            }
+        };
+
+        let mut do_handing = false;
+        if the_message.contains("{HANDING}") {
+            do_handing = true;
+        }
+        if (self.m_crazy_dave_state == CrazyDaveState::HandingTalking || self.m_crazy_dave_state == CrazyDaveState::HandingIdling) && !do_handing {
+            self.crazy_dave_done_handing();
+        }
+
+        let mut do_sound = true;
+        if the_message.contains("{NO_SOUND}") {
+            do_sound = false;
+        } else {
+            self.crazy_dave_stop_sound();
+        }
+
+        let mut words_count = 0;
+        let mut is_control_word = false;
+        for byte in the_message.bytes() {
+            if byte == b'{' {
+                is_control_word = true;
+            } else if byte == b'}' {
+                is_control_word = false;
+            } else if !is_control_word {
+                words_count += 1;
+            }
+        }
+
+        unsafe { (*reanim_ptr).set_image_override("Dave_mouths", std::ptr::null_mut()); }
+
+        if self.m_crazy_dave_state != CrazyDaveState::Talking || do_sound {
+            if do_handing {
+                unsafe { (*reanim_ptr).play_reanim("anim_talk_handing", crate::todlib::reanimator::ReanimLoopType::Loop, 50, 12.0); }
+                if do_sound {
+                    if the_message.contains("{SHORT_SOUND}") {
+                        self.play_foley(FoleyType::CrazyDaveShort as i32);
+                    } else if the_message.contains("{SCREAM}") {
+                        self.play_foley(FoleyType::CrazyDaveScream as i32);
+                    } else {
+                        self.play_foley(FoleyType::CrazyDaveLong as i32);
+                    }
+                }
+                self.m_crazy_dave_state = CrazyDaveState::HandingTalking;
+            } else if the_message.contains("{SHAKE}") {
+                unsafe { (*reanim_ptr).play_reanim("anim_crazy", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, 50, 12.0); }
+                if do_sound {
+                    self.play_foley(FoleyType::CrazyDaveCrazy as i32);
+                }
+                self.m_crazy_dave_state = CrazyDaveState::Talking;
+            } else if the_message.contains("{SCREAM}") {
+                unsafe { (*reanim_ptr).play_reanim("anim_smalltalk", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, 50, 12.0); }
+                if do_sound {
+                    self.play_foley(FoleyType::CrazyDaveScream as i32);
+                }
+                self.m_crazy_dave_state = CrazyDaveState::Talking;
+            } else if the_message.contains("{SCREAM2}") {
+                unsafe { (*reanim_ptr).play_reanim("anim_mediumtalk", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, 50, 12.0); }
+                if do_sound {
+                    self.play_foley(FoleyType::CrazyDaveScream2 as i32);
+                }
+                self.m_crazy_dave_state = CrazyDaveState::Talking;
+            } else if the_message.contains("{SHOW_WALLNUT}") {
+                unsafe {
+                    (*reanim_ptr).play_reanim("anim_talk_handing", crate::todlib::reanimator::ReanimLoopType::Loop, 50, 12.0);
+                    // [TRANSLATION_NOTE]: C++ 创建 REANIM_WALLNUT 并 AttachReanim 到
+                    // "Dave_handinghand" 轨道（mOffset=1.2 缩放）；Rust 侧 attachment 为骨架，暂略
+                    let _wallnut = self.add_reanimation(0.0, 0.0, 0, ReanimationType::Wallnut as i32);
+                }
+                if do_sound {
+                    self.play_foley(FoleyType::CrazyDaveScream2 as i32);
+                }
+                self.m_crazy_dave_state = CrazyDaveState::HandingTalking;
+            } else if the_message.contains("{SHOW_HAMMER}") {
+                unsafe {
+                    (*reanim_ptr).play_reanim("anim_talk_handing", crate::todlib::reanimator::ReanimLoopType::Loop, 50, 12.0);
+                    // [TRANSLATION_NOTE]: C++ 创建 REANIM_HAMMER（anim_whack_zombie, mAnimTime=1.0）
+                    // 并 AttachReanim 到 "Dave_handinghand" 轨道（mOffset=1.5 缩放）；attachment 为骨架，暂略
+                    let _hammer = self.add_reanimation(0.0, 0.0, 0, ReanimationType::Hammer as i32);
+                }
+                if do_sound {
+                    self.play_foley(FoleyType::CrazyDaveLong as i32);
+                }
+                self.m_crazy_dave_state = CrazyDaveState::HandingTalking;
+            } else if the_message.contains("{SHOW_FERTILIZER}") {
+                unsafe {
+                    (*reanim_ptr).play_reanim("anim_talk_handing", crate::todlib::reanimator::ReanimLoopType::Loop, 50, 12.0);
+                    // [TRANSLATION_NOTE]: C++ 创建 REANIM_ZENGARDEN_FERTILIZER（anim "bag",
+                    // mAnimRate=0）并 AttachReanim 到 "Dave_handinghand" 轨道；attachment 为骨架，暂略
+                    let _fert = self.add_reanimation(0.0, 0.0, 0, ReanimationType::ZengardenFertilizer as i32);
+                }
+                if do_sound {
+                    self.play_foley(FoleyType::CrazyDaveLong as i32);
+                }
+                self.m_crazy_dave_state = CrazyDaveState::HandingTalking;
+            } else if the_message.contains("{SHOW_TREE_FOOD}") {
+                unsafe {
+                    (*reanim_ptr).play_reanim("anim_talk_handing", crate::todlib::reanimator::ReanimLoopType::Loop, 50, 12.0);
+                    // [TRANSLATION_NOTE]: C++ 创建 REANIM_TREEOFWISDOM_TREEFOOD（anim "bag",
+                    // mAnimRate=0）并 AttachReanim 到 "Dave_handinghand" 轨道；attachment 为骨架，暂略
+                    let _treefood = self.add_reanimation(0.0, 0.0, 0, ReanimationType::TreeofwisdomTreefood as i32);
+                }
+                if do_sound {
+                    self.play_foley(FoleyType::CrazyDaveLong as i32);
+                }
+                self.m_crazy_dave_state = CrazyDaveState::HandingTalking;
+            } else if the_message.contains("{SHOW_MONEYBAG}") {
+                unsafe {
+                    (*reanim_ptr).play_reanim("anim_talk_handing", crate::todlib::reanimator::ReanimLoopType::Loop, 50, 12.0);
+                    // [TRANSLATION_NOTE]: C++ 创建 REANIM_ZENGARDEN_FERTILIZER（anim "bag",
+                    // mAnimRate=0，SetImageOverride("bag", IMAGE_MONEYBAG)）并 AttachReanim 到
+                    // "Dave_handinghand" 轨道；attachment 为骨架，暂略
+                    let _moneybag = self.add_reanimation(0.0, 0.0, 0, ReanimationType::ZengardenFertilizer as i32);
+                }
+                if do_sound {
+                    self.play_foley(FoleyType::CrazyDaveLong as i32);
+                }
+                self.m_crazy_dave_state = CrazyDaveState::HandingTalking;
+            } else {
+                if words_count < 23 {
+                    unsafe { (*reanim_ptr).play_reanim("anim_smalltalk", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, 50, 12.0); }
+                    if do_sound {
+                        self.play_foley(FoleyType::CrazyDaveShort as i32);
+                    }
+                    self.m_crazy_dave_state = CrazyDaveState::Talking;
+                } else if words_count < 52 {
+                    unsafe { (*reanim_ptr).play_reanim("anim_mediumtalk", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, 50, 12.0); }
+                    if do_sound {
+                        self.play_foley(FoleyType::CrazyDaveLong as i32);
+                    }
+                    self.m_crazy_dave_state = CrazyDaveState::Talking;
+                } else {
+                    unsafe { (*reanim_ptr).play_reanim("anim_blahblah", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, 50, 12.0); }
+                    if do_sound {
+                        self.play_foley(FoleyType::CrazyDaveExtraLong as i32);
+                    }
+                    self.m_crazy_dave_state = CrazyDaveState::Talking;
+                }
+            }
+        }
+
+        self.m_crazy_dave_message_text = the_message.to_string();
+    }
+
+    /// 停止戴夫说话（对应 C++ CrazyDaveStopTalking）
+    pub fn crazy_dave_stop_talking(&mut self) {
+        let mut done_handing = true;
+        if self.game_mode == GameMode::Upsell {
+            done_handing = false;
+        }
+        if done_handing && self.m_crazy_dave_state == CrazyDaveState::HandingTalking {
+            self.crazy_dave_done_handing();
+        }
+
+        let reanim_ptr: *mut Reanimation = {
+            let r = self.reanimation_get_mut(self.m_crazy_dave_reanim_id);
+            match r {
+                Some(r) => r as *mut Reanimation,
+                None => return,
+            }
+        };
+        unsafe { (*reanim_ptr).set_image_override("Dave_mouths", std::ptr::null_mut()); }
+
+        if self.m_crazy_dave_state == CrazyDaveState::HandingTalking && !done_handing {
+            unsafe { (*reanim_ptr).play_reanim("anim_idle_handing", crate::todlib::reanimator::ReanimLoopType::Loop, 20, 12.0); }
+            self.m_crazy_dave_state = CrazyDaveState::HandingIdling;
+        } else if self.m_crazy_dave_state == CrazyDaveState::Talking || self.m_crazy_dave_state == CrazyDaveState::HandingTalking {
+            unsafe { (*reanim_ptr).play_reanim("anim_idle", crate::todlib::reanimator::ReanimLoopType::Loop, 20, 12.0); }
+            self.m_crazy_dave_state = CrazyDaveState::Idling;
+        }
+
+        self.m_crazy_dave_message_index = -1;
+        self.m_crazy_dave_message_text.clear();
+        self.crazy_dave_stop_sound();
+    }
+
+    /// 更新疯狂戴夫（对应 C++ UpdateCrazyDave）
+    pub fn update_crazy_dave(&mut self) {
+        let reanim_ptr: *mut Reanimation = {
+            let r = self.reanimation_get_mut(self.m_crazy_dave_reanim_id);
+            match r {
+                Some(r) => r as *mut Reanimation,
+                None => return,
+            }
+        };
+
+        if self.m_crazy_dave_state == CrazyDaveState::Entering || self.m_crazy_dave_state == CrazyDaveState::Talking {
+            if unsafe { (*reanim_ptr).m_loop_count > 0 } {
+                unsafe { (*reanim_ptr).play_reanim("anim_idle", crate::todlib::reanimator::ReanimLoopType::Loop, 20, 12.0); }
+                self.m_crazy_dave_state = CrazyDaveState::Idling;
+            }
+        } else if self.m_crazy_dave_state == CrazyDaveState::HandingTalking {
+            if unsafe { (*reanim_ptr).m_loop_count > 0 } {
+                unsafe { (*reanim_ptr).play_reanim("anim_idle_handing", crate::todlib::reanimator::ReanimLoopType::Loop, 20, 12.0); }
+                self.m_crazy_dave_state = CrazyDaveState::HandingIdling;
+            }
+        } else if self.m_crazy_dave_state == CrazyDaveState::Leaving && unsafe { (*reanim_ptr).m_loop_count > 0 } {
+            self.crazy_dave_die();
+        }
+
+        if self.m_crazy_dave_state == CrazyDaveState::Idling || self.m_crazy_dave_state == CrazyDaveState::HandingIdling {
+            // [TRANSLATION_NOTE]: 嘴部图片覆盖（C++ 使用 IMAGE_REANIM_CRAZYDAVE_MOUTH1/4/5/6）
+            // Rust 侧无对应图片资源常量，统一以清除覆盖近似
+            unsafe { (*reanim_ptr).set_image_override("Dave_mouths", std::ptr::null_mut()); }
+        }
+
+        if self.m_crazy_dave_state == CrazyDaveState::Idling || self.m_crazy_dave_state == CrazyDaveState::Talking
+            || self.m_crazy_dave_state == CrazyDaveState::HandingTalking || self.m_crazy_dave_state == CrazyDaveState::HandingIdling
+        {
+            self.m_crazy_dave_blink_counter -= 1;
+            if self.m_crazy_dave_blink_counter <= 0 {
+                self.m_crazy_dave_blink_counter = crate::todlib::tod_common::rand_range_int(400, 800);
+                if let Some(blink_ptr) = self.add_reanimation(0.0, 0.0, 0, ReanimationType::CrazyDave as i32) {
+                    unsafe {
+                        (*blink_ptr).set_frames_for_layer("anim_blink");
+                        (*blink_ptr).m_loop_type = crate::todlib::reanimator::ReanimLoopType::PlayOnceFullLastFrameAndHold;
+                        (*blink_ptr).m_anim_rate = 15.0;
+                        // [TRANSLATION_NOTE]: C++ 中 AttachToAnotherReanimation(aCrazyDaveReanim,
+                        // "Dave_head")；Rust 侧无对应接口
+                        (*blink_ptr).m_color_override = (*reanim_ptr).m_color_override;
+                        (*reanim_ptr).assign_render_group_to_track("Dave_eye", -1); // RENDER_GROUP_HIDDEN
+                    }
+                    self.m_crazy_dave_blink_reanim_id = self.reanimation_get_id(blink_ptr);
+                }
+            }
+        }
+
+        let blink_ptr: *mut Reanimation = {
+            let r = self.reanimation_get_mut(self.m_crazy_dave_blink_reanim_id);
+            match r {
+                Some(r) => r as *mut Reanimation,
+                None => std::ptr::null_mut(),
+            }
+        };
+        if !blink_ptr.is_null() && unsafe { (*blink_ptr).m_loop_count > 0 } {
+            unsafe { (*reanim_ptr).assign_render_group_to_track("Dave_eye", 0); } // RENDER_GROUP_NORMAL
+            self.remove_reanimation(self.m_crazy_dave_blink_reanim_id);
+            self.m_crazy_dave_blink_reanim_id = REANIMATIONID_NULL;
+        }
+
+        unsafe { (*reanim_ptr).update(); }
+    }
+
+    /// 绘制疯狂戴夫（对应 C++ DrawCrazyDave）
+    pub fn draw_crazy_dave(&self, g: &mut Graphics) {
+        let reanim_ptr: *const Reanimation = {
+            let r = self.reanimation_get(self.m_crazy_dave_reanim_id);
+            match r {
+                Some(r) => r as *const Reanimation,
+                None => return,
+            }
+        };
+
+        if !self.m_crazy_dave_message_text.is_empty() {
+            // [TRANSLATION_NOTE]: C++ 中绘制 IMAGE_STORE_SPEECHBUBBLE(2) 气泡与
+            // PvzpDrawStringWrapped(FONT_BRIANNETOD16) 台词文本、click to continue 提示；
+            // Rust 侧对应图片/字体资源未接入，此处仅保留位置计算逻辑
+            let mut a_pos_x = 285;
+            let mut a_pos_y = 20;
+            if self.base.dialog_map.contains_key(&(Dialogs::Store as i32)) {
+                a_pos_x -= 180;
+                a_pos_y -= 78;
+            } else if self.game_mode == GameMode::Upsell {
+                a_pos_x += 130;
+                a_pos_y += 70;
+            }
+
+            let mut a_bubble_text = self.m_crazy_dave_message_text.clone();
+            if a_bubble_text.contains("{SHAKE}") {
+                a_bubble_text = a_bubble_text.replace("{SHAKE}", "");
+                // C++ 中气泡矩形位置每帧随机偏移（rand()%2）
+            }
+            let _click_to_continue = self.game_mode != GameMode::Upsell;
+        }
+
+        unsafe { (*reanim_ptr).draw(g); }
+    }
+
+    /// 推进戴夫台词（对应 C++ AdvanceCrazyDaveText）
+    pub fn advance_crazy_dave_text(&mut self) -> bool {
+        let a_message_name = format!("[CRAZY_DAVE_{}]", self.m_crazy_dave_message_index + 1);
+        // [TRANSLATION_NOTE]: C++ 中 PvzpStringListExists(aMessageName) 检查字符串表
+        // 是否存在该台词；Rust 侧用 get_string 近似判定
+        if self.base.resource_manager.is_none() {
+            return false;
+        }
+        self.crazy_dave_talk_index(self.m_crazy_dave_message_index + 1);
+        true
+    }
 
     // ==================== 杂项 ====================
 
@@ -903,8 +1673,22 @@ impl LawnApp {
         if count == 1 { format!("{} {}", count, singular) } else { format!("{} {}", count, plural) }
     }
 
-    pub fn toggle_slow_mo(&mut self) {}
-    pub fn toggle_fast_mo(&mut self) {}
+    /// 慢速模式开关（对应 C++ ToggleSlowMo）
+    pub fn toggle_slow_mo(&mut self) {
+        unsafe {
+            G_SLOW_MO_COUNTER = 0;
+            G_SLOW_MO = !G_SLOW_MO;
+            G_FAST_MO = false;
+        }
+    }
+
+    /// 快速模式开关（对应 C++ ToggleFastMo）
+    pub fn toggle_fast_mo(&mut self) {
+        unsafe {
+            G_SLOW_MO = false;
+            G_FAST_MO = !G_FAST_MO;
+        }
+    }
     pub fn need_pause_game(&self) -> bool { false }
     pub fn need_register(&self) -> bool { false }
 
@@ -922,7 +1706,19 @@ impl LawnApp {
         self.is_adventure_mode() && self.player_info.as_ref().map_or(false, |p| p.m_finished_adventure == 0)
     }
     pub fn earned_gold_trophy(&self) -> bool { false }
-    pub fn kill_dialog(&mut self, _dialog: Dialogs) {}
+
+    /// 关闭对话框（对应 C++ KillDialog）
+    pub fn kill_dialog(&mut self, the_dialog_id: Dialogs) -> bool {
+        if self.base.kill_dialog(the_dialog_id as i32) {
+            // [TRANSLATION_NOTE]: C++ 中若对话框表为空且无焦点 widget，则将焦点交还
+            // Board 或 GameSelector；Rust 侧 widget_manager 焦点跟踪未完全接入，暂略。
+            if self.board.is_some() && !self.need_pause_game() {
+                unsafe { (*self.board.unwrap()).pause(false); }
+            }
+            return true;
+        }
+        false
+    }
 
     /// 关闭模式对话框（对应 C++ ModalClose）
     /// 恢复游戏暂停状态
@@ -935,14 +1731,6 @@ impl LawnApp {
         }
     }
 
-    /// 关闭新选项对话框（对应 C++ KillNewOptionsDialog）
-    /// 应用画面模式设置并移除对话框
-    pub fn kill_new_options_dialog(&mut self) -> bool {
-        // 简化实现：关闭 NewOptions 对话框
-        self.kill_dialog(Dialogs::NewOptions);
-        true
-    }
-
     /// 异步关闭请求（对应 C++ CloseRequestAsync）
     /// 设置退出标志
     pub fn close_request_async(&mut self) {
@@ -952,11 +1740,25 @@ impl LawnApp {
 
 
     /// 写入注册表（对应 C++ WriteToRegistry）
-    pub fn write_to_registry(&self, _key: &str, _value: &str) {}
+    pub fn write_to_registry(&mut self) {
+        if let Some(player_info) = &self.player_info {
+            // [TRANSLATION_NOTE]: C++ 中 RegistryWriteString("CurUser", mPlayerInfo->mName)
+            // 与 mPlayerInfo->SaveDetails()；Rust 侧注册表写入与 PlayerInfo 持久化未实现
+            let _ = player_info;
+        }
+        // C++ 中末尾调用 SexyAppBase::WriteToRegistry()
+    }
     /// 读取注册表（对应 C++ ReadFromRegistry）
     pub fn read_from_registry(&self, _key: &str, _default: &str) -> String { _default.to_string() }
     /// 写入当前用户配置（对应 C++ WriteCurrentUserConfig）
-    pub fn write_current_user_config(&self) {}
+    pub fn write_current_user_config(&mut self) -> bool {
+        if let Some(player_info) = &self.player_info {
+            // [TRANSLATION_NOTE]: C++ 中 mPlayerInfo->SaveDetails()；
+            // Rust 侧 PlayerInfo 持久化未实现
+            let _ = player_info;
+        }
+        true
+    }
     /// 切换画面模式（对应 C++ SwitchScreenMode）
     pub fn switch_screen_mode(&mut self, _windowed: bool, _use_3d: bool, _force: bool) {}
     /// 弹出高分对话框（对应 C++ DoHighScoreDialog）
@@ -964,7 +1766,146 @@ impl LawnApp {
     /// 更改目录钩子（对应 C++ ChangeDirHook）
     pub fn change_dir_hook(&self, _path: &str) -> bool { false }
     /// 更新完成关卡的玩家档案（对应 C++ UpdatePlayerProfileForFinishingLevel）
-    pub fn update_player_profile_for_finishing_level(&mut self) {}
+    /// 更新通关后的玩家资料（对应 C++ UpdatePlayerProfileForFinishingLevel）
+    pub fn update_player_profile_for_finishing_level(&mut self) -> bool {
+        let app_ptr = self as *mut LawnApp;
+        // 对应 C++ UpdatePlayerProfileForFinishingLevel：通关后推进关卡/生存/解谜/挑战记录并解锁成就
+        let mut a_unlocked_new_challenge = false;
+
+        let board_level = self.board.map_or(0, |b| unsafe { (*b).level });
+        let board = self.board;
+
+        if self.is_adventure_mode() {
+            if board_level == FINAL_LEVEL {
+                if let Some(pi) = self.player_info.as_mut() {
+                    pi.set_level(1);
+                    pi.m_finished_adventure += 1;
+                    if pi.m_finished_adventure == 1 {
+                        pi.m_needs_message_on_game_selector = 1;
+                    }
+                }
+                crate::lawn::widget::achievements_screen::ReportAchievement::give_achievement(
+                    Some(app_ptr),
+                    crate::lawn::widget::achievements_screen::AchievementId::HomeSecurity as i32,
+                    false,
+                );
+            } else if let Some(pi) = self.player_info.as_mut() {
+                pi.set_level(board_level + 1);
+            }
+
+            if !self.has_finished_adventure() && board_level == 34 {
+                if let Some(pi) = self.player_info.as_mut() {
+                    pi.m_needs_magic_taco_reward = true;
+                }
+            }
+        } else if self.is_survival_mode() {
+            let is_final = board.map_or(false, |b| unsafe { (*b).is_final_survival_stage() });
+            if is_final {
+                a_unlocked_new_challenge = !self.has_beaten_challenge(self.game_mode);
+                if let Some(b) = board {
+                    unsafe { (*b).survival_save_score(); }
+                }
+                if a_unlocked_new_challenge && self.has_finished_adventure() {
+                    let a_num_trophies = Self::get_num_trophies(ChallengePage::Survival as i32);
+                    if a_num_trophies != 8 && a_num_trophies != 9 {
+                        if let Some(pi) = self.player_info.as_mut() {
+                            pi.m_has_new_survival = 1;
+                        }
+                    }
+                }
+            }
+        } else if self.is_puzzle_mode() {
+            a_unlocked_new_challenge = !self.has_beaten_challenge(self.game_mode);
+            let a_index = self.get_current_challenge_index() as usize;
+            if let Some(pi) = self.player_info.as_mut() {
+                if let Some(rec) = pi.m_challenge_records.get_mut(a_index) {
+                    *rec += 1;
+                }
+            }
+            if !self.has_finished_adventure()
+                && (self.game_mode == GameMode::ScaryPotter3 || self.game_mode == GameMode::PuzzleIZombie3)
+            {
+                a_unlocked_new_challenge = false;
+            }
+            if a_unlocked_new_challenge {
+                let is_scary_potter = self.is_scary_potter_level();
+                if let Some(pi) = self.player_info.as_mut() {
+                    if is_scary_potter {
+                        pi.m_has_new_scary_potter = 1;
+                    } else {
+                        pi.m_has_new_izombie = 1;
+                    }
+                }
+            }
+        } else {
+            a_unlocked_new_challenge = !self.has_beaten_challenge(self.game_mode);
+            let a_index = self.get_current_challenge_index() as usize;
+            let has_finished = self.has_finished_adventure();
+            if let Some(pi) = self.player_info.as_mut() {
+                if let Some(rec) = pi.m_challenge_records.get_mut(a_index) {
+                    *rec += 1;
+                }
+                if a_unlocked_new_challenge && has_finished {
+                    let a_num_trophies = Self::get_num_trophies(ChallengePage::Challenge as i32);
+                    if a_num_trophies <= 17 {
+                        pi.m_has_new_mini_game = 1;
+                    }
+                }
+                let a_num_trophies = Self::get_num_trophies(ChallengePage::Challenge as i32);
+                if a_num_trophies == 20 {
+                    crate::lawn::widget::achievements_screen::ReportAchievement::give_achievement(
+                        Some(app_ptr),
+                        crate::lawn::widget::achievements_screen::AchievementId::BeyondTheGrave as i32,
+                        false,
+                    );
+                }
+            }
+        }
+
+        if (self.is_adventure_mode() || self.is_survival_mode())
+            && !self.is_scary_potter_level()
+            && !self.is_whack_a_zombie_level()
+        {
+            if let Some(b) = board {
+                unsafe {
+                    let br = &*b;
+                    if br.stage_is_day_with_pool() && !br.m_pea_shooter_used {
+                        crate::lawn::widget::achievements_screen::ReportAchievement::give_achievement(
+                            Some(app_ptr),
+                            crate::lawn::widget::achievements_screen::AchievementId::DontPea as i32,
+                            false,
+                        );
+                    } else if br.stage_has_roof()
+                        && !br.has_conveyor_belt_seed_bank()
+                        && !br.m_catapult_plants_used
+                    {
+                        crate::lawn::widget::achievements_screen::ReportAchievement::give_achievement(
+                            Some(app_ptr),
+                            crate::lawn::widget::achievements_screen::AchievementId::Grounded as i32,
+                            false,
+                        );
+                    } else if br.stage_is_day_without_pool() && br.m_mushroom_and_coffee_beans_only {
+                        crate::lawn::widget::achievements_screen::ReportAchievement::give_achievement(
+                            Some(app_ptr),
+                            crate::lawn::widget::achievements_screen::AchievementId::GoodMorning as i32,
+                            false,
+                        );
+                    }
+                    if br.stage_is_night() && !br.m_mushrooms_used {
+                        crate::lawn::widget::achievements_screen::ReportAchievement::give_achievement(
+                            Some(app_ptr),
+                            crate::lawn::widget::achievements_screen::AchievementId::NoFungusAmongUs as i32,
+                            false,
+                        );
+                    }
+                }
+            }
+        }
+
+        self.write_current_user_config();
+
+        a_unlocked_new_challenge
+    }
     /// URL 打开成功回调（对应 C++ URLOpenSucceeded）
     pub fn url_open_succeeded(&self, _url: &str) {}
     /// 打开 URL（对应 C++ OpenURL）
@@ -1086,7 +2027,17 @@ impl LawnApp {
         self.loading_completed();
     }
 
-    pub fn confirm_quit(&mut self) {}
+    /// 确认退出（对应 C++ ConfirmQuit）
+    pub fn confirm_quit(&mut self) {
+        // [TRANSLATION_NOTE]: C++ 中 PvzpStringTranslate("[QUIT_HEADER]"/"[QUIT_MESSAGE]")；
+        // Rust 侧字符串翻译系统未接入，此处以字面量近似
+        let a_header = "[QUIT_HEADER]".to_string();
+        let a_body = "[QUIT_MESSAGE]".to_string();
+        let a_dialog = self.do_dialog(Dialogs::Quit as i32, true, &a_header, &a_body, "", BUTTONS_OK_CANCEL);
+        // [TRANSLATION_NOTE]: C++ 中 aDialog->mLawnYesButton->mLabel = "[QUIT_BUTTON]"；
+        // CenterDialog(aDialog, aDialog->mWidth, aDialog->mHeight) 待 widget 层接入
+        let _ = a_dialog;
+    }
 
     // ==================== 事件处理 ====================
 

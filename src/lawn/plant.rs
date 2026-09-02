@@ -1082,11 +1082,42 @@ impl Plant {
         matches!(seed_type, SeedType::Cattail | SeedType::Cactus)
     }
 
+    /// 附加粒子效果（对应 C++ AddAttachedParticle：先销毁旧粒子再添加新的）
+    pub fn add_attached_particle(&mut self, pos_x: i32, pos_y: i32, render_position: i32, effect: ParticleEffect) -> Option<*mut ParticleSystem> {
+        if let Some(app) = self.base.app {
+            unsafe {
+                // 对应 C++ ParticleTryToGet(mParticleID) 后的 ParticleSystemDie
+                if let Some(es) = (*app).effect_system.as_mut() {
+                    if let Some(ps) = es.particle_systems.get_mut(self.particle_id as usize) {
+                        ps.particle_system_die();
+                    }
+                }
+                let a_new_particle = (*app).add_tod_particle(pos_x as f32, pos_y as f32, render_position, effect as i32);
+                if let Some(p) = a_new_particle {
+                    // 对应 C++ ParticleGetID(aNewParticle)：遍历查找指针匹配的 ID
+                    if let Some(es) = (*app).effect_system.as_ref() {
+                        if let Some(idx) = es.particle_systems.iter().position(|ps| std::ptr::eq(ps, p)) {
+                            self.particle_id = idx as ParticleSystemID;
+                        }
+                    }
+                }
+                a_new_particle
+            }
+        } else {
+            None
+        }
+    }
+
     pub fn is_upgrade(seed_type: SeedType) -> bool {
         matches!(seed_type, SeedType::Gatlingpea | SeedType::Twinsunflower |
             SeedType::Gloomshroom | SeedType::Cattail | SeedType::Wintermelon |
             SeedType::GoldMagnet | SeedType::Spikerock | SeedType::Cobcannon)
     }
+
+    /// 预加载植物资源（对应 C++ Plant::PreloadPlantResources）
+    /// [TRANSLATION_NOTE]: C++ 中按种子类型加载对应 reanim 定义与图片；Rust 侧
+    /// reanim 定义加载在 reanim_loader 中处理，此处骨架保留调用链
+    pub fn preload_plant_resources(_seed_type: SeedType) {}
 
     /// 是否可升级（对应 C++ IsUpgradableTo）
     pub fn is_upgradable_to(&self, upgraded_type: SeedType) -> bool {
@@ -1386,7 +1417,7 @@ impl Plant {
     }
 
     /// 花盆高度偏移（对应 C++ PlantFlowerPotHeightOffset）
-    fn plant_flower_pot_height_offset(seed_type: SeedType, flower_pot_scale: f32) -> f32 {
+    pub fn plant_flower_pot_height_offset(seed_type: SeedType, flower_pot_scale: f32) -> f32 {
         let mut a_height_offset = -5.0 * flower_pot_scale;
         let mut a_scale_offset_fix = 0.0;
 

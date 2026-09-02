@@ -854,13 +854,14 @@ pub enum RenderObjectType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum CrazyDaveState {
-    NotHere = 0,
-    Waiting = 1,
-    Talking = 2,
-    GivingPresent = 3,
-    WaitingToLeave = 4,
-    Leaving = 5,
-    Gone = 6,
+    // [TRANSLATION_NOTE]: 数值与语义已对齐 C++ ConstEnums.h CrazyDaveState
+    Off = 0,
+    Entering = 1,
+    Leaving = 2,
+    Idling = 3,
+    Talking = 4,
+    HandingTalking = 5,
+    HandingIdling = 6,
 }
 
 // ============================================================
@@ -1584,31 +1585,38 @@ pub enum GridItemState {
     StinkyFallingAsleep,
     /// 臭鼬醒来（对应 C++ GRIDITEM_STINKY_WAKING_UP）
     StinkyWakingUp,
+    /// [TRANSLATION_NOTE]: 以下 4 个为追加变体（对应 C++ GRIDITEM_STATE_ZEN_TOOL_*，C++ 数值为 14-18，
+    /// 因 Rust 侧 GridItemState 整体未对齐 C++ 数值，此处追加到末尾保持既有变体不变）
+    ZenToolWateringCan,
+    ZenToolBugSpray,
+    ZenToolPhonograph,
+    ZenToolGoldWateringCan,
 }
 
 /// MessageStyle — 消息样式
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum MessageStyle {
+    // [TRANSLATION_NOTE]: 数值与命名已对齐 C++ ConstEnums.h MessageStyle（19 值）
     Off = 0,
     TutorialLevel1,
     TutorialLevel1Stay,
     TutorialLevel2,
     TutorialLater,
-    HintBig,
-    HintSmall,
+    TutorialLaterStay,
     HintLong,
-    HintStay,
     HintFast,
-    HintMedium,
-    HintSlow,
-    ZombieMessage,
-    PlantMessage,
-    CoinMessage,
-    SunMessage,
+    HintStay,
+    HintTallFast,
+    HintTallUnlockMessage,
+    HintTallLong,
+    BigMiddle,
+    BigMiddleFast,
+    HouseName,
+    HugeWave,
+    SlotMachine,
+    ZenGardenLong,
     Achievement,
-    ChallengeMessage,
-    LevelName,
 }
 
 /// Dialogs — 对话框类型

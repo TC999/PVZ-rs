@@ -9,7 +9,11 @@ use crate::lawn::board::Board;
 use crate::lawn::board::HitResult;
 use crate::lawn::plant::Plant;
 use crate::lawn::grid_item::GridItem;
-use crate::lawn::system::player_info::PottedPlant;
+use crate::lawn::system::player_info::{FacingDirection, PottedPlant};
+use crate::framework::widget::dialog::BUTTONS_YES_NO;
+use crate::todlib::tod_foley::FoleyType;
+use crate::todlib::reanimator::Reanimation;
+use crate::lawn::system::music::MusicTune;
 
 /// 禅境花园网格尺寸（对应 C++ ZEN_MAX_GRIDSIZE_X/Y）
 pub const ZEN_MAX_GRIDSIZE_X: i32 = 8;
@@ -116,11 +120,64 @@ impl ZenGarden {
     }
 
     pub fn draw_potted_plant_icon(&self, g: &mut Graphics, x: f32, y: f32, potted_plant: &PottedPlant) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ DrawPottedPlantIcon
+        self.draw_potted_plant(g, x, y, potted_plant, 0.7, true);
     }
 
     pub fn draw_potted_plant(&self, g: &mut Graphics, x: f32, y: f32, potted_plant: &PottedPlant, scale: f32, draw_pot: bool) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ DrawPottedPlant（缩放/变体/偏移计算完整；核心绘制依赖
+        // Plant::DrawSeedType，Rust 侧尚未实现，绘制处留注释）
+        let mut a_plant_variation = DrawVariation::Normal;
+        let mut a_seed_type = potted_plant.seed_type;
+        if potted_plant.plant_age == PottedPlantAge::Sprout {
+            a_seed_type = SeedType::Sprout;
+            if potted_plant.seed_type != SeedType::Marigold {
+                a_plant_variation = DrawVariation::SproutNoFlower;
+            }
+        } else if (a_seed_type == SeedType::Tanglekelp || a_seed_type == SeedType::Seashroom)
+            && potted_plant.which_zen_garden == GardenType::Aquarium
+        {
+            a_plant_variation = DrawVariation::Aquarium;
+        } else {
+            a_plant_variation = potted_plant.draw_variation;
+        }
+
+        let board_ref = self.board.map(|b| unsafe { &*b });
+        let mut a_offset_x = 0.0f32;
+        let mut a_offset_y = Plant::plant_draw_height_offset(board_ref, None, a_seed_type, -1, -1);
+        if draw_pot {
+            let a_pot_offset_y = Plant::plant_draw_height_offset(board_ref, None, SeedType::Flowerpot, -1, -1);
+            let mut a_pot_variation = DrawVariation::ZenGarden;
+            if Plant::is_aquatic(a_seed_type) {
+                a_pot_variation = DrawVariation::ZenGardenWater;
+            }
+            // [TRANSLATION_NOTE]: C++ 中 Plant::DrawSeedType(&aPottedPlantG, FLOWERPOT, SEED_NONE,
+            // aPotVariation2, x, y + aPotOffsetY*scale) 绘制花盆；待 Plant::DrawSeedType 实现后接入
+            let _ = a_pot_variation;
+            let _ = a_pot_offset_y;
+        }
+
+        if potted_plant.facing == FacingDirection::Left {
+            // C++ 中 aPottedPlantG.mScaleX = -scale
+            a_offset_x += 80.0 * scale;
+        }
+
+        if potted_plant.plant_age == PottedPlantAge::Small {
+            a_offset_x += 20.0 * scale;
+            a_offset_y += 40.0 * scale;
+        } else if potted_plant.plant_age == PottedPlantAge::Medium {
+            a_offset_x += 10.0 * scale;
+            a_offset_y += 20.0 * scale;
+        }
+
+        if draw_pot {
+            a_offset_y += Plant::plant_flower_pot_height_offset(a_seed_type, scale);
+        }
+        a_offset_y += self.plant_potted_draw_height_offset(a_seed_type, scale);
+
+        // [TRANSLATION_NOTE]: C++ 中 Plant::DrawSeedType(&aPottedPlantG, aSeedType, SEED_NONE,
+        // aPlantVariation, x + aOffsetX, y + aOffsetY) 绘制植物；待 Plant::DrawSeedType 实现后接入
+        let _ = (g, a_plant_variation, a_offset_x, a_offset_y);
     }
 
     pub fn is_zen_garden_full(&self, include_dropped_presents: bool) -> bool {
@@ -423,7 +480,141 @@ impl ZenGarden {
     }
 
     pub fn mouse_down_with_money_sign(&mut self, plant: &mut Plant) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ MouseDownWithMoneySign：确认出售盆栽植物
+        if let Some(board) = self.board {
+            unsafe { (*board).clear_cursor(); }
+        }
+        let a_header = "[ZEN_SELL_HEADER]".to_string();
+        let a_lines = "[ZEN_SELL_LINES]".to_string();
+        let a_price = self.get_plant_sell_price(plant);
+
+        if let Some(app) = self.app {
+            unsafe { if (*app).m_crazy_dave_state == CrazyDaveState::Off { (*app).crazy_dave_enter(); } }
+        }
+
+        let a_potted_plant = self.potted_plant_from_index(plant.potted_plant_index as usize);
+        let mut a_message_text = self.app.map_or(String::new(), |app| unsafe {
+            (*app).get_crazy_dave_text(1700)
+        });
+        a_message_text = a_message_text.replace("{SELL_PRICE}", &a_price.to_string());
+
+        let a_plant_name = if plant.seed_type == SeedType::Sprout
+            && a_potted_plant.map_or(false, |pp| unsafe { (*pp).seed_type == SeedType::Marigold })
+        {
+            "[MARIGOLD_SPROUT]".to_string()
+        } else {
+            crate::lawn::plant::Plant::get_name_string(plant.seed_type, plant.imitater_type)
+        };
+        a_message_text = a_message_text.replace("{PLANT_TYPE}", &a_plant_name);
+
+        if let Some(app) = self.app {
+            unsafe {
+                (*app).crazy_dave_talk_message(&a_message_text);
+                if let Some(r) = (*app).reanimation_get_mut((*app).m_crazy_dave_reanim_id) {
+                    r.play_reanim("anim_blahblah", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, 20, 12.0);
+                }
+            }
+        }
+
+        // 对应 C++ DataArrayGetID(thePlant)：记录植物索引
+        let a_plant_id = self.plant_index_of(plant);
+
+        let a_dialog = self.app.and_then(|app| unsafe {
+            (*app).do_dialog(Dialogs::ZenSell as i32, true, &a_header, &a_lines, "", BUTTONS_YES_NO)
+        });
+        if let Some(d) = a_dialog {
+            unsafe {
+                (*d).x += 120;
+                (*d).y += 60;
+            }
+        }
+        if let Some(board) = self.board {
+            unsafe { (*board).show_coin_bank(0); }
+        }
+        let a_result = a_dialog.map_or(0, |d| unsafe { (*d).wait_for_result(true) });
+        if let Some(app) = self.app {
+            unsafe { (*app).crazy_dave_leave(); }
+        }
+
+        if a_result == crate::framework::widget::dialog::ID_YES {
+            // 模态等待期间植物可能已被替换
+            if self.plant_index_of(plant) != a_plant_id {
+                return;
+            }
+            let sell_index = self.plant_index_of(plant);
+            let Some(sell_index) = sell_index else { return };
+            let sell_plant_index;
+            {
+                let board = self.board;
+                let Some(board) = board else { return };
+                unsafe {
+                    let b = &mut *board;
+                    if sell_index >= b.plants.len() || b.plants[sell_index].dead {
+                        return;
+                    }
+                    sell_plant_index = b.plants[sell_index].potted_plant_index;
+                }
+            }
+
+            if let Some(app) = self.app {
+                unsafe {
+                    if let Some(info) = (*app).player_info.as_mut() {
+                        info.add_coins(a_price);
+                    }
+                    if let Some(board) = self.board {
+                        (*board).m_coins_collected += a_price;
+                    }
+                    // 数组前移（对应 C++ memmove）+ 其余植物索引修正
+                    if let Some(info) = (*app).player_info.as_mut() {
+                        let num_after = info.m_num_potted_plants - sell_plant_index - 1;
+                        if num_after > 0 {
+                            let idx = sell_plant_index as usize;
+                            if idx + 1 < info.m_potted_plant.len() {
+                                info.m_potted_plant.remove(idx);
+                            }
+                            if let Some(board) = self.board {
+                                unsafe {
+                                    let b = &mut *board;
+                                    for i in 0..b.plants.len() {
+                                        if b.plants[i].dead {
+                                            continue;
+                                        }
+                                        if b.plants[i].potted_plant_index > sell_plant_index {
+                                            b.plants[i].potted_plant_index -= 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        info.m_num_potted_plants -= 1;
+                    }
+                    (*app).play_foley(FoleyType::UseShovel as i32);
+                }
+            }
+
+            if let Some(board) = self.board {
+                unsafe {
+                    let b = &mut *board;
+                    let plant_ptr = &mut b.plants[sell_index] as *mut Plant;
+                    self.remove_potted_plant(unsafe { &mut *plant_ptr });
+                }
+            }
+        }
+    }
+
+    /// 查找植物在棋盘植物数组中的索引（对应 C++ DataArrayGetID）
+    fn plant_index_of(&self, target: &Plant) -> Option<usize> {
+        if let Some(board) = self.board {
+            unsafe {
+                let b = &*board;
+                for i in 0..b.plants.len() {
+                    if std::ptr::eq(&b.plants[i] as *const Plant, target as *const Plant) {
+                        return Some(i);
+                    }
+                }
+            }
+        }
+        None
     }
 
     pub fn place_potted_plant(&mut self, potted_plant_index: usize) -> Option<*mut Plant> {
@@ -465,23 +656,314 @@ impl ZenGarden {
     }
 
     pub fn zen_garden_update(&mut self) {
-        // [TRANSLATION_NOTE]: 核心循环：更新植物需求→盆栽→工具/臭鼬→教程检查
+        // 对应 C++ ZenGardenUpdate：商店打开时跳过更新
+        if let Some(app) = self.app {
+            unsafe {
+                if (*app).base.dialog_map.contains_key(&(Dialogs::Store as i32)) {
+                    return;
+                }
+                self.now_time = (*app).get_now_time();
+                self.now_tm = (*app).get_local_time(self.now_time);
+                (*app).update_crazy_dave();
+            }
+        }
+
+        if let Some(board) = self.board {
+            unsafe {
+                if (*board).cursor_object.cursor_type != CursorType::Normal {
+                    if let Some(ch) = (*board).challenge.as_mut() {
+                        ch.challenge_state = ChallengeState::Normal;
+                        ch.challenge_state_counter = 3000;
+                    }
+                } else if (*board).m_tutorial_state == TutorialState::Off {
+                    if let Some(ch) = (*board).challenge.as_mut() {
+                        if ch.challenge_state_counter > 0 {
+                            ch.challenge_state_counter -= 1;
+                        }
+                        if ch.challenge_state == ChallengeState::Normal && ch.challenge_state_counter == 0 {
+                            ch.challenge_state = ChallengeState::ZenFading;
+                            ch.challenge_state_counter = 50;
+                        }
+                    }
+                }
+            }
+        }
+
+        self.update_plant_needs();
+
+        if let Some(board) = self.board {
+            unsafe {
+                let b = &mut *board;
+                for i in 0..b.plants.len() {
+                    if b.plants[i].dead {
+                        continue;
+                    }
+                    if b.plants[i].potted_plant_index != -1 {
+                        let plant_ptr = &mut b.plants[i] as *mut Plant;
+                        self.potted_plant_update(unsafe { &mut *plant_ptr });
+                    }
+                }
+                for i in 0..b.grid_items.len() {
+                    if b.grid_items[i].dead {
+                        continue;
+                    }
+                    let item_type = b.grid_items[i].grid_item_type;
+                    if item_type == crate::lawn::grid_item::GridItemType::ZenTool {
+                        let item_ptr = &mut b.grid_items[i] as *mut GridItem;
+                        self.zen_tool_update(unsafe { &mut *item_ptr });
+                    } else if item_type == crate::lawn::grid_item::GridItemType::PlantStinky {
+                        let item_ptr = &mut b.grid_items[i] as *mut GridItem;
+                        self.stinky_update(unsafe { &mut *item_ptr });
+                    }
+                }
+            }
+        }
+
+        if let Some(board) = self.board {
+            unsafe {
+                if (*board).m_tutorial_state == TutorialState::ZenGardenKeepWatering
+                    && self.count_plants_needing_fertilizer() > 0
+                {
+                    (*board).display_advice(
+                        "[ADVICE_ZEN_GARDEN_VISIT_STORE]",
+                        MessageStyle::HintTallLong as i32,
+                        AdviceType::None,
+                    );
+                    (*board).m_tutorial_state = TutorialState::ZenGardenVisitStore;
+                    // [TRANSLATION_NOTE]: C++ 中 mStoreButton->mDisabled=false /
+                    // mBtnNoDraw=false；Rust 侧 store_button 仅为 Option<i32>，无按钮对象
+                }
+            }
+        }
     }
 
     pub fn mouse_down_with_full_wheel_barrow(&mut self, x: i32, y: i32) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ MouseDownWithFullWheelBarrow：从独轮车取出盆栽放到网格
+        let a_potted_plant = self.get_potted_plant_in_wheelbarrow();
+        let Some(a_potted_plant) = a_potted_plant else { return };
+
+        unsafe {
+            if self.garden_type == GardenType::Aquarium
+                && !Plant::is_aquatic((*a_potted_plant).seed_type)
+            {
+                if let Some(board) = self.board {
+                    (*board).display_advice(
+                        "[ZEN_ONLY_AQUATIC_PLANTS]",
+                        MessageStyle::HintTallFast as i32,
+                        AdviceType::None,
+                    );
+                }
+                return;
+            }
+
+            let a_grid_x = self.board.map_or(-1, |b| unsafe { (*b).pixel_to_grid_x(x, y) });
+            let a_grid_y = self.board.map_or(-1, |b| unsafe { (*b).pixel_to_grid_y(x, y) });
+            if a_grid_x == -1 || a_grid_y == -1 {
+                return;
+            }
+            let plant_ok = self.board.map_or(PlantingReason::NotHere, |b| unsafe {
+                (*b).can_plant_at(a_grid_x, a_grid_y, (*a_potted_plant).seed_type)
+            });
+            if plant_ok != PlantingReason::Ok {
+                return;
+            }
+
+            (*a_potted_plant).which_zen_garden = self.garden_type;
+            (*a_potted_plant).x = a_grid_x;
+            (*a_potted_plant).y = a_grid_y;
+
+            // 对应 C++ 指针差计算 PottedPlantIndex
+            let a_potted_plant_index = self.potted_plant_index_of(a_potted_plant);
+            let Some(a_potted_plant_index) = a_potted_plant_index else { return };
+
+            let a_plant = self.place_potted_plant(a_potted_plant_index);
+            if let Some(board) = self.board {
+                if a_plant.is_some() {
+                    (*board).do_planting_effects(
+                        (*a_potted_plant).x,
+                        (*a_potted_plant).y,
+                        (*a_potted_plant).seed_type,
+                    );
+                }
+            }
+        }
+    }
+
+    /// 查找盆栽在玩家资料数组中的索引（对应 C++ 指针差）
+    fn potted_plant_index_of(&self, target: *mut PottedPlant) -> Option<usize> {
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(info) = (*app).player_info.as_ref() {
+                    for (i, pp) in info.m_potted_plant.iter().enumerate() {
+                        if pp as *const PottedPlant == target as *const PottedPlant {
+                            return Some(i);
+                        }
+                    }
+                }
+            }
+        }
+        None
     }
 
     pub fn mouse_down_with_empty_wheel_barrow(&mut self, plant: &mut Plant) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ MouseDownWithEmptyWheelBarrow：装入独轮车并重置坐标
+        let a_potted_plant = self.potted_plant_from_index(plant.potted_plant_index as usize);
+        self.remove_potted_plant(plant);
+        if let Some(pp) = a_potted_plant {
+            unsafe {
+                (*pp).which_zen_garden = GardenType::Wheelbarrow;
+                (*pp).x = 0;
+                (*pp).y = 0;
+            }
+        }
+        if let Some(app) = self.app {
+            unsafe { (*app).play_foley(FoleyType::Plant as i32); }
+        }
     }
 
     pub fn goto_next_garden(&mut self) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ GotoNextGarden：离开当前花园并切换到下一个已购花园（或智慧树）
+        self.leave_garden();
+        if let Some(board) = self.board {
+            unsafe { (*board).clear_advice(AdviceType::None); }
+        }
+        if let Some(app) = self.app {
+            unsafe { (*app).crazy_dave_die(); }
+        }
+        if let Some(board) = self.board {
+            unsafe {
+                (*board).plants.clear();
+                (*board).coins.clear();
+            }
+        }
+        // 对应 C++ mEffectSystem->EffectSystemFreeAll()：清空全部特效
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(es) = (*app).effect_system.as_mut() {
+                    es.effect_system_free_all();
+                }
+            }
+        }
+
+        let mut a_go_to_tree = false;
+        if self.garden_type == GardenType::Main {
+            if self.has_purchased_item(StoreItem::MushroomGarden) {
+                self.garden_type = GardenType::Mushroom;
+                if let Some(board) = self.board {
+                    unsafe { (*board).m_background_type = BackgroundType::MushroomGarden; }
+                }
+            } else if self.has_purchased_item(StoreItem::AquariumGarden) {
+                self.garden_type = GardenType::Aquarium;
+                if let Some(board) = self.board {
+                    unsafe { (*board).m_background_type = BackgroundType::Zombiquarium; }
+                }
+            } else if self.has_purchased_item(StoreItem::TreeOfWisdom) {
+                a_go_to_tree = true;
+            }
+        } else if self.garden_type == GardenType::Mushroom {
+            if self.has_purchased_item(StoreItem::AquariumGarden) {
+                self.garden_type = GardenType::Aquarium;
+                if let Some(board) = self.board {
+                    unsafe { (*board).m_background_type = BackgroundType::Zombiquarium; }
+                }
+            } else if self.has_purchased_item(StoreItem::TreeOfWisdom) {
+                a_go_to_tree = true;
+            } else {
+                self.garden_type = GardenType::Main;
+                if let Some(board) = self.board {
+                    unsafe { (*board).m_background_type = BackgroundType::Greenhouse; }
+                }
+            }
+        } else if self.garden_type == GardenType::Aquarium {
+            if self.has_purchased_item(StoreItem::TreeOfWisdom) {
+                a_go_to_tree = true;
+            } else {
+                self.garden_type = GardenType::Main;
+                if let Some(board) = self.board {
+                    unsafe { (*board).m_background_type = BackgroundType::Greenhouse; }
+                }
+            }
+        }
+
+        if a_go_to_tree {
+            if let Some(app) = self.app {
+                unsafe {
+                    // [TRANSLATION_NOTE]: C++ 中先 ReleaseTrackedResources(mLoadedResourceNames)
+                    (*app).kill_board();
+                    (*app).pre_new_game(GameMode::ChallengeTreeOfWisdom, false);
+                }
+            }
+            return;
+        }
+
+        // [TRANSLATION_NOTE]: C++ 中 ReleaseTrackedResources 后按背景加载资源组；
+        // Rust 侧 mLoadedResourceNames 跟踪未接入，直接加载对应组
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(rm) = (*app).base.resource_manager.as_mut() {
+                    let background = self.board.map_or(BackgroundType::Greenhouse, |b| unsafe { (*b).m_background_type });
+                    match background {
+                        BackgroundType::MushroomGarden => {
+                            let _ = (**rm).load_resources("DelayLoad_MushroomGarden");
+                        }
+                        BackgroundType::Greenhouse => {
+                            let _ = (**rm).load_resources("DelayLoad_GreenHouseGarden");
+                            let _ = (**rm).load_resources("DelayLoad_GreenHouseOverlay");
+                        }
+                        BackgroundType::Zombiquarium => {
+                            let _ = (**rm).load_resources("DelayLoad_Zombiquarium");
+                            let _ = (**rm).load_resources("DelayLoad_GreenHouseOverlay");
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        if let Some(board) = self.board {
+            unsafe {
+                let background = (*board).m_background_type;
+                if (background == BackgroundType::MushroomGarden || background == BackgroundType::Zombiquarium)
+                    && !self.has_purchased_item(StoreItem::WheelBarrow)
+                {
+                    (*board).display_advice(
+                        "[ADVICE_NEED_WHEELBARROW]",
+                        MessageStyle::HintTallFast as i32,
+                        AdviceType::NeedWheelbarrow,
+                    );
+                }
+            }
+        }
+
+        self.zen_garden_init_level();
+    }
+
+    /// 玩家是否已购买指定商店物品（对应 C++ mPurchases[item] 非零判断）
+    fn has_purchased_item(&self, item: StoreItem) -> bool {
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(info) = (*app).player_info.as_ref() {
+                    let idx = item as usize;
+                    return info.m_purchases.get(idx).copied().unwrap_or(0) != 0;
+                }
+            }
+        }
+        false
     }
 
     pub fn get_potted_plant_in_wheelbarrow(&self) -> Option<*mut PottedPlant> {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ GetPottedPlantInWheelbarrow：查找 whichZenGarden==WHEELBARROW 的盆栽
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(info) = (*app).player_info.as_ref() {
+                    for (i, pp) in info.m_potted_plant.iter().enumerate() {
+                        if pp.which_zen_garden == GardenType::Wheelbarrow {
+                            return self.potted_plant_from_index(i);
+                        }
+                    }
+                }
+            }
+        }
         None
     }
 
@@ -589,11 +1071,97 @@ impl ZenGarden {
     }
 
     pub fn draw_backdrop(&self, g: &mut Graphics) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ DrawBackdrop：水族馆中在空位绘制植物阴影（引导放置）
+        if self.garden_type != GardenType::Aquarium {
+            return;
+        }
+        if let Some(board) = self.board {
+            unsafe {
+                let cursor_type = (*board).cursor_object.cursor_type;
+                if cursor_type == CursorType::PlantFromWheelBarrow
+                    || cursor_type == CursorType::Wheelbarrow
+                    || cursor_type == CursorType::PlantFromGlove
+                {
+                    let mut count = 0;
+                    let placements = self.get_special_grid_placements(&mut count);
+                    if let Some(p) = placements {
+                        for i in 0..count {
+                            let a_grid = unsafe { &*p.add(i as usize) };
+                            if (*board).get_top_plant_at(a_grid.grid_x, a_grid.grid_y).is_none() {
+                                // [TRANSLATION_NOTE]: C++ 中 PvzpDrawImageCelScaled(
+                                // IMAGE_PLANTSHADOW, aGrid.mPixelX-35, aGrid.mPixelY+33, 0,0, 1.7,1.7)
+                                // 绘制植物阴影；Rust 侧图片资源未接入，暂略
+                                let _ = (a_grid.pixel_x, a_grid.pixel_y);
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     pub fn mouse_down_zen_garden(&mut self, x: i32, y: i32, click_count: i32, hit_result: &mut HitResult) -> bool {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ MouseDownZenGarden
+        if let Some(board) = self.board {
+            unsafe {
+                if let Some(ch) = (*board).challenge.as_mut() {
+                    if ch.challenge_state == ChallengeState::ZenFading {
+                        ch.challenge_state = ChallengeState::Normal;
+                    }
+                    ch.challenge_state_counter = 3000;
+                }
+
+                if hit_result.object_type == GameObjectType::Stinky
+                    && (*board).cursor_object.cursor_type == CursorType::Normal
+                {
+                    self.wake_stinky();
+                } else if (*board).cursor_object.cursor_type == CursorType::Glove {
+                    if (*board).can_use_game_object(GameObjectType::Wheelbarrow) {
+                        let a_button_rect = (*board).get_zen_button_rect(GameObjectType::Wheelbarrow);
+                        let a_potted_plant = self.get_potted_plant_in_wheelbarrow();
+                        if a_button_rect.contains(x, y) && a_potted_plant.is_some() {
+                            (*board).clear_cursor();
+                            let pp = a_potted_plant.unwrap();
+                            (*board).cursor_object.seed_type = (*pp).seed_type;
+                            (*board).cursor_object.imitater_type = SeedType::None;
+                            (*board).cursor_object.cursor_type = CursorType::PlantFromWheelBarrow;
+                            return true;
+                        }
+                    }
+                } else if (*board).cursor_object.cursor_type == CursorType::PlantFromGlove {
+                    if (*board).can_use_game_object(GameObjectType::Wheelbarrow) {
+                        let a_button_rect = (*board).get_zen_button_rect(GameObjectType::Wheelbarrow);
+                        let glove_id = (*board).cursor_object.glove_plant_id as usize;
+                        let b = &mut *board;
+                        let plant_alive = glove_id < b.plants.len() && !b.plants[glove_id].dead;
+                        if plant_alive && a_button_rect.contains(x, y)
+                            && self.get_potted_plant_in_wheelbarrow().is_none()
+                        {
+                            let plant_ptr = &mut b.plants[glove_id] as *mut crate::lawn::plant::Plant;
+                            self.mouse_down_with_empty_wheel_barrow(unsafe { &mut *plant_ptr });
+                            b.clear_cursor();
+                            return true;
+                        }
+                    }
+                } else if hit_result.object_type == GameObjectType::None
+                    && (*board).cursor_object.cursor_type == CursorType::Normal
+                    && self.garden_type == GardenType::Aquarium
+                    && click_count <= -1
+                {
+                    // [TRANSLATION_NOTE]: C++ 中 PlaySample(SOUND_TAPGLASS)
+                }
+            }
+        }
+
+        if let Some(app) = self.app {
+            unsafe {
+                if (*app).m_crazy_dave_message_index != -1 {
+                    self.advance_crazy_dave_dialog();
+                    return true;
+                }
+            }
+        }
+
         false
     }
 
@@ -718,7 +1286,25 @@ impl ZenGarden {
     }
 
     pub fn draw_plant_overlay(&self, g: &mut Graphics, plant: &Plant) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ DrawPlantOverlay：按需求在植物上方显示气泡提示
+        if plant.potted_plant_index == -1 {
+            return;
+        }
+        let a_potted_plant = self.potted_plant_from_index(plant.potted_plant_index as usize);
+        let a_plant_need = a_potted_plant.map_or(PottedPlantNeed::None, |pp| unsafe {
+            self.get_plants_need(&*pp)
+        });
+        if a_plant_need == PottedPlantNeed::None {
+            return;
+        }
+        // [TRANSLATION_NOTE]: C++ 中绘制 IMAGE_PLANTSPEECHBUBBLE 并按下述需求绘制
+        // IMAGE_ZEN_NEED_ICONS（列 0/1/2）或 IMAGE_WATERDROP 图标；Rust 侧图片资源未接入，暂略
+        match a_plant_need {
+            PottedPlantNeed::Fertilizer | PottedPlantNeed::Bugspray
+            | PottedPlantNeed::Phonograph | PottedPlantNeed::Water => {}
+            _ => {}
+        }
+        let _ = g;
     }
 
     pub fn was_plant_need_fulfilled_today(&self, potted_plant: &PottedPlant) -> bool {
@@ -1063,20 +1649,142 @@ impl ZenGarden {
         }
     }
 
-    pub fn potted_plant_update(&mut self, _plant: &mut Plant) {
-        // [TRANSLATION_NOTE]: PottedPlantUpdate — 检查时间戳、睡眠状态、倒计时、生产、效果状态
+    pub fn potted_plant_update(&mut self, plant: &mut Plant) {
+        // 对应 C++ PottedPlantUpdate：检查时间戳倒流并重置计时器
+        let a_potted_plant = self.potted_plant_from_index(plant.potted_plant_index as usize);
+        let a_now = self.now_time;
+        let need_reset = a_potted_plant.map_or(false, |pp| unsafe {
+            (*pp).last_watered_time > a_now
+                || (*pp).last_need_fulfilled_time > a_now
+                || (*pp).last_fertilized_time > a_now
+                || (*pp).last_chocolate_time > a_now
+        });
+        if need_reset {
+            if let Some(pp) = a_potted_plant {
+                self.reset_plant_timers(unsafe { &mut *pp });
+            }
+        }
+
+        if plant.is_asleep {
+            return;
+        }
+        if plant.state_countdown > 0 {
+            plant.state_countdown -= 1;
+        }
+
+        let is_full_and_fulfilled = a_potted_plant.map_or(false, |pp| unsafe {
+            (*pp).plant_age == PottedPlantAge::Full && self.was_plant_need_fulfilled_today(&*pp)
+        });
+        if is_full_and_fulfilled {
+            self.plant_update_production(plant);
+        }
+        self.update_plant_effect_state(plant);
     }
 
     pub fn add_happy_effect(&self, plant: &mut Plant) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ AddHappyEffect：在植物或花盆上附加开心发光粒子
+        let a_flower_pot = self.board.and_then(|b| unsafe {
+            (*b).get_top_plant_at(plant.plant_col, plant.start_row)
+        });
+
+        // 通过数组地址匹配获得花盆可变引用（避免 &T -> &mut T 的 UB 转换）
+        let mut a_flower_pot_ptr: *mut Plant = std::ptr::null_mut();
+        if let (Some(board), Some(fp)) = (self.board, a_flower_pot) {
+            unsafe {
+                let b = &mut *board;
+                for i in 0..b.plants.len() {
+                    if std::ptr::eq(&b.plants[i] as *const Plant, fp as *const Plant) {
+                        a_flower_pot_ptr = &mut b.plants[i] as *mut Plant;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if a_flower_pot_ptr.is_null() {
+            plant.add_attached_particle(
+                plant.pos_x as i32 + 40,
+                plant.pos_y as i32 + 60,
+                plant.base.render_order - 1,
+                ParticleEffect::PottedZenGlow,
+            );
+        } else {
+            unsafe {
+                let pot = &mut *a_flower_pot_ptr;
+                if Plant::is_aquatic(plant.seed_type) {
+                    pot.add_attached_particle(
+                        pot.pos_x as i32 + 40,
+                        pot.pos_y as i32 + 61,
+                        pot.base.render_order - 1,
+                        ParticleEffect::PottedWaterPlantGlow,
+                    );
+                } else {
+                    pot.add_attached_particle(
+                        pot.pos_x as i32 + 40,
+                        pot.pos_y as i32 + 63,
+                        pot.base.render_order - 1,
+                        ParticleEffect::PottedZenGlow,
+                    );
+                }
+            }
+        }
     }
 
     pub fn remove_happy_effect(&self, plant: &mut Plant) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ RemoveHappyEffect：销毁花盆或植物上的特效粒子
+        let a_flower_pot = self.board.and_then(|b| unsafe {
+            (*b).get_top_plant_at(plant.plant_col, plant.start_row)
+        });
+        let particle_id = if let Some(fp) = a_flower_pot {
+            fp.particle_id
+        } else {
+            plant.particle_id
+        };
+        if particle_id == PARTICLESYSTEMID_NULL {
+            return;
+        }
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(es) = (*app).effect_system.as_mut() {
+                    if let Some(ps) = es.particle_systems.get_mut(particle_id as usize) {
+                        ps.particle_system_die();
+                    }
+                }
+            }
+        }
     }
 
     pub fn plant_update_production(&self, plant: &mut Plant) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ PlantUpdateProduction：植物生产倒计时与产币
+        plant.launch_counter -= 1;
+        self.set_plant_anim_speed(plant);
+        let a_potted_plant = self.potted_plant_from_index(plant.potted_plant_index as usize);
+        let a_high_on_chocolate = a_potted_plant.map_or(false, |pp| unsafe {
+            self.plant_high_on_chocolate(&*pp)
+        });
+        if a_high_on_chocolate {
+            plant.launch_counter -= 1;
+        }
+
+        if plant.launch_counter <= 0 {
+            self.plant_set_launch_counter(plant);
+            if let Some(app) = self.app {
+                unsafe { (*app).play_foley(FoleyType::SpawnSun as i32); }
+            }
+
+            let mut a_coin_hit = crate::framework::common::rand_range(1000);
+            a_coin_hit += crate::todlib::tod_common::tod_animate_curve(
+                5, 30, self.plant_get_minutes_since_happy(plant), 0, 80,
+                crate::lawn::game_enums::TodCurves::Linear,
+            );
+            let mut a_coin_type = CoinType::Silver;
+            if a_coin_hit < 100 {
+                a_coin_type = CoinType::Gold;
+            }
+            if let Some(board) = self.board {
+                unsafe { (*board).add_coin(plant.pos_x, plant.pos_y, a_coin_type, CoinMotion::Coin); }
+            }
+        }
     }
 
     pub fn can_drop_potted_plant_loot(&self) -> bool {
@@ -1090,7 +1798,19 @@ impl ZenGarden {
     }
 
     pub fn show_tutorial_arrow_on_watering_can(&self) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ ShowTutorialArrowOnWateringCan
+        if let Some(board) = self.board {
+            unsafe {
+                let a_button_rect = (*board).get_zen_button_rect(GameObjectType::WateringCan);
+                (*board).tutorial_arrow_show(a_button_rect.x + 10, a_button_rect.y + 10);
+                (*board).display_advice(
+                    "[ADVICE_ZEN_GARDEN_PICK_UP_WATER]",
+                    MessageStyle::ZenGardenLong as i32,
+                    AdviceType::None,
+                );
+                (*board).m_tutorial_state = TutorialState::ZenGardenPickupWater;
+            }
+        }
     }
 
     pub fn zen_garden_start(&mut self) {
@@ -1098,7 +1818,45 @@ impl ZenGarden {
     }
 
     pub fn update_plant_effect_state(&self, plant: &mut Plant) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ UpdatePlantEffectState：按需求/睡眠更新植物状态
+        let a_potted_plant = self.potted_plant_from_index(plant.potted_plant_index as usize);
+        let a_original_state = plant.state;
+        let a_plant_need = a_potted_plant.map_or(PottedPlantNeed::None, |pp| unsafe {
+            self.get_plants_need(&*pp)
+        });
+        if a_plant_need == PottedPlantNeed::Water {
+            plant.state = PlantState::NotReady;
+        } else if a_plant_need == PottedPlantNeed::None {
+            if a_potted_plant.map_or(false, |pp| unsafe {
+                self.was_plant_need_fulfilled_today(&*pp)
+            }) {
+                plant.state = PlantState::ZenGardenHappy;
+            } else if plant.is_asleep {
+                plant.state = PlantState::NotReady;
+            } else {
+                plant.state = PlantState::ZenGardenWatered;
+            }
+        } else {
+            plant.state = PlantState::ZenGardenNeedy;
+        }
+        if a_original_state == plant.state {
+            return;
+        }
+
+        // [TRANSLATION_NOTE]: C++ 中检查下方花盆（GetTopPlantAt TOPPLANT_ONLY_UNDER_PLANT）
+        // 并 SetImageOverride("Pot_top", IMAGE_REANIM_POT_TOP_DARK)；Rust 侧无该图片常量，暂略
+        if a_original_state == PlantState::ZenGardenHappy {
+            self.remove_happy_effect(plant);
+        }
+
+        if plant.state == PlantState::ZenGardenHappy {
+            plant.set_sleeping(false);
+            self.add_happy_effect(plant);
+        } else if Plant::is_nocturnal(plant.seed_type)
+            && !self.board.map_or(false, |b| unsafe { (*b).stage_is_night() })
+        {
+            plant.set_sleeping(true);
+        }
     }
 
     pub fn can_use_game_object(&self, object_type: GameObjectType) -> bool {
@@ -1106,12 +1864,124 @@ impl ZenGarden {
         false
     }
 
-    pub fn zen_tool_update(&self, _zen_tool: &mut GridItem) {
-        // [TRANSLATION_NOTE]: ZenToolUpdate — 更新禅境工具状态（肥料/杀虫剂/音乐盒等）
+    pub fn zen_tool_update(&mut self, zen_tool: &mut GridItem) {
+        // 对应 C++ ZenToolUpdate：工具动画播完后执行喂养并销毁
+        let a_tool_reanim = self.app.and_then(|app| unsafe {
+            (*app).reanimation_get(zen_tool.grid_item_reanim_id).map(|r| r as *const Reanimation)
+        });
+        let Some(a_tool_reanim) = a_tool_reanim else { return };
+
+        let mut a_play_time = 1;
+        if zen_tool.grid_item_state == GridItemState::ZenToolPhonograph {
+            a_play_time = 2;
+        }
+        if unsafe { (*a_tool_reanim).m_loop_count >= a_play_time } {
+            self.do_feeding_tool(zen_tool.pos_x as i32, zen_tool.pos_y as i32, zen_tool.grid_item_state);
+            zen_tool.grid_item_die();
+        }
     }
 
     pub fn do_feeding_tool(&mut self, x: i32, y: i32, tool_type: GridItemState) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ DoFeedingTool
+        if tool_type == GridItemState::ZenToolGoldWateringCan {
+            if let Some(board) = self.board {
+                unsafe {
+                    let b = &mut *board;
+                    for i in 0..b.plants.len() {
+                        if b.plants[i].dead || b.plants[i].potted_plant_index == -1 {
+                            continue;
+                        }
+                        let in_range = b.is_plant_in_gold_watering_can_range(x, y, &b.plants[i]);
+                        if !in_range {
+                            continue;
+                        }
+                        let pidx = b.plants[i].potted_plant_index as usize;
+                        if let Some(pp) = self.potted_plant_from_index(pidx) {
+                            if unsafe { self.get_plants_need(&*pp) } == PottedPlantNeed::Water {
+                                let plant_ptr = &mut b.plants[i] as *mut Plant;
+                                self.plant_watered(unsafe { &mut *plant_ptr });
+                            }
+                        }
+                    }
+                }
+            }
+            return;
+        }
+
+        let a_grid_x = self.board.map_or(-1, |b| unsafe { (*b).pixel_to_grid_x(x, y) });
+        let a_grid_y = self.board.map_or(-1, |b| unsafe { (*b).pixel_to_grid_y(x, y) });
+        let a_plant = self.board.and_then(|b| unsafe { (*b).get_top_plant_at(a_grid_x, a_grid_y) });
+        let Some(a_plant_ref) = a_plant else { return };
+        if a_plant_ref.potted_plant_index == -1 {
+            return;
+        }
+
+        // 通过数组地址匹配获得可变引用（避免 &T -> &mut T 的 UB 转换）
+        let mut a_plant_ptr: *mut Plant = std::ptr::null_mut();
+        if let Some(board) = self.board {
+            unsafe {
+                let b = &mut *board;
+                for i in 0..b.plants.len() {
+                    if std::ptr::eq(&b.plants[i] as *const Plant, a_plant_ref as *const Plant) {
+                        a_plant_ptr = &mut b.plants[i] as *mut Plant;
+                        break;
+                    }
+                }
+            }
+        }
+        if a_plant_ptr.is_null() {
+            return;
+        }
+
+        let a_potted_plant = self.potted_plant_from_index(a_plant_ref.potted_plant_index as usize);
+        let a_need = a_potted_plant.map_or(PottedPlantNeed::None, |pp| unsafe {
+            self.get_plants_need(&*pp)
+        });
+
+        if a_need == PottedPlantNeed::Water && tool_type == GridItemState::ZenToolWateringCan {
+            self.plant_watered(unsafe { &mut *a_plant_ptr });
+        } else if a_need == PottedPlantNeed::Fertilizer && tool_type == GridItemState::ZenToolFertilizer {
+            self.plant_fertilized(unsafe { &mut *a_plant_ptr });
+        } else if a_need == PottedPlantNeed::Bugspray && tool_type == GridItemState::ZenToolBugSpray {
+            self.plant_fulfill_need(unsafe { &mut *a_plant_ptr });
+        } else if a_need == PottedPlantNeed::Phonograph && tool_type == GridItemState::ZenToolPhonograph {
+            self.plant_fulfill_need(unsafe { &mut *a_plant_ptr });
+        }
+
+        if let Some(board) = self.board {
+            unsafe {
+                if (*board).m_tutorial_state == TutorialState::ZenGardenFertilizePlants
+                    && tool_type == GridItemState::ZenToolFertilizer
+                {
+                    if self.all_plants_have_been_fertilized() {
+                        (*board).m_tutorial_state = TutorialState::ZenGardenCompleted;
+                        (*board).display_advice(
+                            "[ADVICE_ZEN_GARDEN_CONTINUE_ADVENTURE]",
+                            MessageStyle::HintTallFast as i32,
+                            AdviceType::None,
+                        );
+                        // [TRANSLATION_NOTE]: C++ 中 mMenuButton->mDisabled=false / mBtnNoDraw=false
+                    } else if let Some(app) = self.app {
+                        unsafe {
+                            if let Some(info) = (*app).player_info.as_mut() {
+                                let fidx = StoreItem::Fertilizer as usize;
+                                if info.m_purchases.get(fidx).copied().unwrap_or(0) == 1000 {
+                                    // PURCHASE_COUNT_OFFSET == 1000
+                                    if info.m_purchases.len() > fidx {
+                                        info.m_purchases[fidx] = 1000 + 5;
+                                    }
+                                    (*board).display_advice(
+                                        "[ADVICE_ZEN_GARDEN_NEED_MORE_FERTILIZER]",
+                                        MessageStyle::HintTallFast as i32,
+                                        AdviceType::None,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     pub fn add_stinky(&mut self) {
@@ -1250,8 +2120,73 @@ impl ZenGarden {
         self.stinky_anim_rate_update(stinky);
     }
 
-    pub fn open_store(&self) {
-        // TODO: 从 ZenGarden.cpp 翻译
+    pub fn open_store(&mut self) {
+        // 对应 C++ OpenStore：离开花园打开商店（教程时赠送肥料）
+        self.leave_garden();
+        let a_store = crate::lawn::lawn_app::LawnApp::show_store_screen(self.app);
+
+        if let Some(board) = self.board {
+            unsafe {
+                if (*board).m_tutorial_state == TutorialState::ZenGardenVisitStore {
+                    if let Some(s) = a_store {
+                        unsafe { (*(s as *mut crate::lawn::widget::store_screen::StoreScreen)).setup_for_intro(2600); }
+                    }
+                    if let Some(app) = self.app {
+                        unsafe {
+                            if let Some(info) = (*app).player_info.as_mut() {
+                                let fidx = StoreItem::Fertilizer as usize;
+                                if info.m_purchases.len() > fidx {
+                                    info.m_purchases[fidx] = 1000 + 5; // PURCHASE_COUNT_OFFSET + 5
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(s) = a_store {
+            unsafe {
+                let store = &mut *(s as *mut crate::lawn::widget::store_screen::StoreScreen);
+                // [TRANSLATION_NOTE]: C++ 中 mBackButton->SetLabel("[STORE_BACK_TO_GAME]")
+                store.page = StorePages::Zen1;
+                // C++ 中 WaitForResult(true) 模态等待；Rust 侧以 wait_for_dialog 字段近似
+                store.wait_for_dialog = true;
+            }
+        }
+
+        let a_go_to_tree_now = a_store.map_or(false, |s| unsafe {
+            (*(s as *mut crate::lawn::widget::store_screen::StoreScreen)).go_to_tree_now
+        });
+        if a_go_to_tree_now {
+            if let Some(app) = self.app {
+                unsafe {
+                    (*app).kill_board();
+                    (*app).pre_new_game(GameMode::ChallengeTreeOfWisdom, false);
+                }
+            }
+        } else {
+            if let Some(app) = self.app {
+                unsafe {
+                    self.now_time = (*app).get_now_time();
+                    self.now_tm = (*app).get_local_time(self.now_time);
+                    if let Some(music) = (*app).music.as_mut() {
+                        music.make_sure_music_is_playing(MusicTune::ZenGarden);
+                    }
+                    if let Some(board) = self.board {
+                        if (*board).m_tutorial_state == TutorialState::ZenGardenVisitStore {
+                            (*board).display_advice(
+                                "[ADVICE_ZEN_GARDEN_FERTILIZE]",
+                                MessageStyle::ZenGardenLong as i32,
+                                AdviceType::None,
+                            );
+                            (*board).m_tutorial_state = TutorialState::ZenGardenFertilizePlants;
+                        }
+                    }
+                }
+            }
+            self.add_stinky();
+        }
     }
 
     pub fn get_stinky(&self) -> Option<*mut GridItem> {
@@ -1360,8 +2295,21 @@ impl ZenGarden {
         }
     }
 
-    pub fn setup_for_zen_tutorial(&self) {
-        // TODO: 从 ZenGarden.cpp 翻译
+    pub fn setup_for_zen_tutorial(&mut self) {
+        // 对应 C++ SetupForZenTutorial
+        if let Some(board) = self.board {
+            unsafe {
+                // [TRANSLATION_NOTE]: C++ 中 mMenuButton/mStoreButton 的 SetLabel/mDisabled/mBtnNoDraw；
+                // Rust 侧按钮为 Option<i32>，暂略
+                let _ = board;
+            }
+        }
+        if let Some(app) = self.app {
+            unsafe {
+                (*app).crazy_dave_enter();
+                (*app).crazy_dave_talk_index(2100);
+            }
+        }
     }
 
     pub fn wake_stinky(&self) {
@@ -1472,11 +2420,85 @@ impl ZenGarden {
     }
 
     pub fn advance_crazy_dave_dialog(&mut self) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ AdvanceCrazyDaveDialog
+        let Some(app) = self.app else { return };
+        unsafe {
+            if (*app).m_crazy_dave_message_index == -1
+                || (*app).base.dialog_map.contains_key(&(Dialogs::Store as i32))
+                || (*app).base.dialog_map.contains_key(&(Dialogs::ZenSell as i32))
+            {
+                return;
+            }
+
+            if (*app).m_crazy_dave_message_index == 2104 {
+                self.show_tutorial_arrow_on_watering_can();
+            }
+
+            if !(*app).advance_crazy_dave_text() {
+                (*app).crazy_dave_leave();
+                return;
+            }
+
+            if (*app).m_crazy_dave_message_index == 2102 {
+                let num_potted = (*app).player_info.as_ref().map_or(0, |info| info.m_num_potted_plants);
+                if num_potted == 0 {
+                    for _ in 0..2 {
+                        let mut a_potted_plant = PottedPlant::new();
+                        a_potted_plant.initialize_potted_plant(SeedType::Marigold);
+                        a_potted_plant.draw_variation = unsafe {
+                            std::mem::transmute::<i32, DrawVariation>(
+                                crate::todlib::tod_common::rand_range_int(
+                                    DrawVariation::MarigoldWhite as i32,
+                                    DrawVariation::MarigoldLightGreen as i32,
+                                ),
+                            )
+                        };
+                        a_potted_plant.feedings_per_grow = 3;
+                        self.add_potted_plant(&mut a_potted_plant);
+                    }
+                }
+            }
+        }
     }
 
-    pub fn leave_garden(&self) {
-        // TODO: 从 ZenGarden.cpp 翻译
+    pub fn leave_garden(&mut self) {
+        // 对应 C++ LeaveGarden：处理地面工具与臭鼬，收集未收集金币
+        if let Some(board) = self.board {
+            unsafe {
+                let b = &mut *board;
+                for i in 0..b.grid_items.len() {
+                    if b.grid_items[i].dead {
+                        continue;
+                    }
+                    let item_type = b.grid_items[i].grid_item_type;
+                    if item_type == crate::lawn::grid_item::GridItemType::ZenTool {
+                        let tool = &mut b.grid_items[i];
+                        self.do_feeding_tool(tool.pos_x as i32, tool.pos_y as i32, tool.grid_item_state);
+                        tool.grid_item_die();
+                    } else if item_type == crate::lawn::grid_item::GridItemType::PlantStinky {
+                        if let Some(app) = self.app {
+                            unsafe {
+                                if let Some(info) = (*app).player_info.as_mut() {
+                                    info.stinky_pos_x = b.grid_items[i].pos_x as i32;
+                                    info.stinky_pos_y = b.grid_items[i].pos_y as i32;
+                                }
+                            }
+                        }
+                        b.grid_items[i].grid_item_die();
+                    }
+                }
+                for i in 0..b.coins.len() {
+                    if b.coins[i].dead {
+                        continue;
+                    }
+                    if b.coins[i].is_being_collected {
+                        b.coins[i].score_coin();
+                    } else {
+                        b.coins[i].die();
+                    }
+                }
+            }
+        }
     }
 
     pub fn can_drop_chocolate(&self) -> bool {
@@ -1493,11 +2515,62 @@ impl ZenGarden {
     }
 
     pub fn feed_chocolate_to_plant(&self, plant: &mut Plant) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ FeedChocolateToPlant：记录巧克力时间并重置生产倒计时
+        if let Some(pp) = self.potted_plant_from_index(plant.potted_plant_index as usize) {
+            unsafe { (*pp).last_chocolate_time = self.now_time; }
+        }
+        plant.launch_counter = 60;
+        // [TRANSLATION_NOTE]: C++ 中 AddPvzpParticle(PARTICLE_PRESENT_PICKUP) 附加粒子；
+        // Rust 侧粒子附加未接入，暂略
     }
 
     pub fn set_plant_anim_speed(&self, plant: &mut Plant) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ SetPlantAnimSpeed
+        let a_body_reanim = self.app.and_then(|app| unsafe {
+            (*app).reanimation_get_mut(plant.body_reanim_id).map(|r| r as *mut Reanimation)
+        });
+        let Some(a_body_reanim) = a_body_reanim else { return };
+        let a_potted_plant = self.potted_plant_from_index(plant.potted_plant_index as usize);
+        let a_plant_high_on_chocolate = a_potted_plant.map_or(false, |pp| unsafe {
+            self.plant_high_on_chocolate(&*pp)
+        });
+        let a_plant_at_high_rate = unsafe { (*a_body_reanim).m_anim_rate >= 25.0 };
+        if a_plant_at_high_rate == a_plant_high_on_chocolate {
+            return;
+        }
+
+        let mut a_target_rate;
+        match plant.seed_type {
+            SeedType::Peashooter | SeedType::Snowpea | SeedType::Repeater
+            | SeedType::Leftpeater | SeedType::Gatlingpea | SeedType::Splitpea
+            | SeedType::Threepeater | SeedType::Marigold => {
+                a_target_rate = crate::todlib::tod_common::rand_range_float(15.0, 20.0);
+            }
+            SeedType::PotatoMine => {
+                a_target_rate = 12.0;
+            }
+            _ => {
+                a_target_rate = crate::todlib::tod_common::rand_range_float(10.0, 15.0);
+            }
+        }
+
+        if a_plant_high_on_chocolate {
+            a_target_rate *= 2.0;
+            a_target_rate = a_target_rate.max(25.0);
+        }
+
+        unsafe { (*a_body_reanim).m_anim_rate = a_target_rate; }
+        let body_anim_time = unsafe { (*a_body_reanim).m_anim_time };
+        for head_id in [plant.head_reanim_id, plant.head_reanim_id2, plant.head_reanim_id3] {
+            if let Some(app) = self.app {
+                unsafe {
+                    if let Some(h) = (*app).reanimation_get_mut(head_id) {
+                        h.m_anim_rate = a_target_rate;
+                        h.m_anim_time = body_anim_time;
+                    }
+                }
+            }
+        }
     }
 
     pub fn update_stinky_motion_trail(&self, stinky: &mut GridItem, stinky_high_on_chocolate: bool) {
@@ -1560,12 +2633,26 @@ impl ZenGarden {
     }
 
     pub fn plant_set_launch_counter(&self, plant: &mut Plant) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ PlantSetLaunchCounter
+        let a_time = self.plant_get_minutes_since_happy(plant);
+        let a_counter_max = crate::todlib::tod_common::tod_animate_curve(
+            5, 30, a_time, 3000, 15000, crate::lawn::game_enums::TodCurves::Linear,
+        );
+        plant.launch_counter = crate::todlib::tod_common::rand_range_int(1800, a_counter_max);
     }
 
     pub fn plant_get_minutes_since_happy(&self, plant: &Plant) -> i32 {
-        // TODO: 从 ZenGarden.cpp 翻译
-        0
+        // 对应 C++ PlantGetMinutesSinceHappy
+        let a_potted_plant = self.potted_plant_from_index(plant.potted_plant_index as usize);
+        let a_minutes = a_potted_plant.map_or(0, |pp| unsafe {
+            ((self.now_time - (*pp).last_need_fulfilled_time) / 60) as i32
+        });
+        if let Some(pp) = a_potted_plant {
+            if unsafe { self.plant_high_on_chocolate(&*pp) } {
+                return 0;
+            }
+        }
+        a_minutes
     }
 
     pub fn is_stinky_high_on_chocolate(&self) -> bool {

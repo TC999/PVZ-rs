@@ -2571,7 +2571,7 @@ impl Challenge {
 
     pub fn tree_of_wisdom_open_store(&self) {
         // 对应 C++ TreeOfWisdomOpenStore：TreeOfWisdomLeave + ShowStoreScreen
-        crate::lawn::lawn_app::LawnApp::show_store_screen();
+        crate::lawn::lawn_app::LawnApp::show_store_screen(self.app);
     }
 
     pub fn tree_of_wisdom_leave(&mut self) {

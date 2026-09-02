@@ -65,11 +65,12 @@ impl MessageWidget {
 
         // 根据消息样式设置持续时间
         self.duration = match the_message_style {
-            MessageStyle::HintLong | MessageStyle::HintMedium => 1500,
-            MessageStyle::HintFast | MessageStyle::TutorialLevel1
-            | MessageStyle::TutorialLevel2 | MessageStyle::TutorialLater => 500,
+            MessageStyle::HintLong | MessageStyle::HintTallLong => 1500,
+            MessageStyle::HintFast | MessageStyle::HintTallFast
+            | MessageStyle::TutorialLevel1 | MessageStyle::TutorialLevel2
+            | MessageStyle::TutorialLater => 500,
             MessageStyle::HintStay | MessageStyle::TutorialLevel1Stay => 10000,
-            MessageStyle::LevelName => 250,
+            MessageStyle::HouseName => 250,
             _ => 250,
         };
         self.display_time = self.duration;

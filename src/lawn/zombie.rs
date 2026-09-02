@@ -185,6 +185,11 @@ pub struct Zombie {
 }
 
 impl Zombie {
+    /// 预加载僵尸资源（对应 C++ Zombie::PreloadZombieResources）
+    /// [TRANSLATION_NOTE]: C++ 中按僵尸类型加载对应 reanim 定义与图片；Rust 侧
+    /// reanim 定义加载在 reanim_loader 中处理，此处骨架保留调用链
+    pub fn preload_zombie_resources(_zombie_type: ZombieType) {}
+
     pub fn new() -> Self {
         Zombie {
             base: GameObject::new(),
