@@ -165,12 +165,73 @@ impl ChallengeScreen {
         if self.cheat_enable_challenges { 0 } else { a_trophies_needed }
     }
 
-    pub fn draw_button(&self, _g: &mut Graphics, _challenge_index: i32) {
-        // TODO: 从 ChallengeScreen.cpp 翻译
+    pub fn draw_button(&self, g: &mut Graphics, challenge_index: i32) {
+        // 对应 C++ DrawButton：绘制挑战按钮（图标/窗口框/名称/锁）
+        let Some(btn) = self.challenge_buttons.get(challenge_index as usize).copied().flatten() else { return };
+        unsafe {
+            if !(*btn).visible {
+                return;
+            }
+            let Some(a_def) = get_challenge_definition(challenge_index) else { return };
+            let mut a_pos_x = (*btn).x;
+            let mut a_pos_y = (*btn).y;
+            if (*btn).is_down {
+                a_pos_x += 1;
+                a_pos_y += 1;
+            }
+
+            if self.accomplishments_needed(challenge_index) <= 1 {
+                // [TRANSLATION_NOTE]: C++ 中绘制缩略图（IMAGE_SURVIVAL_THUMBNAILS/
+                // IMAGE_CHALLENGE_THUMBNAILS）与窗口框（IMAGE_CHALLENGE_WINDOW[HIGHLIGHT]）；
+                // Rust 侧图片资源未接入，暂略
+
+                // 解锁中处理（C++ 中设置颜色化与摇动偏移绘制锁图标）
+                if challenge_index == self.unlock_challenge_index {
+                    let _shake_x = self.lock_shake_x;
+                    let _shake_y = self.lock_shake_y;
+                }
+
+                let a_record = self.app.map_or(0, |app| unsafe {
+                    (*app).player_info.as_ref().map_or(0, |info| {
+                        info.m_challenge_records.get(challenge_index as usize).copied().unwrap_or(0)
+                    })
+                });
+                if a_record > 0 {
+                    // [TRANSLATION_NOTE]: C++ 中已通关绘制奖杯，Endless 挑战绘制旗数/最长连击文本
+                    let _ = a_record;
+                }
+            } else {
+                // [TRANSLATION_NOTE]: C++ 中绘制 IMAGE_CHALLENGE_BLANK 空按钮
+            }
+            let _ = (g, a_pos_x, a_pos_y);
+        }
     }
 
-    pub fn draw(&self, _g: &mut Graphics) {
-        // TODO: 从 ChallengeScreen.cpp 翻译
+    pub fn draw(&self, g: &mut Graphics) {
+        // 对应 C++ Draw：背景/标题/奖杯计数 + 各挑战按钮
+        // [TRANSLATION_NOTE]: C++ 中绘制 IMAGE_CHALLENGE_BACKGROUND 背景与标题文字
+        let a_title = match self.page_index {
+            ChallengePage::Survival => "[PICK_AREA]",
+            ChallengePage::Puzzle => "[SCARY_POTTER]",
+            _ => "[PICK_CHALLENGE]",
+        };
+        let _ = a_title;
+
+        // C++ 中奖杯计数（mApp->GetNumTrophies(mPageIndex)）
+        let a_trophies_total = match self.page_index {
+            ChallengePage::Survival => 10,
+            ChallengePage::Challenge => 20,
+            ChallengePage::Puzzle => 18,
+            _ => 0,
+        };
+        if a_trophies_total > 0 {
+            // [TRANSLATION_NOTE]: C++ 中绘制 "x/y" 奖杯字符串与 IMAGE_TROPHY 图标
+            let _ = a_trophies_total;
+        }
+
+        for a_challenge_mode in 0..72 {
+            self.draw_button(g, a_challenge_mode);
+        }
     }
 
     pub fn update(&mut self) {
@@ -200,11 +261,13 @@ impl ChallengeScreen {
     }
 
     pub fn added_to_manager(&mut self, _manager: &mut WidgetManager) {
-        // TODO: 从 ChallengeScreen.cpp 翻译
+        // C++ 中 AddWidget(mBackButton) + 所有页签/挑战按钮
+        // [TRANSLATION_NOTE]: Rust 侧 ButtonWidget 未接入 WidgetManager::add_widget，暂略
     }
 
     pub fn removed_from_manager(&mut self, _manager: &mut WidgetManager) {
-        // TODO: 从 ChallengeScreen.cpp 翻译
+        // C++ 中 RemoveWidget(mBackButton) + 所有页签/挑战按钮
+        // [TRANSLATION_NOTE]: Rust 侧 ButtonWidget 未接入 WidgetManager，暂略
     }
 
     pub fn button_press(&mut self, _id: i32) {
