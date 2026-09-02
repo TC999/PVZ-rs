@@ -507,12 +507,11 @@ impl LawnApp {
 
     /// 添加动画（对应 C++ AddReanimation）
     pub fn add_reanimation(&mut self, x: f32, y: f32, render_order: i32, reanim_type: i32) -> Option<*mut Reanimation> {
-        // [TRANSLATION_NOTE]: render_order 存储在 Reanimation 的 extra 字段（待渲染层系统接入）
-        let _ = render_order;
         let reanim_type = unsafe { std::mem::transmute::<i32, ReanimationType>(reanim_type) };
         if let Some(es) = self.effect_system.as_mut() {
             let mut reanim = Reanimation::new();
             reanim.reanimation_initialize_type(x, y, reanim_type);
+            reanim.m_render_order = render_order;
             let id = es.add_reanimation(reanim);
             let idx = id as usize;
             if idx < es.reanimations.len() {
@@ -550,6 +549,20 @@ impl LawnApp {
     /// 添加粒子（对应 C++ AddTodParticle）
     pub fn add_tod_particle(&mut self, _x: f32, _y: f32, _render_order: i32, _effect: i32) -> Option<*mut TodParticleSystem> { None }
 
+    /// 移除动画（对应 C++ RemoveReanimation）
+    pub fn remove_reanimation(&mut self, id: ReanimationID) {
+        if let Some(es) = self.effect_system.as_mut() {
+            es.remove_reanimation(id);
+        }
+    }
+
+    /// 移除粒子（对应 C++ RemoveParticle）
+    pub fn remove_particle(&mut self, id: ParticleSystemID) {
+        if let Some(es) = self.effect_system.as_mut() {
+            es.remove_particle_system(id);
+        }
+    }
+
     /// 播放音效（对应 C++ PlayFoley）
     pub fn play_foley(&self, _type: i32) {
         // [TRANSLATION_NOTE]: 完整实现需要 SoundSystem::PlayFoley
@@ -558,6 +571,11 @@ impl LawnApp {
 
     pub fn play_foley_pitch(&self, _type: i32, _pitch: f32) {
         // [TRANSLATION_NOTE]: 完整实现需要 SoundSystem::PlayFoleyPitch
+    }
+
+    /// 播放采样音效（对应 C++ PlaySample）
+    pub fn play_sample(&self, _sound_type: i32) {
+        // [TRANSLATION_NOTE]: 完整实现需要 SoundManager::PlaySample
     }
 
     // ==================== 状态查询 ====================
@@ -602,38 +620,68 @@ impl LawnApp {
             || self.is_final_boss_level()
             || self.game_mode == GameMode::ChallengeBeghouled
             || self.game_mode == GameMode::ChallengeBeghouledTwist
-            // Note: C++ also has GAMEMODE_UPSELL and GAMEMODE_INTRO, but these
-            // don't exist in the Rust enum yet
+            || self.game_mode == GameMode::Upsell
+            || self.game_mode == GameMode::Intro
     }
     pub fn is_puzzle_mode(&self) -> bool {
-        matches!(self.game_mode,
-            GameMode::ChallengeScaryPotter | GameMode::ChallengePuzzleMode
-        )
+        let a_mode = self.game_mode as i32;
+        (a_mode >= GameMode::ScaryPotter1 as i32 && a_mode <= GameMode::ScaryPotterEndless as i32)
+            || (a_mode >= GameMode::PuzzleIZombie1 as i32 && a_mode <= GameMode::PuzzleIZombieEndless as i32)
+    }
+    pub fn is_endless_scary_potter(&self, mode: GameMode) -> bool {
+        mode == GameMode::ScaryPotterEndless
+    }
+    pub fn is_endless_izombie(&self, mode: GameMode) -> bool {
+        mode == GameMode::PuzzleIZombieEndless
     }
     pub fn is_challenge_mode(&self) -> bool {
         !self.is_adventure_mode() && !self.is_puzzle_mode() && !self.is_survival_mode()
     }
     pub fn is_art_challenge(&self) -> bool {
+        if self.board.is_none() {
+            return false;
+        }
         matches!(self.game_mode,
-            GameMode::ChallengeSeeingStars
+            GameMode::ChallengeArtChallengeWallnut | GameMode::ChallengeArtChallengeSunflower
+            | GameMode::ChallengeSeeingStars
         )
     }
     pub fn is_izombie_level(&self) -> bool {
-        self.board.is_some() && matches!(self.game_mode, GameMode::ChallengePuzzleMode)
+        if self.board.is_none() {
+            return false;
+        }
+        let a_mode = self.game_mode as i32;
+        a_mode >= GameMode::PuzzleIZombie1 as i32 && a_mode <= GameMode::PuzzleIZombieEndless as i32
     }
     pub fn is_scary_potter_level(&self) -> bool {
-        self.game_mode == GameMode::ChallengeScaryPotter
+        let a_mode = self.game_mode as i32;
+        if a_mode >= GameMode::ScaryPotter1 as i32 && a_mode <= GameMode::ScaryPotterEndless as i32 {
+            return true;
+        }
+        self.is_adventure_mode() && self.board.map_or(false, |b| unsafe { (*b).level == 35 })
     }
     pub fn is_whack_a_zombie_level(&self) -> bool {
-        self.game_mode == GameMode::ChallengeWhackAZombie
+        if self.board.is_none() {
+            return false;
+        }
+        if self.game_mode == GameMode::ChallengeWhackAZombie {
+            return true;
+        }
+        self.is_adventure_mode() && self.board.map_or(false, |b| unsafe { (*b).level == 15 })
     }
     pub fn is_squirrel_level(&self) -> bool {
-        // [TRANSLATION_NOTE]: C++ 有 GAMEMODE_CHALLENGE_SQUIRREL，Rust 枚举暂缺
-        false
+        self.board.is_some() && self.game_mode == GameMode::ChallengeSquirrel
     }
     pub fn is_shovel_level(&self) -> bool {
-        // [TRANSLATION_NOTE]: C++ 有 GAMEMODE_CHALLENGE_SHOVEL，Rust 枚举暂缺
-        false
+        self.board.is_some() && self.game_mode == GameMode::ChallengeShovel
+    }
+    pub fn is_little_trouble_level(&self) -> bool {
+        self.board.map_or(false, |b| unsafe {
+            (*b).app.map_or(false, |app| {
+                unsafe { (*app).game_mode == GameMode::ChallengeLittleTrouble
+                    || ((*app).game_mode == GameMode::Adventure && (*b).level == 25) }
+            })
+        })
     }
     pub fn is_wallnut_bowling_level(&self) -> bool {
         if self.board.is_none() { return false; }
@@ -650,16 +698,26 @@ impl LawnApp {
         self.board.is_some() && self.game_mode == GameMode::ChallengeSlotMachine
     }
     pub fn is_stormy_night_level(&self) -> bool {
-        // [TRANSLATION_NOTE]: C++ 有 GAMEMODE_CHALLENGE_STORMY_NIGHT，Rust 枚举暂缺
+        if self.board.is_none() {
+            return false;
+        }
+        if self.game_mode == GameMode::ChallengeStormyNight {
+            return true;
+        }
         self.is_adventure_mode() && self.board.map_or(false, |b| unsafe { (*b).level == 40 })
     }
     pub fn is_final_boss_level(&self) -> bool {
         if self.board.is_none() { return false; }
-        if self.game_mode == GameMode::ChallengeDrZomboss { return true; }
+        if self.game_mode == GameMode::ChallengeFinalBoss { return true; }
         self.is_adventure_mode() && self.board.map_or(false, |b| unsafe { (*b).level == 50 })
     }
     pub fn is_bungee_blitz_level(&self) -> bool {
-        // [TRANSLATION_NOTE]: C++ 有 GAMEMODE_CHALLENGE_BUNGEE_BLITZ，Rust 枚举暂缺
+        if self.board.is_none() {
+            return false;
+        }
+        if self.game_mode == GameMode::ChallengeBungeeBlitz {
+            return true;
+        }
         self.is_adventure_mode() && self.board.map_or(false, |b| unsafe { (*b).level == 45 })
     }
     pub fn is_night(&self) -> bool {
@@ -722,10 +780,11 @@ impl LawnApp {
         if self.is_survival_hard(mode) {
             return self.player_info.as_ref().unwrap().m_challenge_records[a_challenge_index as usize] >= SURVIVAL_HARD_FLAGS;
         }
-        // [TRANSLATION_NOTE]: C++ 的 IsEndlessScaryPotter / IsEndlessIZombie 对应
-        // GAMEMODE_SCARY_POTTER_ENDLESS / GAMEMODE_PUZZLE_I_ZOMBIE_ENDLESS，
-        // 这两个变体在 Rust GameMode 枚举中不存在，故恒为 false。
-        if self.is_survival_endless(mode) {
+        // 对应 C++ IsSurvivalEndless || IsEndlessScaryPotter || IsEndlessIZombie
+        if self.is_survival_endless(mode)
+            || mode == GameMode::ScaryPotterEndless
+            || mode == GameMode::PuzzleIZombieEndless
+        {
             return false;
         }
         self.player_info.as_ref().unwrap().m_challenge_records[a_challenge_index as usize] > 0
@@ -784,6 +843,15 @@ impl LawnApp {
     pub fn get_current_level_name(&self) -> String { format!("Level {}", self.m_level) }
     pub fn get_stage_string(level: i32) -> String { format!("Stage {}", level) }
     pub fn get_num_trophies(_page: i32) -> i32 { 0 }
+    /// 获取当前时间戳（秒，对应 C++ GetNowTime）
+    pub fn get_now_time(&self) -> i64 {
+        crate::framework::common::now_time()
+    }
+    /// 获取本地时间结构（对应 C++ GetLocalTime）
+    /// 返回 (年, 月, 日, 时, 分, 秒, 周几, 一年中第几天, 夏令时)
+    pub fn get_local_time(&self, _time: i64) -> (i32, i32, i32, i32, i32, i32, i32, i32, i32) {
+        crate::framework::common::local_time()
+    }
     pub fn get_money_string(amount: i32) -> String {
         // 对应 C++ LawnApp::GetMoneyString（金额以"分"为单位显示，×10）
         let a_value = amount * 10;

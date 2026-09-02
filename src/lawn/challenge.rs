@@ -2,6 +2,7 @@
 // 对应 C++ src/Lawn/Challenge.h / Challenge.cpp
 
 use crate::framework::graphics::graphics::Graphics;
+use crate::framework::rect::Rect;
 use crate::lawn::game_enums::*;
 use crate::lawn::board::HitResult;
 use crate::lawn::grid_item::GridItem;
@@ -273,8 +274,20 @@ impl Challenge {
         0
     }
 
-    pub fn clear_cursor(&self) {
-        // 简化版：清除光标状态
+    pub fn clear_cursor(&mut self) {
+        // 对应 C++ ClearCursor
+        let game_mode = self.get_app().game_mode;
+        if game_mode == GameMode::ChallengeBeghouled || game_mode == GameMode::ChallengeBeghouledTwist {
+            self.beghouled_drag_cancel();
+        }
+        if self.get_app().is_whack_a_zombie_level() {
+            if let Some(board) = self.board { unsafe {
+                let b = &mut *board;
+                if !b.has_level_award_dropped() {
+                    b.cursor_object.cursor_type = CursorType::Hammer;
+                }
+            } }
+        }
     }
 
     pub fn beghouled_remove_horizontal_match(&mut self, grid_x: i32, grid_y: i32, board_state: &mut BeghouledBoardState) {
@@ -385,8 +398,28 @@ impl Challenge {
         }
     }
 
-    pub fn zombie_ate_plant(&mut self, _plant: &mut Plant) {
-        // 已在 Beghouled 部分实现
+    pub fn zombie_ate_plant(&mut self, plant: &mut Plant) {
+        // 对应 C++ ZombieAtePlant
+        let game_mode = self.get_app().game_mode;
+        if game_mode != GameMode::ChallengeBeghouled && game_mode != GameMode::ChallengeBeghouledTwist {
+            return;
+        }
+        let col = plant.plant_col;
+        let row = plant.base.row;
+        self.beghouled_eated[col as usize][row as usize] = 1;
+
+        if let Some(board) = self.board { unsafe {
+            let b = &mut *board;
+            if b.seed_bank.len() == 4 {
+                b.seed_bank.push(SeedPacket::new());
+                if let Some(packet) = b.seed_bank.get_mut(4) {
+                    packet.set_packet_type(SeedType::BeghouledButtonCrater, SeedType::None);
+                }
+                b.display_advice("[ADVICE_BEGHOULED_USE_CRATER_1]", 2, AdviceType::BeghouledUseCrater1);
+            }
+        } }
+        self.beghouled_check_stuck_state();
+        self.beghouled_update_craters();
     }
 
     pub fn draw_backdrop(&self, _g: &mut Graphics) {
@@ -398,18 +431,88 @@ impl Challenge {
     }
 
     pub fn check_for_complete_art_challenge(&mut self, _grid_x: i32, _grid_y: i32) {
-        // 简化版
+        let board = self.get_board();
+        if board.has_level_award_dropped() { return; }
+        let game_mode = self.get_app().game_mode;
+        for grid_y in 0..6 {
+            for grid_x in 0..9 {
+                let seed = Self::get_art_challenge_seed_static(game_mode, grid_x, grid_y);
+                if seed != SeedType::None {
+                    let has_match = if let Some(board) = self.board { unsafe {
+                        (*board).plants.iter().any(|p| !p.dead && p.plant_col == grid_x && p.base.row == grid_y && p.seed_type == seed)
+                    } } else { false };
+                    if !has_match {
+                        return;
+                    }
+                }
+            }
+        }
+        self.spawn_level_award(_grid_x, _grid_y);
     }
 
-    pub fn get_art_challenge_seed(&self, _grid_x: i32, _grid_y: i32) -> SeedType {
-        SeedType::None
+    pub fn get_art_challenge_seed(&self, grid_x: i32, grid_y: i32) -> SeedType {
+        Self::get_art_challenge_seed_static(self.get_app().game_mode, grid_x, grid_y)
     }
 
-    pub fn plant_added(&mut self, _plant: &mut Plant) {
-        // 简化版
+    pub fn get_art_challenge_seed_static(game_mode: GameMode, grid_x: i32, grid_y: i32) -> SeedType {
+        if grid_y < 0 || grid_y >= 6 || grid_x < 0 || grid_x >= 9 {
+            return SeedType::None;
+        }
+        let ry = grid_y as usize;
+        let cx = grid_x as usize;
+        match game_mode {
+            GameMode::ChallengeArtChallengeWallnut => ART_CHALLENGE_WALLNUT[ry][cx],
+            GameMode::ChallengeArtChallengeSunflower => ART_CHALLENGE_SUNFLOWER[ry][cx],
+            GameMode::ChallengeSeeingStars => ART_CHALLENGE_STARFRUIT[ry][cx],
+            _ => SeedType::None,
+        }
     }
 
-    pub fn can_plant_at(&self, _grid_x: i32, _grid_y: i32, _seed_type: SeedType) -> PlantingReason {
+    pub fn plant_added(&mut self, plant: &mut Plant) {
+        let app = self.get_app();
+        if !app.is_art_challenge() { return; }
+        let art_seed = self.get_art_challenge_seed(plant.plant_col, plant.base.row);
+        if art_seed != SeedType::None && art_seed == plant.seed_type {
+            self.check_for_complete_art_challenge(plant.plant_col, plant.base.row);
+        }
+    }
+
+    pub fn can_plant_at(&self, grid_x: i32, grid_y: i32, seed_type: SeedType) -> PlantingReason {
+        let app = self.get_app();
+        if app.is_wallnut_bowling_level() {
+            return if grid_x > 2 { PlantingReason::NotPassedLine } else { PlantingReason::Ok };
+        } else if app.is_izombie_level() {
+            let mut limit = 6;
+            let mode = app.game_mode as i32;
+            if mode >= GameMode::PuzzleIZombie1 as i32 && mode <= GameMode::PuzzleIZombie5 as i32 {
+                limit = 4;
+            } else if (mode >= GameMode::PuzzleIZombie6 as i32 && mode <= GameMode::PuzzleIZombie8 as i32)
+                || mode == GameMode::PuzzleIZombieEndless as i32
+            {
+                limit = 5;
+            }
+            if seed_type == SeedType::ZombieBungee {
+                return if grid_x < limit { PlantingReason::Ok } else { PlantingReason::NotHere };
+            } else if Self::is_zombie_seed_type(seed_type) != 0 {
+                return if grid_x >= limit { PlantingReason::Ok } else { PlantingReason::NotHere };
+            }
+        } else if app.is_art_challenge() {
+            let art_seed = self.get_art_challenge_seed(grid_x, grid_y);
+            if art_seed != SeedType::None
+                && art_seed != seed_type
+                && seed_type != SeedType::Lilypad
+                && seed_type != SeedType::Pumpkinshell
+            {
+                return PlantingReason::NotOnArt;
+            }
+            if app.game_mode == GameMode::ChallengeArtChallengeWallnut {
+                if (grid_x == 4 || grid_x == 6) && grid_y == 1 {
+                    return PlantingReason::NotHere;
+                }
+            }
+        } else if app.is_final_boss_level() && grid_x >= 8 {
+            return PlantingReason::NotHere;
+        }
         PlantingReason::Ok
     }
 
@@ -417,11 +520,44 @@ impl Challenge {
         // 依赖图片资源
     }
 
-    pub fn beghouled_is_valid_move(&self, _from_x: i32, _from_y: i32, _to_x: i32, _to_y: i32, _board_state: &BeghouledBoardState) -> i32 {
-        0
+    pub fn beghouled_is_valid_move(&self, from_x: i32, from_y: i32, to_x: i32, to_y: i32, board_state: &BeghouledBoardState) -> i32 {
+        if from_x < 0 || from_x > 8 || to_x < 0 || to_x > 8
+            || from_y < 0 || from_y > 5 || to_y < 0 || to_y > 5
+            || self.beghouled_eated[from_x as usize][from_y as usize] != 0
+            || self.beghouled_eated[to_x as usize][to_y as usize] != 0
+        {
+            return 0;
+        }
+        let seed_from = board_state.seed_type[from_x as usize][from_y as usize];
+        let seed_to = board_state.seed_type[to_x as usize][to_y as usize];
+        if seed_from == SeedType::None {
+            return 0;
+        }
+        let mut swapped = board_state.clone();
+        swapped.seed_type[from_x as usize][from_y as usize] = seed_to;
+        swapped.seed_type[to_x as usize][to_y as usize] = seed_from;
+        self.beghouled_board_has_match(&swapped)
     }
 
-    pub fn beghouled_check_for_possible_moves(&self, _board_state: &BeghouledBoardState) -> i32 {
+    pub fn beghouled_check_for_possible_moves(&self, board_state: &BeghouledBoardState) -> i32 {
+        let game_mode = self.get_app().game_mode;
+        for row in 0..5 {
+            for col in 0..8 {
+                if game_mode == GameMode::ChallengeBeghouled {
+                    if self.beghouled_is_valid_move(col, row, col + 1, row, board_state) != 0
+                        || self.beghouled_is_valid_move(col, row, col, row + 1, board_state) != 0
+                    {
+                        return 1;
+                    }
+                } else if game_mode == GameMode::ChallengeBeghouledTwist {
+                    if self.beghouled_twist_move_causes_match(col, row, &mut board_state.clone()) != 0 {
+                        return 1;
+                    }
+                } else {
+                    return 0;
+                }
+            }
+        }
         0
     }
 
@@ -429,6 +565,14 @@ impl Challenge {
         if self.challenge_state != ChallengeState::Normal { return; }
         let board = self.get_board();
         if board.has_level_award_dropped() { return; }
+        let mut board_state = BeghouledBoardState { seed_type: [[SeedType::None; 6]; 9] };
+        self.load_beghouled_board_state(&mut board_state);
+        if self.beghouled_check_for_possible_moves(&board_state) == 0 {
+            let board = self.get_board();
+            board.display_advice("[ADVICE_BEGHOULED_NO_MOVES]", 2, AdviceType::BeghouledNoMoves);
+            self.challenge_state = ChallengeState::BeghouledNoMatches;
+            self.challenge_state_counter = 1500;
+        }
     }
 
     pub fn init_zombie_waves_survival(&mut self) {
@@ -452,14 +596,87 @@ impl Challenge {
     }
 
     pub fn update_slot_machine(&mut self) {
+        // 对应 C++ UpdateSlotMachine
         let sun_money;
+        let mut should_award = false;
         {
             let board = self.get_board();
             sun_money = board.m_sun_money.max(0).min(2000);
+            if sun_money >= 2000 - 100 {
+                board.display_advice("[ADVICE_ALMOST_THERE]", 2, AdviceType::AlmostThere);
+            }
+            if sun_money >= 2000 {
+                should_award = true;
+                board.clear_advice(AdviceType::None);
+            }
             board.m_progress_meter_width = sun_money;
         }
-        if sun_money >= 2000 {
+        if should_award {
             self.spawn_level_award(4, 2);
+        }
+
+        if self.challenge_state != ChallengeState::SlotMachineRolling {
+            let board = self.get_board();
+            if !board.has_level_award_dropped() {
+                board.display_advice_again("[ADVICE_SLOT_MACHINE_SPIN_AGAIN]", 3, AdviceType::SlotMachineSpinAgain);
+            }
+        } else {
+            let countdown = {
+                let board = self.get_board();
+                board.seed_bank.first().map_or(i32::MAX, |p| p.slot_machine_countdown)
+            };
+            if countdown <= 0 {
+                self.challenge_state = ChallengeState::Normal;
+
+                let packets: Vec<SeedType> = {
+                    let board = self.get_board();
+                    board.seed_bank.iter().take(3).map(|p| p.seed_type).collect()
+                };
+                let p1 = packets.get(0).copied().unwrap_or(SeedType::None);
+                let p2 = packets.get(1).copied().unwrap_or(SeedType::None);
+                let p3 = packets.get(2).copied().unwrap_or(SeedType::None);
+                if p1 != p2 || p2 != p3 {
+                    if p1 == p2 || p2 == p3 || p1 == p3 {
+                        let win_seed = if p1 == p2 || p1 == p3 { p1 } else { p2 };
+                        if win_seed == SeedType::SlotMachineDiamond {
+                            let board = self.get_board();
+                            board.display_advice("[ADVICE_SLOT_MACHINE_2_DIAMONDS]", 3, AdviceType::None);
+                            board.add_coin(360.0, 85.0, CoinType::Diamond, CoinMotion::Coin);
+                        } else if win_seed == SeedType::SlotMachineSun {
+                            let board = self.get_board();
+                            board.display_advice("[ADVICE_SLOT_MACHINE_2_SUNS]", 3, AdviceType::None);
+                            for i in 0..4 {
+                                board.add_coin((320 + i * 15) as f32, 85.0, CoinType::Sun, CoinMotion::Coin);
+                            }
+                        } else {
+                            let board = self.get_board();
+                            board.display_advice("[ADVICE_SLOT_MACHINE_2_OF_A_KIND]", 3, AdviceType::None);
+                            board.add_coin(360.0, 85.0, CoinType::UsableSeedPacket, CoinMotion::Coin);
+                        }
+                    }
+                } else {
+                    // 三个相同
+                    if p1 == SeedType::SlotMachineDiamond {
+                        let board = self.get_board();
+                        board.display_advice("[ADVICE_SLOT_MACHINE_DIAMOND_JACKPOT]", 3, AdviceType::None);
+                        for i in 0..5 {
+                            board.add_coin((320 + i * 12) as f32, 85.0, CoinType::Diamond, CoinMotion::Coin);
+                        }
+                    } else if p1 == SeedType::SlotMachineSun {
+                        let board = self.get_board();
+                        board.display_advice("[ADVICE_SLOT_MACHINE_SUN_JACKPOT]", 3, AdviceType::None);
+                        for i in 0..20 {
+                            board.add_coin((320 + i * 3) as f32, 85.0, CoinType::Sun, CoinMotion::Coin);
+                        }
+                    } else {
+                        let board = self.get_board();
+                        board.display_advice("[ADVICE_SLOT_MACHINE_3_OF_A_KIND]", 3, AdviceType::None);
+                        for i in 0..3 {
+                            board.add_coin((320 + i * 20) as f32, 85.0, CoinType::UsableSeedPacket, CoinMotion::Coin);
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -467,8 +684,41 @@ impl Challenge {
         // 依赖图片资源
     }
 
-    pub fn update_tool_tip(&self, _x: i32, _y: i32) -> i32 {
-        0
+    pub fn update_tool_tip(&self, x: i32, y: i32) -> i32 {
+        // 对应 C++ UpdateToolTip
+        if !self.get_app().is_slot_machine_level() {
+            return 0;
+        }
+        let mut hit_result = HitResult { object: None, object_type: GameObjectType::None };
+        let slot_machine_handle_rect;
+        let cursor_normal;
+        let can_take_sun;
+        if let Some(board) = self.board { unsafe {
+            let b = &*board;
+            b.mouse_hit_test(x, y, &mut hit_result);
+            cursor_normal = b.cursor_object.cursor_type == CursorType::Normal;
+            can_take_sun = b.can_take_sun_money(25);
+        } } else {
+            return 0;
+        }
+        slot_machine_handle_rect = self.slot_machine_get_handle_rect();
+        if hit_result.object_type != GameObjectType::SlotMachineHandle
+            || !cursor_normal
+            || self.challenge_state != ChallengeState::Normal
+        {
+            return 0;
+        }
+        if let Some(board) = self.board { unsafe {
+            let b = &mut *board;
+            if !can_take_sun {
+                b.tool_tip.m_warning_text = "[NOT_ENOUGH_SUN]".to_string();
+            }
+            b.tool_tip.set_label("[SLOT_MACHINE_PULL_TOOLTIP]");
+            b.tool_tip.set_position(slot_machine_handle_rect.x + 15, slot_machine_handle_rect.y + 65);
+            b.tool_tip.m_visible = true;
+            b.tool_tip.m_center = true;
+        } }
+        1
     }
 
     pub fn whack_a_zombie_spawning(&mut self) {
@@ -490,9 +740,31 @@ impl Challenge {
         0
     }
 
-    pub fn beghouled_clear_crater(&mut self, _count: i32) {
+    pub fn beghouled_update_craters(&mut self) {
+        let can_clear = self.beghouled_can_clear_crater() != 0;
         let board = self.get_board();
-        board.clear_advice(AdviceType::None);
+        if board.seed_bank.len() != 5 { return; }
+        let seed_packet = &mut board.seed_bank[4];
+        seed_packet.set_activate(can_clear);
+    }
+
+    pub fn beghouled_clear_crater(&mut self, mut count: i32) {
+        if let Some(board) = self.board { unsafe {
+            let b = &mut *board;
+            b.clear_advice(AdviceType::None);
+        } }
+        for grid_x in 0..9 {
+            for grid_y in 0..5 {
+                if self.beghouled_eated[grid_x][grid_y] != 0 {
+                    self.beghouled_eated[grid_x][grid_y] = 0;
+                    count -= 1;
+                    if count == 0 {
+                        self.beghouled_update_craters();
+                        return;
+                    }
+                }
+            }
+        }
     }
 
     pub fn mouse_down_whack_a_zombie(&mut self, x: i32, y: i32) {
@@ -568,8 +840,42 @@ impl Challenge {
         board.grid_items.push(stone);
     }
 
-    pub fn spawn_level_award(&self, _grid_x: i32, _grid_y: i32) {
-        // 简化版
+    pub fn spawn_level_award(&self, grid_x: i32, grid_y: i32) {
+        if let Some(board) = self.board { unsafe {
+            let b = &mut *board;
+            if b.has_level_award_dropped() { return; }
+
+            let pos_x = b.grid_to_pixel_x(grid_x, grid_y) + 40;
+            let pos_y = b.grid_to_pixel_y(grid_x, grid_y) + 40;
+            let app_ptr = match b.app { Some(a) => a, None => return };
+            let app = &mut *app_ptr;
+            let coin_type = if app.is_first_time_adventure_mode() {
+                CoinType::FinalSeedPacket
+            } else if app.is_adventure_mode() || app.has_beaten_challenge(app.game_mode) {
+                CoinType::AwardMoneyBag
+            } else {
+                CoinType::Trophy
+            };
+
+            b.m_level_award_spawned = true;
+            app.board_result = BoardResult::Won;
+            app.play_foley(crate::todlib::tod_foley::FoleyType::SpawnSun as i32);
+            b.add_coin(pos_x as f32, pos_y as f32, coin_type, CoinMotion::Coin);
+            // AddPvzpParticle(PARTICLE_SCREEN_FLASH) 暂未接入粒子系统
+
+            if app.game_mode == GameMode::ChallengeZombiquarium {
+                if let Some(coin) = b.coins.last_mut() {
+                    coin.collect();
+                }
+            } else if !app.is_izombie_level() {
+                for zombie in b.zombies.iter_mut() {
+                    if zombie.dead { continue; }
+                    if !zombie.is_dead_or_dying() {
+                        zombie.take_damage(1800, 0);
+                    }
+                }
+            }
+        } }
     }
 
     pub fn beghouled_score(&mut self, grid_x: i32, grid_y: i32, num_plants: i32, is_horizontal: i32) {
@@ -632,6 +938,18 @@ impl Challenge {
     }
 
     pub fn update_portal_combat(&mut self) {
+        if let Some(board) = self.board { unsafe {
+            let b = &mut *board;
+            for item in b.grid_items.iter_mut() {
+                if item.dead { continue; }
+                if item.is_open_portal() {
+                    let mut p = std::ptr::read(item as *const GridItem);
+                    self.update_portal(&mut p);
+                    std::ptr::write(item as *mut GridItem, p);
+                }
+            }
+        } }
+
         let has_award = self.get_board().has_level_award_dropped();
         if has_award {
             let board = self.get_board();
@@ -659,23 +977,128 @@ impl Challenge {
         None
     }
 
-    pub fn update_portal(&mut self, _portal: &mut GridItem) {
-        // 简化版
+    pub fn update_portal(&mut self, portal: &mut GridItem) {
+        let other_portal = match self.get_other_portal(portal) {
+            Some(p) => p,
+            None => return,
+        };
+        let board_ptr = match self.board {
+            Some(b) => b,
+            None => return,
+        };
+        unsafe {
+            let board = &mut *board_ptr;
+            let portal_grid_y = portal.grid_y;
+            let portal_grid_x = portal.grid_x;
+            let other_grid_x = (*other_portal).grid_x;
+            let other_grid_y = (*other_portal).grid_y;
+
+            // 僵尸穿过传送门
+            for zombie in board.zombies.iter_mut() {
+                if zombie.dead { continue; }
+                if zombie.base.row == portal_grid_y && zombie.last_portal_x != portal_grid_x {
+                    let zombie_rect = zombie.get_zombie_rect();
+                    let zombie_x = zombie_rect.x + zombie_rect.width / 2;
+                    let portal_x = portal_grid_x * 80 + 25;
+                    if (zombie_x - portal_x).abs() <= 45 {
+                        let mut diff_x = zombie_x - zombie.pos_x as i32;
+                        if zombie.is_walking_backwards() { diff_x -= 60; }
+                        zombie.pos_x = (other_grid_x * 80 - diff_x) as f32;
+                        zombie.set_row(other_grid_y);
+                        zombie.pos_y = zombie.get_pos_y_based_on_row(other_grid_y);
+                        zombie.last_portal_x = other_grid_x;
+                    }
+                }
+            }
+
+            // 子弹穿过传送门
+            for projectile in board.projectiles.iter_mut() {
+                if projectile.dead { continue; }
+                if projectile.motion == crate::lawn::projectile::ProjectileMotion::Straight
+                    && projectile.base.row == portal_grid_y
+                    && projectile.last_portal_x != portal_grid_x
+                {
+                    let proj_rect = projectile.get_projectile_rect();
+                    let proj_x = proj_rect.x + proj_rect.width / 2;
+                    let portal_x = portal_grid_x * 80 + 55;
+                    if (proj_x - portal_x).abs() <= 40 {
+                        let delta_y = (other_grid_y - portal_grid_y) * 100;
+                        projectile.pos_x += (other_grid_x * 80 - proj_x + 60) as f32;
+                        projectile.base.row = other_grid_y;
+                        projectile.pos_y += delta_y as f32;
+                        projectile.shadow_y += delta_y as f32;
+                        projectile.last_portal_x = other_grid_x;
+                        projectile.base.render_order = crate::lawn::board::make_render_order(RENDER_LAYER_PROJECTILE, other_grid_y, 0);
+                    }
+                }
+            }
+
+            // 割草机穿过传送门
+            for mower in board.lawn_mowers.iter_mut() {
+                if mower.dead { continue; }
+                if mower.mower_state == LawnMowerState::Triggered
+                    && mower.base.row == portal_grid_y
+                    && mower.last_portal_x != portal_grid_x
+                {
+                    let mower_x = mower.pos_x + 45.0;
+                    let portal_x = (portal_grid_x * 80 + 25) as f32;
+                    if (mower_x - portal_x).abs() <= 20.0 {
+                        mower.pos_x = (other_grid_x * 80 + 25) as f32;
+                        mower.base.row = other_grid_y;
+                        mower.pos_y = ((other_grid_y - portal_grid_y) * 100) as f32;
+                        mower.last_portal_x = other_grid_x;
+                        mower.base.render_order = crate::lawn::board::make_render_order(RENDER_LAYER_LAWN_MOWER, other_grid_y, 0);
+                        mower.update();
+                    }
+                }
+            }
+        }
     }
 
-    pub fn portal_combat_row_spawn_weight(&self, _grid_y: i32) -> f32 {
+    pub fn portal_combat_row_spawn_weight(&self, grid_y: i32) -> f32 {
+        if self.get_portal_distance_to_mower(grid_y) < 5 {
+            return 0.01;
+        }
+        if let Some(board) = self.board { unsafe {
+            for item in &(*board).grid_items {
+                if !item.dead && item.is_open_portal() && item.grid_y == grid_y {
+                    return 1.0;
+                }
+            }
+        } }
         0.2
     }
 
-    pub fn can_target_zombie_with_portals(&self, _plant: &Plant, _zombie: &Zombie) -> i32 {
-        1
+    pub fn can_target_zombie_with_portals(&self, plant: &Plant, zombie: &Zombie) -> i32 {
+        let mut grid_x = plant.plant_col;
+        let mut grid_y = plant.base.row;
+        for _ in 0..3 {
+            let portal = self.get_portal_to_right(grid_x, grid_y);
+            if grid_y == zombie.base.row {
+                let range_left = grid_x * 80;
+                let range_right = if let Some(p) = portal { unsafe { (*p).grid_x * 80 } } else { 800 };
+                if zombie.pos_x > range_left as f32 && zombie.pos_x < range_right as f32 {
+                    return 1;
+                }
+            }
+            if let Some(p) = portal {
+                let other_portal = self.get_other_portal(unsafe { &*p });
+                if let Some(op) = other_portal {
+                    grid_x = unsafe { (*op).grid_x };
+                    grid_y = unsafe { (*op).grid_y };
+                    continue;
+                }
+            }
+            break;
+        }
+        0
     }
 
     pub fn get_portal_to_right(&self, grid_x: i32, grid_y: i32) -> Option<*mut GridItem> {
         let mut record: Option<*mut GridItem> = None;
         if let Some(board) = self.board { unsafe {
             for item in &(*board).grid_items {
-                if !item.dead && item.grid_x > grid_x && item.grid_y == grid_y {
+                if !item.dead && item.is_open_portal() && item.grid_x > grid_x && item.grid_y == grid_y {
                     if record.is_none() || unsafe { &*record.unwrap() }.grid_x > item.grid_x {
                         record = Some(item as *const _ as *mut GridItem);
                     }
@@ -685,26 +1108,88 @@ impl Challenge {
         record
     }
 
-    pub fn get_portal_at(&self, _grid_x: i32, _grid_y: i32) -> Option<*mut GridItem> {
+    pub fn get_portal_at(&self, grid_x: i32, grid_y: i32) -> Option<*mut GridItem> {
+        if let Some(board) = self.board { unsafe {
+            for item in &(*board).grid_items {
+                if !item.dead && item.grid_x == grid_x && item.grid_y == grid_y && item.is_open_portal() {
+                    return Some(item as *const _ as *mut GridItem);
+                }
+            }
+        } }
         None
     }
 
     pub fn move_a_portal(&mut self) {
-        // MoveAPortal — 简化版
-        if let Some(_board) = self.board { unsafe {
-            // 简化：不做实际传送门移动
+        // 收集所有打开的传送门
+        let mut portal_picks: Vec<*mut GridItem> = Vec::new();
+        if let Some(board) = self.board { unsafe {
+            for item in &mut (*board).grid_items {
+                if !item.dead && item.is_open_portal() {
+                    portal_picks.push(item as *mut GridItem);
+                }
+            }
+        } }
+        if portal_picks.is_empty() { return; }
+
+        let portal = portal_picks[crate::framework::common::rand_range(portal_picks.len() as i32) as usize];
+        let other_portal = self.get_other_portal(unsafe { &*portal });
+        let other_portal = match other_portal { Some(p) => p, None => return };
+
+        let mut grid_array: Vec<crate::todlib::tod_common::TodWeightedGridArray> = Vec::new();
+        if let Some(board) = self.board { unsafe {
+            let b = &*board;
+            let other_x = (*other_portal).grid_x;
+            let other_y = (*other_portal).grid_y;
+            for grid_x in 0..10 {
+                for grid_y in 0..5 {
+                    if self.get_portal_at(grid_x, grid_y).is_none() && other_x != grid_x && other_y != grid_y {
+                        grid_array.push(crate::todlib::tod_common::TodWeightedGridArray { x: grid_x, y: grid_y, weight: 1 });
+                    }
+                }
+            }
+        } }
+
+        let grid_array_len = grid_array.len();
+        let pick = crate::todlib::tod_common::tod_pick_from_weighted_grid_array(&mut grid_array, grid_array_len);
+        let pick = match pick { Some(p) => p, None => return };
+        let grid_x = grid_array[pick].x;
+        let grid_y = grid_array[pick].y;
+
+        if let Some(board) = self.board { unsafe {
+            let b = &mut *board;
+            let portal_type = (*portal).grid_item_type;
+            let mut new_portal = GridItem::new();
+            new_portal.grid_item_type = portal_type;
+            new_portal.grid_x = grid_x;
+            new_portal.grid_y = grid_y;
+            new_portal.render_order = crate::lawn::board::make_render_order(RENDER_LAYER_PARTICLE, grid_y, 0);
+            new_portal.open_portal();
+            b.grid_items.push(new_portal);
+            (*portal).close_portal();
         } }
     }
 
-    pub fn get_portal_distance_to_mower(&self, _grid_y: i32) -> i32 {
-        0
+    pub fn get_portal_distance_to_mower(&self, grid_y: i32) -> i32 {
+        let mut grid_x = 10;
+        let mut a_grid_y = grid_y;
+        let mut distance = 0;
+        while distance < 40 {
+            let portal = self.get_portal_to_left(grid_x, a_grid_y);
+            let portal = match portal { Some(p) => p, None => { distance += grid_x; break; } };
+            let other_portal = self.get_other_portal(unsafe { &*portal });
+            let other_portal = match other_portal { Some(p) => p, None => break };
+            distance += grid_x - unsafe { (*portal).grid_x };
+            grid_x = unsafe { (*other_portal).grid_x };
+            a_grid_y = unsafe { (*other_portal).grid_y };
+        }
+        distance
     }
 
     pub fn get_portal_to_left(&self, grid_x: i32, grid_y: i32) -> Option<*mut GridItem> {
         let mut record: Option<*mut GridItem> = None;
         if let Some(board) = self.board { unsafe {
             for item in &(*board).grid_items {
-                if !item.dead && item.grid_x < grid_x && item.grid_y == grid_y {
+                if !item.dead && item.is_open_portal() && item.grid_x < grid_x && item.grid_y == grid_y {
                     if record.is_none() || unsafe { &*record.unwrap() }.grid_x < item.grid_x {
                         record = Some(item as *const _ as *mut GridItem);
                     }
@@ -714,16 +1199,98 @@ impl Challenge {
         record
     }
 
+    pub fn get_portal_left_right(&self, grid_x: i32, grid_y: i32, to_left: bool) -> Option<*mut GridItem> {
+        let mut record: Option<*mut GridItem> = None;
+        if let Some(board) = self.board { unsafe {
+            for item in &(*board).grid_items {
+                if item.dead { continue; }
+                let portal_x = item.grid_x;
+                if portal_x == grid_x { continue; }
+                let is_dir = (portal_x > grid_x) as i32 ^ (to_left as i32);
+                if item.is_open_portal() && is_dir != 0 && item.grid_y == grid_y {
+                    let is_cls = if let Some(r) = record {
+                        let r_x = (*r).grid_x;
+                        (r_x > portal_x) as i32 ^ (to_left as i32)
+                    } else { 1 };
+                    if record.is_none() || is_cls != 0 {
+                        record = Some(item as *const _ as *mut GridItem);
+                    }
+                }
+            }
+        } }
+        record
+    }
+
     pub fn beghouled_packet_clicked(&mut self, seed_packet: &mut SeedPacket) {
+        let packet_type = seed_packet.seed_type;
+        let cost = {
+            let board = self.get_board();
+            let cost = board.get_current_plant_cost(packet_type, SeedType::None);
+            if !board.can_take_sun_money(cost) {
+                return;
+            }
+            cost
+        };
+
+        // 升级索引：SEED_REPEATER→0, SEED_FUMESHROOM→1, SEED_TALLNUT→2
+        let upgrade = match packet_type {
+            SeedType::Repeater => 0,
+            SeedType::Fumeshroom => 1,
+            SeedType::Tallnut => 2,
+            _ => -1,
+        };
+
+        if packet_type == SeedType::BeghouledButtonShuffle {
+            if self.challenge_state == ChallengeState::BeghouledFalling
+                || self.challenge_state == ChallengeState::BeghouledMoving
+            {
+                return;
+            }
+            self.beghouled_shuffle();
+        } else if packet_type == SeedType::BeghouledButtonCrater {
+            if self.beghouled_can_clear_crater() == 0
+                || self.challenge_state == ChallengeState::BeghouledFalling
+                || self.challenge_state == ChallengeState::BeghouledMoving
+            {
+                return;
+            }
+            self.beghouled_clear_crater(1);
+            self.beghouled_start_falling(ChallengeState::BeghouledFalling);
+        } else if upgrade != -1 && self.beghouled_purchased_upgrade[upgrade as usize] == 0 {
+            self.beghouled_purchased_upgrade[upgrade as usize] = 1;
+            let primary = match upgrade {
+                0 => SeedType::Peashooter,
+                1 => SeedType::Puffshroom,
+                _ => SeedType::Wallnut,
+            };
+            let to_replace: Vec<(i32, i32)> = {
+                let board = self.get_board();
+                board.plants.iter()
+                    .filter(|p| !p.dead && p.seed_type == primary)
+                    .map(|p| (p.plant_col, p.base.row))
+                    .collect()
+            };
+            for (col, row) in to_replace {
+                let board = self.get_board();
+                if let Some(plant) = board.plants.iter_mut().find(|p| !p.dead && p.plant_col == col && p.base.row == row) {
+                    plant.die();
+                }
+                board.add_plant(col, row, packet_type, SeedType::None);
+            }
+            seed_packet.set_activate(false);
+        }
         let board = self.get_board();
-        let _cost = board.get_current_plant_cost(seed_packet.seed_type, SeedType::None);
-        board.take_sun_money(_cost);
-        board.refresh_seed_packet_from_cursor();
+        board.take_sun_money(cost);
     }
 
     pub fn beghouled_shuffle(&mut self) {
         let board = self.get_board();
         board.clear_advice(AdviceType::None);
+        for plant in &mut board.plants {
+            if !plant.dead {
+                plant.die();
+            }
+        }
         self.beghouled_start_falling(ChallengeState::BeghouledFalling);
     }
 
@@ -736,34 +1303,110 @@ impl Challenge {
         0
     }
 
-    pub fn beghouled_update_craters(&mut self) {
-        // 简化版
-    }
-
     pub fn zombiquarium_spawn_snorkle(&mut self) -> Option<*mut Zombie> {
         let board = self.get_board();
-        // 简化版：返回 None
-        None
+        board.add_zombie_in_row(ZombieType::Snorkel, 0, 0);
+        let idx = board.zombies.len() - 1;
+        let zombie = &mut board.zombies[idx];
+        zombie.pos_x = crate::framework::common::rand_range(600) as f32 + 50.0;
+        zombie.pos_y = crate::framework::common::rand_range(300) as f32 + 100.0;
+        Some(zombie as *mut Zombie)
     }
 
-    pub fn zombiquarium_packet_clicked(&mut self, _seed_packet: &mut SeedPacket) {
-        // 简化版
+    pub fn zombiquarium_packet_clicked(&mut self, seed_packet: &mut SeedPacket) {
+        let cost = {
+            let board = self.get_board();
+            board.get_current_plant_cost(seed_packet.seed_type, SeedType::None)
+        };
+        let can_afford = self.get_board().can_take_sun_money(cost);
+        if !can_afford { return; }
+
+        if seed_packet.seed_type == SeedType::ZombiquariumSnorkle {
+            if self.get_board().count_zombies_on_screen() > 100 { return; }
+            if self.get_board().m_tutorial_state == TutorialState::ZombiquariumBuySnorkel {
+                let board = self.get_board();
+                board.clear_advice(AdviceType::ZombiquariumBuySnorkel);
+                board.m_tutorial_state = TutorialState::ZombiquariumBoughtSnorkel;
+            }
+            let _zombie = self.zombiquarium_spawn_snorkle();
+        } else if seed_packet.seed_type == SeedType::ZombiquariumTrophy {
+            self.spawn_level_award(2, 0);
+            let board = self.get_board();
+            board.clear_advice(AdviceType::None);
+        }
+        let board = self.get_board();
+        board.take_sun_money(cost);
     }
 
-    pub fn zombiquarium_mouse_down(&mut self, _x: i32, _y: i32) {
-        // 简化版
+    pub fn zombiquarium_drop_brain(&mut self, x: i32, y: i32) {
+        let board = self.get_board();
+        board.clear_advice(AdviceType::ZombiquariumClickToFeed);
+        let mut brain = crate::lawn::grid_item::GridItem::new();
+        brain.grid_item_type = crate::lawn::grid_item::GridItemType::None;
+        brain.render_order = 400000;
+        brain.grid_x = 0;
+        brain.grid_y = 0;
+        brain.counter = 0;
+        brain.pos_x = (x - 15) as f32;
+        brain.pos_y = (y - 15) as f32;
+        board.grid_items.push(brain);
+        // PlaySample(SOUND_TAP) 未接入
     }
 
-    pub fn zombiquarium_drop_brain(&mut self, _x: i32, _y: i32) {
-        // 简化版
+    pub fn zombiquarium_mouse_down(&mut self, x: i32, y: i32) {
+        if x < 80 || x > 720 || y < 90 || y > 430 { return; }
+
+        let brains_count = {
+            let board = self.get_board();
+            board.grid_items.iter().filter(|item| !item.dead && item.grid_item_type == crate::lawn::grid_item::GridItemType::None).count() as i32
+        };
+        if brains_count < 3 {
+            let can_pay = self.get_board().take_sun_money(5);
+            if can_pay {
+                self.zombiquarium_drop_brain(x, y);
+            }
+        }
     }
 
     pub fn zombiquarium_update(&mut self) {
+        {
+            let board = self.get_board();
+            if board.zombies.is_empty() && !board.has_level_award_dropped() {
+                board.zombies_won();
+                return;
+            }
+        }
         let board = self.get_board();
         let score = board.m_sun_money.max(0).min(1000);
         board.m_progress_meter_width = score;
         if score >= 1000 - 100 {
             board.display_advice("[ALMOST_THERE]", 3, AdviceType::None);
+        }
+        if score >= 110 && board.m_tutorial_state == TutorialState::Off {
+            board.m_tutorial_state = TutorialState::ZombiquariumBuySnorkel;
+            board.display_advice("[ADVICE_ZOMBIQUARIUM_BUY_SNORKEL]", 3, AdviceType::ZombiquariumBuySnorkel);
+        } else if score < 100 && board.m_tutorial_state == TutorialState::ZombiquariumBuySnorkel {
+            board.clear_advice(AdviceType::ZombiquariumBuySnorkel);
+            board.m_tutorial_state = TutorialState::Off;
+        }
+        if score >= 1000 && board.m_tutorial_state == TutorialState::ZombiquariumBoughtSnorkel {
+            board.m_tutorial_state = TutorialState::ZombiquariumClickTrophy;
+            board.display_advice("[ADVICE_ZOMBIQUARIUM_CLICK_TROPHY]", 3, AdviceType::ZombiquariumClickTrophy);
+        } else if score < 1000 && board.m_tutorial_state == TutorialState::ZombiquariumClickTrophy {
+            board.clear_advice(AdviceType::ZombiquariumClickTrophy);
+            board.m_tutorial_state = TutorialState::ZombiquariumBoughtSnorkel;
+        }
+
+        let board = self.get_board();
+        for item in &mut board.grid_items {
+            if item.dead { continue; }
+            if item.grid_item_type == crate::lawn::grid_item::GridItemType::None {
+                item.counter += 1;
+                item.pos_y += 0.15;
+                if item.pos_y >= 500.0 {
+                    item.grid_item_die();
+                }
+            }
         }
     }
 
@@ -777,8 +1420,30 @@ impl Challenge {
         } }
     }
 
-    pub fn scary_potter_place_pot(&mut self, _pot_type: ScaryPotType, _zombie_type: ZombieType, _seed_type: SeedType, _count: i32, _grid_array: &mut [crate::todlib::tod_common::TodWeightedGridArray], _grid_array_count: i32) {
-        // 简化版
+    pub fn scary_potter_place_pot(&mut self, pot_type: ScaryPotType, zombie_type: ZombieType, seed_type: SeedType, mut count: i32, grid_array: &mut [crate::todlib::tod_common::TodWeightedGridArray], grid_array_count: i32) {
+        while count > 0 {
+            let pick = crate::todlib::tod_common::tod_pick_from_weighted_grid_array(grid_array, grid_array_count as usize);
+            let pick = match pick { Some(p) => p, None => break };
+            let gx = grid_array[pick].x;
+            let gy = grid_array[pick].y;
+            grid_array[pick].weight = 0;
+
+            let board = self.get_board();
+            let mut scary_pot = crate::lawn::grid_item::GridItem::new();
+            scary_pot.grid_item_type = crate::lawn::grid_item::GridItemType::ScaryPot;
+            scary_pot.grid_item_state = GridItemState::ScaryPotQuestion;
+            scary_pot.grid_x = gx;
+            scary_pot.grid_y = gy;
+            scary_pot.render_order = crate::lawn::board::make_render_order(RENDER_LAYER_PLANT, gy, 0);
+            scary_pot.zombie_type = zombie_type;
+            scary_pot.seed_type = seed_type;
+            scary_pot.scary_pot_type = pot_type;
+            if pot_type == ScaryPotType::Sun {
+                scary_pot.sun_count = crate::framework::common::rand_range(3) + 1;
+            }
+            board.grid_items.push(scary_pot);
+            count -= 1;
+        }
     }
 
     pub fn scary_potter_start(&mut self) {
@@ -793,14 +1458,74 @@ impl Challenge {
     }
 
     pub fn scary_potter_open_pot(&mut self, scary_pot: &mut GridItem) {
+        let grid_x = scary_pot.grid_x;
+        let grid_y = scary_pot.grid_y;
+        let pot_type = scary_pot.scary_pot_type;
+        let pot_state = scary_pot.grid_item_state;
+        let zombie_type = scary_pot.zombie_type;
+        let seed_type = scary_pot.seed_type;
+        let sun_count = self.scary_potter_count_sun_in_pot(scary_pot);
+
+        let (a_pos_x, a_pos_y) = {
+            let board = self.get_board();
+            (board.grid_to_pixel_x(grid_x, grid_y), board.grid_to_pixel_y(grid_x, grid_y))
+        };
+        let board = self.get_board();
+        match pot_type {
+            ScaryPotType::Seed => {
+                board.add_coin((a_pos_x + 20) as f32, a_pos_y as f32, CoinType::UsableSeedPacket, CoinMotion::FromPlant);
+                // 简化：mUsableSeedType 未单独存储
+            }
+            ScaryPotType::Zombie => {
+                board.add_zombie_in_row(zombie_type, grid_y, 0);
+            }
+            ScaryPotType::Sun => {
+                for i in 0..sun_count {
+                    board.add_coin((a_pos_x + 15 * i) as f32, a_pos_y as f32, CoinType::Sun, CoinMotion::FromPlant);
+                }
+            }
+            ScaryPotType::None => {}
+        }
+        let _ = pot_state;
+
         scary_pot.grid_item_die();
         if self.scary_potter_is_completed() != 0 {
-            self.spawn_level_award(scary_pot.grid_x, scary_pot.grid_y);
+            if self.get_app().is_scary_potter_level() {
+                let board = self.get_board();
+                if !board.is_final_scary_potter_stage() {
+                    self.puzzle_phase_complete(grid_x, grid_y);
+                } else {
+                    self.spawn_level_award(grid_x, grid_y);
+                }
+            } else {
+                self.spawn_level_award(grid_x, grid_y);
+            }
         }
     }
 
-    pub fn scary_potter_jack_explode(&self, _pos_x: i32, _pos_y: i32) {
-        // 简化版
+    pub fn scary_potter_jack_explode(&mut self, pos_x: i32, pos_y: i32) {
+        let (a_grid_x, a_grid_y) = {
+            let board = self.get_board();
+            (board.pixel_to_grid_x(pos_x, pos_y), board.pixel_to_grid_y(pos_x, pos_y))
+        };
+        if let Some(board) = self.board { unsafe {
+            let b = &mut *board;
+            let items = &b.grid_items;
+            let mut targets = Vec::new();
+            for item in items {
+                if item.dead { continue; }
+                if item.grid_item_type == crate::lawn::grid_item::GridItemType::ScaryPot
+                    && item.grid_x >= a_grid_x - 1 && item.grid_x <= a_grid_x + 1
+                    && item.grid_y >= a_grid_y - 1 && item.grid_y <= a_grid_y + 1
+                {
+                    targets.push(item as *const _ as *mut GridItem);
+                }
+            }
+            for ptr in targets {
+                let item = &mut *ptr;
+                self.scary_potter_open_pot(item);
+            }
+        } }
     }
 
     pub fn scary_potter_is_completed(&self) -> i32 {
@@ -809,23 +1534,57 @@ impl Challenge {
                 if !item.dead && item.grid_item_type == crate::lawn::grid_item::GridItemType::ScaryPot { return 0; }
             }
         } }
+        if let Some(board) = self.board { unsafe {
+            if (*board).are_enemy_zombies_on_screen() { return 0; }
+        } }
         1
     }
 
-    pub fn scary_potter_change_pot_type(&mut self, _pot_type: GridItemState, _count: i32) {
-        // 简化版
+    pub fn scary_potter_change_pot_type(&mut self, pot_type: GridItemState, mut count: i32) {
+        let mut pot_picks: Vec<*mut GridItem> = Vec::new();
+        if let Some(board) = self.board { unsafe {
+            let b = &mut *board;
+            for item in &mut b.grid_items {
+                if item.dead { continue; }
+                if item.grid_item_type != crate::lawn::grid_item::GridItemType::ScaryPot { continue; }
+                let matches = if pot_type == GridItemState::ScaryPotLeaf {
+                    item.scary_pot_type == ScaryPotType::Seed
+                } else if pot_type == GridItemState::ScaryPotZombie {
+                    item.zombie_type == ZombieType::Gargantuar
+                } else {
+                    false
+                };
+                if matches {
+                    pot_picks.push(item as *mut GridItem);
+                }
+            }
+        } }
+        if pot_picks.is_empty() { return; }
+        if count > pot_picks.len() as i32 { count = pot_picks.len() as i32; }
+        for _ in 0..count {
+            let idx = crate::framework::common::rand_range(pot_picks.len() as i32) as usize;
+            unsafe { (*pot_picks[idx]).grid_item_state = pot_type; }
+        }
     }
 
     pub fn scary_potter_populate(&mut self) {
         self.scary_potter_pots = self.scary_potter_count_pots();
     }
 
-    pub fn scary_potter_dont_place_in_col(&self, _col: i32, _grid_array: &mut [crate::todlib::tod_common::TodWeightedGridArray], _grid_array_count: i32) {
-        // 简化版
+    pub fn scary_potter_dont_place_in_col(&self, col: i32, grid_array: &mut [crate::todlib::tod_common::TodWeightedGridArray], grid_array_count: i32) {
+        for i in 0..grid_array_count {
+            if grid_array[i as usize].x == col {
+                grid_array[i as usize].weight = 0;
+            }
+        }
     }
 
-    pub fn scary_potter_fill_column_with_plant(&mut self, _col: i32, _seed_type: SeedType, _grid_array: &mut [crate::todlib::tod_common::TodWeightedGridArray], _grid_array_count: i32) {
-        // 简化版
+    pub fn scary_potter_fill_column_with_plant(&mut self, col: i32, seed_type: SeedType, grid_array: &mut [crate::todlib::tod_common::TodWeightedGridArray], grid_array_count: i32) {
+        self.scary_potter_dont_place_in_col(col, grid_array, grid_array_count);
+        let board = self.get_board();
+        for row in 0..5 {
+            board.add_plant(col, row, seed_type, SeedType::None);
+        }
     }
 
     pub fn puzzle_next_stage_clear(&mut self) {
@@ -844,17 +1603,91 @@ impl Challenge {
 
     pub fn i_zombie_seed_type_to_zombie_type(seed_type: SeedType) -> ZombieType {
         match seed_type {
-            SeedType::Sprout => ZombieType::Normal,
-            _ => ZombieType::Normal,
+            SeedType::ZombieNormal => ZombieType::Normal,
+            SeedType::ZombieTrafficCone => ZombieType::TrafficCone,
+            SeedType::ZombiePolevaulter => ZombieType::Polevaulter,
+            SeedType::ZombiePail => ZombieType::Pail,
+            SeedType::ZombieLadder => ZombieType::Ladder,
+            SeedType::ZombieDigger => ZombieType::Digger,
+            SeedType::ZombieBungee => ZombieType::Bungee,
+            SeedType::ZombieFootball => ZombieType::Football,
+            SeedType::ZombieBalloon => ZombieType::Balloon,
+            SeedType::ZombieScreenDoor => ZombieType::Door,
+            SeedType::Zomboni => ZombieType::Zamboni,
+            SeedType::ZombiePogo => ZombieType::Pogo,
+            SeedType::ZombieDancer => ZombieType::Dancer,
+            SeedType::ZombieGargantuar => ZombieType::Gargantuar,
+            SeedType::ZombieImp => ZombieType::Imp,
+            _ => ZombieType::Invalid,
         }
     }
 
     pub fn is_zombie_seed_type(seed_type: SeedType) -> i32 {
-        matches!(seed_type, SeedType::Sprout).then(|| 1).unwrap_or(0)
+        matches!(seed_type,
+            SeedType::ZombiquariumSnorkle | SeedType::ZombiquariumTrophy
+            | SeedType::ZombieNormal | SeedType::ZombieTrafficCone
+            | SeedType::ZombiePolevaulter | SeedType::ZombiePail
+            | SeedType::ZombieLadder | SeedType::ZombieDigger
+            | SeedType::ZombieBungee | SeedType::ZombieFootball
+            | SeedType::ZombieBalloon | SeedType::ZombieScreenDoor
+            | SeedType::Zomboni | SeedType::ZombiePogo
+            | SeedType::ZombieDancer | SeedType::ZombieGargantuar
+            | SeedType::ZombieImp
+        ).then(|| 1).unwrap_or(0)
     }
 
-    pub fn i_zombie_mouse_down_with_zombie(&mut self, _x: i32, _y: i32, _click_count: i32) {
-        // 简化版
+    pub fn i_zombie_mouse_down_with_zombie(&mut self, x: i32, y: i32, click_count: i32) {
+        if click_count >= 0 {
+            let seed_type = {
+                let board = self.get_board();
+                board.cursor_object.seed_type
+            };
+            let (grid_x, grid_y) = {
+                let board = self.get_board();
+                (board.planting_pixel_to_grid_x(x, y, seed_type), board.planting_pixel_to_grid_y(x, y, seed_type))
+            };
+            if grid_x != -1 && grid_y != -1 && click_count != 0 {
+                if self.can_plant_at(grid_x, grid_y, seed_type) == PlantingReason::Ok {
+                    let can_afford = {
+                        let board = self.get_board();
+                        board.can_take_sun_money(board.get_current_plant_cost(seed_type, SeedType::None))
+                    };
+                    if can_afford {
+                        {
+                            let board = self.get_board();
+                            board.clear_advice(AdviceType::IZombieLeftOfLine);
+                            board.clear_advice(AdviceType::IZombieNotPassedLine);
+                        }
+                        let zombie_type = Self::i_zombie_seed_type_to_zombie_type(seed_type);
+                        self.i_zombie_place_zombie(zombie_type, grid_x, grid_y);
+                        let seed_bank_index = {
+                            let board = self.get_board();
+                            board.cursor_object.seed_bank_index
+                        };
+                        if seed_bank_index >= 0 {
+                            let board = self.get_board();
+                            if let Some(packet) = board.seed_bank.get_mut(seed_bank_index as usize) {
+                                packet.was_planted();
+                            }
+                        }
+                        let board = self.get_board();
+                        board.take_sun_money(board.get_current_plant_cost(seed_type, SeedType::None));
+                        board.clear_cursor();
+                    }
+                } else {
+                    let board = self.get_board();
+                    board.clear_advice(AdviceType::None);
+                    if seed_type == SeedType::ZombieBungee {
+                        board.display_advice("[ADVICE_I_ZOMBIE_LEFT_OF_LINE]", 5, AdviceType::IZombieLeftOfLine);
+                    } else {
+                        board.display_advice("[ADVICE_I_ZOMBIE_NOT_PASSED_LINE]", 5, AdviceType::IZombieNotPassedLine);
+                    }
+                }
+                return;
+            }
+        }
+        let board = self.get_board();
+        board.refresh_seed_packet_from_cursor();
     }
 
     pub fn i_zombie_start(&mut self) {
@@ -862,21 +1695,48 @@ impl Challenge {
         board.display_advice("[I_ZOMBIE_EAT_ALL_BRAINS]", 1, AdviceType::None);
     }
 
-    pub fn i_zombie_place_plants(&mut self, seed_type: SeedType, count: i32, grid_y: i32) {
-        let board = self.get_board();
-        for _ in 0..count.min(10) {
-            if grid_y == -1 {
-                for row in 0..5 {
-                    if board.can_plant_at(0, row, seed_type) == PlantingReason::Ok {
-                        board.add_plant(0, row, seed_type, SeedType::None);
-                        break;
-                    }
-                }
-            } else {
-                if board.can_plant_at(0, grid_y, seed_type) == PlantingReason::Ok {
-                    board.add_plant(0, grid_y, seed_type, SeedType::None);
+    pub fn i_zombie_place_plants(&mut self, seed_type: SeedType, mut count: i32, grid_y: i32) {
+        // 对应 C++ IZombiePlacePlants
+        let game_mode = self.get_app().game_mode;
+        let mut columns = 6;
+        let mode = game_mode as i32;
+        if mode >= GameMode::PuzzleIZombie1 as i32 && mode <= GameMode::PuzzleIZombie5 as i32 {
+            columns = 4;
+        } else if mode != GameMode::PuzzleIZombie9 as i32 {
+            columns = 5;
+        }
+
+        let (min_grid_y, max_grid_y) = if grid_y == -1 {
+            (0, 4)
+        } else {
+            (grid_y, grid_y)
+        };
+
+        let mut grid_array: Vec<crate::todlib::tod_common::TodWeightedGridArray> = Vec::new();
+        for row in min_grid_y..=max_grid_y {
+            for col in 0..columns {
+                let can_plant = {
+                    let board = self.get_board();
+                    board.can_plant_at(col, row, seed_type) == PlantingReason::Ok
+                };
+                if !can_plant { continue; }
+                // 坚果和火炬木只出现在最右 3 列
+                if (seed_type != SeedType::Wallnut && seed_type != SeedType::Torchwood) || columns - col <= 3 {
+                    grid_array.push(crate::todlib::tod_common::TodWeightedGridArray { x: col, y: row, weight: 1 });
                 }
             }
+        }
+        let array_count = grid_array.len();
+        if count > array_count as i32 {
+            count = array_count as i32;
+        }
+        for _ in 0..count {
+            let pick = crate::todlib::tod_common::tod_pick_from_weighted_grid_array(&mut grid_array, array_count);
+            let pick = match pick { Some(p) => p, None => break };
+            let gx = grid_array[pick].x;
+            let gy = grid_array[pick].y;
+            grid_array[pick].weight = 0;
+            self.i_zombie_place_plant_in_square(seed_type, gx, gy);
         }
     }
 
@@ -895,8 +1755,8 @@ impl Challenge {
         // 依赖 Reanimation 系统
     }
 
-    pub fn scary_potter_count_sun_in_pot(&self, _scary_pot: &GridItem) -> i32 {
-        0
+    pub fn scary_potter_count_sun_in_pot(&self, scary_pot: &GridItem) -> i32 {
+        scary_pot.sun_count
     }
 
     pub fn scary_potter_count_pots(&self) -> i32 {
@@ -950,7 +1810,10 @@ impl Challenge {
         let mut count = 0;
         if let Some(board) = self.board { unsafe {
             for item in &(*board).grid_items {
-                if item.grid_item_type == crate::lawn::grid_item::GridItemType::None && item.dead == false {
+                if item.grid_item_type == crate::lawn::grid_item::GridItemType::Squirrel
+                    && item.grid_item_state != GridItemState::SquirrelCaught
+                    && item.grid_item_state != GridItemState::SquirrelZombie
+                {
                     count += 1;
                 }
             }
@@ -959,30 +1822,164 @@ impl Challenge {
     }
 
     pub fn squirrel_start(&mut self) {
-        let board = self.get_board();
-        for _ in 0..7 {
+        let mut picks: Vec<crate::todlib::tod_common::TodWeightedGridArray> = Vec::new();
+        for col in 0..9 {
+            for row in 0..5 {
+                picks.push(crate::todlib::tod_common::TodWeightedGridArray { x: col, y: row, weight: 1 });
+            }
+        }
+        let mut picks_count = picks.len();
+        for _ in (0..7).rev() {
+            let pick_idx = crate::todlib::tod_common::tod_pick_from_weighted_grid_array(&mut picks, picks_count);
+            let pick_idx = match pick_idx { Some(i) => i, None => break };
+            let gx = picks[pick_idx].x;
+            let gy = picks[pick_idx].y;
+            picks[pick_idx].weight = 0;
+            let board = self.get_board();
             let mut squirrel = crate::lawn::grid_item::GridItem::new();
-            squirrel.grid_item_type = crate::lawn::grid_item::GridItemType::None;
-            squirrel.grid_x = 0;
-            squirrel.grid_y = 0;
+            squirrel.grid_item_type = crate::lawn::grid_item::GridItemType::Squirrel;
+            squirrel.grid_item_state = GridItemState::SquirrelWaiting;
+            squirrel.grid_x = gx;
+            squirrel.grid_y = gy;
+            squirrel.counter = 100 + crate::framework::common::rand_range(401);
+            squirrel.render_order = crate::lawn::board::make_render_order(RENDER_LAYER_GRAVE_STONE, gy, 1);
             board.grid_items.push(squirrel);
+        }
+        for pick in picks.iter_mut() {
+            if pick.x < 4 {
+                pick.weight = 0;
+            }
+        }
+        let zombie_idx = crate::todlib::tod_common::tod_pick_from_weighted_grid_array(&mut picks, picks_count);
+        let zombie_idx = match zombie_idx { Some(i) => i, None => return };
+        let board = self.get_board();
+        let mut zs = crate::lawn::grid_item::GridItem::new();
+        zs.grid_item_type = crate::lawn::grid_item::GridItemType::Squirrel;
+        zs.grid_item_state = GridItemState::SquirrelZombie;
+        zs.grid_x = picks[zombie_idx].x;
+        zs.grid_y = picks[zombie_idx].y;
+        zs.render_order = crate::lawn::board::make_render_order(RENDER_LAYER_GRAVE_STONE, zs.grid_y, 1);
+        board.grid_items.push(zs);
+    }
+
+    pub fn squirrel_found(&mut self, squirrel: &mut GridItem) {
+        if squirrel.grid_item_state == GridItemState::SquirrelZombie {
+            let (gx, gy) = (squirrel.grid_x, squirrel.grid_y);
+            let px = {
+                let board = self.get_board();
+                board.grid_to_pixel_x(gx, gy)
+            };
+            let board = self.get_board();
+            board.add_zombie_in_row(ZombieType::Normal, gy, 0);
+            if let Some(zombie) = board.zombies.last_mut() {
+                zombie.pos_x = px as f32;
+            }
+            squirrel.grid_item_die();
+            let board = self.get_board();
+            board.display_advice("[ADVICE_SQUIRREL_ZOMBIE]", 2, AdviceType::None);
+        } else {
+            let neighbors = [(-1, 0), (1, 0), (0, -1), (0, 1)];
+            let mut picks: Vec<crate::todlib::tod_common::TodWeightedGridArray> = Vec::new();
+            for (dx, dy) in neighbors {
+                let gx = squirrel.grid_x + dx;
+                let gy = squirrel.grid_y + dy;
+                if let Some(board) = self.board { unsafe {
+                    let b = &*board;
+                    let has_squirrel = b.grid_items.iter().any(|item| {
+                        !item.dead && item.grid_item_type == crate::lawn::grid_item::GridItemType::Squirrel && item.grid_x == gx && item.grid_y == gy
+                    });
+                    let has_plant = b.plants.iter().any(|p| !p.dead && p.plant_col == gx && p.base.row == gy);
+                    if !has_squirrel && has_plant {
+                        picks.push(crate::todlib::tod_common::TodWeightedGridArray { x: gx, y: gy, weight: 1 });
+                    }
+                } }
+            }
+            if !picks.is_empty() {
+                let pick_count = picks.len();
+                let pick_idx = crate::todlib::tod_common::tod_pick_from_weighted_grid_array(&mut picks, pick_count);
+                let pick_idx = match pick_idx { Some(i) => i, None => return };
+                let (gx, gy) = (picks[pick_idx].x, picks[pick_idx].y);
+                if gx != squirrel.grid_x {
+                    squirrel.grid_item_state = if gx < squirrel.grid_x { GridItemState::SquirrelRunningLeft } else { GridItemState::SquirrelRunningRight };
+                } else {
+                    squirrel.grid_item_state = if gy < squirrel.grid_y { GridItemState::SquirrelRunningUp } else { GridItemState::SquirrelRunningDown };
+                }
+                squirrel.counter = 50;
+                squirrel.grid_x = gx;
+                squirrel.grid_y = gy;
+                squirrel.render_order = crate::lawn::board::make_render_order(RENDER_LAYER_GRAVE_STONE, gy, 1);
+            } else {
+                squirrel.grid_item_state = GridItemState::SquirrelCaught;
+                squirrel.counter = 100;
+                let remaining = self.squirrel_count_uncaught();
+                if remaining > 0 {
+                    let board = self.get_board();
+                    let msg = crate::lawn::lawn_app::LawnApp::pluralize(remaining, "[ADVICE_SQUIRRELS_ONE_LEFT]", "[ADVICE_SQUIRRELS_LEFT]");
+                    board.display_advice(&msg, 2, AdviceType::None);
+                } else {
+                    let board = self.get_board();
+                    board.clear_advice(AdviceType::None);
+                    self.spawn_level_award(squirrel.grid_x, squirrel.grid_y);
+                }
+            }
         }
     }
 
-    pub fn squirrel_found(&mut self, _squirrel: &mut GridItem) {
-        // 简化版
+    pub fn squirrel_peek(&mut self, squirrel: &mut GridItem) {
+        squirrel.counter = 50;
+        squirrel.grid_item_state = GridItemState::SquirrelPeeking;
     }
 
-    pub fn squirrel_peek(&mut self, _squirrel: &mut GridItem) {
-        // 简化版
+    pub fn squirrel_chew(&mut self, squirrel: &mut GridItem) {
+        squirrel.counter = 100 + crate::framework::common::rand_range(401);
+        let (gx, gy) = (squirrel.grid_x, squirrel.grid_y);
+        if let Some(board) = self.board { unsafe {
+            let b = &mut *board;
+            if let Some(plant) = b.plants.iter_mut().find(|p| !p.dead && p.plant_col == gx && p.base.row == gy) {
+                if plant.eaten_flash_countdown <= 25 {
+                    plant.eaten_flash_countdown = 25;
+                }
+            }
+        } }
     }
 
-    pub fn squirrel_chew(&mut self, _squirrel: &mut GridItem) {
-        // 简化版
-    }
-
-    pub fn squirrel_update_one(&mut self, _squirrel: &mut GridItem) {
-        // 简化版
+    pub fn squirrel_update_one(&mut self, squirrel: &mut GridItem) {
+        let mut counter = squirrel.counter;
+        if counter > 0 {
+            counter -= 1;
+            squirrel.counter = counter;
+        }
+        let state = squirrel.grid_item_state;
+        if state == GridItemState::SquirrelWaiting || state == GridItemState::SquirrelZombie {
+            let (gx, gy) = (squirrel.grid_x, squirrel.grid_y);
+            let has_plant = if let Some(board) = self.board { unsafe {
+                (*board).plants.iter().any(|p| !p.dead && p.plant_col == gx && p.base.row == gy)
+            } } else { false };
+            if !has_plant {
+                self.squirrel_found(squirrel);
+            }
+            if counter == 0 {
+                if crate::framework::common::rand_range(2) != 0 && state != GridItemState::SquirrelZombie {
+                    self.squirrel_peek(squirrel);
+                } else {
+                    self.squirrel_chew(squirrel);
+                }
+            }
+        }
+        let state = squirrel.grid_item_state;
+        if (state == GridItemState::SquirrelPeeking
+            || state == GridItemState::SquirrelRunningUp
+            || state == GridItemState::SquirrelRunningDown
+            || state == GridItemState::SquirrelRunningLeft
+            || state == GridItemState::SquirrelRunningRight)
+            && squirrel.counter == 0
+        {
+            squirrel.grid_item_state = GridItemState::SquirrelWaiting;
+            squirrel.counter = 100 + crate::framework::common::rand_range(401);
+        }
+        if state == GridItemState::SquirrelCaught && squirrel.counter == 0 {
+            squirrel.grid_item_die();
+        }
     }
 
     pub fn i_zombie_setup_plant(&self, _plant: &mut Plant) {
@@ -998,14 +1995,40 @@ impl Challenge {
 
     pub fn i_zombie_eat_brain(&mut self, zombie: &mut Zombie) -> i32 {
         let brain = self.i_zombie_get_brain_target(zombie);
-        if brain.is_none() { return 0; }
+        let brain = match brain { Some(b) => b, None => return 0 };
+
+        zombie.start_eating();
+        let mut counter = unsafe { (*brain).counter };
+        counter -= 1;
+        unsafe { (*brain).counter = counter; }
+        if counter <= 0 {
+            unsafe { (*brain).grid_item_die(); }
+            self.i_zombie_score_brain(unsafe { &mut *brain });
+        }
         1
     }
 
     pub fn i_zombie_get_brain_target(&self, zombie: &Zombie) -> Option<*mut GridItem> {
         if zombie.zombie_type == ZombieType::Bungee || zombie.is_walking_backwards() { return None; }
-        let rect = zombie.get_zombie_attack_rect();
-        if rect.x > 20 { return None; }
+        let mut attack_rect = zombie.get_zombie_attack_rect();
+        // 撑杆跳前状态使用更靠左的矩形（对应 C++ PHASE_POLEVAULTER_PRE_VAULT）
+        if zombie.zombie_phase == ZombiePhase::PolevaulterPreVault {
+            attack_rect = Rect::new(50 + zombie.base.x, 0, 20, 115);
+        }
+        if zombie.zombie_type == ZombieType::Balloon {
+            attack_rect.x += 25;
+        }
+        if attack_rect.x > 20 { return None; }
+        if let Some(board) = self.board { unsafe {
+            for item in &(*board).grid_items {
+                if !item.dead && item.grid_x == 0 && item.grid_y == zombie.base.row
+                    && item.grid_item_type == crate::lawn::grid_item::GridItemType::None
+                    && item.grid_item_state != GridItemState::BrainSquished
+                {
+                    return Some(item as *const _ as *mut GridItem);
+                }
+            }
+        } }
         None
     }
 
@@ -1017,19 +2040,48 @@ impl Challenge {
     }
 
     pub fn advance_crazy_dave_dialog(&mut self) {
-        // 简化版
+        // 对应 C++ AdvanceCrazyDaveDialog
+        let board = self.get_board();
+        if !board.is_scary_potter_dave_talking() {
+            return;
+        }
+        let app_ptr = match self.app { Some(a) => a, None => return };
+        unsafe {
+            let app = &mut *app_ptr;
+            if app.m_crazy_dave_message_index == -1 {
+                return;
+            }
+            if !app.advance_crazy_dave_text() {
+                app.crazy_dave_leave();
+                return;
+            }
+            // "Here, I'll give you more vases." || "This should be their last wave."
+            if app.m_crazy_dave_message_index == 2702 || app.m_crazy_dave_message_index == 2801 {
+                self.scary_potter_populate();
+                let board = self.get_board();
+                board.place_rake();
+            }
+        }
     }
 
-    pub fn beghouled_flash_plant(&mut self, flash_x: i32, flash_y: i32, from_x: i32, from_y: i32, to_x: i32, to_y: i32) {
-        let (fx, fy) = if flash_x == from_x && flash_y == from_y {
-            (to_x, to_y)
+    pub fn beghouled_flash_plant(&mut self, mut flash_x: i32, mut flash_y: i32, from_x: i32, from_y: i32, to_x: i32, to_y: i32) {
+        if flash_x == from_x && flash_y == from_y {
+            flash_x = to_x;
+            flash_y = to_y;
         } else if flash_x == to_x && flash_y == to_y {
-            (from_x, from_y)
-        } else {
-            (flash_x, flash_y)
-        };
-        let board = self.get_board();
-        let _ = board.get_top_plant_at(fx, fy);
+            flash_x = from_x;
+            flash_y = from_y;
+        }
+        if let Some(board) = self.board { unsafe {
+            for plant in (&mut *board).plants.iter_mut() {
+                if !plant.dead && plant.plant_col == flash_x && plant.base.row == flash_y {
+                    if plant.beghouled_flash_countdown == 0 {
+                        plant.beghouled_flash_countdown = 300;
+                    }
+                    break;
+                }
+            }
+        } }
     }
 
     pub fn beghouled_flash_a_match(&mut self) {
@@ -1039,20 +2091,59 @@ impl Challenge {
         if game_mode == GameMode::ChallengeBeghouled {
             for row in 0..=4 {
                 for col in 0..=7 {
-                    if col < 7 && self.beghouled_flash_from_board_state(&mut board_state, col, row, col + 1, row) != 0 { return; }
-                    if row < 4 && self.beghouled_flash_from_board_state(&mut board_state, col, row, col, row + 1) != 0 { return; }
+                    if (col < 7 && self.beghouled_flash_from_board_state(&mut board_state, col, row, col + 1, row) != 0)
+                        || (row < 4 && self.beghouled_flash_from_board_state(&mut board_state, col, row, col, row + 1) != 0)
+                    {
+                        return;
+                    }
+                }
+            }
+        } else if game_mode == GameMode::ChallengeBeghouledTwist {
+            for row in 0..=4 {
+                for col in 0..=7 {
+                    if self.beghouled_twist_flash_match(&board_state, col, row) != 0 {
+                        return;
+                    }
                 }
             }
         }
     }
 
     pub fn beghouled_flash_from_board_state(&mut self, board_state: &mut BeghouledBoardState, from_x: i32, from_y: i32, to_x: i32, to_y: i32) -> i32 {
-        if self.beghouled_eated[from_x as usize][from_y as usize] != 0 || self.beghouled_eated[to_x as usize][to_y as usize] != 0 { return 0; }
+        if from_x < 0 || from_x > 8 || from_y < 0 || from_y > 5
+            || to_x < 0 || to_x > 8 || to_y < 0 || to_y > 5
+        {
+            return 0;
+        }
+        if self.beghouled_eated[from_x as usize][from_y as usize] != 0
+            || self.beghouled_eated[to_x as usize][to_y as usize] != 0
+        {
+            return 0;
+        }
         let from_seed = board_state.seed_type[from_x as usize][from_y as usize];
         let to_seed = board_state.seed_type[to_x as usize][to_y as usize];
         board_state.seed_type[from_x as usize][from_y as usize] = to_seed;
         board_state.seed_type[to_x as usize][to_y as usize] = from_seed;
-        let has_match = self.beghouled_board_has_match(board_state);
+
+        let mut has_match = 0;
+        'outer: for row in 0..5 {
+            for col in 0..8 {
+                if self.beghouled_horizontal_match_length(col, row, board_state) >= 3 {
+                    for i in 0..3 {
+                        self.beghouled_flash_plant(col + i, row, from_x, from_y, to_x, to_y);
+                    }
+                } else if self.beghouled_vertical_match_length(col, row, board_state) >= 3 {
+                    for i in 0..3 {
+                        self.beghouled_flash_plant(col, row + i, from_x, from_y, to_x, to_y);
+                    }
+                } else {
+                    continue;
+                }
+                has_match = 1;
+                break 'outer;
+            }
+        }
+
         board_state.seed_type[from_x as usize][from_y as usize] = from_seed;
         board_state.seed_type[to_x as usize][to_y as usize] = to_seed;
         has_match
@@ -1091,32 +2182,195 @@ impl Challenge {
         }
     }
 
-    pub fn whack_a_zombie_place_graves(&mut self, _grave_count: i32) {
-        // 简化版
+    pub fn whack_a_zombie_place_graves(&mut self, mut grave_count: i32) {
+        let mut picks: Vec<crate::todlib::tod_common::TodWeightedGridArray> = Vec::new();
+        if let Some(board) = self.board { unsafe {
+            let b = &*board;
+            for col in 3..9 {
+                for row in 0..5 {
+                    if !b.can_add_grave_stone_at(col, row) {
+                        continue;
+                    }
+                    let has_plant = b.plants.iter().any(|p| !p.dead && p.plant_col == col && p.base.row == row);
+                    picks.push(crate::todlib::tod_common::TodWeightedGridArray {
+                        x: col,
+                        y: row,
+                        weight: if has_plant { 1 } else { 100000 },
+                    });
+                }
+            }
+        } }
+        let pick_count = picks.len();
+        if grave_count > pick_count as i32 {
+            grave_count = pick_count as i32;
+        }
+        if pick_count == 0 || grave_count <= 0 {
+            return;
+        }
+        for _ in 0..grave_count {
+            let pick_idx = crate::todlib::tod_common::tod_pick_from_weighted_grid_array(&mut picks, pick_count);
+            let pick_idx = match pick_idx { Some(i) => i, None => break };
+            let gx = picks[pick_idx].x;
+            let gy = picks[pick_idx].y;
+            picks[pick_idx].weight = 0;
+            let board = self.get_board();
+            for plant in &mut board.plants {
+                if !plant.dead && plant.plant_col == gx && plant.base.row == gy {
+                    plant.die();
+                }
+            }
+            let board = self.get_board();
+            board.add_grave_stone(gx, gy);
+        }
     }
 
-    pub fn beghouled_twist_square_from_mouse(&self, _x: i32, _y: i32, grid_x: &mut i32, grid_y: &mut i32) -> i32 {
-        *grid_x = -1; *grid_y = -1; 0
-    }
-
-    pub fn beghouled_twist_valid_move(&self, _grid_x: i32, _grid_y: i32, _board_state: &BeghouledBoardState) -> i32 {
+    pub fn beghouled_twist_square_from_mouse(&self, x: i32, y: i32, grid_x: &mut i32, grid_y: &mut i32) -> i32 {
+        *grid_x = -1;
+        *grid_y = -1;
+        if let Some(board) = self.board { unsafe {
+            let b = &*board;
+            let gx = b.pixel_to_grid_x(x - 40, y - 40);
+            let gy = b.pixel_to_grid_y(x - 40, y - 40);
+            if gx == -1 || gy == -1 || gx > 6 || gy > 3 {
+                return 0;
+            }
+            *grid_x = gx;
+            *grid_y = gy;
+            return 1;
+        } }
         0
     }
 
-    pub fn beghouled_twist_mouse_down(&mut self, _x: i32, _y: i32) {
-        // 简化版
+    pub fn beghouled_twist_valid_move(&self, grid_x: i32, grid_y: i32, board_state: &BeghouledBoardState) -> i32 {
+        if grid_y == -1 || grid_x > 6 || grid_y > 3 {
+            return 0;
+        }
+        if board_state.seed_type[grid_x as usize][grid_y as usize] != SeedType::None
+            && board_state.seed_type[(grid_x + 1) as usize][grid_y as usize] != SeedType::None
+            && board_state.seed_type[grid_x as usize][(grid_y + 1) as usize] != SeedType::None
+            && board_state.seed_type[(grid_x + 1) as usize][(grid_y + 1) as usize] != SeedType::None
+        {
+            1
+        } else {
+            0
+        }
     }
 
-    pub fn beghouled_twist_move_causes_match(&self, _grid_x: i32, _grid_y: i32, _board_state: &BeghouledBoardState) -> i32 {
-        0
+    pub fn beghouled_twist_mouse_down(&mut self, x: i32, y: i32) {
+        let mut grid_x = 0;
+        let mut grid_y = 0;
+        let mut board_state = BeghouledBoardState { seed_type: [[SeedType::None; 6]; 9] };
+        self.load_beghouled_board_state(&mut board_state);
+        let can_twist = self.beghouled_twist_square_from_mouse(x, y, &mut grid_x, &mut grid_y) != 0
+            && self.beghouled_twist_valid_move(grid_x, grid_y, &board_state) != 0;
+        if !can_twist {
+            return;
+        }
+        let causes_match = self.beghouled_twist_move_causes_match(grid_x, grid_y, &mut board_state);
+        if let Some(board) = self.board { unsafe {
+            let b = &mut *board;
+            // 找到四个角上的植物
+            let gx = grid_x as usize;
+            let gy = grid_y as usize;
+            let cols = [gx, gx + 1, gx, gx + 1];
+            let rows = [gy, gy, gy + 1, gy + 1];
+            let mut plants = Vec::new();
+            for i in 0..4 {
+                for plant in b.plants.iter_mut() {
+                    if !plant.dead && plant.plant_col == cols[i] as i32 && plant.base.row == rows[i] as i32 {
+                        plants.push(plant as *mut Plant);
+                        break;
+                    }
+                }
+            }
+            if plants.len() < 4 { return; }
+            if causes_match == 0 {
+                // 未形成消除：四个植物向中心略微偏移，播放旋转音效
+                unsafe {
+                    (*plants[0]).pos_x = b.grid_to_pixel_x((*plants[0]).plant_col, (*plants[0]).base.row) as f32 + 20.0;
+                    (*plants[1]).pos_y = b.grid_to_pixel_y((*plants[1]).plant_col, (*plants[1]).base.row) as f32 + 20.0;
+                    (*plants[2]).pos_y = b.grid_to_pixel_y((*plants[2]).plant_col, (*plants[2]).base.row) as f32 - 20.0;
+                    (*plants[3]).pos_x = b.grid_to_pixel_x((*plants[3]).plant_col, (*plants[3]).base.row) as f32 - 20.0;
+                }
+                if let Some(app) = b.app {
+                    (*app).play_foley(crate::todlib::tod_foley::FoleyType::Floop as i32);
+                }
+            } else {
+                // 形成消除：交换四角的行列位置
+                unsafe {
+                    (*plants[0]).plant_col += 1;
+                    (*plants[0]).base.render_order = (*plants[0]).calc_render_order();
+                    (*plants[1]).base.row += 1;
+                    (*plants[1]).base.render_order = (*plants[1]).calc_render_order();
+                    (*plants[2]).base.row -= 1;
+                    (*plants[2]).base.render_order = (*plants[2]).calc_render_order();
+                    (*plants[3]).plant_col -= 1;
+                    (*plants[3]).base.render_order = (*plants[3]).calc_render_order();
+                }
+                self.beghouled_start_falling(ChallengeState::BeghouledMoving);
+            }
+        } }
     }
 
-    pub fn beghouled_twist_flash_match(&mut self, _board_state: &BeghouledBoardState, _grid_x: i32, _grid_y: i32) -> i32 {
-        0
+    pub fn beghouled_twist_move_causes_match(&self, grid_x: i32, grid_y: i32, board_state: &mut BeghouledBoardState) -> i32 {
+        if self.beghouled_twist_valid_move(grid_x, grid_y, board_state) == 0 {
+            return 0;
+        }
+        let gx = grid_x as usize;
+        let gy = grid_y as usize;
+        let seed1 = board_state.seed_type[gx][gy];
+        let seed2 = board_state.seed_type[gx + 1][gy];
+        let seed3 = board_state.seed_type[gx][gy + 1];
+        let seed4 = board_state.seed_type[gx + 1][gy + 1];
+
+        board_state.seed_type[gx + 1][gy] = seed1;
+        board_state.seed_type[gx + 1][gy + 1] = seed2;
+        board_state.seed_type[gx][gy + 1] = seed4;
+        board_state.seed_type[gx][gy] = seed3;
+
+        let has_match = self.beghouled_board_has_match(board_state);
+
+        board_state.seed_type[gx][gy] = seed1;
+        board_state.seed_type[gx + 1][gy] = seed2;
+        board_state.seed_type[gx][gy + 1] = seed3;
+        board_state.seed_type[gx + 1][gy + 1] = seed4;
+
+        has_match
+    }
+
+    pub fn beghouled_twist_flash_match(&mut self, board_state: &BeghouledBoardState, grid_x: i32, grid_y: i32) -> i32 {
+        let mut copy = board_state.clone();
+        if self.beghouled_twist_move_causes_match(grid_x, grid_y, &mut copy) == 0 {
+            return 0;
+        }
+        if let Some(board) = self.board { unsafe {
+            let b = &mut *board;
+            for i in 0..4 {
+                let col = grid_x + (i % 2);
+                let row = grid_y + (i / 2);
+                for plant in b.plants.iter_mut() {
+                    if !plant.dead && plant.plant_col == col && plant.base.row == row {
+                        if plant.beghouled_flash_countdown == 0 {
+                            plant.beghouled_flash_countdown = 300;
+                        }
+                        break;
+                    }
+                }
+            }
+        } }
+        1
     }
 
     pub fn beghouled_cancel_match_flashing(&mut self) {
-        // 简化版
+        if let Some(board) = self.board { unsafe {
+            let b = &mut *board;
+            for plant in b.plants.iter_mut() {
+                if plant.dead { continue; }
+                if plant.eaten_flash_countdown >= 25 {
+                    plant.eaten_flash_countdown = 25;
+                }
+            }
+        } }
     }
 
     pub fn beghouled_start_falling(&mut self, state: ChallengeState) {
@@ -1142,26 +2396,98 @@ impl Challenge {
         self.beghouled_fill_holes(&mut board_state, 0);
     }
 
-    pub fn beghouled_create_plants(&mut self, _old_board_state: &BeghouledBoardState, _new_board_state: &BeghouledBoardState) {
-        // 简化版
+    pub fn beghouled_create_plants(&mut self, old_board_state: &BeghouledBoardState, new_board_state: &BeghouledBoardState) {
+        for col in 0..9 {
+            let mut fall_y = 80;
+            for row in (0..6).rev() {
+                let seed_type = new_board_state.seed_type[col as usize][row as usize];
+                if old_board_state.seed_type[col as usize][row as usize] == SeedType::None && seed_type != SeedType::None {
+                    fall_y -= 100;
+                    let board = self.get_board();
+                    board.add_plant(col, row, seed_type, SeedType::None);
+                    if let Some(plant) = board.plants.last_mut() {
+                        plant.pos_y = fall_y as f32;
+                    }
+                    self.beghouled_start_falling(ChallengeState::BeghouledFalling);
+                }
+            }
+        }
     }
 
-    pub fn puzzle_phase_complete(&mut self, _grid_x: i32, _grid_y: i32) {
-        // 简化版
+    pub fn puzzle_phase_complete(&mut self, grid_x: i32, grid_y: i32) {
+        if self.puzzle_is_award_stage() != 0 {
+            let hit = crate::framework::common::rand_range(100);
+            let coin_type = if hit < 15 {
+                if let Some(board) = self.board { unsafe {
+                    if let Some(zen) = (*board).app.map_or(None, |app| unsafe { (*app).zen_garden }) {
+                        if (*zen).can_drop_potted_plant_loot() { CoinType::AwardPresent } else { CoinType::AwardMoneyBag }
+                    } else { CoinType::AwardMoneyBag }
+                } } else { CoinType::AwardMoneyBag }
+            } else if hit < 30 {
+                if let Some(board) = self.board { unsafe {
+                    if let Some(zen) = (*board).app.map_or(None, |app| unsafe { (*app).zen_garden }) {
+                        if (*zen).can_drop_chocolate() { CoinType::AwardChocolate } else { CoinType::AwardMoneyBag }
+                    } else { CoinType::AwardMoneyBag }
+                } } else { CoinType::AwardMoneyBag }
+            } else {
+                CoinType::AwardBagDiamond
+            };
+            let (pos_x, pos_y) = {
+                let board = self.get_board();
+                (board.grid_to_pixel_x(grid_x, grid_y) + 40, board.grid_to_pixel_y(grid_x, grid_y) + 40)
+            };
+            let board = self.get_board();
+            board.add_coin(pos_x as f32, pos_y as f32, coin_type, CoinMotion::Coin);
+        } else {
+            // FadeOutLevel() 尚未在 Board 中翻译
+        }
     }
 
     pub fn puzzle_is_award_stage(&self) -> i32 {
-        if self.survival_stage % 1 == 0 { 1 } else { 0 }
+        let app = self.get_app();
+        if app.is_adventure_mode() { return 0; }
+        let goal = if app.game_mode == GameMode::PuzzleIZombieEndless { 3 }
+            else if app.game_mode == GameMode::ScaryPotterEndless { 10 }
+            else { 1 };
+        if self.survival_stage % goal == 0 { 1 } else { 0 }
     }
 
     pub fn i_zombie_place_zombie(&mut self, zombie_type: ZombieType, grid_x: i32, grid_y: i32) {
+        let pos_x = {
+            let board = self.get_board();
+            board.grid_to_pixel_x(grid_x, grid_y)
+        };
         let board = self.get_board();
         board.add_zombie_in_row(zombie_type, grid_y, 0);
+        if let Some(zombie) = board.zombies.last_mut() {
+            if zombie_type == ZombieType::Bungee {
+                zombie.target_col = grid_x;
+                zombie.set_row(grid_y);
+                zombie.pos_x = pos_x as f32;
+                zombie.pos_y = zombie.get_pos_y_based_on_row(grid_y);
+                zombie.base.render_order = crate::lawn::board::make_render_order(RENDER_LAYER_GRAVE_STONE, grid_y, 7);
+            } else {
+                zombie.pos_x = (pos_x - 30) as f32;
+            }
+        }
     }
 
     pub fn whack_a_zombie_update(&mut self) {
-        let _board = self.get_board();
-        // 简化版：教程状态检查略
+        // 对应 C++ WhackAZombieUpdate
+        if let Some(board) = self.board { unsafe {
+            let b = &mut *board;
+            if b.m_sun_money > 0 && b.m_tutorial_state == TutorialState::Off {
+                b.m_tutorial_state = TutorialState::WhackAZombieBeforePickSeed;
+                b.m_tutorial_timer = 1500;
+            }
+            if b.m_tutorial_state == TutorialState::WhackAZombieBeforePickSeed && b.m_tutorial_timer == 0 {
+                b.m_tutorial_state = TutorialState::WhackAZombiePickSeed;
+                b.m_tutorial_timer = 400;
+            }
+            if b.m_tutorial_state == TutorialState::WhackAZombiePickSeed && b.m_tutorial_timer == 0 {
+                b.m_tutorial_state = TutorialState::WhackAZombieCompleted;
+            }
+        } }
     }
 
     pub fn last_stand_completed_stage(&mut self) {
@@ -1198,12 +2524,27 @@ impl Challenge {
         self.challenge_state_counter = 1000;
     }
 
-    pub fn tree_of_wisdom_mouse_on(&self, _x: i32, _y: i32) -> i32 {
+    pub fn tree_of_wisdom_mouse_on(&self, x: i32, y: i32) -> i32 {
+        let mut hit_result = HitResult { object: None, object_type: GameObjectType::None };
+        if let Some(board) = self.board { unsafe {
+            let b = &*board;
+            b.mouse_hit_test(x, y, &mut hit_result);
+            if hit_result.object_type == GameObjectType::TreeOfWisdom && b.cursor_object.cursor_type == CursorType::TreeFood {
+                return 1;
+            }
+        } }
         0
     }
 
     pub fn tree_of_wisdom_get_size(&self) -> i32 {
-        30
+        if let Some(app) = self.app { unsafe {
+            let a = &*app;
+            let idx = a.get_current_challenge_index();
+            if let Some(player) = &a.player_info {
+                return player.m_challenge_records.get(idx as usize).copied().unwrap_or(0);
+            }
+        } }
+        0
     }
 
     pub fn tree_of_wisdom_draw(&self, _g: &mut Graphics) {
@@ -1211,57 +2552,145 @@ impl Challenge {
     }
 
     pub fn tree_of_wisdom_next_garden(&self) {
-        // 简化版
+        // 对应 C++ TreeOfWisdomNextGarden：TreeOfWisdomLeave + KillBoard + PreNewGame
+        // 注意：Rust 中 self 为 &self，无法直接调用 &mut self 的 leave，保留简化
+        if let Some(app) = self.app { unsafe {
+            let a = &mut *app;
+            a.kill_board();
+            a.pre_new_game(GameMode::ChallengeZenGarden, false);
+        } }
     }
 
-    pub fn tree_of_wisdom_tool_update(&self, _zen_tool: &mut GridItem) {
-        // 简化版
+    pub fn tree_of_wisdom_tool_update(&mut self, zen_tool: &mut GridItem) {
+        // 对应 C++ TreeOfWisdomToolUpdate：动画播完即成长
+        if zen_tool.grid_item_state == GridItemState::ZenToolFertilizer {
+            self.tree_of_wisdom_grow();
+            zen_tool.grid_item_die();
+        }
     }
 
     pub fn tree_of_wisdom_open_store(&self) {
-        // 简化版
+        // 对应 C++ TreeOfWisdomOpenStore：TreeOfWisdomLeave + ShowStoreScreen
+        crate::lawn::lawn_app::LawnApp::show_store_screen();
     }
 
     pub fn tree_of_wisdom_leave(&mut self) {
-        // 简化版
+        if let Some(board) = self.board { unsafe {
+            let b = &mut *board;
+            let mut tool_items = Vec::new();
+            for item in &b.grid_items {
+                if !item.dead && item.grid_item_type == crate::lawn::grid_item::GridItemType::ZenTool {
+                    tool_items.push(item as *const _ as *mut GridItem);
+                }
+            }
+            for ptr in tool_items {
+                let item = &mut *ptr;
+                self.tree_of_wisdom_grow();
+                item.grid_item_die();
+            }
+        } }
     }
 
     pub fn tree_of_wisdom_grow(&mut self) {
+        // 对应 C++ TreeOfWisdomGrow：增加智慧树尺寸并切换到成长动画
+        if let Some(app) = self.app { unsafe {
+            let a = &mut *app;
+            let idx = a.get_current_challenge_index();
+            if let Some(player) = &mut a.player_info {
+                if let Some(record) = player.m_challenge_records.get_mut(idx as usize) {
+                    *record += 1;
+                }
+            }
+        } }
         self.challenge_state = ChallengeState::TreeJustGrew;
         self.challenge_state_counter = 120;
     }
 
-    pub fn tree_of_wisdom_tool(&self, _mouse_x: i32, _mouse_y: i32) {
-        // 简化版
+    pub fn tree_of_wisdom_tool(&self, mouse_x: i32, mouse_y: i32) {
+        if self.tree_of_wisdom_mouse_on(mouse_x, mouse_y) != 0 {
+            // TreeOfWisdomFertilize 需要 reanim 系统，简化处理
+        }
+        if let Some(board) = self.board { unsafe {
+            let b = &mut *board;
+            b.clear_cursor();
+        } }
     }
 
-    pub fn tree_of_wisdom_hit_test(&self, _x: i32, _y: i32, hit_result: &mut HitResult) -> i32 {
-        hit_result.object_type = GameObjectType::None;
-        0
+    pub fn tree_of_wisdom_hit_test(&self, x: i32, y: i32, hit_result: &mut HitResult) -> i32 {
+        let size = self.tree_of_wisdom_get_size();
+        let tree_rect = if size <= 1 { Rect::new(310, 275, 175, 175) }
+            else if size < 7 { Rect::new(290, 255, 205, 195) }
+            else if size < 12 { Rect::new(290, 215, 205, 225) }
+            else { Rect::new(280, 155, 225, 305) };
+        if tree_rect.contains(x, y) {
+            hit_result.object = None;
+            hit_result.object_type = GameObjectType::TreeOfWisdom;
+            1
+        } else {
+            hit_result.object = None;
+            hit_result.object_type = GameObjectType::None;
+            0
+        }
     }
 
     pub fn tree_of_wisdom_babble(&mut self) {
         self.challenge_state = ChallengeState::TreeBabbling;
         self.challenge_state_counter = 400;
-        self.tree_of_wisdom_talk_index = 101;
+        let size = self.tree_of_wisdom_get_size();
+        let babble_hit = crate::framework::common::rand_range(3);
+        if size <= 1 {
+            self.tree_of_wisdom_talk_index = 600;
+        } else if babble_hit == 0 && size >= 5 {
+            self.tree_of_wisdom_talk_index = 500;
+        } else if babble_hit == 1 {
+            self.tree_of_wisdom_talk_index = 101 + crate::framework::common::rand_range(10);
+        } else {
+            self.tree_of_wisdom_talk_index = crate::framework::common::rand_range(4)
+                + if size < 12 { 201 } else if size < 50 { 301 } else { 401 };
+        }
     }
 
     pub fn tree_of_wisdom_give_wisdom(&mut self) {
         self.challenge_state = ChallengeState::TreeGiveWisdom;
         self.challenge_state_counter = 1000;
+        let size = self.tree_of_wisdom_get_size();
+        if size == 100 {
+            self.tree_of_wisdom_talk_index = 800;
+        } else if size == 500 {
+            self.tree_of_wisdom_talk_index = 900;
+        } else if size == 1000 {
+            self.tree_of_wisdom_talk_index = 1000;
+        } else if size > 1000 {
+            self.tree_of_wisdom_talk_index = 1100;
+        } else {
+            self.tree_of_wisdom_talk_index = (size - 1).clamp(1, 49);
+        }
     }
 
-    pub fn tree_of_wisdom_say_repeat(&self) {
-        // 简化版
+    pub fn tree_of_wisdom_say_repeat(&mut self) {
+        let size = self.tree_of_wisdom_get_size();
+        if size >= 100 && crate::framework::common::rand_range(47) == 0 {
+            self.tree_of_wisdom_talk_index = 800;
+        } else if size >= 500 && crate::framework::common::rand_range(47) == 0 {
+            self.tree_of_wisdom_talk_index = 900;
+        } else if size >= 1000 && crate::framework::common::rand_range(47) == 0 {
+            self.tree_of_wisdom_talk_index = 1000;
+        } else {
+            self.tree_of_wisdom_talk_index = 2 + crate::framework::common::rand_range(size.clamp(3, 49) - 2);
+        }
+        self.challenge_state_counter = 600;
     }
 
     pub fn tree_of_wisdom_can_feed(&self) -> i32 {
         if self.challenge_state == ChallengeState::TreeJustGrew { return 0; }
+        if let Some(board) = self.board { unsafe {
+            for item in &(*board).grid_items {
+                if !item.dead && item.grid_item_type == crate::lawn::grid_item::GridItemType::ZenTool {
+                    return 0;
+                }
+            }
+        } }
         1
-    }
-
-    pub fn get_portal_left_right(&self, _grid_x: i32, _grid_y: i32, _to_left: bool) -> Option<*mut GridItem> {
-        None
     }
 }
 
@@ -1276,6 +2705,35 @@ impl Default for Challenge {
 // 对应 C++: extern SeedType gArtChallengeSunFlower[6][9];
 // 对应 C++: extern SeedType gArtChallengeStarFruit[6][9];
 // 这些数据在 Challenge.cpp 中定义，后续翻译具体实现时添加
+
+// 艺术挑战模式图案（对应 C++ Challenge.cpp 中的全局数组）
+// 索引为 [row][col]，row 范围 0..5（MAX_GRID_SIZE_Y），col 范围 0..8（MAX_GRID_SIZE_X）
+pub const ART_CHALLENGE_WALLNUT: [[SeedType; 9]; 6] = [
+    [SeedType::None, SeedType::None, SeedType::None, SeedType::None, SeedType::Wallnut, SeedType::Wallnut, SeedType::Wallnut, SeedType::None, SeedType::None],
+    [SeedType::None, SeedType::None, SeedType::None, SeedType::Wallnut, SeedType::None, SeedType::None, SeedType::None, SeedType::Wallnut, SeedType::None],
+    [SeedType::None, SeedType::None, SeedType::None, SeedType::Wallnut, SeedType::None, SeedType::None, SeedType::None, SeedType::Wallnut, SeedType::None],
+    [SeedType::None, SeedType::None, SeedType::None, SeedType::Wallnut, SeedType::None, SeedType::None, SeedType::None, SeedType::Wallnut, SeedType::None],
+    [SeedType::None, SeedType::None, SeedType::None, SeedType::None, SeedType::Wallnut, SeedType::Wallnut, SeedType::Wallnut, SeedType::None, SeedType::None],
+    [SeedType::None, SeedType::None, SeedType::None, SeedType::None, SeedType::None, SeedType::None, SeedType::None, SeedType::None, SeedType::None],
+];
+
+pub const ART_CHALLENGE_SUNFLOWER: [[SeedType; 9]; 6] = [
+    [SeedType::None, SeedType::None, SeedType::Starfruit, SeedType::Starfruit, SeedType::Starfruit, SeedType::None, SeedType::None, SeedType::None, SeedType::None],
+    [SeedType::None, SeedType::Starfruit, SeedType::Wallnut, SeedType::Wallnut, SeedType::Wallnut, SeedType::Starfruit, SeedType::None, SeedType::None, SeedType::None],
+    [SeedType::None, SeedType::None, SeedType::Starfruit, SeedType::Starfruit, SeedType::Starfruit, SeedType::None, SeedType::None, SeedType::None, SeedType::None],
+    [SeedType::None, SeedType::None, SeedType::None, SeedType::Umbrella, SeedType::None, SeedType::None, SeedType::None, SeedType::None, SeedType::None],
+    [SeedType::None, SeedType::None, SeedType::Umbrella, SeedType::Umbrella, SeedType::Umbrella, SeedType::None, SeedType::None, SeedType::None, SeedType::None],
+    [SeedType::None, SeedType::None, SeedType::None, SeedType::None, SeedType::None, SeedType::None, SeedType::None, SeedType::None, SeedType::None],
+];
+
+pub const ART_CHALLENGE_STARFRUIT: [[SeedType; 9]; 6] = [
+    [SeedType::None, SeedType::None, SeedType::None, SeedType::Starfruit, SeedType::None, SeedType::None, SeedType::None, SeedType::None, SeedType::None],
+    [SeedType::None, SeedType::None, SeedType::None, SeedType::Starfruit, SeedType::Starfruit, SeedType::None, SeedType::None, SeedType::None, SeedType::None],
+    [SeedType::None, SeedType::Starfruit, SeedType::Starfruit, SeedType::Starfruit, SeedType::Starfruit, SeedType::Starfruit, SeedType::Starfruit, SeedType::None, SeedType::None],
+    [SeedType::None, SeedType::None, SeedType::None, SeedType::Starfruit, SeedType::Starfruit, SeedType::Starfruit, SeedType::None, SeedType::None, SeedType::None],
+    [SeedType::None, SeedType::None, SeedType::None, SeedType::Starfruit, SeedType::None, SeedType::None, SeedType::Starfruit, SeedType::None, SeedType::None],
+    [SeedType::None, SeedType::None, SeedType::None, SeedType::None, SeedType::None, SeedType::None, SeedType::None, SeedType::None, SeedType::None],
+];
 
 // 对应 C++: extern int gZombieWaves[NUM_LEVELS];
 // 对应 C++: extern ZombieAllowedLevels gZombieAllowedLevels[NUM_ZOMBIE_TYPES];
