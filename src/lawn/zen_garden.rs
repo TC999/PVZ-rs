@@ -253,11 +253,173 @@ impl ZenGarden {
     }
 
     pub fn mouse_down_with_tool(&mut self, x: i32, y: i32, cursor_type: CursorType) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ MouseDownWithTool：工具分发
+        if cursor_type == CursorType::Wheelbarrow && self.get_potted_plant_in_wheelbarrow().is_some() {
+            self.mouse_down_with_full_wheel_barrow(x, y);
+            if let Some(board_ptr) = self.board {
+                let board = unsafe { &mut *board_ptr };
+                board.clear_cursor();
+            }
+            return;
+        }
+
+        if cursor_type == CursorType::WateringCan
+            || cursor_type == CursorType::Fertilizer
+            || cursor_type == CursorType::BugSpray
+            || cursor_type == CursorType::Phonograph
+            || cursor_type == CursorType::Chocolate
+        {
+            self.mouse_down_with_feeding_tool(x, y, cursor_type);
+            return;
+        }
+
+        // 简单命中：找鼠标下方带盆栽索引的植物
+        let a_plant_idx = self.find_plant_at(x, y);
+        match a_plant_idx {
+            None => {
+                // C++: PlayFoley(FOLEY_DROP) + ClearCursor
+                if let Some(board_ptr) = self.board {
+                    let board = unsafe { &mut *board_ptr };
+                    board.clear_cursor();
+                }
+            }
+            Some(idx) => {
+                let (a_seed_type, a_imitater, a_pot_index) = {
+                    let board_ptr = match self.board {
+                        Some(b) => b,
+                        None => return,
+                    };
+                    let b = unsafe { &*board_ptr };
+                    let p = &b.plants[idx];
+                    (p.seed_type, p.imitater_type, p.potted_plant_index)
+                };
+                if a_pot_index == -1 {
+                    if let Some(board_ptr) = self.board {
+                        let board = unsafe { &mut *board_ptr };
+                        board.clear_cursor();
+                    }
+                    return;
+                }
+                match cursor_type {
+                    CursorType::MoneySign => {
+                        if let Some(board_ptr) = self.board {
+                            let board = unsafe { &mut *board_ptr };
+                            let plant = &mut board.plants[idx];
+                            self.mouse_down_with_money_sign(plant);
+                        }
+                    }
+                    CursorType::Wheelbarrow => {
+                        if let Some(board_ptr) = self.board {
+                            let board = unsafe { &mut *board_ptr };
+                            let plant = &mut board.plants[idx];
+                            self.mouse_down_with_empty_wheel_barrow(plant);
+                            board.clear_cursor();
+                        }
+                    }
+                    CursorType::Glove => {
+                        if let Some(board_ptr) = self.board {
+                            let board = unsafe { &mut *board_ptr };
+                            board.cursor_object.cursor_type = CursorType::PlantFromGlove;
+                            board.cursor_object.glove_plant_id = idx as PlantID;
+                            let _ = (a_seed_type, a_imitater);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    /// 简单命中：按鼠标坐标找前方植物（对应 C++ ToolHitTest 简化）
+    fn find_plant_at(&self, x: i32, y: i32) -> Option<usize> {
+        let board_ptr = self.board?;
+        let board = unsafe { &*board_ptr };
+        for (i, p) in board.plants.iter().enumerate() {
+            if p.dead { continue; }
+            let (px, pw) = (p.base.x, p.base.width);
+            let (py, ph) = (p.base.y, p.base.height);
+            if x >= px && x <= px + pw && y >= py && y <= py + ph {
+                return Some(i);
+            }
+        }
+        None
     }
 
     pub fn move_plant(&mut self, plant: &mut Plant, grid_x: i32, grid_y: i32) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ MovePlant：将植物（连带下方花盆）移到新格
+        if let Some(app) = self.app {
+            unsafe {
+                if (*app).game_mode != GameMode::ChallengeZenGarden {
+                    return;
+                }
+            }
+        }
+        let board_ptr = match self.board {
+            Some(b) => b,
+            None => return,
+        };
+        let (a_pos_x, a_pos_y) = unsafe {
+            let b = &*board_ptr;
+            (b.grid_to_pixel_x(grid_x, grid_y), b.grid_to_pixel_y(grid_x, grid_y))
+        };
+
+        // 找到下方花盆（同格 Flowerpot），一起移动
+        let a_old_col = plant.plant_col;
+        let a_old_row = plant.base.row;
+        let mut a_pot_positions: Option<(i32, i32)> = None;
+        let board = unsafe { &*board_ptr };
+        for p in board.plants.iter() {
+            if p.dead { continue; }
+            if p.plant_col == a_old_col && p.base.row == a_old_row && p.seed_type == SeedType::Flowerpot {
+                a_pot_positions = Some((p.pos_x as i32, p.pos_y as i32));
+                break;
+            }
+        }
+        let a_delta_x = a_pos_x - plant.base.x;
+        let a_delta_y = a_pos_y - plant.base.y;
+
+        // 移动植物本体
+        plant.base.x = a_pos_x;
+        plant.base.y = a_pos_y;
+        plant.plant_col = grid_x;
+        plant.base.row = grid_y;
+        plant.base.render_order = crate::lawn::board::make_render_order(
+            crate::lawn::game_enums::RENDER_LAYER_PLANT, 0, a_pos_y + 1,
+        );
+
+        // 移动花盆
+        if let Some((pot_x, pot_y)) = a_pot_positions {
+            let board = unsafe { &mut *board_ptr };
+            for p in board.plants.iter_mut() {
+                if p.dead { continue; }
+                if p.plant_col == a_old_col && p.base.row == a_old_row && p.seed_type == SeedType::Flowerpot {
+                    p.base.x = pot_x + a_delta_x;
+                    p.base.y = pot_y + a_delta_y;
+                    p.plant_col = grid_x;
+                    p.base.row = grid_y;
+                    p.base.render_order = crate::lawn::board::make_render_order(
+                        crate::lawn::game_enums::RENDER_LAYER_PLANT, 0, a_pos_y,
+                    );
+                    break;
+                }
+            }
+        }
+
+        // 更新 PottedPlant 数据
+        let a_potted_index = plant.potted_plant_index;
+        if a_potted_index >= 0 {
+            if let Some(app) = self.app {
+                unsafe {
+                    if let Some(info) = (*app).player_info.as_mut() {
+                        if (a_potted_index as usize) < info.m_potted_plant.len() {
+                            info.m_potted_plant[a_potted_index as usize].x = grid_x;
+                            info.m_potted_plant[a_potted_index as usize].y = grid_y;
+                        }
+                    }
+                }
+            }
+        }
+        // [TRANSLATION_NOTE]: 粒子系统移动（Particle SystemMove）与 DoPlantingEffects 依赖粒子/种植系统，暂不执行
     }
 
     pub fn mouse_down_with_money_sign(&mut self, plant: &mut Plant) {
@@ -265,8 +427,41 @@ impl ZenGarden {
     }
 
     pub fn place_potted_plant(&mut self, potted_plant_index: usize) -> Option<*mut Plant> {
-        // TODO: 从 ZenGarden.cpp 翻译
-        None
+        // 对应 C++ PlacePottedPlant：放花盆（如需）+ 放植物
+        let (a_x, a_y, a_seed_type, a_maturity) = {
+            let app = self.app?;
+            unsafe {
+                let info = (*app).player_info.as_ref()?;
+                let pp = info.m_potted_plant.get(potted_plant_index)?;
+                (pp.x, pp.y, pp.seed_type, pp.plant_age)
+            }
+        };
+        let a_plant_seed = if a_maturity == PottedPlantAge::Sprout {
+            SeedType::Sprout
+        } else {
+            a_seed_type
+        };
+        let board_ptr = self.board?;
+        let board = unsafe { &mut *board_ptr };
+
+        // 需花盆判定（C++ needPot）：蘑菇园非水生不用花盆，水族馆不用
+        let a_garden_type = self.garden_type;
+        let a_need_pot = !(a_garden_type == GardenType::Mushroom && !Plant::is_aquatic(a_plant_seed))
+            && a_garden_type != GardenType::Aquarium;
+        if a_need_pot {
+            if let Some(_pot) = board.new_plant(a_x, a_y, SeedType::Flowerpot, SeedType::None) {
+                // [TRANSLATION_NOTE]: 花盆 reanim 帧层（anim_waterplants/anim_zengarden）依赖体动画，暂不设置
+            }
+        }
+
+        let a_plant = board.new_plant(a_x, a_y, a_plant_seed, SeedType::None)?;
+        a_plant.potted_plant_index = potted_plant_index as i32;
+        a_plant.base.render_order = crate::lawn::board::make_render_order(
+            crate::lawn::game_enums::RENDER_LAYER_PLANT, 0, a_plant.base.y + 1,
+        );
+        // [TRANSLATION_NOTE]: 发芽/水族馆/变体帧层与 UpdateReanim 依赖 reanim 系统，暂留基础动画
+        let idx = board.plants.len() - 1;
+        Some(&mut board.plants[idx] as *mut Plant)
     }
 
     pub fn zen_garden_update(&mut self) {
@@ -291,7 +486,27 @@ impl ZenGarden {
     }
 
     pub fn remove_potted_plant(&mut self, plant: &mut Plant) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ RemovePottedPlant：碾碎植物 + 压碎下方花盆
+        plant.die();
+        let a_plant_col = plant.plant_col;
+        let a_plant_row = plant.base.row;
+        if let Some(board_ptr) = self.board {
+            let board = unsafe { &mut *board_ptr };
+            // C++: GetTopPlantAt(col, row, TOPPLANT_ONLY_UNDER_PLANT) 找下方花盆
+            let mut a_pot_idx: Option<usize> = None;
+            for (i, p) in board.plants.iter().enumerate() {
+                if p.dead { continue; }
+                if p.plant_col == a_plant_col && p.base.row == a_plant_row
+                    && p.seed_type == SeedType::Flowerpot
+                {
+                    a_pot_idx = Some(i);
+                    break;
+                }
+            }
+            if let Some(i) = a_pot_idx {
+                board.plants[i].die();
+            }
+        }
     }
 
     pub fn get_special_grid_placements(&self, count: &mut i32) -> Option<*const SpecialGridPlacement> {
