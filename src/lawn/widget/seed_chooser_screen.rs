@@ -89,8 +89,86 @@ impl SeedChooserScreen {
         }
     }
 
-    pub fn pick_from_weighted_array_using_special_rand_seed(_arr: &[TodWeightedArray], _count: i32, _rng: &mut MTRand) -> usize { 0 /* TODO */ }
-    pub fn crazy_dave_pick_seeds(&mut self) { /* TODO */ }
+    pub fn pick_from_weighted_array_using_special_rand_seed(arr: &[TodWeightedArray], count: i32, rng: &mut MTRand) -> usize {
+        // 对应 C++ PickFromWeightedArrayUsingSpecialRandSeed
+        let mut a_total_weight = 0i32;
+        for i in 0..count {
+            a_total_weight += arr[i as usize].weight;
+        }
+        let a_rnd_result = rng.next() % a_total_weight.max(1) as u32;
+        let mut a_weight = 0i32;
+        for j in 0..count {
+            a_weight += arr[j as usize].weight;
+            if a_weight as u32 > a_rnd_result {
+                return arr[j as usize].item;
+            }
+        }
+        // C++ 中 DBG_ASSERT(false) 后 unreachable
+        0
+    }
+    pub fn crazy_dave_pick_seeds(&mut self) {
+        // 对应 C++ CrazyDavePickSeeds：按权重挑选前 3 个种子放入种子槽
+        let mut a_seed_array: Vec<TodWeightedArray> = Vec::with_capacity(crate::lawn::game_enums::NUM_SEED_TYPES);
+        for seed_val in 0..crate::lawn::game_enums::NUM_SEEDS_IN_CHOOSER {
+            let a_seed_type = unsafe { std::mem::transmute::<i32, SeedType>(seed_val) };
+            let weight = if self.app.map_or(true, |app| unsafe {
+                !(*app).has_seed_type(a_seed_type)
+                    || self.seed_not_recommended_to_pick(a_seed_type) != 0
+                    || self.seed_not_allowed_to_pick(a_seed_type)
+                    || crate::lawn::plant::Plant::is_upgrade(a_seed_type)
+                    || a_seed_type == SeedType::Imitater
+                    || a_seed_type == SeedType::Umbrella
+                    || a_seed_type == SeedType::Blover
+            }) {
+                0
+            } else {
+                1
+            };
+            a_seed_array.push(TodWeightedArray { item: a_seed_type as usize, weight });
+        }
+
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(board) = (*app).board {
+                    // C++ 中 mZombieAllowed[ZOMBIE_BUNGEE/ZOMBIE_CATAPULT] 允许时解锁 Umbrella
+                    let bungee_allowed = (*board).m_zombie_allowed[ZombieType::Bungee as usize];
+                    let catapult_allowed = (*board).m_zombie_allowed[ZombieType::Catapult as usize];
+                    let balloon_allowed = (*board).m_zombie_allowed[ZombieType::Balloon as usize];
+                    if bungee_allowed || catapult_allowed {
+                        a_seed_array[SeedType::Umbrella as usize].weight = 1;
+                    }
+                    if balloon_allowed || (*board).stage_has_fog() {
+                        a_seed_array[SeedType::Blover as usize].weight = 1;
+                    }
+                    if (*board).stage_has_roof() {
+                        a_seed_array[SeedType::Torchwood as usize].weight = 0;
+                    }
+                }
+
+                let mut a_level_rng = crate::framework::mt_rand::MTRand::new();
+                a_level_rng.srand((self.board.map_or(0, |b| unsafe { (*b).get_level_rand_seed() })) as u32);
+                for i in 0..3 {
+                    let a_picked_seed = Self::pick_from_weighted_array_using_special_rand_seed(&a_seed_array, crate::lawn::game_enums::NUM_SEEDS_IN_CHOOSER, &mut a_level_rng);
+                    a_seed_array[a_picked_seed].weight = 0;
+
+                    let a_pos_x = self.board.map_or(0, |b| unsafe { (*b).get_seed_packet_position_x(i) });
+                    let mut a_chosen_seed = ChosenSeed::new();
+                    a_chosen_seed.seed_type = unsafe { std::mem::transmute::<i32, SeedType>(a_picked_seed as i32) };
+                    a_chosen_seed.x = a_pos_x;
+                    a_chosen_seed.y = 8;
+                    a_chosen_seed.start_x = a_pos_x;
+                    a_chosen_seed.start_y = 8;
+                    a_chosen_seed.end_x = a_pos_x;
+                    a_chosen_seed.end_y = 8;
+                    a_chosen_seed.seed_state = ChosenSeedState::InBank;
+                    a_chosen_seed.seed_index_in_bank = i;
+                    a_chosen_seed.crazy_dave_picked = true;
+                    self.chosen_seeds.push(a_chosen_seed);
+                    self.seeds_in_bank += 1;
+                }
+            }
+        }
+    }
     pub fn has_7_rows(&self) -> bool {
         if let Some(app) = self.app { unsafe {
             (*app).has_finished_adventure() || (*app).player_info.as_ref().unwrap().m_purchases[0] != 0
@@ -108,9 +186,28 @@ impl SeedChooserScreen {
             *y = 0 /* seed_bank.y */ + 8;
         } }
     }
-    pub fn seed_not_recommended_to_pick(&self, t: SeedType) -> u32 { 0 }
-    pub fn seed_not_allowed_to_pick(&self, _t: SeedType) -> bool { false }
-    pub fn seed_not_allowed_during_trial(&self, _t: SeedType) -> bool { false }
+    pub fn seed_not_recommended_to_pick(&self, t: SeedType) -> u32 {
+        // 对应 C++ SeedNotRecommendedToPick
+        let a_rec_flags = self.board.map_or(0, |b| unsafe { (*b).seed_not_recommended_for_level(t) });
+        // [TRANSLATION_NOTE]: C++ 中若 NOCTURNAL 位已设且已选 InstantCoffee 则清除该位；
+        // NotRecommend 位号 Rust 侧未定义，暂保留原标志
+        a_rec_flags
+    }
+    pub fn seed_not_allowed_to_pick(&self, t: SeedType) -> bool {
+        // 对应 C++ SeedNotAllowedToPick：坚守模式禁用产阳植物
+        let is_last_stand = self.app.map_or(false, |app| unsafe { (*app).game_mode == GameMode::ChallengeLastStand });
+        is_last_stand
+            && matches!(
+                t,
+                SeedType::Sunflower | SeedType::Sunshroom | SeedType::Twinsunflower
+                    | SeedType::Seashroom | SeedType::Puffshroom
+            )
+    }
+    pub fn seed_not_allowed_during_trial(&self, t: SeedType) -> bool {
+        // 对应 C++ SeedNotAllowedDuringTrial：试用锁定禁用 Squash/Threepeater
+        self.app.map_or(false, |app| unsafe { (*app).is_trial_stage_locked() })
+            && (t == SeedType::Squash || t == SeedType::Threepeater)
+    }
     pub fn draw(&self, _g: &mut Graphics) { /* TODO */ }
     pub fn update_view_lawn(&mut self) {
         if self.choose_state != SeedChooserState::ViewLawn { return; }
