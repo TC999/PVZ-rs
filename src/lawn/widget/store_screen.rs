@@ -207,6 +207,7 @@ impl StoreScreen {
             StoreItem::BonusLawnMower => 200,
             StoreItem::PoolCleaner => 100,
             StoreItem::RoofCleaner => 100,
+            StoreItem::PacketUpgrade => 75,
             _ => 0,
         }
     }

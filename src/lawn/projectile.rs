@@ -92,6 +92,7 @@ pub struct Projectile {
     pub on_high_ground: bool,
     pub target_zombie_id: ZombieID,
     pub attachment_id: AttachmentID,
+    pub last_portal_x: i32,
 }
 
 impl Projectile {
@@ -131,6 +132,7 @@ impl Projectile {
             on_high_ground: false,
             target_zombie_id: ZOMBIEID_NULL,
             attachment_id: ATTACHMENTID_NULL,
+            last_portal_x: -1,
         }
     }
 

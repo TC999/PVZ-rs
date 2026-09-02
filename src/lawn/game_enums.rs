@@ -168,60 +168,92 @@ pub enum BoardResult {
     Cheat = 6,
 }
 
+// [TRANSLATION_NOTE]: GameMode 枚举数值已显式对齐 C++ ConstEnums.h 的 GameMode 枚举（0-73）。
+// 修复：原先从 GAMEMODE_CHALLENGE_WAR_AND_PEAS_2(32) 起全部错位，导致存档文件名
+// (userdata/game{id}_{mode}.v4) 与 C++ 互不兼容。现已补齐 24 个缺失模式并把
+// ScaryPotter / I_Zombie 系列拆分到各关卡。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum GameMode {
     Adventure = 0,
-    SurvivalNormalStage1,
-    SurvivalNormalStage2,
-    SurvivalNormalStage3,
-    SurvivalNormalStage4,
-    SurvivalNormalStage5,
-    SurvivalHardStage1,
-    SurvivalHardStage2,
-    SurvivalHardStage3,
-    SurvivalHardStage4,
-    SurvivalHardStage5,
-    SurvivalEndlessStage1,
-    SurvivalEndlessStage2,
-    SurvivalEndlessStage3,
-    SurvivalEndlessStage4,
-    SurvivalEndlessStage5,
-    ChallengeWarAndPeas,
-    ChallengeWallnutBowling,
-    ChallengeSlotMachine,
-    ChallengeRainingSeeds,
-    ChallengeBeghouled,
-    ChallengeInvisighoul,
-    ChallengeSeeingStars,
-    ChallengeZombiquarium,
-    ChallengeBeghouledTwist,
-    ChallengeLittleTrouble,
-    ChallengePortalCombat,
-    ChallengeColumns,
-    ChallengeBobsledBonanza,
-    ChallengeZombieNimble,
-    ChallengeWhackAZombie,
-    ChallengeLastStand,
-    ChallengeWallnutBowling2,
-    ChallengePogoParty,
-    ChallengeDrZomboss,
-    ChallengeScaryPotter,
-    ChallengePuzzleMode,
-    ChallengeZenGarden,
-    ChallengeTreeOfWisdom,
-    ChallengeIceLevel,
-    ChallengeSunnyDay,
-    ChallengeResistance,
-    ChallengeZomBotany,
-    ChallengeTimeAttack,
-    ChallengeMovingTarget,
-    ChallengeHeavyWeapons,
+    SurvivalNormalStage1 = 1,
+    SurvivalNormalStage2 = 2,
+    SurvivalNormalStage3 = 3,
+    SurvivalNormalStage4 = 4,
+    SurvivalNormalStage5 = 5,
+    SurvivalHardStage1 = 6,
+    SurvivalHardStage2 = 7,
+    SurvivalHardStage3 = 8,
+    SurvivalHardStage4 = 9,
+    SurvivalHardStage5 = 10,
+    SurvivalEndlessStage1 = 11,
+    SurvivalEndlessStage2 = 12,
+    SurvivalEndlessStage3 = 13,
+    SurvivalEndlessStage4 = 14,
+    SurvivalEndlessStage5 = 15,
+    ChallengeWarAndPeas = 16,
+    ChallengeWallnutBowling = 17,
+    ChallengeSlotMachine = 18,
+    ChallengeRainingSeeds = 19,
+    ChallengeBeghouled = 20,
+    ChallengeInvisighoul = 21,
+    ChallengeSeeingStars = 22,
+    ChallengeZombiquarium = 23,
+    ChallengeBeghouledTwist = 24,
+    ChallengeLittleTrouble = 25,
+    ChallengePortalCombat = 26,
+    ChallengeColumns = 27,
+    ChallengeBobsledBonanza = 28,
+    /// 对应 C++ GAMEMODE_CHALLENGE_SPEED
+    ChallengeZombieNimble = 29,
+    ChallengeWhackAZombie = 30,
+    ChallengeLastStand = 31,
+    ChallengeWarAndPeas2 = 32,
+    ChallengeWallnutBowling2 = 33,
+    ChallengePogoParty = 34,
+    /// 对应 C++ GAMEMODE_CHALLENGE_FINAL_BOSS
+    ChallengeFinalBoss = 35,
+    ChallengeArtChallengeWallnut = 36,
+    ChallengeSunnyDay = 37,
+    /// 对应 C++ GAMEMODE_CHALLENGE_RESODDED
+    ChallengeResodded = 38,
+    ChallengeBigTime = 39,
+    ChallengeArtChallengeSunflower = 40,
+    ChallengeAirRaid = 41,
+    ChallengeIceLevel = 42,
+    ChallengeZenGarden = 43,
+    ChallengeHighGravity = 44,
+    ChallengeGraveDanger = 45,
+    ChallengeShovel = 46,
+    ChallengeStormyNight = 47,
+    ChallengeBungeeBlitz = 48,
+    ChallengeSquirrel = 49,
+    ChallengeTreeOfWisdom = 50,
+    ScaryPotter1 = 51,
+    ScaryPotter2 = 52,
+    ScaryPotter3 = 53,
+    ScaryPotter4 = 54,
+    ScaryPotter5 = 55,
+    ScaryPotter6 = 56,
+    ScaryPotter7 = 57,
+    ScaryPotter8 = 58,
+    ScaryPotter9 = 59,
+    ScaryPotterEndless = 60,
+    PuzzleIZombie1 = 61,
+    PuzzleIZombie2 = 62,
+    PuzzleIZombie3 = 63,
+    PuzzleIZombie4 = 64,
+    PuzzleIZombie5 = 65,
+    PuzzleIZombie6 = 66,
+    PuzzleIZombie7 = 67,
+    PuzzleIZombie8 = 68,
+    PuzzleIZombie9 = 69,
+    PuzzleIZombieEndless = 70,
     /// 对应 C++ GAMEMODE_UPSELL
-    Upsell,
+    Upsell = 71,
     /// 对应 C++ GAMEMODE_INTRO
-    Intro,
-    MaxGameModes,
+    Intro = 72,
+    MaxGameModes = 73,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -276,10 +308,52 @@ pub enum SeedType {
     Spikerock = 46,
     Cobcannon = 47,
     Imitater = 48,
-    ExplodeONut,
-    GiantWallnut,
-    Sprout,
-    Leftpeater,
+    ExplodeONut = 49,
+    GiantWallnut = 50,
+    Sprout = 51,
+    Leftpeater = 52,
+    /// 对应 C++ SEED_BEGHOULED_BUTTON_SHUFFLE
+    BeghouledButtonShuffle = 53,
+    /// 对应 C++ SEED_BEGHOULED_BUTTON_CRATER
+    BeghouledButtonCrater = 54,
+    /// 对应 C++ SEED_SLOT_MACHINE_SUN
+    SlotMachineSun = 55,
+    /// 对应 C++ SEED_SLOT_MACHINE_DIAMOND
+    SlotMachineDiamond = 56,
+    /// 对应 C++ SEED_ZOMBIQUARIUM_SNORKLE
+    ZombiquariumSnorkle = 57,
+    /// 对应 C++ SEED_ZOMBIQUARIUM_TROPHY
+    ZombiquariumTrophy = 58,
+    /// 对应 C++ SEED_ZOMBIE_NORMAL
+    ZombieNormal = 59,
+    /// 对应 C++ SEED_ZOMBIE_TRAFFIC_CONE
+    ZombieTrafficCone = 60,
+    /// 对应 C++ SEED_ZOMBIE_POLEVAULTER
+    ZombiePolevaulter = 61,
+    /// 对应 C++ SEED_ZOMBIE_PAIL
+    ZombiePail = 62,
+    /// 对应 C++ SEED_ZOMBIE_LADDER
+    ZombieLadder = 63,
+    /// 对应 C++ SEED_ZOMBIE_DIGGER
+    ZombieDigger = 64,
+    /// 对应 C++ SEED_ZOMBIE_BUNGEE
+    ZombieBungee = 65,
+    /// 对应 C++ SEED_ZOMBIE_FOOTBALL
+    ZombieFootball = 66,
+    /// 对应 C++ SEED_ZOMBIE_BALLOON
+    ZombieBalloon = 67,
+    /// 对应 C++ SEED_ZOMBIE_SCREEN_DOOR
+    ZombieScreenDoor = 68,
+    /// 对应 C++ SEED_ZOMBONI
+    Zomboni = 69,
+    /// 对应 C++ SEED_ZOMBIE_POGO
+    ZombiePogo = 70,
+    /// 对应 C++ SEED_ZOMBIE_DANCER
+    ZombieDancer = 71,
+    /// 对应 C++ SEED_ZOMBIE_GARGANTUAR
+    ZombieGargantuar = 72,
+    /// 对应 C++ SEED_ZOMBIE_IMP
+    ZombieImp = 73,
     None = -1,
 }
 
@@ -550,6 +624,7 @@ pub const RENDER_LAYER_LAWN_MOWER: i32 = 306000;
 pub const RENDER_LAYER_PARTICLE: i32 = 307000;
 pub const RENDER_LAYER_TOP: i32 = 400000;
 pub const RENDER_LAYER_FOG: i32 = 500000;
+pub const RENDER_LAYER_SCREEN_FADE: i32 = 900000;
 
 // TodCurves
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -609,6 +684,58 @@ pub enum TutorialState {
     WhackAZombie = 28,
     LastStand = 29,
     BobsledBonanza = 30,
+    /// 对应 C++ TUTORIAL_ZOMBIQUARIUM_BUY_SNORKEL
+    ZombiquariumBuySnorkel = 31,
+    /// 对应 C++ TUTORIAL_ZOMBIQUARIUM_BOUGHT_SNORKEL
+    ZombiquariumBoughtSnorkel = 32,
+    /// 对应 C++ TUTORIAL_ZOMBIQUARIUM_CLICK_TROPHY
+    ZombiquariumClickTrophy = 33,
+    /// 对应 C++ TUTORIAL_WHACK_A_ZOMBIE_BEFORE_PICK_SEED
+    WhackAZombieBeforePickSeed = 34,
+    /// 对应 C++ TUTORIAL_WHACK_A_ZOMBIE_PICK_SEED
+    WhackAZombiePickSeed = 35,
+    /// 对应 C++ TUTORIAL_WHACK_A_ZOMBIE_COMPLETED
+    WhackAZombieCompleted = 36,
+    /// 对应 C++ TUTORIAL_SHOVEL_PICKUP
+    ShovelPickup = 37,
+    /// 对应 C++ TUTORIAL_SHOVEL_DIG
+    ShovelDig = 38,
+    /// 对应 C++ TUTORIAL_SHOVEL_KEEP_DIGGING
+    ShovelKeepDigging = 39,
+    /// 对应 C++ TUTORIAL_LEVEL_2_PICK_UP_SUNFLOWER
+    Level2PickUpSunflower = 40,
+    /// 对应 C++ TUTORIAL_LEVEL_2_PLANT_SUNFLOWER
+    Level2PlantSunflower = 41,
+    /// 对应 C++ TUTORIAL_LEVEL_2_REFRESH_SUNFLOWER
+    Level2RefreshSunflower = 42,
+    /// 对应 C++ TUTORIAL_LEVEL_2_COMPLETED
+    Level2Completed = 43,
+    /// 对应 C++ TUTORIAL_MORESUN_PICK_UP_SUNFLOWER
+    MoreSunPickUpSunflower = 44,
+    /// 对应 C++ TUTORIAL_MORESUN_PLANT_SUNFLOWER
+    MoreSunPlantSunflower = 45,
+    /// 对应 C++ TUTORIAL_MORESUN_REFRESH_SUNFLOWER
+    MoreSunRefreshSunflower = 46,
+    /// 对应 C++ TUTORIAL_MORESUN_COMPLETED
+    MoreSunCompleted = 47,
+    /// 对应 C++ TUTORIAL_SLOT_MACHINE_PULL
+    SlotMachinePullTut = 48,
+    /// 对应 C++ TUTORIAL_SLOT_MACHINE_COMPLETED
+    SlotMachineCompleted = 49,
+    /// 对应 C++ TUTORIAL_SHOVEL_COMPLETED
+    ShovelCompleted = 50,
+    /// 对应 C++ TUTORIAL_ZEN_GARDEN_PICKUP_WATER
+    ZenGardenPickupWater = 51,
+    /// 对应 C++ TUTORIAL_ZEN_GARDEN_WATER_PLANT
+    ZenGardenWaterPlant = 52,
+    /// 对应 C++ TUTORIAL_ZEN_GARDEN_KEEP_WATERING
+    ZenGardenKeepWatering = 53,
+    /// 对应 C++ TUTORIAL_ZEN_GARDEN_VISIT_STORE
+    ZenGardenVisitStore = 54,
+    /// 对应 C++ TUTORIAL_ZEN_GARDEN_FERTILIZE_PLANTS
+    ZenGardenFertilizePlants = 55,
+    /// 对应 C++ TUTORIAL_ZEN_GARDEN_COMPLETED
+    ZenGardenCompleted = 56,
 }
 
 // ============================================================
@@ -763,6 +890,11 @@ pub enum HelmType {
     Pail = 2,
     FootballHelmet = 3,
     Digger = 4,
+    Redeyes = 5,
+    Headband = 6,
+    Bobsled = 7,
+    Wallnut = 8,
+    Tallnut = 9,
 }
 
 // ============================================================
@@ -1125,9 +1257,9 @@ pub enum NotRecommend {
     NeedsGraves,
     NeedsFog,
     NeedsRoof,
-    NeedsWater,
-    NeedsHighGround,
-    NeedsLowGround,
+    OnRoof,
+    ForChallenge,
+    AtNight,
 }
 
 /// PlantPriority — 植物优先级
@@ -1164,6 +1296,8 @@ pub enum PlantingReason {
     OnlyOnLilypad,
     OnlyOnFlowerpot,
     NotPassedLine,
+    /// 对应 C++ PLANTING_NOT_ON_ART
+    NotOnArt,
 }
 
 /// PlantRowType — 植物行类型
@@ -1319,6 +1453,40 @@ pub enum GameObjectType {
     ChallengeScreen,
     TitleScreen,
     AlmanacScreen,
+    /// 对应 C++ OBJECT_TYPE_TREE_OF_WISDOM
+    TreeOfWisdom,
+    /// 对应 C++ OBJECT_TYPE_SLOT_MACHINE_HANDLE
+    SlotMachineHandle,
+    /// 对应 C++ OBJECT_TYPE_SHOVEL
+    Shovel,
+    /// 对应 C++ OBJECT_TYPE_WATERING_CAN
+    WateringCan,
+    /// 对应 C++ OBJECT_TYPE_FERTILIZER
+    Fertilizer,
+    /// 对应 C++ OBJECT_TYPE_BUG_SPRAY
+    BugSpray,
+    /// 对应 C++ OBJECT_TYPE_PHONOGRAPH
+    Phonograph,
+    /// 对应 C++ OBJECT_TYPE_CHOCOLATE
+    Chocolate,
+    /// 对应 C++ OBJECT_TYPE_GLOVE
+    Glove,
+    /// 对应 C++ OBJECT_TYPE_MONEY_SIGN
+    MoneySign,
+    /// 对应 C++ OBJECT_TYPE_WHEELBARROW
+    Wheelbarrow,
+    /// 对应 C++ OBJECT_TYPE_TREE_FOOD
+    TreeFood,
+    /// 对应 C++ OBJECT_TYPE_NEXT_GARDEN
+    NextGarden,
+    /// 对应 C++ OBJECT_TYPE_MENU_BUTTON
+    MenuButton,
+    /// 对应 C++ OBJECT_TYPE_STORE_BUTTON
+    StoreButton,
+    /// 对应 C++ OBJECT_TYPE_SCARY_POT
+    ScaryPot,
+    /// 对应 C++ OBJECT_TYPE_STINKY
+    Stinky,
 }
 
 /// GridItemType — 网格物品类型
@@ -1382,6 +1550,40 @@ pub enum GridItemState {
     RakeTriggered,
     /// 脑子被碾碎（对应 C++ GRIDITEM_STATE_BRAIN_SQUISHED）
     BrainSquished,
+    /// 恐怖罐子中为僵尸（对应 C++ GRIDITEM_STATE_SCARY_POT_ZOMBIE）
+    ScaryPotZombie,
+    /// 松鼠等待（对应 C++ GRIDITEM_STATE_SQUIRREL_WAITING）
+    SquirrelWaiting,
+    /// 松鼠偷看（对应 C++ GRIDITEM_STATE_SQUIRREL_PEEKING）
+    SquirrelPeeking,
+    /// 松鼠向上跑（对应 C++ GRIDITEM_STATE_SQUIRREL_RUNNING_UP）
+    SquirrelRunningUp,
+    /// 松鼠向下跑（对应 C++ GRIDITEM_STATE_SQUIRREL_RUNNING_DOWN）
+    SquirrelRunningDown,
+    /// 松鼠向左跑（对应 C++ GRIDITEM_STATE_SQUIRREL_RUNNING_LEFT）
+    SquirrelRunningLeft,
+    /// 松鼠向右跑（对应 C++ GRIDITEM_STATE_SQUIRREL_RUNNING_RIGHT）
+    SquirrelRunningRight,
+    /// 松鼠被捕获（对应 C++ GRIDITEM_STATE_SQUIRREL_CAUGHT）
+    SquirrelCaught,
+    /// 松鼠僵尸（对应 C++ GRIDITEM_STATE_SQUIRREL_ZOMBIE）
+    SquirrelZombie,
+    /// 智慧树肥料（对应 C++ GRIDITEM_STATE_ZEN_TOOL_FERTILIZER）
+    ZenToolFertilizer,
+    /// 臭鼬向左走（对应 C++ GRIDITEM_STINKY_WALKING_LEFT）
+    StinkyWalkingLeft,
+    /// 臭鼬向左转（对应 C++ GRIDITEM_STINKY_TURNING_LEFT）
+    StinkyTurningLeft,
+    /// 臭鼬向右走（对应 C++ GRIDITEM_STINKY_WALKING_RIGHT）
+    StinkyWalkingRight,
+    /// 臭鼬向右转（对应 C++ GRIDITEM_STINKY_TURNING_RIGHT）
+    StinkyTurningRight,
+    /// 臭鼬睡觉（对应 C++ GRIDITEM_STINKY_SLEEPING）
+    StinkySleeping,
+    /// 臭鼬入睡（对应 C++ GRIDITEM_STINKY_FALLING_ASLEEP）
+    StinkyFallingAsleep,
+    /// 臭鼬醒来（对应 C++ GRIDITEM_STINKY_WAKING_UP）
+    StinkyWakingUp,
 }
 
 /// MessageStyle — 消息样式
