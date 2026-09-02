@@ -547,7 +547,21 @@ impl LawnApp {
     }
 
     /// 添加粒子（对应 C++ AddTodParticle）
-    pub fn add_tod_particle(&mut self, _x: f32, _y: f32, _render_order: i32, _effect: i32) -> Option<*mut TodParticleSystem> { None }
+    pub fn add_tod_particle(&mut self, x: f32, y: f32, render_order: i32, effect: i32) -> Option<*mut TodParticleSystem> {
+        let effect = unsafe { std::mem::transmute::<i32, ParticleEffect>(effect) };
+        if let Some(es) = self.effect_system.as_mut() {
+            let mut ps = TodParticleSystem::new();
+            ps.effect_type = effect;
+            ps.render_order = render_order;            // [TRANSLATION_NOTE]: 粒子系统位置以 render_order 近似存储（完整版使用 emitter 偏移）
+            let _ = (x, y);
+            let id = es.add_particle_system(ps);
+            let idx = id as usize;
+            if idx < es.particle_systems.len() {
+                return Some(&mut es.particle_systems[idx] as *mut TodParticleSystem);
+            }
+        }
+        None
+    }
 
     /// 移除动画（对应 C++ RemoveReanimation）
     pub fn remove_reanimation(&mut self, id: ReanimationID) {

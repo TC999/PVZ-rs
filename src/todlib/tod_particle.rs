@@ -532,7 +532,7 @@ impl TodParticleEmitter {
 
 /// 粒子系统运行时实例（对应 C++ TodParticleSystem）
 pub struct TodParticleSystem {
-    pub effect_type: ParticleEffect,
+    pub effect_type: crate::lawn::game_enums::ParticleEffect,
     pub particle_def: *mut TodParticleDefinition,
     pub particle_holder: *mut TodParticleHolder,
     pub emitter_list: TodList<ParticleEmitterID>,
@@ -540,12 +540,14 @@ pub struct TodParticleSystem {
     pub is_attachment: bool,
     pub render_order: i32,
     pub dont_update: bool,
+    // 简化生命周期：系统年龄（帧），达到默认时长后消亡
+    pub system_age: i32,
 }
 
 impl TodParticleSystem {
     pub fn new() -> Self {
         TodParticleSystem {
-            effect_type: 0,
+            effect_type: crate::lawn::game_enums::ParticleEffect::None,
             particle_def: ptr::null_mut(),
             particle_holder: ptr::null_mut(),
             emitter_list: TodList::new(),
@@ -553,12 +555,27 @@ impl TodParticleSystem {
             is_attachment: false,
             render_order: 0,
             dont_update: false,
+            system_age: 0,
         }
     }
 
     pub fn particle_system_die(&mut self) { self.dead = true; }
-    pub fn update(&mut self) {}
-    pub fn draw(&self, _g: &mut Graphics) {}
+
+    /// 更新粒子系统（简化：推进系统年龄，达到默认时长后消亡）
+    pub fn update(&mut self) {
+        if self.dont_update { return; }
+        self.system_age += 1;
+        // 默认粒子时长 150 帧（约 2.5 秒），完整版由定义驱动
+        if self.system_age > 150 {
+            self.dead = true;
+        }
+    }
+
+    /// 绘制粒子系统（简化：完整渲染依赖定义 emitter，骨架仅保留系统存在）
+    pub fn draw(&self, _g: &mut Graphics) {
+        // [TRANSLATION_NOTE]: 完整粒子渲染依赖 emitter 定义求值，当前保留系统生命周期骨架
+    }
+
     pub fn system_move(&mut self, _x: f32, _y: f32) {}
     pub fn override_color(&mut self, _emitter: &str, _color: &Color) {}
     pub fn override_extra_additive_draw(&mut self, _emitter: &str, _enable: bool) {}
