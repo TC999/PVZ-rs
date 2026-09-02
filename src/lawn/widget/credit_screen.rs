@@ -215,7 +215,40 @@ impl CreditScreen {
             }
         }
     }
-    pub fn play_reanim(&self, _index: i32) -> Option<*mut Reanimation> { None /* TODO */ }
+    pub fn play_reanim(&mut self, index: i32) -> Option<*mut Reanimation> {
+        // 对应 C++ PlayReanim：按阶段创建片尾动画并分配渲染组
+        let Some(app) = self.app else { return None };
+        unsafe {
+            // C++ 中先销毁旧动画
+            if let Some(r) = (*app).reanimation_get_mut(self.credits_reanim_id) {
+                r.reanimation_die();
+            }
+
+            let (a_reanim, prefix_assignments): (*mut Reanimation, Vec<(&str, i32)>) = match index {
+                1 => {
+                    let r = (*app).add_reanimation(0.0, 0.0, 0, ReanimationType::CreditsMain as i32)?;
+                    (r, vec![("Background", 1), ("attacher__Zombie", 2), ("Words", 3), ("SpotFront", 3)])
+                }
+                2 => {
+                    let r = (*app).add_reanimation(0.0, 0.0, 0, ReanimationType::CreditsMain2 as i32)?;
+                    (r, vec![("Background", 1), ("attacher__Zombie", 2), ("Words", 3), ("SpotFront", 3), ("attacher__undead", 2)])
+                }
+                3 => {
+                    let r = (*app).add_reanimation(0.0, 0.0, 0, ReanimationType::CreditsMain3 as i32)?;
+                    (r, vec![("Background", 1), ("attacher__Zombie", 2), ("attacher__DiscoLights", 2), ("Words", 3), ("attacher__cattail", 3), ("SpotFront", 3), ("attacher__undead", 2)])
+                }
+                _ => return None, // C++ 中 PVZP_ASSERT(false)
+            };
+
+            for (prefix, group) in prefix_assignments {
+                (*a_reanim).assign_render_group_to_prefix(prefix, group);
+            }
+            (*a_reanim).m_is_attachment = true;
+            (*a_reanim).m_loop_type = crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold;
+            self.credits_reanim_id = (*app).reanimation_get_id(a_reanim);
+            Some(a_reanim)
+        }
+    }
     pub fn jump_to_frame(&mut self, the_phase: CreditsPhase, the_frame: f32) {
         // 对应 C++ JumpToFrame：跳转片尾指定帧并计算音乐偏移
         if let Some(btn) = self.main_menu_button {
