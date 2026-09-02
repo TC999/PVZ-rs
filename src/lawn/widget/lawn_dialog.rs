@@ -382,30 +382,64 @@ impl Default for LawnDialog {
 
 /// 游戏结束对话框（对应 C++ GameOverDialog）
 pub struct GameOverDialog {
+    pub app: Option<*mut crate::lawn::lawn_app::LawnApp>,
     pub menu_button: Option<*mut DialogButton>,
+    pub x: i32,
+    pub y: i32,
 }
 
 impl GameOverDialog {
     pub fn new() -> Self {
         GameOverDialog {
+            app: None,
             menu_button: None,
+            x: 0,
+            y: 0,
         }
     }
 
-    pub fn button_depress(&mut self, _id: i32) {
-        // TODO: 从 LawnDialog.cpp 翻译
+    pub fn button_depress(&mut self, the_id: i32) {
+        // 对应 C++ ButtonDepress
+        let Some(app) = self.app else { return };
+        unsafe {
+            if the_id == 1 {
+                (*app).kill_dialog(crate::lawn::game_enums::Dialogs::GameOver);
+                (*app).kill_board();
+                if (*app).is_survival_mode() {
+                    (*app).show_challenge_screen(crate::lawn::game_enums::ChallengePage::Survival as i32);
+                } else if (*app).is_puzzle_mode() {
+                    (*app).show_challenge_screen(crate::lawn::game_enums::ChallengePage::Puzzle as i32);
+                } else if (*app).is_adventure_mode() {
+                    (*app).show_game_selector();
+                } else {
+                    (*app).show_challenge_screen(crate::lawn::game_enums::ChallengePage::Challenge as i32);
+                }
+            } else if the_id == crate::framework::widget::dialog::ID_FOOTER {
+                (*app).kill_dialog(crate::lawn::game_enums::Dialogs::GameOver);
+                (*app).end_level();
+            }
+        }
     }
 
     pub fn added_to_manager(&mut self, _manager: &mut WidgetManager) {
-        // TODO: 从 LawnDialog.cpp 翻译
+        // C++ 中 AddWidget(mMenuButton)
     }
 
     pub fn removed_from_manager(&mut self, _manager: &mut WidgetManager) {
-        // TODO: 从 LawnDialog.cpp 翻译
+        // C++ 中 RemoveWidget(mMenuButton)
     }
 
-    pub fn mouse_drag(&mut self, _x: i32, _y: i32) {
-        // TODO: 从 LawnDialog.cpp 翻译
+    pub fn mouse_drag(&mut self, x: i32, y: i32) {
+        // 对应 C++ MouseDrag：拖动时保持菜单按钮位置
+        if let Some(btn) = self.menu_button {
+            unsafe {
+                (*btn).x = 635 - self.x;
+                (*btn).y = -10 - self.y;
+                (*btn).width = 163;
+                (*btn).height = 46;
+            }
+        }
+        let _ = (x, y);
     }
 }
 
