@@ -127,11 +127,30 @@ impl ChallengeScreen {
     }
 
     pub fn button_press(&mut self, _id: i32) {
-        // TODO: 从 ChallengeScreen.cpp 翻译
+        // [TRANSLATION_NOTE]: C++ 中 PlaySample(SOUND_ALMANAC_BUTTON)
     }
 
-    pub fn button_depress(&mut self, _id: i32) {
-        // TODO: 从 ChallengeScreen.cpp 翻译
+    pub fn button_depress(&mut self, the_id: i32) {
+        // 对应 C++ ButtonDepress
+        let Some(app) = self.app else { return };
+        unsafe {
+            if the_id == 100 { // ChallengeScreen_Back
+                (*app).kill_challenge_screen();
+                (*app).do_back_to_main();
+            }
+
+            let a_challenge_mode = the_id - 200; // ChallengeScreen_Mode
+            if a_challenge_mode >= 0 && a_challenge_mode < 72 { // NUM_CHALLENGE_MODES
+                (*app).kill_challenge_screen();
+                (*app).pre_new_game(std::mem::transmute::<i32, GameMode>(a_challenge_mode + 1), true);
+            }
+
+            let a_page_index = the_id - 300; // ChallengeScreen_Page
+            if a_page_index >= 0 && a_page_index < 4 {
+                self.page_index = std::mem::transmute::<i32, ChallengePage>(a_page_index);
+                self.update_buttons();
+            }
+        }
     }
 
     pub fn update_tool_tip(&mut self) {
