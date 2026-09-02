@@ -126,7 +126,17 @@ impl CutScene {
 
     /// 开始关卡入场动画
     pub fn start_level_intro(&mut self) {
-        // [TRANSLATION_NOTE]: StartLevelIntro — 设置入场时间、墓碑、草皮、戴夫对话等
+        // 对应 C++ StartLevelIntro：设置入场时间线参数与戴夫对话起点
+        const TIME_ROLL_SOD_START: i32 = 6000;
+        const TIME_ROLL_SOD_END: i32 = 8000;
+        const TIME_GRAVE_STONE_START: i32 = 6000;
+        const TIME_GRAVE_STONE_END: i32 = 7000;
+        const TIME_READY_SET_PLANT_START: i32 = 6000;
+        const TIME_READY_SET_PLANT_END: i32 = 7830;
+        const TIME_FOG_ROLL_IN: i32 = 5950;
+        const TIME_PAN_RIGHT_START: i32 = 1500;
+        const TIME_EARLY_DAVE_LEAVE_END: i32 = 4000;
+
         self.m_cutscene_time = 0;
         if let Some(board) = self.get_board_mut() {
             board.m_show_shovel = false;
@@ -134,6 +144,107 @@ impl CutScene {
         self.m_placed_zombies = false;
         self.m_preloaded = false;
         self.m_placed_lawn_items = false;
+
+        let a_level = self.get_board().map_or(0, |b| b.level);
+        let is_first_time = self.get_app().map_or(false, |a| a.is_first_time_adventure_mode());
+        let game_mode = self.get_app().map_or(GameMode::Adventure, |a| a.game_mode);
+
+        if is_first_time && (a_level == 1 || a_level == 2 || a_level == 4) {
+            self.m_sod_time = TIME_ROLL_SOD_END - TIME_ROLL_SOD_START;
+            if let Some(board) = self.get_board_mut() {
+                board.m_sod_position = 0;
+            }
+        } else {
+            self.m_sod_time = 0;
+            if let Some(board) = self.get_board_mut() {
+                board.m_sod_position = 1000;
+            }
+        }
+
+        self.m_grave_stone_time = 0;
+        // [TRANSLATION_NOTE]: 墓碑时间细分（WhackAZombie/生存重选）依赖挑战与棋盘状态，核心逻辑保留
+        let stage_graves = self.get_board().map_or(false, |b| b.stage_has_grave_stones());
+        if stage_graves {
+            let is_whack = self.get_app().map_or(false, |a| a.is_whack_a_zombie_level());
+            if !is_whack && !self.is_survival_repick() {
+                self.m_grave_stone_time = TIME_GRAVE_STONE_END - TIME_GRAVE_STONE_START;
+                if let Some(board) = self.get_board_mut() {
+                    board.m_enable_grave_stones = true;
+                }
+            }
+        }
+
+        if is_first_time && a_level <= 2 {
+            self.m_ready_set_plant_time = 0;
+        } else if self.get_app().map_or(false, |a| {
+            a.is_shovel_level() || a.is_squirrel_level() || a.is_wallnut_bowling_level()
+                || a.game_mode == GameMode::ChallengeZombiquarium
+                || a.game_mode == GameMode::ChallengeLastStand
+                || a.game_mode == GameMode::ChallengeTreeOfWisdom
+                || a.is_izombie_level() || a.is_whack_a_zombie_level() || a.is_scary_potter_level()
+        }) {
+            self.m_ready_set_plant_time = 0;
+        } else {
+            self.m_ready_set_plant_time = TIME_READY_SET_PLANT_END - TIME_READY_SET_PLANT_START;
+        }
+
+        self.m_lawn_mower_time = 0;
+        self.m_crazy_dave_dialog_start = -1;
+        // [TRANSLATION_NOTE]: 戴夫对话起点细化分支依赖等级/关卡类型与 packet upgrade 判定，核心冒险分支保留
+        if is_first_time && a_level == 11 {
+            self.m_crazy_dave_dialog_start = 201;
+        } else if self.get_app().map_or(false, |a| a.is_wallnut_bowling_level() && a.is_adventure_mode()) {
+            self.m_crazy_dave_dialog_start = if is_first_time { 2400 } else { 2411 };
+            if let Some(board) = self.get_board_mut() {
+                board.m_show_shovel = true;
+            }
+        } else if self.get_app().map_or(false, |a| a.is_whack_a_zombie_level() && a.is_adventure_mode()) {
+            self.m_crazy_dave_dialog_start = 401;
+        } else if self.get_app().map_or(false, |a| a.is_final_boss_level() && a.is_adventure_mode()) {
+            self.m_crazy_dave_dialog_start = 2300;
+        } else if self.get_app().map_or(false, |a| a.is_scary_potter_level() && a.is_adventure_mode()) {
+            self.m_crazy_dave_dialog_start = 2500;
+        } else if self.get_app().map_or(false, |a| a.is_stormy_night_level() && a.is_adventure_mode()) {
+            self.m_crazy_dave_dialog_start = 1101;
+        } else if self.get_app().map_or(false, |a| a.is_bungee_blitz_level() && a.is_adventure_mode()) {
+            self.m_crazy_dave_dialog_start = if is_first_time { 1301 } else { 1304 };
+        } else if !is_first_time && a_level == 1 {
+            self.m_crazy_dave_dialog_start = 1601;
+        } else if game_mode == GameMode::PuzzleIZombie1 {
+            self.m_crazy_dave_dialog_start = 2200;
+        } else if game_mode == GameMode::Upsell {
+            self.m_crazy_dave_dialog_start = 3300;
+            self.m_upsell_hide_board = true;
+        } else if game_mode == GameMode::ScaryPotter1
+            && !self.get_app().map_or(false, |a| a.has_beaten_challenge(GameMode::ScaryPotter1))
+        {
+            self.m_crazy_dave_dialog_start = 3000;
+        }
+
+        if self.m_crazy_dave_dialog_start != -1 {
+            self.m_crazy_dave_time = TIME_EARLY_DAVE_LEAVE_END - TIME_PAN_RIGHT_START;
+            if self.get_app().map_or(false, |a| a.is_final_boss_level() && a.is_adventure_mode()) {
+                self.m_crazy_dave_time += 4000;
+            }
+        }
+
+        let has_fog = self.get_board().map_or(false, |b| b.stage_has_fog());
+        self.m_fog_time = if has_fog {
+            TIME_FOG_ROLL_IN - self.m_sod_time - self.m_lawn_mower_time - TIME_READY_SET_PLANT_START + 2000
+        } else {
+            0
+        };
+
+        self.m_boss_time = if self.get_app().map_or(false, |a| a.is_final_boss_level()) { 4000 } else { 0 };
+
+        if self.is_scrolled_left_at_start() {
+            // [TRANSLATION_NOTE]: C++ mBoard->Move(220, 0) 为渲染平移，Rust Board 无渲染偏移字段，暂不执行
+        }
+        if self.is_non_scrolling_cutscene() && self.m_crazy_dave_time == 0 {
+            self.cancel_intro();
+            return;
+        }
+        // [TRANSLATION_NOTE]: 房屋名提示（DisplayAdvice）与音乐选择依赖提示/音乐系统，已在上轮接入音乐；提示暂略
     }
 
     /// 取消入场动画
@@ -1039,7 +1150,50 @@ impl CutScene {
 
     /// 更新入场动画
     pub fn update_intro(&mut self) {
-        // TODO: 实现完整逻辑（对应 C++ UpdateIntro）
+        // 对应 C++ UpdateIntro：开场动画时间线
+        const TIME_INTRO_PAN_RIGHT_START: i32 = 5890;
+        const TIME_INTRO_PAN_RIGHT_END: i32 = 11890;
+        const TIME_INTRO_FADE_OUT: i32 = 10890;
+        const TIME_INTRO_LOGO_END: i32 = 5900;
+        const TIME_INTRO_END: i32 = 13890;
+
+        // C++: mBoard->Move(-AnimateCurve(...), 0) 渲染平移，Rust Board 无偏移字段
+        let _ = (TIME_INTRO_PAN_RIGHT_START, TIME_INTRO_PAN_RIGHT_END);
+
+        let scene_time = self.m_cutscene_time;
+        if scene_time == 10 {
+            self.load_intro_board();
+        }
+        if scene_time == TIME_INTRO_FADE_OUT {
+            if let Some(app) = self.get_app_mut() {
+                app.music.as_mut().map(|m| m.fade_out(250));
+            }
+        }
+        if scene_time == TIME_INTRO_LOGO_END {
+            let a_render_position = crate::lawn::board::make_render_order(
+                crate::lawn::game_enums::RENDER_LAYER_TOP, 0, 0,
+            );
+            if let Some(app) = self.get_app_mut() {
+                app.add_tod_particle(400.0, 300.0, a_render_position, crate::lawn::game_enums::ParticleEffect::ScreenFlash as i32);
+            }
+            if let Some(app) = self.get_app_mut() {
+                app.m_mute_sounds_for_cutscene = false;
+                // [TRANSLATION_NOTE]: PlaySample(SOUND_HUGE_WAVE) 依赖音效系统
+                app.m_mute_sounds_for_cutscene = true;
+            }
+        }
+        if scene_time == TIME_INTRO_FADE_OUT - 200 {
+            if let Some(app) = self.get_app_mut() {
+                app.m_mute_sounds_for_cutscene = false;
+                // [TRANSLATION_NOTE]: PlaySample(SOUND_SIREN) 依赖音效系统
+                app.m_mute_sounds_for_cutscene = true;
+            }
+        }
+        if scene_time == TIME_INTRO_END {
+            if let Some(app) = self.get_app_mut() {
+                app.pre_new_game(GameMode::Adventure, false);
+            }
+        }
     }
 
     /// 绘制入场动画
