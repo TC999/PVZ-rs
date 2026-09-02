@@ -4,6 +4,7 @@
 #![allow(dead_code)]
 
 use crate::framework::graphics::graphics::Graphics;
+use crate::todlib::tod_foley::FoleyType;
 use crate::framework::widget::widget_manager::WidgetManager;
 use crate::framework::widget::button_widget::ButtonWidget;
 use crate::framework::widget::dialog_button::DialogButton;
@@ -173,7 +174,29 @@ impl ChallengeScreen {
     }
 
     pub fn update(&mut self) {
-        // TODO: 从 ChallengeScreen.cpp 翻译
+        // 对应 C++ Update：解锁状态机（Shaking → Fading → Off）
+        self.update_tool_tip();
+        if self.unlock_state_counter > 0 {
+            self.unlock_state_counter -= 1;
+        }
+        if self.unlock_state == UnlockingState::Shaking {
+            if self.unlock_state_counter == 0 {
+                if let Some(app) = self.app {
+                    unsafe { (*app).play_foley(FoleyType::Paper as i32); }
+                }
+                self.unlock_state = UnlockingState::Fading;
+                self.unlock_state_counter = 50;
+                self.lock_shake_x = 0.0;
+                self.lock_shake_y = 0.0;
+            } else {
+                self.lock_shake_x = crate::todlib::tod_common::rand_range_float(-2.0, 2.0);
+                self.lock_shake_y = crate::todlib::tod_common::rand_range_float(-2.0, 2.0);
+            }
+        } else if self.unlock_state == UnlockingState::Fading && self.unlock_state_counter == 0 {
+            self.unlock_state = UnlockingState::Off;
+            self.unlock_state_counter = 0;
+            self.unlock_challenge_index = -1;
+        }
     }
 
     pub fn added_to_manager(&mut self, _manager: &mut WidgetManager) {
@@ -212,11 +235,94 @@ impl ChallengeScreen {
     }
 
     pub fn update_tool_tip(&mut self) {
-        // TODO: 从 ChallengeScreen.cpp 翻译
+        // 对应 C++ UpdateToolTip：锁定挑战悬停时显示解锁提示
+        let Some(app) = self.app else { return };
+        unsafe {
+            // [TRANSLATION_NOTE]: C++ 中 mWidgetManager->mMouseIn/mActive 判定鼠标在窗内；
+            // Rust 侧以 base.active 近似
+            if !(*app).base.active {
+                self.tool_tip.map_or((), |tip| unsafe { (*tip).m_visible = false; });
+                return;
+            }
+        }
+        let mouse_x = 0; // [TRANSLATION_NOTE]: Rust 侧 widget_manager 未跟踪鼠标位置
+        let mouse_y = 0;
+        for a_challenge_mode in 0..72 {
+            let Some(a_def) = get_challenge_definition(a_challenge_mode) else { continue };
+            let Some(btn) = self.challenge_buttons.get(a_challenge_mode as usize).copied().flatten() else { continue };
+            unsafe {
+                if !(*btn).visible || !(*btn).disabled {
+                    continue;
+                }
+                let in_button = mouse_x >= (*btn).x && mouse_x < (*btn).x + (*btn).width
+                    && mouse_y >= (*btn).y && mouse_y < (*btn).y + (*btn).height;
+                if !in_button || self.accomplishments_needed(a_challenge_mode) > 1 {
+                    continue;
+                }
+                let tip = self.tool_tip;
+                if let Some(tip) = tip {
+                    (*tip).m_x = (*btn).width / 2 + (*btn).x;
+                    (*tip).m_y = (*btn).y;
+                }
+                if self.more_trophies_needed(a_challenge_mode) > 0 {
+                    let mut a_label = "";
+                    if self.page_index == ChallengePage::Puzzle {
+                        if Self::is_scary_potter_level(a_def.challenge_mode) {
+                            a_label = if !(*app).has_finished_adventure() && a_def.challenge_mode == GameMode::ScaryPotter4 {
+                                "[FINISH_ADVENTURE_TOOLTIP]"
+                            } else {
+                                "[ONE_MORE_SCARY_POTTER_TOOLTIP]"
+                            };
+                        } else if Self::is_i_zombie_level(a_def.challenge_mode) {
+                            a_label = if !(*app).has_finished_adventure() && a_def.challenge_mode == GameMode::PuzzleIZombie4 {
+                                "[FINISH_ADVENTURE_TOOLTIP]"
+                            } else {
+                                "[ONE_MORE_IZOMBIE_TOOLTIP]"
+                            };
+                        }
+                    } else if !(*app).has_finished_adventure() || (*app).is_trial_stage_locked() {
+                        a_label = "[FINISH_ADVENTURE_TOOLTIP]";
+                    } else if (*app).is_survival_endless(a_def.challenge_mode) {
+                        a_label = "[10_SURVIVAL_TOOLTIP]";
+                    } else if self.page_index == ChallengePage::Survival {
+                        a_label = "[ONE_MORE_SURVIVAL_TOOLTIP]";
+                    } else if self.page_index == ChallengePage::Challenge {
+                        a_label = "[ONE_MORE_CHALLENGE_TOOLTIP]";
+                    } else {
+                        continue;
+                    }
+                    if let Some(tip) = self.tool_tip {
+                        unsafe {
+                            (*tip).set_label(a_label);
+                            (*tip).m_visible = true;
+                        }
+                    }
+                    return;
+                }
+            }
+        }
+        if let Some(tip) = self.tool_tip {
+            unsafe { (*tip).m_visible = false; }
+        }
     }
 
     pub fn mouse_down(&mut self, _x: i32, _y: i32, _click_count: i32) {
-        // TODO: 从 ChallengeScreen.cpp 翻译
+        // 对应 C++ MouseDown：快速连点 5 次解锁 Limbo 页
+        if self.limbo_page_unlocked {
+            return;
+        }
+        const MAX_GAP_TICKS: u32 = 20;
+        const CLICKS_NEEDED: i32 = 5;
+        let a_now = self.app.map_or(0, |app| unsafe { (*app).m_app_counter });
+        if a_now.saturating_sub(self.last_click_time) > MAX_GAP_TICKS {
+            self.click_count = 0;
+        }
+        self.last_click_time = a_now;
+        self.click_count += 1;
+        if self.click_count >= CLICKS_NEEDED {
+            self.limbo_page_unlocked = true;
+            self.update_buttons();
+        }
     }
 
     pub fn is_scary_potter_level(game_mode: GameMode) -> bool {
