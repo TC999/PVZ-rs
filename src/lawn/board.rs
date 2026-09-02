@@ -1695,6 +1695,35 @@ impl Board {
         None
     }
 
+    /// 关卡结束序列（对应 C++ UpdateLevelEndSequence）
+    fn update_level_end_sequence(&mut self) {
+        // C++: 生存/恐怖罐阶段推进（简化：仅处理通用结束）
+        if self.m_next_survival_stage_counter > 0 {
+            self.m_next_survival_stage_counter -= 1;
+            if self.m_next_survival_stage_counter == 0 {
+                if self.is_survival_stage_with_repick() {
+                    self.try_to_save_game();
+                }
+                self.m_level_complete = true;
+                self.remove_zombies_for_repick();
+            }
+            return;
+        }
+
+        if self.m_board_fade_out_counter < 0 {
+            return;
+        }
+        self.m_board_fade_out_counter -= 1;
+        if self.m_board_fade_out_counter == 0 {
+            self.m_level_complete = true;
+            return;
+        }
+        if self.m_board_fade_out_counter == 300 {
+            // [TRANSLATION_NOTE]: PlaySample(SOUND_LIGHTFILL) 依赖音效系统，暂不执行
+            let _ = self.level;
+        }
+    }
+
     /// 绘制淡出效果（对应 C++ DrawFadeOut）
     /// 在关卡结束或进入下一关时播放黑白淡出动画
     fn draw_fade_out(&self, g: &mut Graphics) {
@@ -2269,6 +2298,35 @@ impl Board {
         self.grid_items.push(ladder);
     }
 
+    /// 更新格子物品（对应 C++ UpdateGridItems）
+    pub fn update_grid_items(&mut self) {
+        let a_game_scene = self.app.map_or(crate::lawn::lawn_app::GameScenes::Playing, |app| unsafe { (*app).game_scene });
+        let mut a_to_die: Vec<usize> = Vec::new();
+        for item in self.grid_items.iter_mut() {
+            if item.dead {
+                continue;
+            }
+            // 墓碑计数推进（出现动画）
+            if self.m_enable_grave_stones
+                && item.grid_item_type == GridItemType::Grave
+                && item.counter < 100
+            {
+                item.counter += 1;
+            }
+            // 弹坑在游戏场景中消退
+            if item.grid_item_type == GridItemType::Crater && a_game_scene == crate::lawn::lawn_app::GameScenes::Playing {
+                if item.counter > 0 {
+                    item.counter -= 1;
+                }
+                if item.counter == 0 {
+                    item.grid_item_die();
+                }
+            }
+            item.update();
+        }
+        let _ = a_to_die;
+    }
+
     /// 添加一个弹坑（对应 C++ AddACrater）
     pub fn add_crater(&mut self, grid_x: i32, grid_y: i32) {
         let mut crater = GridItem::new();
@@ -2281,6 +2339,51 @@ impl Board {
         let mut grave = GridItem::new();
         grave.grid_item_initialize(GridItemType::Grave, grid_x, grid_y);
         self.grid_items.push(grave);
+    }
+
+    /// 获取墓碑数量（对应 C++ GetGraveStonesCount）
+    pub fn get_grave_stones_count(&self) -> i32 {
+        self.grid_items.iter().filter(|item| {
+            !item.dead && item.grid_item_type == GridItemType::Grave
+        }).count() as i32
+    }
+
+    /// 火焰扫荡（对应 C++ DoFwoosh）
+    pub fn do_fwoosh(&mut self, the_row: i32) {
+        let a_render_order = crate::lawn::board::make_render_order(
+            crate::lawn::game_enums::RENDER_LAYER_PARTICLE, the_row, 1,
+        );
+        let app_ptr = match self.app {
+            Some(a) => a,
+            None => return,
+        };
+        unsafe {
+            let app = &mut *app_ptr;
+            for i in 0..12usize {
+                let a_old_id = self.m_fwoosh_id[the_row as usize][i];
+                if a_old_id != REANIMATIONID_NULL {
+                    if let Some(reanim) = app.reanimation_get_mut(a_old_id) {
+                        reanim.reanimation_die();
+                    }
+                }
+
+                let a_pos_x = 750.0 * i as f32 / 11.0 + 10.0;
+                let a_pos_y = self.get_pos_y_based_on_row(a_pos_x + 10.0, the_row) - 10.0;
+                if let Some(ptr) = app.add_reanimation(a_pos_x, a_pos_y, a_render_order, ReanimationType::JalapenoFire as i32) {
+                    let a_id = app.reanimation_get_id(ptr);
+                    if let Some(fwoosh) = app.reanimation_get_mut(a_id) {
+                        fwoosh.set_frames_for_layer("anim_flame");
+                        fwoosh.m_loop_type = crate::todlib::reanimator::ReanimLoopType::LoopFullOffset;
+                        fwoosh.m_anim_rate *= crate::framework::common::rand_float(0.6) + 0.7; // RandRangeFloat(0.7, 1.3)
+                        let a_scale = crate::framework::common::rand_float(0.2) + 0.9; // RandRangeFloat(0.9, 1.1)
+                        let a_flip = if crate::framework::common::rand_range(2) != 0 { 1.0 } else { -1.0 };
+                        fwoosh.override_scale(a_scale * a_flip, 1.0);
+                    }
+                    self.m_fwoosh_id[the_row as usize][i] = a_id;
+                }
+            }
+        }
+        self.m_fwoosh_count_down = 100;
     }
 
     /// 添加多个墓碑（对应 C++ AddGraveStones）
@@ -3398,6 +3501,26 @@ impl Board {
             }
         }
 
+        self.clear_cursor();
+    }
+
+    /// 玉米加农炮点击发射（对应 C++ MouseDownCobcannonFire）
+    pub fn mouse_down_cobcannon_fire(&mut self, x: i32, y: i32, the_click_count: i32) {
+        if the_click_count >= 0 && y >= 80 {
+            // 防误点：30cs 延迟期间且距离准星 < 100px 时忽略
+            if self.m_cob_cannon_cursor_delay_counter > 0
+                && crate::todlib::tod_common::distance(
+                    x as f32, y as f32,
+                    self.m_cob_cannon_mouse_x as f32, self.m_cob_cannon_mouse_y as f32,
+                ) < 100.0
+            {
+                return;
+            }
+            let a_plant_id = self.cursor_object.cob_cannon_plant_id;
+            if let Some(plant) = self.plants.get_mut(a_plant_id as usize) {
+                plant.cob_cannon_fire(x, y);
+            }
+        }
         self.clear_cursor();
     }
 
