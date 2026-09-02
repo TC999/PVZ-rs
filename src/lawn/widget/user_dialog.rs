@@ -18,6 +18,53 @@ pub struct ListWidget {
     pub width: i32,
     pub height: i32,
     pub visible: bool,
+    /// 列表行文本（对应 C++ 行数据）
+    pub lines: Vec<String>,
+    /// 当前选中行索引（对应 mSelectIdx）
+    pub select_index: i32,
+}
+
+impl ListWidget {
+    pub fn new() -> Self {
+        ListWidget {
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+            visible: true,
+            lines: Vec::new(),
+            select_index: 0,
+        }
+    }
+
+    /// 移除一行（对应 C++ RemoveLine）
+    pub fn remove_line(&mut self, index: i32) {
+        if index >= 0 && (index as usize) < self.lines.len() {
+            self.lines.remove(index as usize);
+        }
+    }
+
+    /// 设置选中行（对应 C++ SetSelect）
+    pub fn set_select(&mut self, index: i32) {
+        self.select_index = index.clamp(0, (self.lines.len() as i32).saturating_sub(1));
+    }
+
+    /// 获取行数（对应 C++ GetLineCount）
+    pub fn get_line_count(&self) -> i32 {
+        self.lines.len() as i32
+    }
+
+    /// 添加一行（对应 C++ AddLine）
+    pub fn add_line(&mut self, text: &str) {
+        self.lines.push(text.to_string());
+    }
+
+    /// 设置行文本（对应 C++ SetLine）
+    pub fn set_line(&mut self, index: i32, text: &str) {
+        if index >= 0 && (index as usize) < self.lines.len() {
+            self.lines[index as usize] = text.to_string();
+        }
+    }
 }
 
 /// 用户管理对话框 — 重命名/删除用户
@@ -67,8 +114,36 @@ impl UserDialog {
     pub fn button_depress(&mut self, _id: i32) {}
     pub fn edit_widget_text(&mut self, _id: i32, _text: &str) {}
     pub fn allow_char(&self, _id: i32, _ch: char) -> bool { true }
-    pub fn finish_delete_user(&mut self) {}
-    pub fn finish_rename_user(&mut self, _new_name: &str) {}
+    pub fn finish_delete_user(&mut self) {
+        // 对应 C++ FinishDeleteUser：删除选中用户行并调整选中
+        if let Some(list) = self.user_list {
+            unsafe {
+                let a_sel_idx = (*list).select_index;
+                (*list).remove_line(a_sel_idx);
+
+                let a_sel_idx = (a_sel_idx - 1).max(0);
+                if (*list).get_line_count() > 0 {
+                    (*list).set_select(a_sel_idx);
+                }
+
+                self.num_users -= 1;
+                if self.num_users == 7 {
+                    (*list).add_line("(Create a New User)");
+                }
+            }
+        }
+    }
+
+    pub fn finish_rename_user(&mut self, new_name: &str) {
+        // 对应 C++ FinishRenameUser：重命名选中用户行
+        if let Some(list) = self.user_list {
+            unsafe {
+                if (*list).select_index < self.num_users {
+                    (*list).set_line((*list).select_index, new_name);
+                }
+            }
+        }
+    }
     pub fn get_sel_name(&self) -> String { String::new() }
     pub fn get_preferred_height(&self, _width: i32) -> i32 { 0 }
 }
