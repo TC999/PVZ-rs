@@ -4,8 +4,11 @@
 #![allow(dead_code)]
 
 use std::collections::BTreeMap;
+use std::fs;
+use std::path::Path;
 
 use crate::lawn::system::player_info::PlayerInfo;
+use crate::lawn::system::data_sync::{DataSync, DataReader, DataWriter};
 
 /// 不区分大小写的字符串比较函数（对应 C++ StringLessNoCase）
 fn case_insensitive_cmp(a: &str, b: &str) -> std::cmp::Ordering {
@@ -138,18 +141,72 @@ impl ProfileMgr {
     }
 
     /// 加载档案（从持久化存储）
-    /// 对应 C++ Load() — 使用 DataSync，此处简化为占位
+    /// 对应 C++ Load() — 从 userdata/users.dat 读取 DataSync 数据
     pub fn load(&mut self) {
-        // TODO: 集成 DataSync 反序列化
-        // 原 C++ 实现从 userdata/users.dat 读取 DataSync 数据
-        self.clear();
+        let a_file_name = "userdata/users.dat";
+        match DataReader::open_file(Path::new(a_file_name)) {
+            Some(reader) => {
+                let mut a_sync = DataSync::from_reader(reader);
+                self.sync_state(&mut a_sync);
+            }
+            None => {}
+        }
     }
 
     /// 保存档案（到持久化存储）
-    /// 对应 C++ Save() — 使用 DataSync，此处简化为占位
-    pub fn save(&self) {
-        // TODO: 集成 DataSync 序列化
-        // 原 C++ 实现写入 userdata/users.dat
+    /// 对应 C++ Save() — 将 DataSync 数据写入 userdata/users.dat
+    pub fn save(&mut self) {
+        let mut a_sync = DataSync::from_writer(DataWriter::open_memory(0x20));
+        self.sync_state(&mut a_sync);
+
+        let _ = fs::create_dir_all("userdata");
+        let a_file_name = "userdata/users.dat";
+        if let Some(writer) = a_sync.get_writer_mut() {
+            writer.write_to_file(Path::new(a_file_name));
+        }
+    }
+
+    /// 同步档案状态（对应 C++ SyncState：版本 + 档案数 + 逐个 SyncSummary）
+    pub fn sync_state(&mut self, the_sync: &mut DataSync) {
+        let is_reader = the_sync.get_reader().is_some();
+
+        // 版本号（对应 C++ gProfileVersion = 14）
+        let mut a_version: u32 = 14;
+        the_sync.sync_u32(&mut a_version);
+        the_sync.set_version(a_version as i32);
+        if a_version != 14 {
+            return;
+        }
+
+        if is_reader {
+            self.m_profile_map.clear();
+            let mut a_max_profile_id = 0u32;
+            let mut a_max_use_seq = 0u32;
+            let mut a_profile_count = the_sync.get_reader_mut().map(|r| r.read_u16()).unwrap_or(0);
+            while a_profile_count > 0 {
+                let mut a_profile = PlayerInfo::new();
+                a_profile.sync_summary(the_sync);
+                if a_profile.m_id > a_max_profile_id {
+                    a_max_profile_id = a_profile.m_id;
+                }
+                if a_profile.m_use_seq > a_max_use_seq {
+                    a_max_use_seq = a_profile.m_use_seq;
+                }
+                let name = a_profile.name.clone();
+                self.m_profile_map.insert(name, a_profile);
+                a_profile_count -= 1;
+            }
+            self.m_next_profile_id = a_max_profile_id + 1;
+            self.m_next_profile_use_seq = a_max_use_seq + 1;
+        } else {
+            if let Some(writer) = the_sync.get_writer_mut() {
+                writer.write_u16(self.m_profile_map.len() as u16);
+            }
+            // 逐个档案写入 SyncSummary（BTreeMap 按键序，与 C++ map 一致）
+            for (_name, profile) in self.m_profile_map.iter_mut() {
+                profile.sync_summary(the_sync);
+            }
+        }
     }
 
     // ======== 内部方法 ========
