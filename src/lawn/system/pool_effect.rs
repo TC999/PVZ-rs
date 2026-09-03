@@ -4,10 +4,15 @@
 // 管理水池表面的波光粼粼视觉效果，包含波纹动画与纹理渲染。
 
 use crate::framework::graphics::graphics::Graphics;
+use crate::framework::graphics::gl_interface::TriVertex;
 use crate::framework::graphics::memory_image::MemoryImage;
 
 const CAUSTIC_IMAGE_WIDTH: i32 = 128;
 const CAUSTIC_IMAGE_HEIGHT: i32 = 64;
+/// 游戏资源 IMAGE_POOL 的实际尺寸（704x300），
+/// 对应 C++ PoolEffectDraw 中 IMAGE_POOL->GetWidth()/GetHeight()
+const POOL_IMAGE_WIDTH: f32 = 704.0;
+const POOL_IMAGE_HEIGHT: f32 = 300.0;
 
 /// 水池波光效果（对应 C++ PoolEffect）
 pub struct PoolEffect {
@@ -164,11 +169,123 @@ impl PoolEffect {
     }
 
     /// 绘制水池效果（对应 C++ PoolEffectDraw）
-    pub fn draw(&mut self, g: &mut Graphics, _is_night: bool) {
+    // [TRANSLATION_NOTE]: IMAGE_POOL / IMAGE_POOL_NIGHT / IMAGE_POOL_BASE / IMAGE_POOL_SHADING /
+    /// IMAGE_POOL_BASE_NIGHT / IMAGE_POOL_SHADING_NIGHT 六个全局图片资源尚未接入 Rust 资源系统，
+    /// 软件渲染分支与基底/遮罩层纹理选择保留 C++ 的分支结构与 is_night 区分逻辑，但以注释占位；
+    /// caustic 层（mCausticImage，运行时内存生成）真实调用 Graphics::draw_triangles_tex 绘制。
+    /// is_night 的实际生效点——caustic 顶点颜色（0x30FFFFFF vs 0xC0/0x80FFFFFF）——按 C++ 原样执行。
+    ///
+    /// POOL_IMAGE_WIDTH/HEIGHT 为游戏资源 IMAGE_POOL 的 704x300 实际尺寸，
+    /// 对应 C++ 中 IMAGE_POOL->GetWidth()/GetHeight()。
+    pub fn draw(&mut self, g: &mut Graphics, the_is_night: bool) {
+        // C++: if (!mApp->Is3DAccelerated()) —— 本移植中 3D 加速恒启用，软件分支永不执行（C++ 源码注释原话）
+        if false {
+            // 软件渲染分支（保留结构）：夜晚用 IMAGE_POOL_NIGHT，白天用 IMAGE_POOL
+            if the_is_night {
+                // g->DrawImage(IMAGE_POOL_NIGHT, 34, 278); —— 资源 IMAGE_POOL_NIGHT 未接入
+            } else {
+                // g->DrawImage(IMAGE_POOL, 34, 278); —— 资源 IMAGE_POOL 未接入
+            }
+            return;
+        }
+        // pool background
+        let a_grid_square_x = POOL_IMAGE_WIDTH / 15.0f32;
+        let a_grid_square_y = POOL_IMAGE_HEIGHT / 5.0f32;
+        // aOffsetArray[3][16][6][2]（[层][x][y][xy]），对应 C++ float aOffsetArray[3][16][6][2]
+        let mut a_offset_array = [[[[0.0f32; 2]; 6]; 16]; 3];
+        for x in 0..=15 {
+            for y in 0..=5 {
+                // handles the caustic effect
+                a_offset_array[2][x][y][0] = x as f32 / 15.0f32;
+                a_offset_array[2][x][y][1] = y as f32 / 5.0f32;
+                if x != 0 && x != 15 && y != 0 && y != 5 {
+                    // LCM of all sin wave effective periods (1600, 300, 1800, 220, 3200/3, 200, 720, 640, 88)
+                    const POOL_PHASE_PERIOD: u32 = 316800u32;
+                    let a_pool_phase = (self.pool_counter % POOL_PHASE_PERIOD) as f32 * std::f32::consts::PI; // speed, * 2 is default
+                    let a_wave_time1 = a_pool_phase / 800.0f32;
+                    let a_wave_time2 = a_pool_phase / 150.0f32;
+                    let a_wave_time3 = a_pool_phase / 900.0f32;
+                    let a_wave_time4 = a_pool_phase / 800.0f32;
+                    let a_wave_time5 = a_pool_phase / 110.0f32;
+                    let x_phase = x as f32 * 3.0f32 * 2.0 * std::f32::consts::PI / 15.0f32;
+                    let y_phase = y as f32 * 3.0f32 * 2.0 * std::f32::consts::PI / 5.0f32;
+                    // verticies for rendering, dividing by 1 gives interesting results
+                    a_offset_array[0][x][y][0] = (y_phase + a_wave_time2).sin() * 0.002f32 + (y_phase + a_wave_time1).sin() * 0.005f32;
+                    a_offset_array[0][x][y][1] = (x_phase + a_wave_time5).sin() * 0.01f32 + (x_phase + a_wave_time3).sin() * 0.015f32 + (x_phase + a_wave_time4).sin() * 0.005f32;
+                    a_offset_array[1][x][y][0] = (y_phase * 0.2f32 + a_wave_time2).sin() * 0.015f32 + (y_phase * 0.2f32 + a_wave_time1).sin() * 0.012f32;
+                    a_offset_array[1][x][y][1] = (x_phase * 0.2f32 + a_wave_time5).sin() * 0.005f32 + (x_phase * 0.2f32 + a_wave_time3).sin() * 0.015f32 + (x_phase * 0.2f32 + a_wave_time4).sin() * 0.02f32;
+                    a_offset_array[2][x][y][0] += (y_phase + a_wave_time1 * 1.5f32).sin() * 0.004f32 + (y_phase + a_wave_time2 * 1.5f32).sin() * 0.005f32;
+                    a_offset_array[2][x][y][1] += (x_phase * 4.0f32 + a_wave_time5 * 2.5f32).sin() * 0.005f32 + (x_phase * 2.0f32 + a_wave_time3 * 2.5f32).sin() * 0.04f32 + (x_phase * 3.0f32 + a_wave_time4 * 2.5f32).sin() * 0.02f32;
+                } else {
+                    // skip animation
+                    a_offset_array[0][x][y][0] = 0.0f32;
+                    a_offset_array[0][x][y][1] = 0.0f32;
+                    a_offset_array[1][x][y][0] = 0.0f32;
+                    a_offset_array[1][x][y][1] = 0.0f32;
+                }
+            }
+        }
+
+        let a_index_offset_x = [0, 0, 1, 0, 1, 1];
+        let a_index_offset_y = [0, 1, 1, 0, 1, 0];
+        let zero_vert = TriVertex { x: 0.0, y: 0.0, u: 0.0, v: 0.0, color: 0 };
+        let mut a_vert_array = [[[zero_vert; 3]; 150]; 3];
+
+        for x in 0..15 {
+            for y in 0..5 {
+                for a_layer in 0..3 {
+                    // C++: TriVertex* pVert = &aVertArray[aLayer][x * 10 + y * 2][0];
+                    // 连续填充 6 个顶点（2 个三角形，Rust 数组索引 [tri][k] 与 C++ 扁平内存布局一一对应）
+                    let tri_index = x * 10 + y * 2;
+                    for a_vert_index in 0..6 {
+                        let a_index_x = x + a_index_offset_x[a_vert_index];
+                        let a_index_y = y + a_index_offset_y[a_vert_index];
+                        let p_vert = &mut a_vert_array[a_layer][tri_index + a_vert_index / 3][a_vert_index % 3];
+                        if a_layer == 2 {
+                            // caustic effect
+                            p_vert.x = (704.0f32 / 15.0f32) * a_index_x as f32 + 45.0f32; // x-offset
+                            p_vert.y = 30.0f32 * a_index_y as f32 + 288.0f32; // y-offset
+                            p_vert.u = a_offset_array[2][a_index_x][a_index_y][0] + a_index_x as f32 / 15.0f32;
+                            p_vert.v = a_offset_array[2][a_index_x][a_index_y][1] + a_index_y as f32 / 5.0f32;
+                            // use correct colors depending on the scene
+                            if !g.clip_rect.contains(p_vert.x as i32, p_vert.y as i32) {
+                                p_vert.color = 0x00FFFFFF;
+                            } else if a_index_x == 0 || a_index_x == 15 || a_index_y == 0 {
+                                p_vert.color = 0x20FFFFFF;
+                            } else if the_is_night {
+                                p_vert.color = 0x30FFFFFF;
+                            } else {
+                                p_vert.color = if a_index_x <= 7 { 0xC0FFFFFF } else { 0x80FFFFFF };
+                            }
+                        } else {
+                            // update water outlines
+                            p_vert.color = 0xFFFFFFFF;
+                            p_vert.x = a_index_x as f32 * a_grid_square_x + 35.0f32;
+                            p_vert.y = a_index_y as f32 * a_grid_square_y + 279.0f32;
+                            p_vert.u = a_offset_array[a_layer][a_index_x][a_index_y][0] + a_index_x as f32 / 15.0f32;
+                            p_vert.v = a_offset_array[a_layer][a_index_x][a_index_y][1] + a_index_y as f32 / 5.0f32;
+                            if !g.clip_rect.contains(p_vert.x as i32, p_vert.y as i32) {
+                                p_vert.color = 0x00FFFFFF;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // draw correct shading type depending on area.
+        if the_is_night {
+            // g->DrawTrianglesTex(IMAGE_POOL_BASE_NIGHT, aVertArray[0], 150); —— 资源未接入
+            // g->DrawTrianglesTex(IMAGE_POOL_SHADING_NIGHT, aVertArray[1], 150); —— 资源未接入
+        } else {
+            // g->DrawTrianglesTex(IMAGE_POOL_BASE, aVertArray[0], 150); —— 资源未接入
+            // g->DrawTrianglesTex(IMAGE_POOL_SHADING, aVertArray[1], 150); —— 资源未接入
+        }
+        // update positions
         self.update_water_effect();
-        // C++ 版本中此函数构建三角网格并调用 g->DrawTrianglesTex()
-        // Rust 版本中图形渲染管线尚未完全集成，此处为核心逻辑占位
-        _ = g;
+        // send caustic effect tris to OpenGL (tex, verts, tris)
+        if let Some(caustic) = &self.caustic_image {
+            g.draw_triangles_tex(&caustic.base, &a_vert_array[2], 150);
+        }
     }
 
     /// 更新计数器（对应 C++ PoolEffectUpdate）
