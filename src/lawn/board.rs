@@ -4062,9 +4062,12 @@ impl Board {
     }
 
     /// 处理删除队列（对应 C++ ProcessDeleteQueue）
+    /// 处理待删除队列（对应 C++ ProcessDeleteQueue）
+    /// C++ 中依次回收死亡的植物/僵尸/投射物/硬币/割草机/格子物品
     pub fn process_delete_queue(&mut self) {
-        // Vec 的 `retain` 相当于 DataArray 的清理
-        // 但在 Rust 中，我们使用 cleanup_dead() 方法
+        self.cleanup_dead();
+        self.lawn_mowers.retain(|m| !m.dead);
+        self.grid_items.retain(|g| !g.dead);
     }
 
     /// 停止所有僵尸声音（对应 C++ StopAllZombieSounds）
