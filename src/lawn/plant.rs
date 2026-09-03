@@ -547,8 +547,8 @@ impl Plant {
         }
     }
 
-    /// 寻找目标并开火
-    pub fn find_target_and_fire(&mut self, _the_row: i32, _weapon: PlantWeapon) -> bool {
+    /// 寻找目标并开火（对应 C++ Plant::FindTargetAndFire）
+    pub fn find_target_and_fire(&mut self, the_row: i32, weapon: PlantWeapon) -> bool {
         // 检查发射计数器
         self.shooting_counter += 1;
         if self.shooting_counter < self.launch_rate {
@@ -556,22 +556,14 @@ impl Plant {
         }
         self.shooting_counter = 0;
 
-        // 预先复制值，避免借用冲突
-        let row = self.base.row;
-        let plant_col = self.plant_col;
-        let seed_type = self.seed_type;
-        let x = self.base.x;
-        let y = self.base.y;
-
-        // 在 Board 中找到目标僵尸
-        if let Some(board) = self.base.get_board_mut() {
-            if board.find_zombie_in_row(row, plant_col).is_some() {
-                // 发射子弹
-                board.add_projectile((x + 40) as f32, (y + 20) as f32, row, seed_type);
-                return true;
-            }
+        // 在 Board 中找到目标僵尸（返回 ZombieID）
+        let target_zombie_id = self.find_target_zombie(the_row, weapon);
+        if target_zombie_id.is_none() {
+            return false;
         }
-        false
+        // [TRANSLATION_NOTE]: C++ EndBlink + shooting reanim 动画设置未接入
+        self.fire(target_zombie_id, the_row, weapon);
+        true
     }
 
     /// 发射三发子弹（对应 C++ LaunchThreepeater）
@@ -619,37 +611,237 @@ impl Plant {
         }
     }
 
-    /// 发射子弹/效果（对应 C++ Plant::Fire 简化版）
-    pub fn fire(&mut self, _target_zombie: Option<&mut Zombie>, _row: i32, _weapon: PlantWeapon) {
+    /// 开火（对应 C++ Plant::Fire：按 seed_type/weapon 决定弹种、伤害、特效）
+    pub fn fire(&mut self, target_zombie_id: Option<ZombieID>, the_row: i32, the_plant_weapon: PlantWeapon) {
         // 特殊植物直接造成范围伤害
-        match self.seed_type {
-            SeedType::Fumeshroom | SeedType::Gloomshroom => {
-                // 依赖底层系统
-                return;
+        if self.seed_type == SeedType::Fumeshroom {
+            self.do_row_area_damage(20, 2);
+            if let Some(app) = self.base.get_app() {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::Fume as i32);
             }
-            SeedType::Starfruit => {
-                // 依赖底层系统
-                return;
-            }
-            _ => {}
+            return;
+        }
+        if self.seed_type == SeedType::Gloomshroom {
+            self.do_row_area_damage(20, 2);
+            return;
+        }
+        if self.seed_type == SeedType::Starfruit {
+            self.launch_star_fruit();
+            return;
         }
 
-        // 普通植物发射子弹
-        let x = self.base.x;
-        let y = self.base.y;
-        let row = self.base.row;
+        // 按 seed_type 选择弹种（对应 C++ switch）
+        let mut a_projectile_type = match self.seed_type {
+            SeedType::Peashooter | SeedType::Repeater | SeedType::Threepeater
+            | SeedType::Splitpea | SeedType::Gatlingpea | SeedType::Leftpeater => crate::lawn::projectile::ProjectileType::Pea,
+            SeedType::Snowpea => crate::lawn::projectile::ProjectileType::Snowpea,
+            SeedType::Puffshroom | SeedType::Scaredyshroom | SeedType::Seashroom => crate::lawn::projectile::ProjectileType::Puff,
+            SeedType::Cactus | SeedType::Cattail => crate::lawn::projectile::ProjectileType::Spike,
+            SeedType::Cabbagepult => crate::lawn::projectile::ProjectileType::Cabbage,
+            SeedType::Kernelpult => crate::lawn::projectile::ProjectileType::Kernel,
+            SeedType::Melonpult => crate::lawn::projectile::ProjectileType::Melon,
+            SeedType::Wintermelon => crate::lawn::projectile::ProjectileType::Wintermelon,
+            SeedType::Cobcannon => crate::lawn::projectile::ProjectileType::Cobbig,
+            _ => crate::lawn::projectile::ProjectileType::Pea,
+        };
+        if self.seed_type == SeedType::Kernelpult && the_plant_weapon == PlantWeapon::Secondary {
+            a_projectile_type = crate::lawn::projectile::ProjectileType::Butter;
+        }
+
+        // 音效（对应 C++ FOLEY_THROW / FOLEY_SNOW_PEA_SPARKLES / FOLEY_PUFF）
+        if let Some(app) = self.base.get_app() {
+            app.play_foley(crate::todlib::tod_foley::FoleyType::Throw as i32);
+            if self.seed_type == SeedType::Snowpea || self.seed_type == SeedType::Wintermelon {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::SnowPeaSparkles as i32);
+            } else if self.seed_type == SeedType::Puffshroom
+                || self.seed_type == SeedType::Scaredyshroom
+                || self.seed_type == SeedType::Seashroom
+            {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::Puff as i32);
+            }
+        }
+
+        // 计算发射原点（对应 C++ 大量 if-else 偏移）
+        let m_x = self.base.x;
+        let m_y = self.base.y;
+        let m_row = self.base.row;
+        let mut a_origin_x;
+        let mut a_origin_y;
+        if self.seed_type == SeedType::Puffshroom {
+            a_origin_x = m_x + 40;
+            a_origin_y = m_y + 40;
+        } else if self.seed_type == SeedType::Seashroom {
+            a_origin_x = m_x + 45;
+            a_origin_y = m_y + 63;
+        } else if self.seed_type == SeedType::Cabbagepult {
+            a_origin_x = m_x + 5;
+            a_origin_y = m_y - 12;
+        } else if self.seed_type == SeedType::Melonpult || self.seed_type == SeedType::Wintermelon {
+            a_origin_x = m_x + 25;
+            a_origin_y = m_y - 46;
+        } else if self.seed_type == SeedType::Cattail {
+            a_origin_x = m_x + 20;
+            a_origin_y = m_y - 3;
+        } else if self.seed_type == SeedType::Kernelpult && the_plant_weapon == PlantWeapon::Primary {
+            a_origin_x = m_x + 19;
+            a_origin_y = m_y - 37;
+        } else if self.seed_type == SeedType::Kernelpult && the_plant_weapon == PlantWeapon::Secondary {
+            a_origin_x = m_x + 12;
+            a_origin_y = m_y - 56;
+        } else if self.seed_type == SeedType::Peashooter
+            || self.seed_type == SeedType::Snowpea
+            || self.seed_type == SeedType::Repeater
+        {
+            let (a_offset_x, a_offset_y) = self.get_pea_head_offset();
+            a_origin_x = m_x + a_offset_x + 24;
+            a_origin_y = m_y + a_offset_y - 33;
+        } else if self.seed_type == SeedType::Leftpeater {
+            let (a_offset_x, a_offset_y) = self.get_pea_head_offset();
+            a_origin_x = m_x + a_offset_x - 57;
+            a_origin_y = m_y + a_offset_y - 33;
+        } else if self.seed_type == SeedType::Gatlingpea {
+            let (a_offset_x, a_offset_y) = self.get_pea_head_offset();
+            a_origin_x = m_x + a_offset_x + 34;
+            a_origin_y = m_y + a_offset_y - 33;
+        } else if self.seed_type == SeedType::Splitpea {
+            let (a_offset_x, a_offset_y) = self.get_pea_head_offset();
+            a_origin_y = m_y + a_offset_y - 33;
+            if the_plant_weapon == PlantWeapon::Secondary {
+                a_origin_x = m_x + a_offset_x - 64;
+            } else {
+                a_origin_x = m_x + a_offset_x + 24;
+            }
+        } else if self.seed_type == SeedType::Threepeater {
+            a_origin_x = m_x + 45;
+            a_origin_y = m_y + 10;
+        } else if self.seed_type == SeedType::Scaredyshroom {
+            a_origin_x = m_x + 29;
+            a_origin_y = m_y + 21;
+        } else if self.seed_type == SeedType::Cactus {
+            if the_plant_weapon == PlantWeapon::Primary {
+                a_origin_x = m_x + 93;
+                a_origin_y = m_y - 50;
+            } else {
+                a_origin_x = m_x + 70;
+                a_origin_y = m_y + 23;
+            }
+        } else if self.seed_type == SeedType::Cobcannon {
+            a_origin_x = m_x - 44;
+            a_origin_y = m_y - 184;
+        } else {
+            a_origin_x = m_x + 10;
+            a_origin_y = m_y + 5;
+        }
+        if let Some(board) = self.base.get_board() {
+            if board.get_flower_pot_at(self.plant_col, m_row).is_some() {
+                a_origin_y -= 5;
+            }
+        }
+        // [TRANSLATION_NOTE]: C++ Snowpea/Puffshroom/Scaredyshroom 枪口粒子未接入
+
+        // 投石车目标预测（对应 C++ LOBED 弹道计算）
+        let mut a_range_x = 700.0f32 - a_origin_x as f32;
+        let mut a_range_y = 0.0f32;
+        if self.seed_type == SeedType::Cabbagepult
+            || self.seed_type == SeedType::Kernelpult
+            || self.seed_type == SeedType::Melonpult
+            || self.seed_type == SeedType::Wintermelon
+        {
+            if let Some(board) = self.base.get_board() {
+                if let Some(zombie) = target_zombie_id.and_then(|id| board.zombie_try_to_get(id)) {
+                    let z_rect = zombie.get_zombie_rect();
+                    a_range_x = zombie.zombie_target_lead_x(50.0) - a_origin_x as f32 - 30.0;
+                    a_range_y = z_rect.y as f32 - a_origin_y as f32;
+                    if zombie.zombie_phase == ZombiePhase::DolphinRiding {
+                        a_range_x -= 60.0;
+                    }
+                    if zombie.zombie_type == ZombieType::Pogo && zombie.has_object {
+                        a_range_x -= 60.0;
+                    }
+                    if zombie.zombie_phase == ZombiePhase::SnorkelWalkingInPool {
+                        a_range_x -= 40.0;
+                    }
+                    if zombie.zombie_type == ZombieType::Boss {
+                        a_range_y = board.grid_to_pixel_y(8, m_row) as f32 - a_origin_y as f32;
+                    }
+                }
+            }
+            if a_range_x < 40.0 {
+                a_range_x = 40.0;
+            }
+        }
+
+        // 预计算，避免在 board 借用期间访问 self（借用检查）
+        let a_damage_range_flags = self.get_damage_range_flags(the_plant_weapon);
+        let cob_target_x = self.target_x as f32 - 40.0;
+        let cob_target_row = if let Some(board) = self.base.get_board() {
+            board.pixel_to_grid_y_keep_on_board(self.target_x, self.target_y)
+        } else {
+            0
+        };
+
+        // 发射子弹并设置弹道参数
         if let Some(board) = self.base.get_board_mut() {
-            board.add_projectile((x + 40) as f32, (y + 20) as f32, row, self.seed_type);
+            let idx = board.add_projectile(a_origin_x as f32, a_origin_y as f32, the_row, self.seed_type);
+            let proj = &mut board.projectiles[idx];
+            proj.projectile_type = a_projectile_type;
+            proj.damage_range_flags = a_damage_range_flags;
+
+            if self.seed_type == SeedType::Cabbagepult
+                || self.seed_type == SeedType::Kernelpult
+                || self.seed_type == SeedType::Melonpult
+                || self.seed_type == SeedType::Wintermelon
+            {
+                proj.motion = crate::lawn::projectile::ProjectileMotion::Lobbed;
+                proj.vel_x = a_range_x / 120.0;
+                proj.vel_y = 0.0;
+                proj.vel_z = a_range_y / 120.0 - 7.0;
+                proj.acc_z = 0.115;
+            } else if self.seed_type == SeedType::Threepeater {
+                if the_row < m_row {
+                    proj.motion = crate::lawn::projectile::ProjectileMotion::Threepeater;
+                    proj.vel_y = -3.0;
+                    proj.shadow_y += 80.0;
+                } else if the_row > m_row {
+                    proj.motion = crate::lawn::projectile::ProjectileMotion::Threepeater;
+                    proj.vel_y = 3.0;
+                    proj.shadow_y -= 80.0;
+                }
+            } else if self.seed_type == SeedType::Puffshroom || self.seed_type == SeedType::Seashroom {
+                // [TRANSLATION_NOTE]: C++ MOTION_PUFF 未在 Rust 枚举中，用 Floating 近似
+                proj.motion = crate::lawn::projectile::ProjectileMotion::Floating;
+            } else if self.seed_type == SeedType::Splitpea && the_plant_weapon == PlantWeapon::Secondary {
+                // [TRANSLATION_NOTE]: C++ MOTION_BACKWARDS 未在 Rust 枚举中，暂用 Straight + 负速
+                proj.motion = crate::lawn::projectile::ProjectileMotion::Straight;
+                proj.vel_x = -3.33;
+            } else if self.seed_type == SeedType::Leftpeater {
+                // [TRANSLATION_NOTE]: C++ MOTION_BACKWARDS 未在 Rust 枚举中，暂用 Straight + 负速
+                proj.motion = crate::lawn::projectile::ProjectileMotion::Straight;
+                proj.vel_x = -3.33;
+            } else if self.seed_type == SeedType::Cattail {
+                // [TRANSLATION_NOTE]: C++ MOTION_HOMING 未在 Rust 枚举中，暂用 Straight
+                proj.motion = crate::lawn::projectile::ProjectileMotion::Straight;
+                proj.target_zombie_id = target_zombie_id.unwrap_or(ZOMBIEID_NULL);
+            } else if self.seed_type == SeedType::Cobcannon {
+                proj.motion = crate::lawn::projectile::ProjectileMotion::Lobbed;
+                proj.vel_x = 0.001;
+                proj.vel_y = 0.0;
+                proj.acc_z = 0.0;
+                proj.vel_z = -8.0;
+                proj.cob_target_x = cob_target_x;
+                proj.cob_target_row = cob_target_row;
+            }
         }
     }
 
-    /// 寻找目标僵尸
-    pub fn find_target_zombie(&self, row: i32, _weapon: PlantWeapon) -> Option<ZombieID> {
+    /// 寻找目标僵尸（对应 C++ Plant::FindTargetZombie）
+    /// 返回僵尸在 mZombies 中的索引（Rust 侧用 Vec 索引作为 ZombieID）
+    pub fn find_target_zombie(&self, row: i32, weapon: PlantWeapon) -> Option<ZombieID> {
         if let Some(board) = self.base.get_board() {
-            let attack_rect = self.get_plant_attack_rect(_weapon);
+            let attack_rect = self.get_plant_attack_rect(weapon);
             let mut best_id = None;
             let mut best_weight = -999999;
-            for zombie in &board.zombies {
+            for (i, zombie) in board.zombies.iter().enumerate() {
                 if zombie.dead { continue; }
                 let row_dev = if zombie.zombie_type == ZombieType::Boss { 0 } else { zombie.base.row - row };
                 if row_dev != 0 { continue; }
@@ -658,7 +850,7 @@ impl Plant {
                     let weight = -z_rect.x;
                     if best_id.is_none() || weight > best_weight {
                         best_weight = weight;
-                        best_id = Some(zombie.base.render_order as u32);
+                        best_id = Some(i as u32);
                     }
                 }
             }
@@ -1115,9 +1307,23 @@ impl Plant {
     }
 
     /// 预加载植物资源（对应 C++ Plant::PreloadPlantResources）
-    /// [TRANSLATION_NOTE]: C++ 中按种子类型加载对应 reanim 定义与图片；Rust 侧
-    /// reanim 定义加载在 reanim_loader 中处理，此处骨架保留调用链
-    pub fn preload_plant_resources(_seed_type: SeedType) {}
+    pub fn preload_plant_resources(seed_type: SeedType) {
+        let a_plant_def = get_plant_definition(seed_type);
+        if a_plant_def.reanimation_type != ReanimationType::None {
+            crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(a_plant_def.reanimation_type);
+        }
+
+        if seed_type == SeedType::Cherrybomb {
+            crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::ZombieCharred);
+        } else if seed_type == SeedType::Jalapeno {
+            crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::JalapenoFire);
+        } else if seed_type == SeedType::Torchwood {
+            crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::FirePea);
+            crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::JalapenoFire);
+        } else if Plant::is_nocturnal(seed_type) {
+            crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::Sleeping);
+        }
+    }
 
     /// 绘制植物种子图像（对应 C++ Plant::DrawSeedType）
     pub fn draw_seed_type(
@@ -1283,7 +1489,79 @@ impl Plant {
     pub fn is_in_play(&self) -> bool { self.is_on_board }
 
     /// 设置睡眠状态（对应 C++ SetSleeping）
-    pub fn set_sleeping(&mut self, _is_asleep: bool) {}
+    pub fn set_sleeping(&mut self, is_asleep: bool) {
+        if self.is_asleep == is_asleep || self.not_on_ground() {
+            return;
+        }
+
+        self.is_asleep = is_asleep;
+        if is_asleep {
+            let mut a_pos_x = self.base.x as f32 + 50.0;
+            let mut a_pos_y = self.base.y as f32 + 40.0;
+            if self.seed_type == SeedType::Fumeshroom {
+                a_pos_x += 12.0;
+            } else if self.seed_type == SeedType::Scaredyshroom {
+                a_pos_y -= 20.0;
+            } else if self.seed_type == SeedType::Gloomshroom {
+                a_pos_y -= 12.0;
+            }
+
+            let a_render_order = self.base.render_order + 2;
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(a_sleep_reanim) = app.add_reanimation(a_pos_x, a_pos_y, a_render_order, ReanimationType::Sleeping as i32) {
+                    // [TRANSLATION_NOTE]: C++ 设置 mLoopType/mAnimRate/mAnimTime — Rust 侧指针访问受限，
+                    // 通过 reanimation_get_id 记录后由 reanim 系统更新
+                    self.sleeping_reanim_id = app.reanimation_get_id(a_sleep_reanim);
+                }
+                // [TRANSLATION_NOTE]: 上述 reanim 字段（LOOP、RandRangeFloat(6,8)、RandRangeFloat(0,0.9)）未接入
+            }
+        } else {
+            if let Some(app) = self.base.get_app_mut() {
+                app.remove_reanimation(self.sleeping_reanim_id);
+                self.sleeping_reanim_id = REANIMATIONID_NULL;
+            }
+        }
+
+        // 身体动画切换（对应 C++ 后半段）
+        let reanim_id = self.body_reanim_id;
+        let has_reanim = self.base.get_app_mut().map_or(false, |app| app.reanimation_get_mut(reanim_id).is_some());
+        if !has_reanim {
+            return;
+        }
+
+        if is_asleep {
+            if !self.is_in_play() && self.seed_type == SeedType::Sunshroom {
+                self.set_body_reanim_frame("anim_bigsleep");
+            } else if self.base.get_app().and_then(|app| app.reanimation_get(reanim_id)).map_or(false, |r| r.track_exists("anim_sleep")) {
+                let a_anim_time = self.base.get_app().and_then(|app| app.reanimation_get(reanim_id)).map_or(0.0, |r| r.m_anim_time);
+                self.set_body_reanim_frame("anim_sleep");
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(reanim) = app.reanimation_get_mut(reanim_id) {
+                        reanim.m_anim_time = a_anim_time;
+                    }
+                }
+            } else {
+                self.set_body_reanim_rate(1.0);
+            }
+            self.end_blink();
+        } else {
+            if !self.is_in_play() && self.seed_type == SeedType::Sunshroom {
+                self.set_body_reanim_frame("anim_bigidle");
+            } else if self.base.get_app().and_then(|app| app.reanimation_get(reanim_id)).map_or(false, |r| r.track_exists("anim_idle")) {
+                let a_anim_time = self.base.get_app().and_then(|app| app.reanimation_get(reanim_id)).map_or(0.0, |r| r.m_anim_time);
+                self.set_body_reanim_frame("anim_idle");
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(reanim) = app.reanimation_get_mut(reanim_id) {
+                        reanim.m_anim_time = a_anim_time;
+                    }
+                }
+            }
+            if self.is_in_play() && self.base.get_app().and_then(|app| app.reanimation_get(reanim_id)).map_or(0.0, |r| r.m_anim_rate) < 2.0 {
+                // C++ RandRangeFloat(10.0f, 15.0f) — 用 10 + rand_float(5) 近似
+                self.set_body_reanim_rate(10.0 + crate::framework::common::rand_float(5.0));
+            }
+        }
+    }
 
     /// 附加眨眼动画（对应 C++ AttachBlinkAnim）
     pub fn attach_blink_anim(&mut self, _body_reanim: *mut Reanimation) -> Option<*mut Reanimation> {
@@ -1375,34 +1653,109 @@ impl Plant {
     }
 
     /// 设置身体动画帧（对应 C++ 设置 Reanimation 的 FramesForLayer）
-    pub fn set_body_reanim_frame(&mut self, _layer: &str) {}
+    pub fn set_body_reanim_frame(&mut self, layer: &str) {
+        let reanim_id = self.body_reanim_id;
+        if let Some(app) = self.base.get_app_mut() {
+            if let Some(reanim) = app.reanimation_get_mut(reanim_id) {
+                reanim.set_frames_for_layer(layer);
+            }
+        }
+    }
 
     /// 设置身体动画速率（对应 C++ 设置 Reanimation 的 mAnimRate）
-    pub fn set_body_reanim_rate(&mut self, _rate: f32) {}
+    pub fn set_body_reanim_rate(&mut self, rate: f32) {
+        let reanim_id = self.body_reanim_id;
+        if let Some(app) = self.base.get_app_mut() {
+            if let Some(reanim) = app.reanimation_get_mut(reanim_id) {
+                reanim.m_anim_rate = rate;
+            }
+        }
+    }
 
     /// 设置身体动画循环模式（对应 C++ 设置 Reanimation 的 mLoopType）
-    pub fn set_body_reanim_loop(&mut self, _loop_type: ReanimLoopType) {}
+    pub fn set_body_reanim_loop(&mut self, loop_type: ReanimLoopType) {
+        let reanim_id = self.body_reanim_id;
+        if let Some(app) = self.base.get_app_mut() {
+            if let Some(reanim) = app.reanimation_get_mut(reanim_id) {
+                reanim.m_loop_type = loop_type;
+            }
+        }
+    }
 
     /// 设置帧基础姿势（对应 C++ 设置 Reanimation 的 mFrameBasePose）
-    pub fn set_body_reanim_frame_base_pose(&mut self, _pose: i32) {}
+    pub fn set_body_reanim_frame_base_pose(&mut self, pose: i32) {
+        let reanim_id = self.body_reanim_id;
+        if let Some(app) = self.base.get_app_mut() {
+            if let Some(reanim) = app.reanimation_get_mut(reanim_id) {
+                reanim.m_frame_base_pose = pose;
+            }
+        }
+    }
 
     /// 添加头部重动画（对应 C++ 添加头部 Reanimation）
-    pub fn add_head_reanim(&mut self, _layer: &str) {}
+    pub fn add_head_reanim(&mut self, layer: &str) {
+        let reanim_id = self.head_reanim_id;
+        if let Some(app) = self.base.get_app_mut() {
+            if let Some(reanim) = app.reanimation_get_mut(reanim_id) {
+                reanim.set_frames_for_layer(layer);
+            }
+        }
+    }
 
     /// 添加头部重动画2（对应 C++ 添加第二个头部 Reanimation）
-    pub fn add_head_reanim2(&mut self, _layer: &str) {}
+    pub fn add_head_reanim2(&mut self, layer: &str) {
+        let reanim_id = self.head_reanim_id2;
+        if let Some(app) = self.base.get_app_mut() {
+            if let Some(reanim) = app.reanimation_get_mut(reanim_id) {
+                reanim.set_frames_for_layer(layer);
+            }
+        }
+    }
 
     /// 添加头部重动画3（对应 C++ 添加第三个头部 Reanimation）
-    pub fn add_head_reanim3(&mut self, _layer: &str) {}
+    pub fn add_head_reanim3(&mut self, layer: &str) {
+        let reanim_id = self.head_reanim_id3;
+        if let Some(app) = self.base.get_app_mut() {
+            if let Some(reanim) = app.reanimation_get_mut(reanim_id) {
+                reanim.set_frames_for_layer(layer);
+            }
+        }
+    }
 
     /// 播放身体重动画（对应 C++ Plant::PlayBodyReanim）
-    pub fn play_body_reanim(&mut self, _track_name: &str, _loop_type: ReanimLoopType, _blend_time: i32, _anim_rate: f32) {
-        // [TRANSLATION_NOTE]: reanim 系统未接入，仅保留调用骨架
+    pub fn play_body_reanim(&mut self, track_name: &str, loop_type: ReanimLoopType, blend_time: i32, anim_rate: f32) {
+        let reanim_id = self.body_reanim_id;
+        if let Some(app) = self.base.get_app_mut() {
+            if let Some(reanim) = app.reanimation_get_mut(reanim_id) {
+                // C++: if (theBlendTime > 0) aBodyReanim->StartBlend(theBlendTime)
+                if blend_time > 0 {
+                    // [TRANSLATION_NOTE]: StartBlend 未在 Rust Reanimation 中实现
+                }
+                if anim_rate > 0.0 {
+                    reanim.m_anim_rate = anim_rate;
+                }
+                reanim.m_loop_type = loop_type;
+                reanim.m_loop_count = 0;
+                reanim.set_frames_for_layer(track_name);
+            }
+        }
     }
 
     /// 播放待机动画（对应 C++ Plant::PlayIdleAnim）
-    pub fn play_idle_anim(&mut self, _rate: f32) {
-        // [TRANSLATION_NOTE]: reanim 系统未接入，仅保留调用骨架
+    pub fn play_idle_anim(&mut self, rate: f32) {
+        let reanim_id = self.body_reanim_id;
+        let has_reanim = self.base.get_app_mut().map_or(false, |app| app.reanimation_get_mut(reanim_id).is_some());
+        if !has_reanim {
+            return;
+        }
+        self.play_body_reanim("anim_idle", ReanimLoopType::Loop, 20, rate);
+        if self.base.get_app().map_or(false, |app| app.is_izombie_level()) {
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(reanim) = app.reanimation_get_mut(reanim_id) {
+                    reanim.m_anim_rate = 0.0;
+                }
+            }
+        }
     }
 
     /// 绘制高度偏移（对应 C++ PlantDrawHeightOffset，静态函数；thePlant 可为 nullptr）
@@ -1542,34 +1895,95 @@ impl Plant {
         }
         self.state = PlantState::DoingSpecial;
         self.do_special_countdown = 100;
-        // 依赖底层系统
+        // [TRANSLATION_NOTE]: C++ 设置 anim_explode 动画 + SetShakeOverride + FOLEY_REVERSE_EXPLOSION — reanim 未接入
+        self.play_body_reanim("anim_explode", ReanimLoopType::PlayOnceAndHold, 0, 23.0);
+        if let Some(app) = self.base.get_app() {
+            app.play_foley(crate::todlib::tod_foley::FoleyType::ReverseExplosion as i32);
+        }
     }
 
     pub fn update_ice_shroom(&mut self) {
         if !self.is_asleep && self.state != PlantState::DoingSpecial {
             self.state = PlantState::DoingSpecial;
             self.do_special_countdown = 100;
-            // 依赖底层系统
+            // [TRANSLATION_NOTE]: C++ 设置 anim_explode 动画 + FOLEY_ICE — reanim 未接入
         }
     }
     pub fn update_chomper(&mut self) {
         if self.state == PlantState::Ready {
-            // 依赖底层系统
-            self.state = PlantState::ChomperBiting;
-            self.state_countdown = 70;
+            if self.find_target_zombie(self.base.row, PlantWeapon::Primary).is_some() {
+                self.play_body_reanim("anim_bite", ReanimLoopType::PlayOnceAndHold, 20, 24.0);
+                self.state = PlantState::ChomperBiting;
+                self.state_countdown = 70;
+            }
         } else if self.state == PlantState::ChomperBiting {
             if self.state_countdown == 0 {
-                // 依赖底层系统
-                self.state = PlantState::ChomperBitingGotOne;
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::BigChomp as i32);
+                }
+                let a_zombie_id = self.find_target_zombie(self.base.row, PlantWeapon::Primary);
+                // doBite：Gargantuar/RedeyeGargantuar/Boss 只能咬 40 伤害
+                let mut do_bite = false;
+                if let Some(board) = self.base.get_board() {
+                    if let Some(zombie) = a_zombie_id.and_then(|id| board.zombie_try_to_get(id)) {
+                        if zombie.zombie_type == ZombieType::Gargantuar
+                            || zombie.zombie_type == ZombieType::RedeEyeGargantuar
+                            || zombie.zombie_type == ZombieType::Boss
+                        {
+                            do_bite = true;
+                        }
+                    }
+                }
+                // doMiss：无目标，或（未被冻结时）弹跳/撑杆跳
+                let mut do_miss = false;
+                if a_zombie_id.is_none() {
+                    do_miss = true;
+                } else if let Some(board) = self.base.get_board() {
+                    if let Some(zombie) = a_zombie_id.and_then(|id| board.zombie_try_to_get(id)) {
+                        if !zombie.is_immobilized() {
+                            if zombie.is_bouncing_pogo()
+                                || zombie.zombie_phase == ZombiePhase::PolevaulterInVault
+                                || zombie.zombie_phase == ZombiePhase::PolevaulterPreVault
+                            {
+                                do_miss = true;
+                            }
+                        }
+                    }
+                }
+                if do_bite {
+                    if let Some(app) = self.base.get_app() {
+                        app.play_foley(crate::todlib::tod_foley::FoleyType::Splat as i32);
+                    }
+                    if let Some(board) = self.base.get_board_mut() {
+                        if let Some(zombie) = a_zombie_id.and_then(|id| board.zombie_try_to_get_mut(id)) {
+                            zombie.take_damage(40, 0);
+                        }
+                    }
+                    self.state = PlantState::ChomperBitingMissed;
+                } else if do_miss {
+                    self.state = PlantState::ChomperBitingMissed;
+                } else {
+                    if let Some(board) = self.base.get_board_mut() {
+                        if let Some(zombie) = a_zombie_id.and_then(|id| board.zombie_try_to_get_mut(id)) {
+                            zombie.die_with_loot();
+                        }
+                    }
+                    self.state = PlantState::ChomperBitingGotOne;
+                }
             }
         } else if self.state == PlantState::ChomperBitingGotOne {
+            // [TRANSLATION_NOTE]: C++ 需 aBodyReanim->mLoopCount>0 才进入消化 — reanim 未接入
+            self.play_body_reanim("anim_chew", ReanimLoopType::Loop, 0, 15.0);
             self.state = PlantState::ChomperDigesting;
             self.state_countdown = 4000;
         } else if self.state == PlantState::ChomperDigesting {
             if self.state_countdown == 0 {
+                self.play_body_reanim("anim_swallow", ReanimLoopType::PlayOnceAndHold, 20, 12.0);
                 self.state = PlantState::ChomperSwallowing;
             }
         } else if self.state == PlantState::ChomperSwallowing || self.state == PlantState::ChomperBitingMissed {
+            // [TRANSLATION_NOTE]: C++ 需 aBodyReanim->mLoopCount>0 — reanim 未接入
+            self.play_idle_anim(0.0);
             self.state = PlantState::Ready;
         }
     }
@@ -2186,16 +2600,22 @@ impl Plant {
     pub fn update_potato(&mut self) {
         if self.state == PlantState::NotReady {
             if self.state_countdown == 0 {
+                // [TRANSLATION_NOTE]: PARTICLE_POTATO_MINE_RISE + FOLEY_DIRT_RISE 未接入
+                self.play_body_reanim("anim_rise", ReanimLoopType::PlayOnceAndHold, 20, 18.0);
                 self.state = PlantState::PotatoRising;
-                // 依赖底层系统
             }
         } else if self.state == PlantState::PotatoRising {
-            // 依赖底层系统
+            // [TRANSLATION_NOTE]: C++ 需 aBodyReanim->mLoopCount>0 + anim_glow light reanim — reanim 未接入
+            self.play_body_reanim("anim_armed", ReanimLoopType::Loop, 0, 12.0);
             self.state = PlantState::PotatoArmed;
             self.blink_countdown = 400 + RandRange(4000);
         } else if self.state == PlantState::PotatoArmed {
-            // 依赖底层系统
-            // 若有僵尸接近 → DoSpecial()
+            if self.find_target_zombie(self.base.row, PlantWeapon::Primary).is_some() {
+                self.do_special();
+            } else {
+                // [TRANSLATION_NOTE]: light reanim mFrameCount = PvzpAnimateCurve(200, 50, DistanceToClosestZombie(), 10, 3) — reanim 未接入
+                let _dist = self.distance_to_closest_zombie();
+            }
         }
     }
 
@@ -2235,27 +2655,95 @@ impl Plant {
     }
     pub fn update_tanglekelp(&mut self) {
         if self.state != PlantState::TanglekelpGrabbing {
-            // 依赖底层系统
-            self.state = PlantState::TanglekelpGrabbing;
-            self.state_countdown = 100;
+            let a_zombie_id = self.find_target_zombie(self.base.row, PlantWeapon::Primary);
+            if let Some(zombie_id) = a_zombie_id {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Floop as i32);
+                }
+                self.state = PlantState::TanglekelpGrabbing;
+                self.state_countdown = 100;
+                self.target_zombie_id = zombie_id;
+                if let Some(board) = self.base.get_board_mut() {
+                    if let Some(zombie) = board.zombie_try_to_get_mut(zombie_id) {
+                        zombie.pool_splash(false);
+                    }
+                }
+                // [TRANSLATION_NOTE]: AddAttachedReanim(REANIM_TANGLEKELP) + Snorkel/Dolphin 偏移 — reanim 未接入
+            }
         } else {
+            if self.state_countdown == 50 {
+                if let Some(board) = self.base.get_board_mut() {
+                    if let Some(zombie) = board.zombie_try_to_get_mut(self.target_zombie_id) {
+                        zombie.drag_under();
+                        zombie.pool_splash(false);
+                    }
+                }
+            }
+            if self.state_countdown == 20 {
+                // [TRANSLATION_NOTE]: REANIM_SPLASH + PARTICLE_PLANTING_POOL + FOLEY_ZOMBIE_ENTERING_WATER 未接入
+            }
             if self.state_countdown == 0 {
-                // 依赖底层系统
-                // self.die();
+                self.die();
+                if let Some(board) = self.base.get_board_mut() {
+                    if let Some(zombie) = board.zombie_try_to_get_mut(self.target_zombie_id) {
+                        zombie.die_with_loot();
+                    }
+                }
             }
         }
     }
     pub fn update_scaredy_shroom(&mut self) {
-        // 依赖底层系统
-        // 状态机：Ready→ScaredyshroomLowering→Scared→Raising→Ready
+        if self.shooting_counter > 0 {
+            return;
+        }
+
+        // 检测附近是否有僵尸（对应 C++ 圆形判定：120 半径、行差 ±1、非被控、非死亡）
+        let mut has_zombie_nearby = false;
+        let my_x = self.base.x;
+        let my_y = self.base.y;
+        let my_row = self.base.row;
+        if let Some(board) = self.base.get_board() {
+            for zombie in &board.zombies {
+                if zombie.dead { continue; }
+                let z_rect = zombie.get_zombie_rect();
+                let a_diff_y = if zombie.zombie_type == ZombieType::Boss { 0 } else { zombie.base.row - my_row };
+                if !zombie.mind_controlled
+                    && !zombie.is_dead_or_dying()
+                    && a_diff_y <= 1 && a_diff_y >= -1
+                    && crate::lawn::board::get_circle_rect_overlap(my_x, my_y + 20, 120, &z_rect)
+                {
+                    has_zombie_nearby = true;
+                    break;
+                }
+            }
+        }
+
+        // 状态机：Ready→Lowering→Scared→Raising→Ready
         if self.state == PlantState::Ready {
-            // 若有僵尸靠近 → ScaredyshroomLowering
+            if has_zombie_nearby {
+                self.state = PlantState::ScaredyshroomLowering;
+                self.play_body_reanim("anim_scared", ReanimLoopType::PlayOnceAndHold, 10, 10.0);
+            }
         } else if self.state == PlantState::ScaredyshroomLowering {
+            // [TRANSLATION_NOTE]: C++ 需 aBodyReanim->mLoopCount>0 — reanim 未接入
+            self.play_body_reanim("anim_scaredidle", ReanimLoopType::Loop, 10, 0.0);
             self.state = PlantState::ScaredyshroomScared;
         } else if self.state == PlantState::ScaredyshroomScared {
-            // 若无僵尸靠近 → Raising
+            if !has_zombie_nearby {
+                self.state = PlantState::ScaredyshroomRaising;
+                let a_anim_rate = 7.0 + RandFloat(5.0); // RandRangeFloat(7.0, 12.0)
+                self.play_body_reanim("anim_grow", ReanimLoopType::PlayOnceAndHold, 10, a_anim_rate);
+            }
         } else if self.state == PlantState::ScaredyshroomRaising {
+            // [TRANSLATION_NOTE]: C++ 需 aBodyReanim->mLoopCount>0 — reanim 未接入
+            let a_anim_rate = 10.0 + RandFloat(5.0); // RandRangeFloat(10.0, 15.0)
+            self.play_idle_anim(a_anim_rate);
             self.state = PlantState::Ready;
+        }
+
+        // 非 Ready 状态重置发射计数器
+        if self.state != PlantState::Ready {
+            self.launch_counter = self.launch_rate;
         }
     }
 
