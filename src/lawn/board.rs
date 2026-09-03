@@ -2239,7 +2239,7 @@ impl Board {
 
     /// 掉落战利品（对应 C++ DropLootPiece）
     /// 根据关卡进度、游戏模式、随机概率决定掉落硬币/礼物/巧克力等
-    fn drop_loot_piece(&mut self, pos_x: i32, pos_y: i32, drop_factor: i32) {
+    pub(crate) fn drop_loot_piece(&mut self, pos_x: i32, pos_y: i32, drop_factor: i32) {
         if let Some(app) = self.app {
             unsafe {
                 // 首次冒险模式特殊掉落

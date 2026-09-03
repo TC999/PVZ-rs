@@ -5101,8 +5101,9 @@ impl Zombie {
     }
 
     /// 死亡并掉落物品（对应 C++ DieWithLoot）
+    /// C++: DieNoLoot(); DropLoot(); —— mDroppedLoot 由 DropLoot 内部按 C++ 顺序管理，
+    /// 不能在进入 DropLoot 前预置，否则 DropLoot 首次判断即短路返回。
     pub fn die_with_loot(&mut self) {
-        self.dropped_loot = true;
         self.die_no_loot();
         self.drop_loot();
     }
@@ -5215,9 +5216,59 @@ impl Zombie {
         }
     }
 
-    /// 掉落物品（对应 C++ DropLoot）
+    /// 掉落物品（对应 C++ Zombie::DropLoot）
+    /// C++ 顺序：图鉴击杀标记 → 雪人标记 → TrySpawnLevelAward →
+    /// 判定 mDroppedLoot / 关卡奖励已掉落 / 能否掉落 → 小麻烦关卡 3/4 概率跳过 →
+    /// 水族馆与 I, Zombie 关卡跳过 → 雪人掉 4 钻石，其余掉 DropLootPiece。
     pub fn drop_loot(&mut self) {
-        // 依赖底层系统
+        if !self.is_on_board() {
+            return;
+        }
+        crate::lawn::widget::almanac_dialog::almanac_player_defeated_zombie(self.zombie_type);
+        if self.zombie_type == ZombieType::Yeti {
+            if let Some(board) = self.base.board {
+                unsafe {
+                    (*board).m_killed_yeti = true;
+                }
+            }
+        }
+        self.try_spawn_level_award();
+        let board = match self.base.board {
+            Some(b) => b,
+            None => return,
+        };
+        let app = match self.base.app {
+            Some(a) => a,
+            None => return,
+        };
+        unsafe {
+            if self.dropped_loot || (*board).has_level_award_dropped() || !(*board).can_drop_loot() {
+                return;
+            }
+            self.dropped_loot = true;
+            let zombie_value = get_zombie_definition(self.zombie_type).zombie_value;
+            if (*app).is_little_trouble_level() && RandRange(4) != 0 {
+                // C++: Little Trouble 关卡 75% 概率不掉落任何东西
+                return;
+            }
+            if (*app).game_mode == GameMode::ChallengeZombiquarium
+                || crate::lawn::widget::challenge_screen::ChallengeScreen::is_i_zombie_level((*app).game_mode)
+            {
+                return;
+            }
+            let zombie_rect = self.get_zombie_rect();
+            let center_x = zombie_rect.x + zombie_rect.width / 2;
+            let center_y = zombie_rect.y + zombie_rect.height / 4;
+            if self.zombie_type == ZombieType::Yeti {
+                (*app).play_foley(crate::todlib::tod_foley::FoleyType::SpawnSun as i32);
+                (*board).add_coin((center_x - 20) as f32, center_y as f32, CoinType::Diamond, CoinMotion::Coin);
+                (*board).add_coin((center_x - 30) as f32, center_y as f32, CoinType::Diamond, CoinMotion::Coin);
+                (*board).add_coin((center_x - 40) as f32, center_y as f32, CoinType::Diamond, CoinMotion::Coin);
+                (*board).add_coin((center_x - 50) as f32, center_y as f32, CoinType::Diamond, CoinMotion::Coin);
+            } else {
+                (*board).drop_loot_piece(center_x, center_y, zombie_value);
+            }
+        }
     }
 
     /// 绘制僵尸（对应 C++ Zombie::DrawZombie 简化：绘制身体 reanim + 影子）

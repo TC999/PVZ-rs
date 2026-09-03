@@ -179,3 +179,14 @@ pub fn almanac_init_for_player() {
         }
     }
 }
+
+/// 记录玩家击败的僵尸类型（对应 C++ AlmanacPlayerDefeatedZombie）
+/// 在 Zombie::DropLoot 中调用，用于图鉴的已击败标记
+pub fn almanac_player_defeated_zombie(zombie_type: ZombieType) {
+    unsafe {
+        let idx = zombie_type as usize;
+        if idx < G_ZOMBIE_DEFEATED.len() {
+            G_ZOMBIE_DEFEATED[idx] = true;
+        }
+    }
+}
