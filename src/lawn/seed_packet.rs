@@ -245,5 +245,66 @@ impl Default for SeedBank {
     }
 }
 
+/// 绘制种子包（对应 C++ 全局函数 DrawSeedPacket）
+pub fn draw_seed_packet(
+    g: &mut Graphics,
+    x: f32,
+    y: f32,
+    seed_type: SeedType,
+    imitater_type: SeedType,
+    percent_dark: f32,
+    grayness: i32,
+    draw_cost: bool,
+    use_current_cost: bool,
+) {
+    // 对应 C++ DrawSeedPacket：绘制种子包背景/种子图标/变暗遮罩/成本
+    let mut a_seed_type = seed_type;
+    if a_seed_type == SeedType::Imitater && imitater_type != SeedType::None {
+        a_seed_type = imitater_type;
+    }
+
+    // [TRANSLATION_NOTE]: C++ 中 grayness != 255 或 percentDark > 0 时 SetColor +
+    // SetColorizeImages 灰化/变暗；Rust 侧颜色化绘制未接入
+    let _ = grayness;
+
+    // 种子包背景类型（0-8：模仿者/升级/保龄球/老虎机/水族馆等）
+    let _a_packet_background = if seed_type == SeedType::Imitater {
+        0
+    } else if crate::lawn::plant::Plant::is_upgrade(a_seed_type) {
+        1
+    } else if seed_type == SeedType::BeghouledButtonCrater {
+        3
+    } else if seed_type == SeedType::BeghouledButtonShuffle {
+        4
+    } else if seed_type == SeedType::SlotMachineSun {
+        5
+    } else if seed_type == SeedType::SlotMachineDiamond {
+        6
+    } else if seed_type == SeedType::ZombiquariumSnorkle {
+        7
+    } else if seed_type == SeedType::ZombiquariumTrophy {
+        8
+    } else {
+        2
+    };
+
+    // [TRANSLATION_NOTE]: C++ 中按 g->mScaleX 绘制 IMAGE_SEEDPACKET_LARGER 或 IMAGE_SEEDS
+    // 背景；Rust 侧图片资源未接入，暂略
+
+    // [TRANSLATION_NOTE]: C++ 中按种子类型设置图标缩放/偏移表（约 40 项，如
+    // TALLNUT 0.3/12/22、COBCANNON 0.26/6/22 等）并调用 SeedPacketDrawSeed 绘制图标；
+    // 依赖图片资源，暂略。此处保留成本绘制结构。
+
+    if percent_dark > 0.0 {
+        // [TRANSLATION_NOTE]: C++ 中 ClipRect + 变暗重绘（68*percentDark 高度）
+    }
+
+    if draw_cost {
+        // [TRANSLATION_NOTE]: C++ 中显示种子成本（Plant::GetCost 或加速定价），
+        // FONT_PICO129 绘制；Rust 侧成本/字体未接入，暂略
+        let _ = (x, y, use_current_cost);
+    }
+}
+
 
 
