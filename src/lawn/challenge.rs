@@ -19,6 +19,28 @@ pub enum BeghouledUpgrade {
     NumBeghouledUpgrades,
 }
 
+/// 工具函数：从资源管理器获取图片（对应 C++ IMAGE_* 资源）
+fn get_image(app: &crate::lawn::lawn_app::LawnApp, name: &str) -> *mut crate::framework::graphics::image::Image {
+    if let Some(rm_ptr) = app.base.resource_manager {
+        unsafe {
+            let rm = &*rm_ptr;
+            let shared = rm.get_image(name);
+            let img_ptr = shared.as_image_ptr();
+            if !img_ptr.is_null() {
+                return img_ptr;
+            }
+            // 尝试小写
+            let lower = crate::framework::common::string_to_lower(name);
+            let shared2 = rm.get_image(&lower);
+            let img_ptr2 = shared2.as_image_ptr();
+            if !img_ptr2.is_null() {
+                return img_ptr2;
+            }
+        }
+    }
+    std::ptr::null_mut()
+}
+
 /// 消除棋盘状态
 #[derive(Debug, Clone)]
 pub struct BeghouledBoardState {
@@ -422,12 +444,108 @@ impl Challenge {
         self.beghouled_update_craters();
     }
 
-    pub fn draw_backdrop(&self, _g: &mut Graphics) {
-        // 依赖图片资源
+    pub fn draw_backdrop(&self, g: &mut Graphics) {
+        // 对应 C++ Challenge::DrawBackdrop
+        let app = match self.app {
+            Some(a) => a,
+            None => return,
+        };
+        let game_mode = unsafe { (*app).game_mode };
+        if unsafe { (*app).is_art_challenge() } {
+            self.draw_art_challenge(g);
+        }
+        if game_mode == GameMode::ChallengeTreeOfWisdom {
+            self.tree_of_wisdom_draw(g);
+        }
+        if game_mode == GameMode::ChallengeBeghouled || game_mode == GameMode::ChallengeBeghouledTwist {
+            self.draw_beghouled(g);
+        }
+
+        // C++: DrawImage(IMAGE_WALLNUT_BOWLINGSTRIPE, 268, 77) 保龄球分隔线
+        if unsafe { (*app).is_wallnut_bowling_level() } && self.show_bowling_line != 0 {
+            let img = unsafe { get_image(&*app, "IMAGE_WALLNUT_BOWLINGSTRIPE") };
+            if !img.is_null() {
+                unsafe { g.draw_image_xy(&*img, 268, 77); }
+            }
+        }
+        // C++: 我是僵尸各关的分隔线 x 坐标（352/432/512）
+        let is_i_zombie = matches!(
+            game_mode,
+            GameMode::PuzzleIZombie1
+                | GameMode::PuzzleIZombie2
+                | GameMode::PuzzleIZombie3
+                | GameMode::PuzzleIZombie4
+                | GameMode::PuzzleIZombie5
+                | GameMode::PuzzleIZombie6
+                | GameMode::PuzzleIZombie7
+                | GameMode::PuzzleIZombie8
+                | GameMode::PuzzleIZombieEndless
+                | GameMode::PuzzleIZombie9
+        );
+        if is_i_zombie {
+            let x = match game_mode {
+                GameMode::PuzzleIZombie1
+                | GameMode::PuzzleIZombie2
+                | GameMode::PuzzleIZombie3
+                | GameMode::PuzzleIZombie4
+                | GameMode::PuzzleIZombie5 => 352,
+                GameMode::PuzzleIZombie6
+                | GameMode::PuzzleIZombie7
+                | GameMode::PuzzleIZombie8
+                | GameMode::PuzzleIZombieEndless => 432,
+                GameMode::PuzzleIZombie9 => 512,
+                _ => 352,
+            };
+            let img = unsafe { get_image(&*app, "IMAGE_WALLNUT_BOWLINGSTRIPE") };
+            if !img.is_null() {
+                unsafe { g.draw_image_xy(&*img, x, 73); }
+            }
+        }
+
+        if game_mode == GameMode::ChallengeSlotMachine {
+            self.draw_slot_machine(g);
+        }
+        if game_mode == GameMode::ChallengeZenGarden {
+            if let Some(zg) = unsafe { (*app).zen_garden } {
+                unsafe { (*zg).draw_backdrop(g); }
+            }
+        }
     }
 
-    pub fn draw_art_challenge(&self, _g: &mut Graphics) {
-        // 依赖图片资源
+    pub fn draw_art_challenge(&self, g: &mut Graphics) {
+        // 对应 C++ Challenge::DrawArtChallenge
+        g.set_colorize_images(true);
+        g.set_color(&crate::framework::color::Color::new(255, 255, 255, 100));
+
+        for a_row in 0..crate::lawn::board::MAX_GRID_SIZE_Y {
+            for a_col in 0..crate::lawn::board::MAX_GRID_SIZE_X {
+                let a_seed_type = self.get_art_challenge_seed(a_col as i32, a_row as i32);
+                if a_seed_type != SeedType::None {
+                    let board_ptr = match self.board {
+                        Some(b) => b,
+                        None => return,
+                    };
+                    let has_plant = unsafe {
+                        (*board_ptr).get_top_plant_at(a_col as i32, a_row as i32).is_some()
+                    };
+                    if !has_plant {
+                        let p_x = unsafe { (*board_ptr).grid_to_pixel_x(a_col as i32, a_row as i32) };
+                        let p_y = unsafe { (*board_ptr).grid_to_pixel_y(a_col as i32, a_row as i32) };
+                        crate::lawn::plant::Plant::draw_seed_type(
+                            g,
+                            a_seed_type,
+                            SeedType::None,
+                            DrawVariation::Normal,
+                            p_x as f32,
+                            p_y as f32,
+                        );
+                    }
+                }
+            }
+        }
+
+        // C++: GAMEMODE_CHALLENGE_ART_CHALLENGE_WALLNUT 分支资源已移除，仅保留位置
+        g.set_colorize_images(false);
     }
 
     pub fn check_for_complete_art_challenge(&mut self, _grid_x: i32, _grid_y: i32) {
@@ -516,8 +634,36 @@ impl Challenge {
         PlantingReason::Ok
     }
 
-    pub fn draw_beghouled(&self, _g: &mut Graphics) {
-        // 依赖图片资源
+    pub fn draw_beghouled(&self, g: &mut Graphics) {
+        // 对应 C++ Challenge::DrawBeghouled
+        let board_ptr = match self.board {
+            Some(b) => b,
+            None => return,
+        };
+        let app_ptr = match self.app {
+            Some(a) => a,
+            None => return,
+        };
+
+        for a_grid_y in 0..crate::lawn::board::MAX_GRID_SIZE_Y {
+            for a_grid_x in 0..crate::lawn::board::MAX_GRID_SIZE_X {
+                if self.beghouled_eated[a_grid_x][a_grid_y] != 0 {
+                    let p_x = unsafe { (*board_ptr).grid_to_pixel_x(a_grid_x as i32, a_grid_y as i32) - 8 };
+                    let p_y = unsafe { (*board_ptr).grid_to_pixel_y(a_grid_x as i32, a_grid_y as i32) + 40 };
+                    let img = unsafe { get_image(&*app_ptr, "IMAGE_CRATER") };
+                    if !img.is_null() {
+                        unsafe { g.draw_image_cel_rc(&*img, p_x, p_y, 1, 0); }
+                    }
+                }
+            }
+        }
+
+        if unsafe { (*app_ptr).game_mode } == GameMode::ChallengeBeghouledTwist {
+            // [TRANSLATION_NOTE]: C++ 分支：mChallengeGridX/Y != -1 且 MouseHitTest 非 COIN 时，
+            // 用 PvzpScaleRotateTransformMatrix + PvzpBltMatrix 绘制 IMAGE_BEGHOULED_TWIST_OVERLAY
+            // 旋转叠加层（主计数器驱动每秒 2π 旋转）；Rust 侧矩阵绘制/Overlay 未接入，暂略
+            let _ = (board_ptr, g);
+        }
     }
 
     pub fn beghouled_is_valid_move(&self, from_x: i32, from_y: i32, to_x: i32, to_y: i32, board_state: &BeghouledBoardState) -> i32 {
@@ -681,7 +827,16 @@ impl Challenge {
     }
 
     pub fn draw_slot_machine(&self, _g: &mut Graphics) {
-        // 依赖图片资源
+        // 对应 C++ Challenge::DrawSlotMachine：
+        // ① mGameScene == SCENE_ZOMBIES_WON 直接返回；
+        // ② 复制 Graphics 为 gBoardParent，当 mSlotMachineRollCount < 3 且
+        //    mCursorObject->mCursorType == CURSOR_TYPE_NORMAL 且 challengeState !=
+        //    STATECHALLENGE_SLOT_MACHINE_ROLLING 且 !HasLevelAwardDropped() 时，
+        //    SetColor(GetFlashingColor(mMainCounter, 75)) + SetColorizeImages(true)；
+        // ③ gBoardParent.mTransX/Y = mSeedBank->mX/Y - mBoard->mX/Y；
+        // ④ ReanimationGet(mReanimChallenge)->Draw(&gBoardParent)。
+        // [TRANSLATION_NOTE]: 依赖 Graphics 复制构造（Rust 无 Clone）、CursorObject、
+        // GetFlashingColor 与 SeedBank 坐标体系，绘制时一并接入
     }
 
     pub fn update_tool_tip(&self, x: i32, y: i32) -> i32 {
@@ -1747,12 +1902,66 @@ impl Challenge {
         }
     }
 
-    pub fn i_zombie_draw_plant(&self, _g: &mut Graphics, _plant: &Plant) {
-        // 依赖 Reanimation 系统
+    pub fn i_zombie_draw_plant(&self, g: &mut Graphics, plant: &Plant) {
+        // 对应 C++ Challenge::IZombieDrawPlant：多重描边阴影绘制（白/褐/浅褐/肤色 4 层偏移）
+        let app_ptr = match self.app {
+            Some(a) => a,
+            None => return,
+        };
+        let reanim = unsafe { (&mut *app_ptr).reanimation_get_mut(plant.body_reanim_id) };
+        if let Some(reanim) = reanim {
+            self.i_zombie_set_plant_filter_effect(plant, crate::todlib::filter_effect::FilterEffectType::White);
+            g.set_colorize_images(true);
+
+            let a_offset_x = g.trans_x;
+            let a_offset_y = g.trans_y;
+            g.trans_x = a_offset_x + 4.0;
+            g.trans_y = a_offset_y + 4.0;
+            g.set_color(&crate::framework::color::Color::from_rgb(122, 86, 58));
+            reanim.draw_render_group(g, 0);
+
+            g.trans_x = a_offset_x + 2.0;
+            g.trans_y = a_offset_y + 2.0;
+            g.set_color(&crate::framework::color::Color::from_rgb(171, 135, 107));
+            reanim.draw_render_group(g, 0);
+
+            g.trans_x = a_offset_x - 2.0;
+            g.trans_y = a_offset_y - 2.0;
+            g.set_color(&crate::framework::color::Color::from_rgb(171, 135, 107));
+            reanim.draw_render_group(g, 0);
+
+            g.trans_x = a_offset_x;
+            g.trans_y = a_offset_y;
+            g.set_color(&crate::framework::color::Color::from_rgb(255, 201, 160));
+            self.i_zombie_set_plant_filter_effect(plant, crate::todlib::filter_effect::FilterEffectType::None);
+            reanim.draw_render_group(g, 0);
+
+            self.i_zombie_set_plant_filter_effect(plant, crate::todlib::filter_effect::FilterEffectType::None);
+            g.set_draw_mode(0);
+            g.set_colorize_images(false);
+        }
     }
 
-    pub fn i_zombie_set_plant_filter_effect(&self, _plant: &mut Plant, _filter_effect: crate::todlib::filter_effect::FilterEffectType) {
-        // 依赖 Reanimation 系统
+    pub fn i_zombie_set_plant_filter_effect(&self, plant: &Plant, filter_effect: crate::todlib::filter_effect::FilterEffectType) {
+        // 对应 C++ Challenge::IZombieSetPlantFilterEffect
+        let app_ptr = match self.app {
+            Some(a) => a,
+            None => return,
+        };
+        let reanim_ids = [
+            plant.body_reanim_id,
+            plant.head_reanim_id,
+            plant.head_reanim_id2,
+            plant.head_reanim_id3,
+        ];
+        for reanim_id in reanim_ids {
+            if let Some(reanim) = unsafe { (&mut *app_ptr).reanimation_get_mut(reanim_id) } {
+                // [TRANSLATION_NOTE]: C++ 中 aReanim->mFilterEffect = theFilterEffect；
+                // Rust 侧 Reanimation 无 m_filter_effect 字段（filter_effect 系统未接入），暂略
+                let _ = reanim;
+                let _ = filter_effect;
+            }
+        }
     }
 
     pub fn scary_potter_count_sun_in_pot(&self, scary_pot: &GridItem) -> i32 {
@@ -1786,7 +1995,11 @@ impl Challenge {
     }
 
     pub fn draw_rain(&self, _g: &mut Graphics) {
-        // 依赖图片资源
+        // 对应 C++ Challenge::DrawRain：
+        // ① mBoard->mCutScene->IsBeforePreloading() 或 !Is3DAccelerated() 直接返回；
+        // ② 计算雨滴/雨丝粒子并 DrawParticle 渲染，受 mBoard->mMainCounter 驱动。
+        // [TRANSLATION_NOTE]: 依赖 3D 加速标志与粒子系统（ParticleSystem::DrawParticle），
+        // Rust 侧 3D/粒子绘制未接入，暂保留主计数器驱动的粒子生成骨架
     }
 
     pub fn draw_weather(&self, g: &mut Graphics) {
@@ -1982,8 +2195,32 @@ impl Challenge {
         }
     }
 
-    pub fn i_zombie_setup_plant(&self, _plant: &mut Plant) {
-        // 简化版：不依赖 Reanimation 系统
+    pub fn i_zombie_setup_plant(&self, plant: &mut Plant) {
+        // 对应 C++ Challenge::IZombieSetupPlant
+        let app_ptr = match self.app {
+            Some(a) => a,
+            None => return,
+        };
+        let reanim_ids = [
+            plant.body_reanim_id,
+            plant.head_reanim_id,
+            plant.head_reanim_id2,
+            plant.head_reanim_id3,
+        ];
+        for reanim_id in reanim_ids {
+            if let Some(reanim) = unsafe { (&mut *app_ptr).reanimation_get_mut(reanim_id) } {
+                reanim.m_anim_rate = 0.0;
+            }
+        }
+
+        if plant.seed_type == SeedType::PotatoMine {
+            plant.play_body_reanim("anim_armed", crate::todlib::reanimator::ReanimLoopType::Loop, 0, 0.0);
+            plant.state = PlantState::PotatoArmed;
+        }
+
+        plant.blink_countdown = 0;
+        // [TRANSLATION_NOTE]: C++ 中 thePlant->UpdateReanim()；Rust 侧 Plant 无 update_reanim 方法，
+        // reanim 更新由全局 reanimator 系统驱动，暂不单独调用
     }
 
     pub fn update_rain(&mut self) {
@@ -2548,7 +2785,15 @@ impl Challenge {
     }
 
     pub fn tree_of_wisdom_draw(&self, _g: &mut Graphics) {
-        // 占位绘图
+        // 对应 C++ Challenge::TreeOfWisdomDraw：
+        // ① DrawRenderGroup(0) 绘背景 + 6 个云彩 reanim；
+        // ② 根据高度与鼠标悬停设置 mExtraOverlayColor/mEnableExtraOverlayDraw 后
+        //    按组绘树干(2)/地面(3)/根系(4)；
+        // ③ STATECHALLENGE_TREE_GIVE_WISDOM/BABBLING 时绘制气泡 + 包裹文字；
+        // ④ 高度 >= 50 时用 FONT_HOUSEOFTERROR16 + PvzpDrawStringMatrix 绘制尺寸。
+        // [TRANSLATION_NOTE]: 依赖 mEnableExtraOverlayDraw/mExtraOverlayColor（Rust
+        // Reanimation 已有 m_extra_overlay_* 字段待接）、字体矩阵绘制与 StrFormat/
+        // PvzpReplaceNumberString 字符串系统；TreeOfWisdomMouseOn/GetSize 已实现
     }
 
     pub fn tree_of_wisdom_next_garden(&self) {
