@@ -998,16 +998,18 @@ impl Board {
             }
         }
 
-        // 僵尸吃植物
+        // 僵尸吃植物（对应 C++ Zombie::EatPlant 的伤害结算）
         let zombie_eat_data: Vec<(usize, i32, i32)> = self.zombies.iter().enumerate()
             .filter(|(_, z)| !z.dead && z.is_eating && z.zombie_age % 4 == 0)
             .map(|(i, z)| (i, z.base.row, z.target_col))
             .collect();
         for (zombie_idx, row, target_col) in zombie_eat_data {
             if let Some(plant) = self.find_plant_at(row, target_col as usize) {
-                plant.plant_health -= 20; // EAT_DAMAGE = 20
+                plant.plant_health -= crate::lawn::zombie::DAMAGE_PER_EAT;
+                plant.recently_eaten_countdown = 50;
                 if plant.plant_health <= 0 {
                     plant.die();
+                    self.m_plants_eaten += 1;
                     if let Some(zombie) = self.zombies.get_mut(zombie_idx) {
                         zombie.stop_eating();
                     }
@@ -1019,48 +1021,64 @@ impl Board {
             }
         }
 
-        // 僵尸与割草机碰撞
+        // 僵尸与割草机碰撞（对应 C++ LawnMower::Update 中的碰撞检测→MowZombie）
         for zombie in &mut self.zombies {
             if zombie.dead { continue; }
-            let z_rect = zombie.get_zombie_rect();
+            if zombie.zombie_type == ZombieType::Boss { continue; }
 
             for mower in &mut self.lawn_mowers {
-                if mower.mowing || mower.dead { continue; }
+                if mower.dead { continue; }
                 if mower.base.row != zombie.base.row { continue; }
+                if zombie.zombie_phase == ZombiePhase::Mowered || zombie.is_tangle_kelp_target() {
+                    continue;
+                }
+                if !zombie.effected_by_damage(127) { continue; }
 
-                let m_rect = mower.get_mower_rect();
-                if z_rect.intersects(&m_rect) {
-                    mower.start_mowing();
-                    zombie.die_no_loot();
+                let m_rect = mower.get_lawn_mower_attack_rect();
+                let z_rect = zombie.get_zombie_rect();
+                let a_overlap = get_rect_overlap(&m_rect, &z_rect);
+                let min_overlap = if zombie.zombie_type == ZombieType::Balloon { 20 } else { 0 };
+                if a_overlap <= min_overlap { continue; }
+
+                // bungee 僵尸和已死的僵尸不能自己触发割草机
+                if mower.mower_state != LawnMowerState::Ready
+                    || (zombie.zombie_type != ZombieType::Bungee && zombie.has_head)
+                {
+                    mower.mow_zombie(zombie);
                 }
             }
         }
     }
 
-    /// 在指定行列查找植物
+    /// 在指定行列查找植物（对应 C++ Board::GetTopPlantAt，TOPPLANT_EATING_ORDER）
     pub fn find_plant_at(&mut self, row: i32, col: usize) -> Option<&mut Plant> {
         if col >= MAX_GRID_SIZE_X { return None; }
-        let row_idx = row as usize;
-        if row_idx >= MAX_GRID_SIZE_Y { return None; }
+        if row < 0 || row as usize >= MAX_GRID_SIZE_Y { return None; }
 
-        if let Some(pid) = self.grid_plants[row_idx][col] {
-            self.plants.iter_mut().find(|p| /* p.id == pid */ false)
-        } else {
-            None
-        }
+        // TOPPLANT_EATING_ORDER：南瓜 > 正常植物 > 底层植物（花盆/荷叶）
+        let info = self.get_plants_on_lawn(col as i32, row);
+        let idx = info.pumpkin_plant.or(info.normal_plant).or(info.under_plant)?;
+        self.plants.get_mut(idx)
     }
 
-    /// 在指定行查找僵尸（从指定列开始向左找最近的）
-    pub fn find_zombie_in_row(&mut self, _row: i32, _from_col: i32) -> Option<&mut Zombie> {
-        // 查找该行最左边的僵尸
-        let first_row = self.zombies.first().map(|z| z.base.row).unwrap_or(-1);
-        for zombie in &mut self.zombies {
+    /// 在指定行查找僵尸（对应 C++ Plant::FindTargetZombie 简化：同行 + 植物右侧 + 最靠左）
+    pub fn find_zombie_in_row(&mut self, row: i32, from_col: i32) -> Option<&mut Zombie> {
+        let mut best_idx = None;
+        let mut best_x = i32::MAX;
+        let plant_x = from_col * 80 + 40; // 植物列对应的像素 x
+        for (i, zombie) in self.zombies.iter().enumerate() {
             if zombie.dead { continue; }
-            if zombie.base.row == first_row { // 简化：查找第一个
-                return Some(zombie);
+            let row_dev = if zombie.zombie_type == ZombieType::Boss { 0 } else { zombie.base.row - row };
+            if row_dev != 0 { continue; }
+            let z_x = zombie.get_zombie_rect().x;
+            // 僵尸须位于植物右侧（含同列）才可被射击
+            if z_x < plant_x { continue; }
+            if z_x < best_x {
+                best_x = z_x;
+                best_idx = Some(i);
             }
         }
-        None
+        best_idx.map(|i| &mut self.zombies[i])
     }
 
     /// 添加硬币

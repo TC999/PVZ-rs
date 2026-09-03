@@ -62,10 +62,14 @@ impl LawnMower {
         self.visible = true;
     }
 
-    /// 启动割草机
+    /// 启动割草机（对应 C++ StartMower：状态置为 Triggered）
     pub fn start_mower(&mut self) {
+        if self.mower_state == LawnMowerState::Triggered {
+            return;
+        }
         self.mowing = true;
-        self.mower_state = LawnMowerState::RollingIn;
+        self.mower_state = LawnMowerState::Triggered;
+        // [TRANSLATION_NOTE]: reanim 速率、FOLEY 音效、mWaveRowGotLawnMowered/mTriggeredLawnMowers 计数暂未接入
     }
 
     /// 启动割草机（与 start_mower 逻辑相同）
@@ -98,25 +102,7 @@ impl LawnMower {
 
         // 游戏场景检查
         // [TRANSLATION_NOTE]: 场景检查暂略
-
-        // 碰撞检测：遍历僵尸
-        if let Some(board) = self.base.get_board() {
-            let attack_rect = self.get_lawn_mower_attack_rect();
-            for (_idx, zombie) in board.zombies.iter().enumerate() {
-                if zombie.dead { continue; }
-                if zombie.zombie_type == ZombieType::Boss { continue; }
-                if zombie.base.row != self.base.row { continue; }
-                if zombie.zombie_phase == ZombiePhase::Mowered { continue; }
-
-                let z_rect = zombie.get_zombie_rect();
-                let overlap = crate::lawn::board::get_rect_overlap(&attack_rect, &z_rect);
-                if overlap > 0 {
-                    if self.mower_state != LawnMowerState::Ready || (zombie.zombie_type != ZombieType::Bungee && zombie.has_head) {
-                        // [TRANSLATION_NOTE]: MowZombie 需要可变引用，先退出 board 借用
-                    }
-                }
-            }
-        }
+        // [TRANSLATION_NOTE]: 碰撞检测→MowZombie 已统一到 Board::check_collisions（mower.update 内因借用无法取 zombie 可变引用）
 
         // 触发/碾压状态
         if self.mower_state == LawnMowerState::Triggered || self.mower_state == LawnMowerState::Squished {
@@ -159,11 +145,11 @@ impl LawnMower {
         }
 
         if self.mower_type == LawnMowerType::Pool {
-            // [TRANSLATION_NOTE]: 泳池音效+动画暂未实现
+            // [TRANSLATION_NOTE]: FOLEY_SHOOP 音效 + anim_suck/anim_landsuck reanim 暂未接入
             zombie.die_with_loot();
         } else {
-            // [TRANSLATION_NOTE]: Splat 音效+mow_down 暂未实现
-            zombie.die_with_loot();
+            // [TRANSLATION_NOTE]: FOLEY_SPLAT 音效暂未接入
+            zombie.mow_down();
         }
     }
 
