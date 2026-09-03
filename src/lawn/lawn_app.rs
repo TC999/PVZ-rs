@@ -68,6 +68,7 @@ pub struct LawnApp {
     pub game_selector: Option<*mut ()>,
     pub seed_chooser_screen: Option<*mut ()>,
     pub award_screen: Option<*mut ()>,
+    pub almanac_dialog: Option<*mut ()>,
     pub credit_screen: Option<*mut ()>,
     pub challenge_screen: Option<*mut ()>,
     pub store_screen: Option<*mut ()>,
@@ -184,7 +185,7 @@ impl LawnApp {
         LawnApp {
             base: SexyAppBase::new(),
             board: None, title_screen: None, game_selector: None,
-            seed_chooser_screen: None, award_screen: None,
+            seed_chooser_screen: None, award_screen: None, almanac_dialog: None,
             credit_screen: None, challenge_screen: None, zen_garden: None,
             store_screen: None,
             sound_system: None, effect_system: None,
@@ -732,12 +733,25 @@ impl LawnApp {
     }
 
     /// 显示图鉴（对应 C++ DoAlmanacDialog）
-    pub fn do_almanac_dialog(&mut self, _seed: SeedType, _zombie: ZombieType) {
-        // [TRANSLATION_NOTE]: C++ 中创建 AlmanacDialog 并 AddDialog(DIALOG_ALMANAC)+SetFocus，
-        // 若 seed != SEED_NONE 调 ShowPlant(seed)，否则 zombie != ZOMBIE_INVALID 调 ShowZombie(zombie)。
-        // Rust 侧 AlmanacDialog 尚未接入 Widget/Dialog 体系，此处暂不创建。
+    pub fn do_almanac_dialog(&mut self, seed: SeedType, zombie: ZombieType) {
+        let mut screen = Box::new(crate::lawn::widget::almanac_dialog::AlmanacDialog::new());
+        screen.app = Some(self as *mut LawnApp);
+        if seed != SeedType::None {
+            screen.show_plant(seed);
+        } else if zombie != ZombieType::Invalid {
+            screen.show_zombie(zombie);
+        }
+        // [TRANSLATION_NOTE]: C++ 中随后 AddDialog(DIALOG_ALMANAC, aDialog) + SetFocus(aDialog)；
+        // Rust 侧 AlmanacDialog 非 framework::Dialog 子类，暂以裸指针持有
+        self.almanac_dialog = Some(Box::into_raw(screen) as *mut ());
     }
     pub fn kill_almanac_dialog(&mut self) -> bool {
+        if let Some(screen) = self.almanac_dialog.take() {
+            unsafe {
+                let _ = Box::from_raw(screen as *mut crate::lawn::widget::almanac_dialog::AlmanacDialog);
+            }
+            return true;
+        }
         // [TRANSLATION_NOTE]: 对应 C++ KillAlmanacDialog — GetDialog(DIALOG_ALMANAC) 非空则 KillDialog
         self.base.kill_dialog(Dialogs::Almanac as i32)
     }
@@ -754,6 +768,17 @@ impl LawnApp {
         self.kill_new_options_dialog();
         self.kill_board();
         self.show_game_selector();
+    }
+
+    /// 关闭所有非模态对话框（对应 C++ FinishModelessDialogs）
+    /// 关闭绑定到棋盘的对话框；被关闭的对话框按取消处理，删除延后
+    pub fn finish_modeless_dialogs(&mut self) {
+        self.kill_dialog(Dialogs::ConfirmRestart);
+        self.kill_dialog(Dialogs::ConfirmBackToMain);
+        self.kill_dialog(Dialogs::Paused);
+        // 图鉴可能在 WaitForResult 中途，选项对话框挂在其下
+        self.kill_dialog(Dialogs::Almanac);
+        self.kill_new_options_dialog();
     }
 
     /// 移除新选项对话框（对应 C++ KillNewOptionsDialog）
@@ -1742,11 +1767,12 @@ impl LawnApp {
     /// 写入注册表（对应 C++ WriteToRegistry）
     pub fn write_to_registry(&mut self) {
         if let Some(player_info) = &self.player_info {
-            // [TRANSLATION_NOTE]: C++ 中 RegistryWriteString("CurUser", mPlayerInfo->mName)
-            // 与 mPlayerInfo->SaveDetails()；Rust 侧注册表写入与 PlayerInfo 持久化未实现
-            let _ = player_info;
+            // C++: RegistryWriteString("CurUser", mPlayerInfo->mName) — 注册表写入未接入
+            // C++: mPlayerInfo->SaveDetails() — 接入 PlayerInfo 存档 IO
+            player_info.save_details();
         }
         // C++ 中末尾调用 SexyAppBase::WriteToRegistry()
+        // [TRANSLATION_NOTE]: SexyAppBase::WriteToRegistry 未接入
     }
     /// 读取注册表（对应 C++ ReadFromRegistry）
     pub fn read_from_registry(&self, _key: &str, _default: &str) -> String { _default.to_string() }
@@ -1760,9 +1786,17 @@ impl LawnApp {
         true
     }
     /// 切换画面模式（对应 C++ SwitchScreenMode）
-    pub fn switch_screen_mode(&mut self, _windowed: bool, _use_3d: bool, _force: bool) {}
+    pub fn switch_screen_mode(&mut self, windowed: bool, _use_3d: bool, _force: bool) {
+        // C++: SexyAppBase::SwitchScreenMode(wantWindowed, is3d, force) — 窗口模式切换
+        self.base.is_windowed = windowed;
+        // C++: 若 NewOptionsDialog 存在则 mFullscreenCheckbox->SetChecked(!mIsWindowed)
+        // [TRANSLATION_NOTE]: Rust 侧 NewOptionsDialog 为独立 widget（fullscreen_checked 字段），
+        // 对话框实例挂载管理未接入，此处不联动
+    }
     /// 弹出高分对话框（对应 C++ DoHighScoreDialog）
-    pub fn do_high_score_dialog(&mut self) {}
+    pub fn do_high_score_dialog(&mut self) {
+        // C++ 中该函数体为空（DoRegister 等同类注册对话框同样为空）
+    }
     /// 更改目录钩子（对应 C++ ChangeDirHook）
     pub fn change_dir_hook(&self, _path: &str) -> bool { false }
     /// 更新完成关卡的玩家档案（对应 C++ UpdatePlayerProfileForFinishingLevel）
@@ -1907,7 +1941,9 @@ impl LawnApp {
         a_unlocked_new_challenge
     }
     /// URL 打开成功回调（对应 C++ URLOpenSucceeded）
-    pub fn url_open_succeeded(&self, _url: &str) {}
+    pub fn url_open_succeeded(&self, _url: &str) {
+        // [TRANSLATION_NOTE]: C++ 中无对应方法（Rust 侧为占位，浏览器打开回调暂不处理）
+    }
     /// 打开 URL（对应 C++ OpenURL）
     pub fn open_url(&self, _url: &str, _minimized: bool) -> bool { false }
     /// 获取布尔属性（对应 C++ GetBoolean）
@@ -2056,7 +2092,21 @@ impl LawnApp {
     // ==================== 调试 ====================
 
     pub fn debug_key_down(&mut self, _key: i32) -> bool { false }
-    pub fn show_resource_error(&mut self, _exit: bool) {}
+    pub fn show_resource_error(&mut self, do_exit: bool) {
+        // 对应 C++ SexyAppBase::ShowResourceError
+        let a_error = "".to_string(); // [TRANSLATION_NOTE]: mResourceManager->GetErrorText() 未接入
+        let mut a_message = if a_error.is_empty() {
+            String::new()
+        } else {
+            format!("{}\n\n", a_error)
+        };
+        // [TRANSLATION_NOTE]: GetResourceFolder() 未接入，使用相对路径说明
+        a_message += "Please place main.pak and the properties/ folder into: ./";
+        self.base.popup(&a_message);
+        if do_exit {
+            std::process::exit(1); // C++ DoExit(1)
+        }
+    }
 }
 
 // 全局辅助函数
