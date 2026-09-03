@@ -2901,6 +2901,16 @@ impl Plant {
         a_translated_name
     }
 
+    /// 获取植物图鉴说明文案（对应 C++ Plant::GetToolTip，静态）
+    /// C++: StrFormat("[%s_TOOLTIP]", aPlantDef.mPlantName) → PvzpStringTranslate
+    pub fn get_tool_tip(seed_type: SeedType) -> String {
+        let a_plant_def = get_plant_definition(seed_type);
+        let a_tool_tip = format!("[{}_TOOLTIP]", a_plant_def.plant_name.unwrap_or(""));
+        // [TRANSLATION_NOTE]: PvzpStringTranslate 字符串翻译系统未接入，直接返回原始标记
+        let a_translated_tool_tip = a_tool_tip;
+        a_translated_tool_tip
+    }
+
     /// 获取刷新时间（对应 C++ Plant::GetRefreshTime，静态）
     pub fn get_refresh_time(seed_type: SeedType, imitater_type: SeedType) -> i32 {
         if crate::lawn::challenge::Challenge::is_zombie_seed_type(seed_type) != 0 {

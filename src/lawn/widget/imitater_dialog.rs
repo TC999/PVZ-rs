@@ -124,7 +124,10 @@ impl ImitaterDialog {
 
             // C++ 中设置警告文本，暂简化
             if let Some(ref mut tip) = self.tool_tip {
-                tip.set_title(&format!("[IMITATER: {:?}]", seed_type));
+                // C++: mToolTip->SetTitle(Plant::GetNameString(SEED_IMITATER, aSeedType));
+                // C++: mToolTip->SetLabel(Plant::GetToolTip(aSeedType));
+                tip.set_title(&crate::lawn::plant::Plant::get_name_string(SeedType::Imitater, seed_type));
+                tip.set_label(&crate::lawn::plant::Plant::get_tool_tip(seed_type));
                 tip.m_x = (SEED_PACKET_WIDTH - tip.m_width) / 2 + seed_x;
                 tip.m_y = SEED_PACKET_HEIGHT + seed_y;
                 tip.m_visible = true;

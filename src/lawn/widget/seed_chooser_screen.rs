@@ -327,7 +327,75 @@ impl SeedChooserScreen {
         self.remove_tool_tip();
     }
     pub fn show_tool_tip(&mut self) {
-        // ShowToolTip — 简化版
+        // 对应 C++ SeedChooserScreen::ShowToolTip L863-L948
+        // [TRANSLATION_NOTE]: C++ 最外层条件 !mWidgetManager->mMouseIn || !mApp->mActive ||
+        // mApp->GetDialogCount() > 0 —— widget_manager 未接入，以 choose_state 判断为主保留结构；
+        // mImitaterButton->IsMouseOver() 无对应谓词，该分支跳过（C++ L871-L879）。
+        if self.choose_state == SeedChooserState::ViewLawn {
+            self.remove_tool_tip();
+        } else if self.seeds_in_flight <= 0 {
+            // C++: SeedType aSeedType = SeedHitTest(mLastMouseX, mLastMouseY);
+            let a_seed_type = self.seed_hit_test(self.last_mouse_x, self.last_mouse_y);
+            if a_seed_type == SeedType::None {
+                self.remove_tool_tip();
+            } else if a_seed_type as i32 != self.tool_tip_seed {
+                self.remove_tool_tip();
+                // C++: ChosenSeed& aChosenSeed = mChosenSeeds[aSeedType];
+                let a_chosen_seed = self.chosen_seeds.iter().find(|s| s.seed_type == a_seed_type);
+                let a_rec_flags = self.seed_not_recommended_to_pick(a_seed_type);
+                let a_not_allowed = self.seed_not_allowed_to_pick(a_seed_type);
+                let a_not_during_trial = self.seed_not_allowed_during_trial(a_seed_type);
+                let a_state_in_bank = a_chosen_seed.map_or(false, |s| s.seed_state == ChosenSeedState::InBank);
+                let a_crazy_dave_picked = a_chosen_seed.map_or(false, |s| s.crazy_dave_picked);
+                let a_imitater_type = a_chosen_seed.map_or(SeedType::None, |s| s.imitater_type);
+                let a_seed_index_in_bank = a_chosen_seed.map_or(0, |s| s.seed_index_in_bank);
+
+                let tip_ptr = match self.tool_tip {
+                    Some(p) => p,
+                    None => return,
+                };
+                unsafe {
+                    let tip = &mut *tip_ptr;
+                    if a_not_allowed {
+                        tip.set_warning_text("[NOT_ALLOWED_ON_THIS_LEVEL]");
+                    } else if a_not_during_trial {
+                        tip.set_warning_text("[FULL_VERSION_ONLY]");
+                    } else if a_state_in_bank && a_crazy_dave_picked {
+                        tip.set_warning_text("[CRAZY_DAVE_WANTS]");
+                    } else if a_rec_flags != 0 {
+                        if crate::lawn::zombie::test_bit(a_rec_flags, crate::lawn::game_enums::NotRecommend::Nocturnal as u32) {
+                            tip.set_warning_text("[NOCTURNAL_WARNING]");
+                        } else {
+                            tip.set_warning_text("[NOT_RECOMMENDED_FOR_LEVEL]");
+                        }
+                    } else {
+                        tip.set_warning_text("");
+                    }
+
+                    if a_seed_type == SeedType::Imitater {
+                        // C++: SetTitle(GetNameString(aSeedType, mImitaterType)); SetLabel(GetToolTip(mImitaterType));
+                        tip.set_title(&crate::lawn::plant::Plant::get_name_string(a_seed_type, a_imitater_type));
+                        tip.set_label(&crate::lawn::plant::Plant::get_tool_tip(a_imitater_type));
+                    } else {
+                        tip.set_title(&crate::lawn::plant::Plant::get_name_string(a_seed_type, SeedType::None));
+                        tip.set_label(&crate::lawn::plant::Plant::get_tool_tip(a_seed_type));
+                    }
+
+                    let mut a_seed_x = 0;
+                    let mut a_seed_y = 0;
+                    if a_state_in_bank {
+                        self.get_seed_position_in_bank(a_seed_index_in_bank, &mut a_seed_x, &mut a_seed_y);
+                    } else {
+                        self.get_seed_position_in_chooser(a_seed_type as i32, &mut a_seed_x, &mut a_seed_y);
+                    }
+                    // C++: std::clamp((SEED_PACKET_WIDTH - mToolTip->mWidth) / 2 + aSeedX, 0, BOARD_WIDTH - mToolTip->mWidth)
+                    tip.m_x = ((SEED_PACKET_WIDTH - tip.m_width) / 2 + a_seed_x).clamp(0, BOARD_WIDTH - tip.m_width);
+                    tip.m_y = a_seed_y + 70;
+                    tip.m_visible = true;
+                    self.tool_tip_seed = a_seed_type as i32;
+                }
+            }
+        }
     }
     pub fn cancel_lawn_view(&mut self) {
         if self.choose_state == SeedChooserState::ViewLawn && self.view_lawn_time > 100 && self.view_lawn_time <= 250 {
