@@ -36,6 +36,10 @@ pub const BOSS_ZOMBIE_LIST: [ZombieType; 12] = [
     ZombieType::Pogo, ZombieType::Newspaper, ZombieType::Door, ZombieType::Gargantuar,
 ];
 
+// C++ Zombie.cpp 文件级常量
+const CLIP_HEIGHT_LIMIT: f32 = -100.0; // C++ constexpr CLIP_HEIGHT_LIMIT = -100.0f
+const ZOMBIE_MINDCONTROLLED_COLOR: Color = Color { r: 128, g: 64, b: 192, a: 255 }; // C++ Color(128, 64, 192, 255)
+
 // C++ DamageFlags 位索引（对应 ConstEnums.h DamageFlags）
 const DAMAGE_BYPASSES_SHIELD: u32 = 0;
 const DAMAGE_HITS_SHIELD_AND_BODY: u32 = 1;
@@ -186,9 +190,43 @@ pub struct Zombie {
 
 impl Zombie {
     /// 预加载僵尸资源（对应 C++ Zombie::PreloadZombieResources）
-    /// [TRANSLATION_NOTE]: C++ 中按僵尸类型加载对应 reanim 定义与图片；Rust 侧
-    /// reanim 定义加载在 reanim_loader 中处理，此处骨架保留调用链
-    pub fn preload_zombie_resources(_zombie_type: ZombieType) {}
+    pub fn preload_zombie_resources(zombie_type: ZombieType) {
+        use crate::todlib::reanim_loader::reanimator_ensure_definition_loaded;
+
+        let a_zombie_def = get_zombie_definition(zombie_type);
+        if a_zombie_def.reanimation_type != ReanimationType::None {
+            reanimator_ensure_definition_loaded(a_zombie_def.reanimation_type);
+        }
+
+        if zombie_type == ZombieType::Digger {
+            reanimator_ensure_definition_loaded(ReanimationType::DiggerDirt);
+            reanimator_ensure_definition_loaded(ReanimationType::ZombieCharredDigger);
+        } else if zombie_type == ZombieType::Boss {
+            reanimator_ensure_definition_loaded(ReanimationType::BossDriver);
+            reanimator_ensure_definition_loaded(ReanimationType::BossFireball);
+            reanimator_ensure_definition_loaded(ReanimationType::BossIceball);
+
+            for &a_zombie_type in BOSS_ZOMBIE_LIST.iter() {
+                let a_def = get_zombie_definition(a_zombie_type);
+                reanimator_ensure_definition_loaded(a_def.reanimation_type);
+            }
+        } else if zombie_type == ZombieType::Dancer {
+            reanimator_ensure_definition_loaded(ReanimationType::BackupDancer);
+        } else if zombie_type == ZombieType::Gargantuar || zombie_type == ZombieType::RedeEyeGargantuar {
+            reanimator_ensure_definition_loaded(ReanimationType::Imp);
+            reanimator_ensure_definition_loaded(ReanimationType::ZombieCharredImp);
+            reanimator_ensure_definition_loaded(ReanimationType::ZombieCharredGargantuar);
+        } else if zombie_type == ZombieType::Zamboni {
+            reanimator_ensure_definition_loaded(ReanimationType::Imp);
+            reanimator_ensure_definition_loaded(ReanimationType::ZombieCharredZamboni);
+        } else if zombie_type == ZombieType::Catapult {
+            reanimator_ensure_definition_loaded(ReanimationType::ZombieCharredCatapult);
+        }
+
+        reanimator_ensure_definition_loaded(ReanimationType::Puff);
+        reanimator_ensure_definition_loaded(ReanimationType::ZombieCharred);
+        reanimator_ensure_definition_loaded(ReanimationType::LawnMoweredZombie);
+    }
 
     pub fn new() -> Self {
         Zombie {
@@ -961,7 +999,19 @@ impl Zombie {
     }
 
     /// 更新被碾压效果（对应 C++ Zombie::UpdateMowered）
-    fn update_mowered(&mut self) {}
+    fn update_mowered(&mut self) {
+        // C++: mApp->ReanimationTryToGet(mMoweredReanimID) 为空或循环完成（mLoopCount > 0）时
+        //      掉落头/手臂并死亡掉物
+        let a_mowered_done = self.base.get_app().map_or(true, |app| {
+            app.reanimation_get(self.mowered_reanim_id)
+                .map_or(true, |r| r.m_loop_count > 0)
+        });
+        if a_mowered_done {
+            self.drop_head(0);
+            self.drop_arm(0);
+            self.die_with_loot();
+        }
+    }
 
     /// 更新僵尸的 Playing 阶段行为（对应 C++ Zombie::UpdatePlaying）
     fn update_playing(&mut self) {
@@ -4995,9 +5045,110 @@ impl Zombie {
         // [TRANSLATION_NOTE]: C++ 完整 Zombatar 头部 reanim 装配（轨道颜色/渲染组/附件矩阵）— reanim 未接入
     }
 
-    /// 绘制僵尸部位（对应 C++ DrawZombiePart）
-    pub fn draw_zombie_part(&self, _g: &mut Graphics, _image: *mut Image, _frame: i32, _row: i32, _draw_pos: &crate::lawn::zombie::ZombieDrawPosition) {
-        // [TRANSLATION_NOTE]: C++ 图片 cel 裁剪/镜像/颜色化绘制 — 图片系统未接入
+    /// 绘制僵尸部位（对应 C++ DrawZombiePart；C++ 注释"normally never called"）
+    pub fn draw_zombie_part(&self, g: &mut Graphics, image: *mut Image, frame: i32, row: i32, draw_pos: &ZombieDrawPosition) {
+        // 裸指针图片访问（对应 C++ Image*）
+        let a_cel_width;
+        let a_cel_height;
+        unsafe {
+            let a_image = &*image;
+            a_cel_width = a_image.get_cel_width();
+            a_cel_height = a_image.get_cel_height();
+        }
+        let mut an_offset_x = draw_pos.image_offset_x;
+        let mut an_offset_y = draw_pos.image_offset_y + draw_pos.body_y;
+        if self.zombie_phase == ZombiePhase::PolevaulterInVault {
+            an_offset_x -= 120.0;
+            an_offset_y -= 120.0;
+        }
+        if self.zombie_phase == ZombiePhase::DiggerTunneling {
+            an_offset_y += 50.0;
+        }
+        if self.zombie_type == ZombieType::Zamboni {
+            an_offset_y -= 19.0;
+        }
+
+        let mut a_draw_height = a_cel_height as f32;
+        if draw_pos.clip_height > CLIP_HEIGHT_LIMIT {
+            a_draw_height = (a_cel_height as f32 - draw_pos.clip_height).clamp(0.0, a_cel_height as f32);
+        }
+
+        let mut an_alpha = 255;
+        if self.zombie_fade >= 0 {
+            an_alpha = (255 * self.zombie_fade / 10).clamp(0, 255);
+            g.set_colorize_images(true);
+            g.set_color(&Color::new(255, 255, 255, an_alpha as u8));
+        }
+
+        let mut a_mirror = false;
+        if self.zombie_phase == ZombiePhase::DancerDancingIn || self.zombie_phase == ZombiePhase::DancerDancingLeft {
+            let a_frame = self.get_dancer_frame();
+            if !self.is_eating && (a_frame == 12 || a_frame == 13 || a_frame == 14 || a_frame == 18 || a_frame == 19 || a_frame == 20) {
+                a_mirror = true;
+                an_offset_x -= 30.0;
+            }
+        }
+        if a_mirror {
+            an_offset_x = -an_offset_x;
+        }
+
+        let a_src_rect = Rect::new(frame * a_cel_width, row * a_cel_height, a_cel_width, a_draw_height as i32);
+        let a_dest_rect = Rect::new(an_offset_x as i32, an_offset_y as i32, a_cel_width, a_draw_height as i32);
+        if self.zombie_phase == ZombiePhase::Burned {
+            if self.mind_controlled {
+                a_mirror = true;
+            }
+
+            g.set_colorize_images(true);
+            g.set_color(&Color::BLACK);
+            unsafe {
+                g.draw_image_mirror_stretch(&*image, &a_dest_rect, &a_src_rect, a_mirror);
+            }
+        } else if self.mind_controlled {
+            a_mirror = true;
+            g.set_colorize_images(true);
+            let mut a_mincontrolled_color = ZOMBIE_MINDCONTROLLED_COLOR;
+            a_mincontrolled_color.a = an_alpha as u8;
+            g.set_color(&a_mincontrolled_color);
+            unsafe {
+                g.draw_image_mirror_stretch(&*image, &a_dest_rect, &a_src_rect, a_mirror);
+            }
+
+            g.set_draw_mode(crate::framework::graphics::graphics::DrawMode::Additive as i32);
+            unsafe {
+                g.draw_image_mirror_stretch(&*image, &a_dest_rect, &a_src_rect, a_mirror);
+            }
+            g.set_draw_mode(crate::framework::graphics::graphics::DrawMode::Normal as i32);
+        } else if self.chilled_counter > 0 || self.ice_trap_counter > 0 {
+            g.set_colorize_images(true);
+            g.set_color(&Color::new(75, 75, 255, an_alpha as u8));
+            unsafe {
+                g.draw_image_mirror_stretch(&*image, &a_dest_rect, &a_src_rect, a_mirror);
+            }
+
+            g.set_draw_mode(crate::framework::graphics::graphics::DrawMode::Additive as i32);
+            unsafe {
+                g.draw_image_mirror_stretch(&*image, &a_dest_rect, &a_src_rect, a_mirror);
+            }
+            g.set_draw_mode(crate::framework::graphics::graphics::DrawMode::Normal as i32);
+        } else {
+            unsafe {
+                g.draw_image_mirror_stretch(&*image, &a_dest_rect, &a_src_rect, a_mirror);
+            }
+        }
+
+        if self.just_got_shot_counter > 0 {
+            g.set_draw_mode(crate::framework::graphics::graphics::DrawMode::Additive as i32);
+            g.set_colorize_images(true);
+            let a_grayness = self.just_got_shot_counter * 10;
+            g.set_color(&Color::new(a_grayness as u8, a_grayness as u8, a_grayness as u8, 255));
+            unsafe {
+                g.draw_image_mirror_stretch(&*image, &a_dest_rect, &a_src_rect, a_mirror);
+            }
+            g.set_draw_mode(crate::framework::graphics::graphics::DrawMode::Normal as i32);
+        }
+
+        g.set_colorize_images(false);
     }
 
     /// 绘制僵尸头部（对应 C++ DrawZombieHead，C++ 中已注释为死代码）
@@ -5084,7 +5235,53 @@ impl Zombie {
     }
 
     /// 停止僵尸音效（对应 C++ StopZombieSound）
-    pub fn stop_zombie_sound(&mut self) { /* stub */ }
+    pub fn stop_zombie_sound(&mut self) {
+        use crate::todlib::tod_foley::FoleyType;
+
+        if self.zombie_type == ZombieType::Dancer || self.zombie_type == ZombieType::BackupDancer {
+            let mut a_stop_sound = true;
+
+            if let Some(board) = self.base.get_board() {
+                for a_zombie in &board.zombies {
+                    if a_zombie.dead {
+                        continue;
+                    }
+                    if a_zombie.has_head && !a_zombie.is_dead_or_dying() && a_zombie.is_on_board() &&
+                        (a_zombie.zombie_type == ZombieType::Dancer || a_zombie.zombie_type == ZombieType::BackupDancer)
+                    {
+                        a_stop_sound = false;
+                        break;
+                    }
+                }
+            }
+
+            if a_stop_sound {
+                if let Some(app) = self.base.get_app() {
+                    if let Some(ss) = &app.sound_system {
+                        ss.stop_foley(FoleyType::Dancer);
+                    }
+                }
+            }
+        }
+
+        if self.playing_song {
+            self.playing_song = false;
+
+            if self.zombie_type == ZombieType::JackInTheBox {
+                if let Some(app) = self.base.get_app() {
+                    if let Some(ss) = &app.sound_system {
+                        ss.stop_foley(FoleyType::JackInTheBox);
+                    }
+                }
+            } else if self.zombie_type == ZombieType::Digger {
+                if let Some(app) = self.base.get_app() {
+                    if let Some(ss) = &app.sound_system {
+                        ss.stop_foley(FoleyType::Digger);
+                    }
+                }
+            }
+        }
+    }
 
     /// 施加冻结（对应 C++ ApplyChill）
     pub fn apply_chill(&mut self, _is_ice_trap: bool) {
@@ -6194,10 +6391,24 @@ impl Zombie {
     }
 
     /// 显示前缀动画轨道（对应 C++ ReanimShowPrefix）
-    pub fn reanim_show_prefix(&mut self, _track_prefix: &str, _render_group: i32) {}
+    pub fn reanim_show_prefix(&mut self, track_prefix: &str, render_group: i32) {
+        // C++: TryToGet(mBodyReanimID) 非空时 AssignRenderGroupToPrefix
+        if let Some(app) = self.base.get_app_mut() {
+            if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                a_body_reanim.assign_render_group_to_prefix(track_prefix, render_group);
+            }
+        }
+    }
 
     /// 显示动画轨道（对应 C++ ReanimShowTrack）
-    pub fn reanim_show_track(&mut self, _track_name: &str, _render_group: i32) {}
+    pub fn reanim_show_track(&mut self, track_name: &str, render_group: i32) {
+        // C++: TryToGet(mBodyReanimID) 非空时 AssignRenderGroupToTrack
+        if let Some(app) = self.base.get_app_mut() {
+            if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                a_body_reanim.assign_render_group_to_track(track_name, render_group);
+            }
+        }
+    }
 
     /// 是否在棋盘上（对应 C++ IsOnBoard）
     pub fn is_on_board(&self) -> bool {
@@ -6250,7 +6461,18 @@ impl Zombie {
     }
 
     /// 设置水下动画轨道（对应 C++ SetupWaterTrack）
-    pub fn setup_water_track(&mut self, _track_name: &str) {}
+    pub fn setup_water_track(&mut self, track_name: &str) {
+        // C++: ReanimationGet(mBodyReanimID) 非空时对轨道实例设置忽略附加色/颜色覆盖/裁剪
+        if let Some(app) = self.base.get_app_mut() {
+            if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                if let Some(a_track_instance) = a_body_reanim.get_track_instance_by_name(track_name) {
+                    a_track_instance.m_ignore_extra_additive_color = true;
+                    a_track_instance.m_ignore_color_override = true;
+                    a_track_instance.m_ignore_clip_rect = true;
+                }
+            }
+        }
+    }
 
     /// 添加附加粒子（对应 C++ AddAttachedParticle）
     pub fn add_attached_particle(&mut self, _pos_x: i32, _pos_y: i32, _effect: ParticleEffect) -> Option<*mut ParticleSystem> { None }
@@ -6506,19 +6728,187 @@ impl Zombie {
     }
 
     /// 忽略裁剪矩形（对应 C++ ReanimIgnoreClipRect）
-    pub fn reanim_ignore_clip_rect(&mut self, _track_name: &str, _ignore_clip_rect: bool) {}
+    pub fn reanim_ignore_clip_rect(&mut self, track_name: &str, ignore_clip_rect: bool) {
+        // C++: ReanimationGet(mBodyReanimID)；遍历定义轨道，名字匹配（strcasecmp）的轨道实例置 mIgnoreClipRect
+        if let Some(app) = self.base.get_app_mut() {
+            if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                if let Some(def_ptr) = a_body_reanim.m_definition {
+                    unsafe {
+                        let a_def_ref = &*def_ptr;
+                        for (i, a_track) in a_def_ref.m_tracks.iter().enumerate() {
+                            if a_track.m_name.eq_ignore_ascii_case(track_name) {
+                                if let Some(a_track_instance) = a_body_reanim.m_track_instances.get_mut(i) {
+                                    a_track_instance.m_ignore_clip_rect = ignore_clip_rect;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     /// 重新启用裁剪（对应 C++ ReanimReenableClipping）
-    pub fn reanim_reenable_clipping(&mut self) { /* stub */ }
+    pub fn reanim_reenable_clipping(&mut self) {
+        // C++: 全部轨道实例的 mIgnoreClipRect 置 false
+        if let Some(app) = self.base.get_app_mut() {
+            if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                for a_track_instance in &mut a_body_reanim.m_track_instances {
+                    a_track_instance.m_ignore_clip_rect = false;
+                }
+            }
+        }
+    }
 
     /// 开始行走动画（对应 C++ StartWalkAnim）
-    pub fn start_walk_anim(&mut self, _blend_time: i32) {}
+    pub fn start_walk_anim(&mut self, blend_time: i32) {
+        // C++: TryToGet(mBodyReanimID) 为空直接返回
+        let a_body_exists = self.base.get_app().map_or(false, |app| {
+            app.reanimation_get(self.body_reanim_id).is_some()
+        });
+        if !a_body_exists {
+            return;
+        }
+
+        self.pick_random_speed();
+        if self.zombie_phase == ZombiePhase::LadderCarrying {
+            self.play_zombie_reanim("anim_ladderwalk", ReanimLoopType::Loop, blend_time, 0.0);
+        } else if self.zombie_phase == ZombiePhase::NewspaperMad {
+            self.play_zombie_reanim("anim_walk_nopaper", ReanimLoopType::Loop, blend_time, 0.0);
+        } else if self.in_pool && self.zombie_height != ZombieHeight::InToPool && self.zombie_height != ZombieHeight::OutOfPool
+            && self.base.get_app().map_or(false, |app| {
+                app.reanimation_get(self.body_reanim_id).map_or(false, |r| r.track_exists("anim_swim"))
+            })
+        {
+            self.play_zombie_reanim("anim_swim", ReanimLoopType::Loop, blend_time, 0.0);
+        } else if (self.zombie_type == ZombieType::Normal || self.zombie_type == ZombieType::TrafficCone || self.zombie_type == ZombieType::Pail)
+            && self.base.get_board().map_or(false, |b| b.m_dance_mode)
+        {
+            self.play_zombie_reanim("anim_dance", ReanimLoopType::Loop, blend_time, 0.0);
+        } else {
+            let mut a_walk_anim_variant = RandRange(2);
+            if self.zombie_type == ZombieType::PeaHead {
+                a_walk_anim_variant = 0;
+            }
+            if self.zombie_type == ZombieType::Flag {
+                a_walk_anim_variant = 0;
+            }
+
+            if a_walk_anim_variant == 0 && self.base.get_app().map_or(false, |app| {
+                app.reanimation_get(self.body_reanim_id).map_or(false, |r| r.track_exists("anim_walk2"))
+            }) {
+                self.play_zombie_reanim("anim_walk2", ReanimLoopType::Loop, blend_time, 0.0);
+            } else if self.base.get_app().map_or(false, |app| {
+                app.reanimation_get(self.body_reanim_id).map_or(false, |r| r.track_exists("anim_walk"))
+            }) {
+                self.play_zombie_reanim("anim_walk", ReanimLoopType::Loop, blend_time, 0.0);
+            }
+        }
+    }
 
     /// 启用胡子模式（对应 C++ EnableMustache）
-    pub fn enable_mustache(&mut self, _enable: bool) {}
+    pub fn enable_mustache(&mut self, enable: bool) {
+        use crate::todlib::reanim_loader::{reanimator_get_image, resolve_reanim_image_name};
+
+        if self.from_wave == Zombie::ZOMBIE_WAVE_UI {
+            return;
+        }
+        if !self.has_head || Zombie::is_zombotany(self.zombie_type) {
+            return;
+        }
+
+        // C++: TryToGet(mBodyReanimID) 为空或 TrackExists("Zombie_mustache") 为假直接返回
+        let a_track_exists = self.base.get_app().map_or(false, |app| {
+            app.reanimation_get(self.body_reanim_id)
+                .map_or(false, |r| r.track_exists("Zombie_mustache"))
+        });
+        if !a_track_exists {
+            return;
+        }
+
+        if enable {
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                    a_body_reanim.assign_render_group_to_prefix(
+                        "Zombie_mustache",
+                        crate::todlib::reanimator::RENDER_GROUP_NORMAL,
+                    );
+
+                    // C++: RandRangeInt(1, 3)
+                    match 1 + RandRange(3) {
+                        1 => a_body_reanim.set_image_override("Zombie_mustache", std::ptr::null_mut()),
+                        2 => a_body_reanim.set_image_override(
+                            "Zombie_mustache",
+                            reanimator_get_image(resolve_reanim_image_name("IMAGE_REANIM_ZOMBIE_MUSTACHE2"))
+                                .unwrap_or(std::ptr::null_mut()),
+                        ),
+                        3 => a_body_reanim.set_image_override(
+                            "Zombie_mustache",
+                            reanimator_get_image(resolve_reanim_image_name("IMAGE_REANIM_ZOMBIE_MUSTACHE3"))
+                                .unwrap_or(std::ptr::null_mut()),
+                        ),
+                        _ => {}
+                    }
+                }
+            }
+        } else {
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                    a_body_reanim.assign_render_group_to_prefix(
+                        "Zombie_mustache",
+                        crate::todlib::reanimator::RENDER_GROUP_HIDDEN,
+                    );
+                }
+            }
+        }
+    }
 
     /// 启用未来模式（对应 C++ EnableFuture）
-    pub fn enable_future(&mut self, _enable: bool) {}
+    pub fn enable_future(&mut self, enable: bool) {
+        use crate::todlib::reanim_loader::{reanimator_get_image, resolve_reanim_image_name};
+
+        if self.from_wave == Zombie::ZOMBIE_WAVE_UI || Zombie::is_zombotany(self.zombie_type) {
+            return;
+        }
+
+        // C++: TryToGet(mBodyReanimID) 为空或 mReanimationType != REANIM_ZOMBIE 直接返回
+        let a_is_plain_zombie = self.base.get_app().map_or(false, |app| {
+            app.reanimation_get(self.body_reanim_id)
+                .map_or(false, |r| r.reanim_type == ReanimationType::Zombie)
+        });
+        if !a_is_plain_zombie {
+            return;
+        }
+
+        if enable {
+            // C++: static_cast<unsigned int>(mBoard->ZombieGetID(this)) % 4
+            let a_id = self.base.get_board().map_or(0, |b| b.zombie_get_id(self) % 4);
+            let mut a_image = std::ptr::null_mut();
+            match a_id {
+                0 => a_image = reanimator_get_image(resolve_reanim_image_name("IMAGE_REANIM_ZOMBIE_HEAD_SUNGLASSES1"))
+                    .unwrap_or(std::ptr::null_mut()),
+                1 => a_image = reanimator_get_image(resolve_reanim_image_name("IMAGE_REANIM_ZOMBIE_HEAD_SUNGLASSES2"))
+                    .unwrap_or(std::ptr::null_mut()),
+                2 => a_image = reanimator_get_image(resolve_reanim_image_name("IMAGE_REANIM_ZOMBIE_HEAD_SUNGLASSES3"))
+                    .unwrap_or(std::ptr::null_mut()),
+                3 => a_image = reanimator_get_image(resolve_reanim_image_name("IMAGE_REANIM_ZOMBIE_HEAD_SUNGLASSES4"))
+                    .unwrap_or(std::ptr::null_mut()),
+                _ => debug_assert!(false), // C++: PVZP_ASSERT(false)
+            }
+
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                    a_body_reanim.set_image_override("anim_head1", a_image);
+                }
+            }
+        } else {
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                    a_body_reanim.set_image_override("anim_head1", std::ptr::null_mut());
+                }
+            }
+        }
+    }
 
     /// 播放僵尸出现音效（对应 C++ PlayZombieAppearSound）
     pub fn play_zombie_appear_sound(&mut self) {

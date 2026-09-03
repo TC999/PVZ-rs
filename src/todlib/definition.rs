@@ -59,6 +59,12 @@ pub struct ReanimatorTrackInstance {
     pub m_cached_center_y: f32,
     // 对应 C++ mRenderGroup（默认 RENDER_GROUP_NORMAL=0）
     pub m_render_group: i32,
+    // 对应 C++ mIgnoreClipRect（禁用裁剪矩形）
+    pub m_ignore_clip_rect: bool,
+    // 对应 C++ mIgnoreExtraAdditiveColor（忽略附加加法混合颜色）
+    pub m_ignore_extra_additive_color: bool,
+    // 对应 C++ mIgnoreColorOverride（忽略颜色覆盖）
+    pub m_ignore_color_override: bool,
 }
 
 impl ReanimatorTrackInstance {
@@ -76,6 +82,9 @@ impl ReanimatorTrackInstance {
             m_cached_center_x: 0.0,
             m_cached_center_y: 0.0,
             m_render_group: 0,
+            m_ignore_clip_rect: false,
+            m_ignore_extra_additive_color: false,
+            m_ignore_color_override: false,
         }
     }
 }
