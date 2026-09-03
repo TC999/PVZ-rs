@@ -115,8 +115,37 @@ impl ZenGarden {
     // --- 方法存根（待从 ZenGarden.cpp 翻译具体实现） ---
 
     pub fn zen_garden_init_level(&mut self) {
-        // [TRANSLATION_NOTE]: 完整逻辑依赖 Board、PottedPlant 等系统
-        // 设置当前时间、放置盆栽、添加臭鼬、播放音乐
+        // 对应 C++ ZenGardenInitLevel
+        let app_ptr = match self.app {
+            Some(p) => p,
+            None => return,
+        };
+        self.board = unsafe { (*app_ptr).board };
+        self.now_time = unsafe { (*app_ptr).get_now_time() };
+        self.now_tm = unsafe { (*app_ptr).get_local_time(self.now_time) };
+
+        let num_potted = unsafe { (*app_ptr).player_info.as_ref().map_or(0, |p| p.m_num_potted_plants) };
+        for i in 0..num_potted {
+            if let Some(pp) = self.potted_plant_from_index(i as usize) {
+                unsafe {
+                    if (*pp).which_zen_garden == self.garden_type {
+                        self.place_potted_plant(i as usize);
+                    }
+                }
+            }
+        }
+
+        if let Some(board_ptr) = self.board {
+            unsafe {
+                if let Some(challenge) = &mut (*board_ptr).challenge {
+                    challenge.challenge_state_counter = 3000;
+                }
+            }
+        }
+        self.add_stinky();
+        if let Some(music) = unsafe { (*app_ptr).music.as_mut() } {
+            music.start_game_music();
+        }
     }
 
     pub fn draw_potted_plant_icon(&self, g: &mut Graphics, x: f32, y: f32, potted_plant: &PottedPlant) {
@@ -1817,7 +1846,7 @@ impl ZenGarden {
     }
 
     pub fn zen_garden_start(&mut self) {
-        // TODO: 从 ZenGarden.cpp 翻译
+        // 对应 C++ ZenGardenStart：C++ 中该函数体为空
     }
 
     pub fn update_plant_effect_state(&self, plant: &mut Plant) {
