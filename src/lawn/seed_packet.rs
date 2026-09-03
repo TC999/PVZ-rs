@@ -6,6 +6,7 @@ use crate::lawn::game_object::GameObject;
 use crate::lawn::board::HitResult;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::rect::Rect;
+use crate::todlib::tod_common::TodWeightedArray;
 
 /// 种子槽 — 玩家选择植物的 UI 元素
 pub struct SeedPacket {
@@ -74,20 +75,25 @@ impl SeedPacket {
 
     /// 激活（对应 C++ Activate）
     pub fn activate(&mut self) {
+        // PVZP_ASSERT(mPacketType != SEED_NONE)
         self.active = true;
-        self.refreshing = false;
-        self.countdown = 0;
-        self.slot_machine_countdown = 0;
     }
 
-    /// 停用（对应 C++ Deactivate）
+    /// 停用（对应 C++ Deactivate：复位所有冷却/刷新状态）
     pub fn deactivate(&mut self) {
         self.active = false;
+        self.countdown = 0;
+        self.refresh_time = 0;
+        self.refreshing = false;
     }
 
     /// 设置激活状态（对应 C++ SetActivate）
     pub fn set_activate(&mut self, active: bool) {
-        self.active = active;
+        if active {
+            self.activate();
+        } else {
+            self.deactivate();
+        }
     }
 
     /// 能否拾取（对应 C++ CanPickUp）
@@ -95,14 +101,91 @@ impl SeedPacket {
         self.active && self.countdown <= 0 && self.seed_type != SeedType::None
     }
 
-    /// 准备就绪闪烁（对应 C++ FlashIfReady 简化版）
+    /// 准备就绪闪烁（对应 C++ FlashIfReady）
     pub fn flash_if_ready(&mut self) {
-        // [TRANSLATION_NOTE]: 闪烁粒子效果暂未实现
+        if !self.can_pick_up() {
+            return;
+        }
+        if let Some(app) = self.app {
+            unsafe {
+                if (*app).m_easy_planting_cheat {
+                    return;
+                }
+            }
+        }
+
+        if let Some(board) = self.board {
+            unsafe {
+                let b = &mut *board;
+                // [TRANSLATION_NOTE]: 非传送带模式加 PARTICLE_SEED_PACKET_FLASH 粒子未接入
+                if !b.has_conveyor_belt_seed_bank() {
+                    // 粒子位置：mX + mSeedBank->mX, mY + mSeedBank->mY
+                }
+
+                if b.m_tutorial_state == TutorialState::Level1RefreshPeashooter {
+                    b.set_tutorial_state(TutorialState::Level1PickUpPeashooter);
+                } else if b.m_tutorial_state == TutorialState::Level2RefreshSunflower
+                    && self.seed_type == SeedType::Sunflower
+                {
+                    b.set_tutorial_state(TutorialState::Level2PickUpSunflower);
+                } else if b.m_tutorial_state == TutorialState::MoreSunRefreshSunflower
+                    && self.seed_type == SeedType::Sunflower
+                {
+                    b.set_tutorial_state(TutorialState::MoreSunPickUpSunflower);
+                }
+            }
+        }
     }
 
-    /// 老虎机选种子（对应 C++ PickNextSlotMachineSeed 简化版）
+    /// 老虎机选种子（对应 C++ PickNextSlotMachineSeed）
     pub fn pick_next_slot_machine_seed(&mut self) {
-        // [TRANSLATION_NOTE]: 老虎机选种子逻辑暂未实现
+        let a_peas_count = match self.board {
+            Some(b) => unsafe { (*b).count_plant_by_type(SeedType::Peashooter) },
+            None => 0,
+        };
+
+        let slot_seed_types = [
+            SeedType::Sunflower,
+            SeedType::Peashooter,
+            SeedType::Snowpea,
+            SeedType::Wallnut,
+            SeedType::SlotMachineSun,
+            SeedType::SlotMachineDiamond,
+        ];
+
+        let mut a_seed_weight_array = [TodWeightedArray { item: 0, weight: 0 }; NUM_SEED_TYPES];
+        let mut a_seeds_count = 0usize;
+        for &a_seed_type in &slot_seed_types {
+            let mut a_weight = 100;
+            if a_seed_type == SeedType::Peashooter {
+                a_weight = crate::todlib::tod_common::tod_animate_curve(
+                    0, 5, a_peas_count, 200, 100, TodCurves::Linear,
+                );
+            } else if a_seed_type == SeedType::SlotMachineDiamond {
+                a_weight = 30;
+            }
+
+            if self.packet_index == 2 && a_seed_type != SeedType::SlotMachineDiamond {
+                if let Some(board) = self.board {
+                    unsafe {
+                        let b = &*board;
+                        if b.seed_bank.len() > 1
+                            && (a_seed_type == b.seed_bank[0].slot_machine_next_seed
+                                || a_seed_type == b.seed_bank[1].slot_machine_next_seed)
+                        {
+                            a_weight += a_weight / 2;
+                        }
+                    }
+                }
+            }
+
+            a_seed_weight_array[a_seeds_count].item = a_seed_type as usize;
+            a_seed_weight_array[a_seeds_count].weight = a_weight;
+            a_seeds_count += 1;
+        }
+
+        let a_pick = crate::todlib::tod_common::tod_pick_from_weighted_array(&a_seed_weight_array[..a_seeds_count]);
+        self.slot_machine_next_seed = slot_seed_types[a_pick.clamp(0, slot_seed_types.len() as isize - 1) as usize];
     }
 
     /// 老虎机启动（对应 C++ SlotMachineStart）
@@ -112,13 +195,21 @@ impl SeedPacket {
         self.pick_next_slot_machine_seed();
     }
 
-    /// 更新冷却（对应 C++ SeedPacket::Update 简化版）
+    /// 更新冷却（对应 C++ SeedPacket::Update）
     pub fn update(&mut self) {
         if self.seed_type == SeedType::None {
             return;
         }
+        // [TRANSLATION_NOTE]: C++ 先检查 mGameScene == SCENE_PLAYING 才更新 — 场景状态未接入
 
-        // [TRANSLATION_NOTE]: mMainCounter == 0 时 FlashIfReady 暂未实现
+        if let Some(board) = self.board {
+            unsafe {
+                // mMainCounter == 0 时闪烁
+                if (*board).m_main_counter == 0 {
+                    self.flash_if_ready();
+                }
+            }
+        }
 
         // 冷却刷新
         if !self.active && self.refreshing {
@@ -131,11 +222,14 @@ impl SeedPacket {
             }
         }
 
-        // 老虎机滚动
+        // 老虎机滚动（对应 C++ Update：翻转速度曲线）
         if self.slot_machine_countdown > 0 {
             self.slot_machine_countdown -= 1;
-            // [TRANSLATION_NOTE]: 使用曲线动画计算翻转速度
-            self.slot_machine_position += 0.06;
+            let a_flips_per_second = crate::todlib::tod_common::tod_animate_curve_float(
+                400, 0, self.slot_machine_countdown, 6.0, 2.0, TodCurves::Linear,
+            );
+            self.slot_machine_position += a_flips_per_second * 0.01;
+
             if self.slot_machine_position >= 1.0 {
                 self.seed_type = self.slot_machine_next_seed;
                 if self.slot_machine_countdown == 0 {
@@ -145,12 +239,73 @@ impl SeedPacket {
                     self.slot_machine_position -= 1.0;
                     self.pick_next_slot_machine_seed();
                 }
+            } else if self.slot_machine_countdown == 0 {
+                self.slot_machine_countdown = 1;
             }
         }
     }
 
     /// 绘制
-    pub fn draw(&self, _g: &mut Graphics) {}
+    pub fn draw(&self, g: &mut Graphics) {
+        let mut a_percent_dark = 0.0f32;
+        if !self.active {
+            if self.refresh_time == 0 {
+                a_percent_dark = 1.0;
+            } else {
+                a_percent_dark = (self.refresh_time - self.countdown) as f32 / self.refresh_time as f32;
+            }
+        }
+
+        if self.slot_machine_countdown > 0 {
+            // 老虎机滚动中：裁剪绘制当前种与下一种子（两张叠画）
+            let a_offset_y = (-self.height as f32 * self.slot_machine_position).round() as i32;
+            draw_seed_packet(g, 0.0, a_offset_y as f32, self.seed_type, SeedType::None, 0.0, 128, false, false);
+            draw_seed_packet(g, 0.0, (self.height + a_offset_y) as f32, self.slot_machine_next_seed, SeedType::None, 0.0, 128, false, false);
+        } else {
+            let mut a_use_seed_type = self.seed_type;
+            if self.seed_type == SeedType::Imitater && self.imitater_type != SeedType::None {
+                a_use_seed_type = self.imitater_type;
+            }
+
+            let mut a_draw_cost = true;
+            let mut a_cost = 0;
+            let mut a_conveyor = false;
+            let mut a_slot_level = false;
+            let mut a_grayness = 255;
+            if let Some(board) = self.board {
+                unsafe {
+                    let b = &*board;
+                    a_conveyor = b.has_conveyor_belt_seed_bank();
+                    a_cost = b.get_current_plant_cost(self.seed_type, self.imitater_type);
+                    if a_conveyor {
+                        a_draw_cost = false;
+                    }
+                    if let Some(app) = self.app {
+                        if (*app).is_slot_machine_level() {
+                            a_slot_level = true;
+                            a_draw_cost = false;
+                        }
+                        if ((*app).game_mode == GameMode::ChallengeBeghouled && !self.active)
+                            || ((*app).game_mode == GameMode::ChallengeBeghouledTwist && !self.active)
+                        {
+                            a_grayness = 64;
+                        } else if (*app).m_easy_planting_cheat {
+                            a_percent_dark = 0.0;
+                        } else if (a_draw_cost && !b.can_take_sun_money(a_cost))
+                            || a_percent_dark > 1.0
+                            || !b.planting_requirements_met(a_use_seed_type)
+                        {
+                            a_grayness = 128;
+                        }
+                    }
+                }
+            }
+            // [TRANSLATION_NOTE]: C++ 中 mGameScene != SCENE_PLAYING 用 mCutSceneDarken、教程高亮闪烁灰化未接入
+            let _ = (a_conveyor, a_slot_level, a_cost, a_grayness);
+
+            draw_seed_packet(g, self.offset_x as f32, 0.0, self.seed_type, self.imitater_type, a_percent_dark, a_grayness, a_draw_cost, true);
+        }
+    }
 
     /// 设置冷却时间
     pub fn set_countdown(&mut self, refresh_time: i32) {
@@ -159,27 +314,171 @@ impl SeedPacket {
 
     /// 种植后处理（对应 C++ WasPlanted）
     pub fn was_planted(&mut self) {
-        // [TRANSLATION_NOTE]: 完整逻辑依赖 Board::HasConveyorBeltSeedBank/IsSlotMachineLevel 等
-        // 传送带模式：从传送带移除
-        // 老虎机模式：Deactivate
-        // 坚不可摧模式：保持激活 + FlashIfReady
-        // 普通模式：times_used++ + refreshing = true + 计算 refresh_time
-        self.times_used += 1;
-        self.refreshing = true;
+        // PVZP_ASSERT(mPacketType != SEED_NONE)
+        let mut conveyor = false;
+        let mut slot_level = false;
+        let mut last_stand_before_onslaught = false;
+        if let Some(board) = self.board {
+            unsafe {
+                let b = &*board;
+                conveyor = b.has_conveyor_belt_seed_bank();
+                // C++: mGameMode == GAMEMODE_CHALLENGE_LAST_STAND && mChallenge->mChallengeState != STATECHALLENGE_LAST_STAND_ONSLAUGHT
+                if b.challenge.as_ref().map_or(false, |c| c.challenge_state != ChallengeState::LastStandOnslaught) {
+                    last_stand_before_onslaught = true;
+                }
+            }
+        }
+        if let Some(app) = self.app {
+            unsafe {
+                slot_level = (*app).is_slot_machine_level();
+                if (*app).game_mode != GameMode::ChallengeLastStand {
+                    last_stand_before_onslaught = false;
+                }
+            }
+        }
+
+        if conveyor {
+            // [TRANSLATION_NOTE]: C++ mBoard->mSeedBank->RemoveSeed(mIndex) — Rust 侧
+            // board.seed_bank 为 Vec<SeedPacket>，移除逻辑由 Board 层处理，此处暂略
+        } else if slot_level {
+            self.deactivate();
+        } else if last_stand_before_onslaught {
+            self.times_used += 1;
+            self.active = true;
+            self.flash_if_ready();
+        } else {
+            self.times_used += 1;
+            self.refreshing = true;
+            self.refresh_time = crate::lawn::plant::Plant::get_refresh_time(self.seed_type, self.imitater_type);
+        }
     }
 
-    /// 鼠标点击（对应 C++ MouseDown 简化版）
+    /// 鼠标点击（对应 C++ MouseDown）
     pub fn mouse_down(&mut self, _x: i32, _y: i32, _click_count: i32) {
-        // [TRANSLATION_NOTE]: 完整逻辑包含阳光检测、需求提示、Buzz 音效、教程状态机等
-        // 核心流程：
-        // 1. 检查暂停/场景/种子类型
-        // 2. 老虎机模式：显示提示 + 记录滚动次数
-        // 3. 检查激活状态 → 显示冷却提示
-        // 4. 检查阳光 → 显示不够提示
-        // 5. 检查合成需求 → 显示对应提示
-        // 6. 清除所有提示
-        // 7. 三消/水族馆模式：转发给 Challenge
-        // 8. 普通模式：设置光标类型 + 播放音效 + 更新教程 + Deactivate
+        let board_ptr = match self.board { Some(b) => b, None => return };
+        let app_ptr = match self.app { Some(a) => a, None => return };
+        unsafe {
+            let b = &mut *board_ptr;
+            let app = &mut *app_ptr;
+            // C++: mBoard->mPaused || mApp->mGameScene != SCENE_PLAYING || mPacketType == SEED_NONE
+            if b.m_paused || self.seed_type == SeedType::None {
+                return;
+            }
+            // [TRANSLATION_NOTE]: mApp->mGameScene != SCENE_PLAYING 检查未接入
+
+            // 老虎机模式
+            if app.is_slot_machine_level() {
+                // [TRANSLATION_NOTE]: mBoard->mAdvice->IsBeingDisplayed() 未接入，直接显示
+                b.display_advice("[ADVICE_SLOT_MACHINE_PULL]", MessageStyle::HintTallFast as i32, AdviceType::SlotMachinePull);
+                // [TRANSLATION_NOTE]: mChallenge->mSlotMachineRollCount = min(roll, 2) 未接入
+                return;
+            }
+
+            let mut a_use_seed_type = self.seed_type;
+            if self.seed_type == SeedType::Imitater && self.imitater_type != SeedType::None {
+                a_use_seed_type = self.imitater_type;
+            }
+
+            if !app.m_easy_planting_cheat {
+                if !self.active {
+                    // [TRANSLATION_NOTE]: PlaySample(SOUND_BUZZER) 未接入
+                    if app.is_first_time_adventure_mode() && b.level == 1 {
+                        b.display_advice("[ADVICE_SEED_REFRESH]", MessageStyle::TutorialLevel1 as i32, AdviceType::SeedRefresh);
+                    }
+                    return;
+                }
+
+                let a_cost = b.get_current_plant_cost(self.seed_type, self.imitater_type);
+                if !b.can_take_sun_money(a_cost) && !b.has_conveyor_belt_seed_bank() {
+                    // [TRANSLATION_NOTE]: PlaySample(SOUND_BUZZER) 未接入
+                    b.m_out_of_money_counter = 70;
+                    if app.is_first_time_adventure_mode() && b.level == 1 {
+                        b.display_advice("[ADVICE_CANT_AFFORD_PLANT]", MessageStyle::TutorialLevel1 as i32, AdviceType::CantAffordPlant);
+                    }
+                    return;
+                }
+
+                if !b.planting_requirements_met(a_use_seed_type) {
+                    // [TRANSLATION_NOTE]: PlaySample(SOUND_BUZZER) 未接入
+                    let (advice, style) = match a_use_seed_type {
+                        SeedType::Gatlingpea => (AdviceType::PlantNeedsRepeater, MessageStyle::HintLong),
+                        SeedType::Wintermelon => (AdviceType::PlantNeedsMelonpult, MessageStyle::HintLong),
+                        SeedType::Twinsunflower => (AdviceType::PlantNeedsSunflower, MessageStyle::HintLong),
+                        SeedType::Spikerock => (AdviceType::PlantNeedsSpikeweed, MessageStyle::HintLong),
+                        SeedType::Cobcannon => (AdviceType::PlantNeedsKernelpult, MessageStyle::HintLong),
+                        SeedType::GoldMagnet => (AdviceType::PlantNeedsMagnetshroom, MessageStyle::HintLong),
+                        SeedType::Gloomshroom => (AdviceType::PlantNeedsFumeshroom, MessageStyle::HintLong),
+                        SeedType::Cattail => (AdviceType::PlantNeedsLilypad, MessageStyle::HintLong),
+                        _ => (AdviceType::None, MessageStyle::HintLong),
+                    };
+                    let advice_str = match advice {
+                        AdviceType::PlantNeedsRepeater => "[ADVICE_PLANT_NEEDS_REPEATER]",
+                        AdviceType::PlantNeedsMelonpult => "[ADVICE_PLANT_NEEDS_MELONPULT]",
+                        AdviceType::PlantNeedsSunflower => "[ADVICE_PLANT_NEEDS_SUNFLOWER]",
+                        AdviceType::PlantNeedsSpikeweed => "[ADVICE_PLANT_NEEDS_SPIKEWEED]",
+                        AdviceType::PlantNeedsKernelpult => "[ADVICE_PLANT_NEEDS_KERNELPULT]",
+                        AdviceType::PlantNeedsMagnetshroom => "[ADVICE_PLANT_NEEDS_MAGNETSHROOM]",
+                        AdviceType::PlantNeedsFumeshroom => "[ADVICE_PLANT_NEEDS_FUMESHROOM]",
+                        AdviceType::PlantNeedsLilypad => "[ADVICE_PLANT_NEEDS_LILYPAD]",
+                        _ => "",
+                    };
+                    if !advice_str.is_empty() {
+                        b.display_advice(advice_str, style as i32, advice);
+                    }
+                    return;
+                }
+            }
+
+            b.clear_advice(AdviceType::CantAffordPlant);
+            b.clear_advice(AdviceType::PlantNeedsRepeater);
+            b.clear_advice(AdviceType::PlantNeedsMelonpult);
+            b.clear_advice(AdviceType::PlantNeedsSunflower);
+            b.clear_advice(AdviceType::PlantNeedsKernelpult);
+            b.clear_advice(AdviceType::PlantNeedsSpikeweed);
+            b.clear_advice(AdviceType::PlantNeedsMagnetshroom);
+            b.clear_advice(AdviceType::PlantNeedsFumeshroom);
+            b.clear_advice(AdviceType::PlantNeedsLilypad);
+
+            // 三消/水族馆模式转发给 Challenge
+            if app.game_mode == GameMode::ChallengeBeghouled || app.game_mode == GameMode::ChallengeBeghouledTwist {
+                if let Some(challenge) = b.challenge.as_mut() {
+                    challenge.beghouled_packet_clicked(self);
+                }
+            } else if app.game_mode == GameMode::ChallengeZombiquarium {
+                if let Some(challenge) = b.challenge.as_mut() {
+                    challenge.zombiquarium_packet_clicked(self);
+                }
+            } else {
+                // 普通模式：设置光标 + 音效 + 教程推进 + Deactivate
+                b.cursor_object.seed_type = self.seed_type;
+                b.cursor_object.imitater_type = self.imitater_type;
+                b.cursor_object.cursor_type = CursorType::PlantFromBank;
+                b.cursor_object.seed_bank_index = self.packet_index;
+                // [TRANSLATION_NOTE]: PlaySample(SOUND_SEEDLIFT) 未接入
+
+                if b.m_tutorial_state == TutorialState::Level1PickUpPeashooter {
+                    b.set_tutorial_state(TutorialState::Level1PlantPeashooter);
+                } else if b.m_tutorial_state == TutorialState::Level2PickUpSunflower {
+                    if self.seed_type == SeedType::Sunflower {
+                        b.set_tutorial_state(TutorialState::Level2PlantSunflower);
+                    } else {
+                        b.set_tutorial_state(TutorialState::Level2RefreshSunflower);
+                    }
+                } else if b.m_tutorial_state == TutorialState::MoreSunPickUpSunflower {
+                    if self.seed_type == SeedType::Sunflower {
+                        b.set_tutorial_state(TutorialState::MoreSunPlantSunflower);
+                    } else {
+                        b.set_tutorial_state(TutorialState::MoreSunRefreshSunflower);
+                    }
+                } else if b.m_tutorial_state == TutorialState::WhackAZombiePickSeed
+                    || b.m_tutorial_state == TutorialState::WhackAZombieBeforePickSeed
+                {
+                    b.set_tutorial_state(TutorialState::WhackAZombieCompleted);
+                }
+
+                self.deactivate();
+            }
+        }
     }
 
     /// 鼠标命中测试（对应 C++ MouseHitTest）
