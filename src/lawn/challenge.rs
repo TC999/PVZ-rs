@@ -122,15 +122,142 @@ impl Challenge {
     }
 
     pub fn start_level(&mut self) {
-        // [TRANSLATION_NOTE]: 完整逻辑涉及多个 Board 未翻译字段。保留可用逻辑。
-        let is_stormy = self.get_app().is_stormy_night_level();
-        let a_game_mode = self.get_app().game_mode;
-        if is_stormy {
+        // 对应 C++ Challenge::StartLevel L439-L576
+        if self.get_app().is_whack_a_zombie_level() {
+            // C++ L441-L454: 锤子游标与计数
+            // [TRANSLATION_NOTE]: mCursorObject->mCursorType/锤子 reanim（ReanimatorEnsureDefinitionLoaded、
+            // AddReanimation/ReanimationGetID）未接入，仅保留 mZombieCountDown 设置
+            let board = self.get_board();
+            board.m_zombie_count_down = 200;
+            board.m_zombie_count_down_start = board.m_zombie_count_down;
+        }
+        if self.get_app().is_stormy_night_level() {
             self.challenge_state = ChallengeState::StormFlash1;
             self.challenge_state_counter = 400;
         }
+        let a_game_mode = self.get_app().game_mode;
+        if a_game_mode == GameMode::ChallengeBobsledBonanza {
+            // C++ L461-L471: 非水池行设为全冰面
+            let board = self.get_board();
+            for i in 0..crate::lawn::board::MAX_GRID_SIZE_Y {
+                if board.m_plant_row[i] != PlantRowType::Pool {
+                    board.m_ice_min_x[i] = 400;
+                    board.m_ice_timer[i] = 0x7FFFFFFF;
+                }
+            }
+        }
+        if self.get_app().is_wallnut_bowling_level() {
+            // C++ L472-L479
+            let board = self.get_board();
+            board.m_zombie_count_down = 200;
+            board.m_zombie_count_down_start = board.m_zombie_count_down;
+            // C++: mBoard->mSeedBank->AddSeed(SEED_WALLNUT) —— [TRANSLATION_NOTE]: SeedBank 未接入 Rust，跳过
+            self.conveyor_belt_counter = 400;
+            self.show_bowling_line = 1;
+        }
+        if a_game_mode == GameMode::ChallengeShovel || a_game_mode == GameMode::ChallengeSquirrel {
+            self.shovel_add_wallnuts();
+        }
+        if self.get_app().is_scary_potter_level() {
+            self.scary_potter_start();
+        }
+        if self.get_app().is_little_trouble_level()
+            || self.get_app().is_stormy_night_level()
+            || self.get_app().is_bungee_blitz_level()
+            || a_game_mode == GameMode::ChallengeInvisighoul
+        {
+            // C++ L488-L493
+            let board = self.get_board();
+            board.m_zombie_count_down = 200;
+            board.m_zombie_count_down_start = board.m_zombie_count_down;
+            self.conveyor_belt_counter = 200;
+        }
+        if self.get_app().is_survival_mode() && self.survival_stage == 0 {
+            // C++ L494-L501: PvzpReplaceNumberString 填充旗子数
+            // [TRANSLATION_NOTE]: 数字替换未接入，直接使用原始字符串键
+            let a_message = if self.get_app().is_survival_normal(a_game_mode) {
+                "[ADVICE_SURVIVE_FLAGS]"
+            } else if self.get_app().is_survival_hard(a_game_mode) {
+                "[ADVICE_SURVIVE_FLAGS]"
+            } else {
+                "[ADVICE_SURVIVE_ENDLESS]"
+            };
+            self.get_board().display_advice(a_message, MessageStyle::HintFast as i32, AdviceType::SurviveFlags);
+        }
+        if a_game_mode == GameMode::ChallengeLastStand && self.survival_stage == 0 {
+            // C++ L502-L505
+            self.get_board().display_advice(
+                "[ADVICE_SURVIVE_FLAGS]",
+                MessageStyle::BigMiddleFast as i32,
+                AdviceType::SurviveFlags,
+            );
+        }
+        if a_game_mode == GameMode::ChallengeArtChallengeWallnut {
+            self.get_board().display_advice("[ADVICE_FILL_IN_WALLNUTS]", MessageStyle::HintFast as i32, AdviceType::None);
+        }
+        if a_game_mode == GameMode::ChallengeArtChallengeSunflower {
+            self.get_board().display_advice("[ADVICE_FILL_IN_SPACES]", MessageStyle::HintFast as i32, AdviceType::None);
+        }
+        if a_game_mode == GameMode::ChallengeSeeingStars {
+            self.get_board().display_advice("[ADVICE_FILL_IN_STARFRUIT]", MessageStyle::HintFast as i32, AdviceType::None);
+        }
+        if self.get_app().is_slot_machine_level() {
+            // C++ L518-L521: TUTORIAL_SLOT_MACHINE_PULL
+            self.get_board().set_tutorial_state(TutorialState::SlotMachinePullTut);
+        }
         if a_game_mode == GameMode::ChallengeBeghouled || a_game_mode == GameMode::ChallengeBeghouledTwist {
+            // C++ L522-L538
+            let board = self.get_board();
+            board.m_zombie_count_down = 200;
+            board.m_zombie_count_down_start = board.m_zombie_count_down;
+            self.beghouled_make_start_board();
+            self.beghouled_update_craters();
             self.challenge_state_counter = 1500;
+            if a_game_mode == GameMode::ChallengeBeghouled {
+                self.get_board().display_advice("[ADVICE_BEGHOULED_DRAG_TO_MATCH_3]", MessageStyle::HintFast as i32, AdviceType::None);
+            } else {
+                self.get_board().display_advice("[ADVICE_BEGHOULED_TWIST_TO_MATCH_3]", MessageStyle::HintFast as i32, AdviceType::None);
+            }
+        }
+        if self.get_app().is_mini_boss_level() {
+            // C++ L539-L544
+            let board = self.get_board();
+            board.m_zombie_count_down = 100;
+            board.m_zombie_count_down_start = board.m_zombie_count_down;
+            self.conveyor_belt_counter = 200;
+        }
+        if a_game_mode == GameMode::ChallengePortalCombat {
+            self.portal_start();
+        }
+        if a_game_mode == GameMode::ChallengeColumns {
+            // C++ L549-L553
+            let board = self.get_board();
+            board.m_current_wave = 9;
+            board.m_zombie_count_down = 2400;
+        }
+        if a_game_mode == GameMode::ChallengeAirRaid || a_game_mode == GameMode::ChallengeBobsledBonanza {
+            // C++ L554-L557
+            self.get_board().m_zombie_count_down = 4500;
+        }
+        if a_game_mode == GameMode::ChallengePogoParty {
+            // C++ L558-L561
+            self.get_board().m_zombie_count_down = 5500;
+        }
+        if a_game_mode == GameMode::ChallengeZombiquarium {
+            // C++ L562-L567
+            self.get_board().display_advice(
+                "[ADVICE_ZOMBIQUARIUM_CLICK_TO_FEED]",
+                MessageStyle::HintTallFast as i32,
+                AdviceType::ZombiquariumClickToFeed,
+            );
+            self.zombiquarium_spawn_snorkle();
+            self.zombiquarium_spawn_snorkle();
+        }
+        if self.get_app().is_izombie_level() {
+            self.i_zombie_start();
+        }
+        if self.get_app().is_squirrel_level() {
+            self.squirrel_start();
         }
     }
 
@@ -350,14 +477,12 @@ impl Challenge {
     }
 
     pub fn update(&mut self) {
-        // [TRANSLATION_NOTE]: 完整逻辑涉及多个未翻译 Board/LawnApp 字段和子函数
-        // 保留核心控制流结构
-        let is_stormy = self.get_app().is_stormy_night_level();
-        let a_game_mode = self.get_app().game_mode;
-        let a_game_scene = self.get_app().game_scene;
-        if is_stormy {
-            // [TRANSLATION_NOTE]: UpdateStormyNight() 暂未实现
+        // 对应 C++ Challenge::Update L2139-L2237
+        if self.get_app().is_stormy_night_level() {
+            self.update_stormy_night();
         }
+
+        let a_game_mode = self.get_app().game_mode;
         let board = self.get_board();
         if board.m_paused {
             if a_game_mode == GameMode::ChallengeBeghouledTwist {
@@ -366,15 +491,63 @@ impl Challenge {
             }
             return;
         }
-        if a_game_mode == GameMode::ChallengeRainingSeeds || is_stormy {
-            // [TRANSLATION_NOTE]: UpdateRain() 暂未实现
+        if a_game_mode == GameMode::ChallengeRainingSeeds || self.get_app().is_stormy_night_level() {
+            self.update_rain();
         }
-        if a_game_scene != crate::lawn::lawn_app::GameScenes::Playing && a_game_mode != GameMode::ChallengeTreeOfWisdom {
+        if self.get_app().game_scene != crate::lawn::lawn_app::GameScenes::Playing
+            && a_game_mode != GameMode::ChallengeTreeOfWisdom
+        {
             return;
         }
-        if board.has_conveyor_belt_seed_bank() {
+        if self.get_board().has_conveyor_belt_seed_bank() {
             self.update_conveyor_belt();
         }
+        if a_game_mode == GameMode::ChallengeBeghouled || a_game_mode == GameMode::ChallengeBeghouledTwist {
+            self.update_beghouled();
+        }
+        if self.get_app().is_scary_potter_level() {
+            self.scary_potter_update();
+        }
+        // C++ L2174-L2184: (ScaryPotter || WhackAZombie) && mSeedBank->mY < 0 时种子栏滑入
+        // [TRANSLATION_NOTE]: SeedBank 整体 y 坐标未接入 Rust（board.seed_bank 为 Vec<SeedPacket>），此段跳过
+        if self.get_app().is_whack_a_zombie_level() {
+            self.whack_a_zombie_update();
+        }
+        if self.get_app().is_izombie_level() {
+            self.i_zombie_update();
+        }
+        if self.get_app().is_slot_machine_level() {
+            self.update_slot_machine();
+        }
+        if a_game_mode == GameMode::ChallengeZombieNimble {
+            // C++ L2200: mBoard->UpdateGame() —— 速度挑战的额外一帧更新（C++ GAMEMODE_CHALLENGE_SPEED）
+            self.get_board().update();
+        }
+        if a_game_mode == GameMode::ChallengeRainingSeeds {
+            self.update_raining_seeds();
+        }
+        if a_game_mode == GameMode::ChallengePortalCombat {
+            self.update_portal_combat();
+        }
+        if self.get_app().is_squirrel_level() {
+            self.squirrel_update();
+        }
+        if a_game_mode == GameMode::ChallengeZombiquarium {
+            self.zombiquarium_update();
+        }
+        if a_game_mode == GameMode::ChallengeTreeOfWisdom {
+            self.tree_of_wisdom_update();
+        }
+        if a_game_mode == GameMode::ChallengeIceLevel && self.get_board().m_main_counter == 3000 {
+            // C++ L2222-L2226: 该帧播放 FOLEY_FLOOP 与 SOUND_LOSEMUSIC 音效
+            self.get_app().play_foley(crate::todlib::tod_foley::FoleyType::Floop as i32);
+            self.get_app().play_sample(crate::framework::resources::ResourceId::SoundLosemusic as i32);
+        }
+        if a_game_mode == GameMode::ChallengeLastStand {
+            self.last_stand_update();
+        }
+        // C++ L2232-L2236: mReanimChallenge 的 attachment reanim 更新
+        // [TRANSLATION_NOTE]: reanim 系统未接入，跳过
     }
 
     pub fn update_beghouled(&mut self) {
