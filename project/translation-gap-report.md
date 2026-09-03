@@ -1,108 +1,86 @@
-# PVZ-rs 翻译缺口分析报告（当前代码重核版）
+# PVZ-rs ↔ C++ 翻译差异核查报告（2026-09-03 重核版）
 
-> 对比 Rust 版 (PvZ Portable) 与 C++ 版 (PvPZ) 之间的翻译不一致
-> 旧版报告（09-01）已作废：09-02 大批提交后其结论多处过时，本报告基于当时最新 `src/lawn/` 与 `cpp/src/Lawn/` 逐函数核对重新生成。
-> 核对方式：只读扫描（函数名归一化对比 + 空函数体扫描 + 关键函数抽查），未修改任何源码。
-
-**编译状态**：`cargo build` 成功（665 warnings）。
-
----
-
-## 〇、相对旧报告的修复确认（旧版"严重问题"多数已消除）
-
-- **GameMode 枚举**：已补齐 73 个值并显式对齐 C++ 数值（`game_enums.rs` 171 行起注释），ScaryPotter / I_Zombie 已拆分到各关卡，存档文件名错位问题消除。
-- **HelmType 枚举**：已补齐 `Redeyes/Headband/Bobsled/Wallnut/Tallnut`（值 5–9）。
-- **cutscene.rs 判定类函数**：`is_showing_crazy_dave`、`is_in_shovel_tutorial`、`is_survival_repick`、`is_scrolled_left_at_start`、`can_get_packet_upgrade`、`show_zombie_walking`、`should_run_upsell_board`、`is_non_scrolling_cutscene` 等已从硬编码 `false` 改为真实逻辑。
-- **zombie.rs Boss 系列**：`update_boss` + `boss_play_idle/boss_rv_attack/boss_rv_landing/boss_spawn_attack/boss_spawn_contact/boss_stomp_attack/boss_stomp_contact/boss_bungee_attack/boss_bungee_spawn/boss_bungee_leave/boss_head_attack/boss_head_spit/boss_destroy_iceball_in_row/boss_destroy_fireball/boss_head_spit_effect/boss_head_spit_contact/update_boss_fireball/boss_start_death/boss_die` 均已翻译；`draw()`/`draw_reanim`/`draw_bobsled_reanim`/`draw_bungee_reanim`/`draw_bungee_target`/`draw_dancer_reanim`/`draw_bungee_cord`/`draw_ice_trap`/`draw_butter` 已有实体。
-- **challenge.rs**：Beghouled / BeghouledTwist / ScaryPotter / Portal / Squirrel / Zombiquarium / 打地鼠等系列均已实现；`can_plant_at` 已含完整种植限制逻辑（墙果保龄球线 / I,Zombie 半场 / 艺术挑战 / Boss 行限制），不再恒返回 `Ok`。
+> 基线：HEAD `d6982dd`（2026-09-03 08:22，"绘制层: seed_packet draw_seed_packet 骨架"）。
+> 对比 Rust 版（`src/`）与 C++ 版（`cpp/src/Lawn/`、`cpp/src/ConstEnums.h`）的翻译不一致。
+> 方法：只读扫描——词干级函数匹配（camelCase↔snake，含 `BossRVAttack`/`WhackAZombie`/C++ 拼写错误 `Attact` 等特殊边界）+ 空函数体/占位扫描（EMPTY / STUB / TODO / TRANSLATION_NOTE）+ 关键逻辑抽查。**未修改任何源码**（git 工作区干净）。
+> 编译基线：`cargo build` 成功（670 warnings，514 duplicates）。
+>
+> **本版相对 09-02 版及对话摘要的勘误**：`challenge.rs` 的 IZombie/Whack/Portal/Beghouled 系列、`cutscene.rs::PlaceAZombie`、`grid_item.rs::DrawIZombieBrain` 均有对应 `fn`（个别为空体 stub），**不是**"完全缺失"；此前逐行括号脚本因漏采多行签名 fn 造成误报，本版以词干匹配 + 人工复核为准。
 
 ---
 
-## 一、仍缺失/不一致的差异总览（按文件）
+## 一、高危逻辑不一致（函数存在但行为与 C++ 不符，优先修复）
 
-### 1. 完全缺失的函数（C++ 有实现、全仓库无对应 `fn`）
+1. **`board.rs::find_plant_at` 恒返回 `None`**（board.rs:1041，`find(|p| /* p.id == pid */ false)` 为占位）。
+   后果：僵尸吃植物分支（board.rs:1004）恒走 `else` → 植物被啃两口即 `stop_eating()`，永远不触发植物的 `die()`/被吃动画与音效（C++ 走 `Board::ZombieEatPlant` + `Plant::Die`）。
+2. **`board.rs::find_zombie_in_row` 忽略 `row`/`from_col`，恒返回僵尸列表第一只**（board.rs:1054）。
+   植物开火主链 `update_abilities → update_shooter → find_target_and_fire → board.find_zombie_in_row`（plant.rs:568）使用该函数 → 射手可能隔行开火、无视目标列。plant.rs:647 `find_target_zombie`（按行+碰撞矩形加权，较接近 C++）未被主链采用。
+3. **割草机逻辑两套脱节**：
+   - `lawn_mower.rs::update`（77 行起）碰撞命中处为空操作（借用问题注释掉，未调 `mow_zombie`）；
+   - 实际触发在 `board.rs` 碰撞循环中直接 `mower.start_mowing() + zombie.die_no_loot()`；
+   - `lawn_mower.rs::mow_zombie`（153 行）**无任何调用者**。
+   C++ 语义（`LawnMower::Update→MowZombie`：同机连续碾压多只、Bungee 僵尸跳伞躲避、碾压行推进、SuperMower 判定）丢失。
+4. **特殊植物状态机大量"依赖底层系统"占位**（plant.rs 1539–2260，对照 C++ `UpdateXxx`）：
+   - `update_doom_shroom`/`update_ice_shroom`：仅置状态，无爆炸范围伤害/冰冻/特效音效接入；
+   - `update_chomper`：无啃咬目标判定，`Ready` 直接进 `Biting`；
+   - `update_potato`：`PotatoArmed` 后无僵尸接近引爆判定；
+   - `update_tanglekelp`：抓到后 `die()` 被注释；
+   - `update_scaredy_shroom`：无僵尸靠近检测，仅状态空转；
+   - `update_blover`：空体。
+5. **`plant.rs::fire`/`find_target_and_fire` 简化**：`weapon` 参数被忽略；`Fumeshroom/Gloomshroom/Starfruit` 分支直接 `return`（C++ `Plant::Fire` 按 weapon 决定弹种/伤害/特效）。
 
-| 文件 | 缺失函数 |
-|---|---|
-| **board.rs** | `AddACrater`、`AddAGraveStone`、`AddALadder`、`DrawBackdrop`、`DrawGameObjects`、`DrawHouseDoorBottom/Top`、`DrawUITop/Bottom/TopRightUI/UICoinBank/Shovel/ZenButtons/ProgressMeter`、board 层 `KeyChar`、`SpecialPlantHitTest`、`ToolHitTestHelper`、`HighlightPlantsForMouse`、`GetZenButtonRect`、`AddBossRenderItem`、`CreateRakeReanim`、`CountSunflowers`、`DrawDebugText/DrawDebugObjectRects` |
-| **plant.rs** | `Animate/AnimateGarlic/AnimateNuts/AnimatePumpkin`、`UpdateReanim(+Color)`、`UpdateBowling`、`DrawMagnetItems(OnTop)`、`GetFreeMagnetItem`、`MagnetShroomAttactItem`、`StarFruitFire`、`MakeRenderOrder`、`GetImage`、`GetToolTip`、`PreloadPlantResources`、`AddAttachedParticle`、`DrawSeedType` |
-| **zombie.rs** | `DrawZombieWithParts/DrawZombiePart/DrawZombieHead`、`FindPlantTarget`、`SetupReanimForLostArm/Head`、`UpdateZombieGatling/Pea/Jalapeno/SquashHead`、`ApplyZombatarHead`、`ShowYuckyFace/HasYuckyFaceImage`、`BobsledBurn/BobsledDie`、`BungeeDie/BungeeDropPlant`、`StartMindControlled`、`PreloadZombieResources`、`OverrideParticleColor/Scale`、`BalloonPropellerHatSpin`、`AddAttachedReanim`、`StrFormat`、`IsImmobilizied` |
-| **coin.rs** | `IsSun`、`IsLevelAward`、`IsPresentWithAdvice`、`CoinGetsBouncyArrow`、`GetDisappearTime`、`PlayCollectSound`、`PlayGroundSound`、`PlayLaunchSound`、`MouseDown`、`DroppedUsableSeed`、`TryAutoCollectAfterLevelAward`（11 个） |
-| **seed_packet.rs** | 传送带系列 `AddSeed/RemoveSeed/RefreshAllPackets/GetNumSeedsOnConveyorBelt/CountOfTypeOnConveyorBelt/UpdateWidth/ContainsPoint`（注：`update_conveyor_belt` 在 challenge.rs:924，不在 seed_packet） |
-| **projectile.rs** | `DoImpact`、`FindCollisionTarget`、`PlayImpactSound` |
-| 其他 | `lawn_common.rs::KeyText`；`grid_item.rs` 无独立 `DrawGridItem` |
+---
 
-### 2. 函数体为空的占位（C++ 对应函数有实质逻辑）
+## 二、完全缺失（C++ 有实现，Rust 全仓库无对应 fn；改名等价项已剔除）
 
-| 文件 | 空函数数 | 代表函数 |
+| 文件 | 缺失函数 | 备注 |
 |---|---|---|
-| **lawn_app.rs** | 36 | `check_for_game_end`、`end_level`、`show/kill_award_screen`、`show_seed_chooser_screen`、`show/kill_store_screen`、`do_almanac_dialog`、`do_pause_dialog`、Crazy Dave 整套（`crazy_dave_enter/update/leave/draw/die/stop_talking/talk_index/talk_message`）、`play_foley/play_foley_pitch/play_sample`、`toggle_slow/fast_mo`、`write_to_registry`、`write_current_user_config`、`update_player_profile_for_finishing_level`、`confirm_quit`、`switch_screen_mode`、`do_high_score_dialog` 等（对应 `LawnApp.cpp` 181 个方法） |
-| **zen_garden.rs** | 26 | `zen_garden_update/start/init_level`、`draw_backdrop/draw_potted_plant(+icon)`、`draw_plant_overlay`、`mouse_down_with_money_sign`、`mouse_down_with_full/empty_wheel_barrow`、`goto_next_garden`、`leave_garden`、`open_store`、`do_feeding_tool`、`feed_chocolate_to_plant`、`plant_update_production`、`add/remove_happy_effect`、`zen_tool_update`、`advance_crazy_dave_dialog`、`show_tutorial_arrow_on_watering_can`、`setup_for_zen_tutorial`、`update_plant_effect_state`、`potted_plant_update`、`set_plant_anim_speed`、`plant_set_launch_counter` |
-| **cutscene.rs** | 13 | `load_intro_board`、`load_upsell_board_pool/fog/roof`、`load_upsell_challenge_screen`、`update_upsell`、`draw_upsell/draw_intro`、`add_upsell_zombie`、`cancel_intro`、`animate_board`、`preload_resources`、`clear_upsell_board` |
-| **board.rs** | 14 | `save_game`、`setup_waves`、`update_fwoosh`、`update_layers`、`process_delete_queue`、`do_typing_check`、`pick_up_tool`、`survival_save_score`、`puzzle_save_streak`、`update_progress_meter`、`freeze_effects_for_cutscene`、`stop_all_zombie_sounds`、`reset_fps_stats`、`remove_particle_by_type` |
-| **zombie.rs** | 21 | reanim/声音辅助：`update_reanim`、`load_plain_zombie_reanim`、`start_walk_anim`、`set/apply_anim_rate`、`reanim_show_prefix/show_track`、`reanim_ignore_clip_rect/reenable_clipping`、`drop_loot`、`update_mowered`、`attach/detach_shield`、`setup_door_arms`、`setup_reanim_layers`、`show_door_arms`、`setup_water_track`、`enable_mustache/enable_future`、`setup_zombatar_flag_reanim` |
-| **plant.rs** | 11 | reanim 动画接口：`set_body_reanim_frame/rate/loop/base_pose`、`add_head_reanim(1/2/3)`、`play_body_reanim`、`play_idle_anim`、`update_blover`、`set_sleeping` |
-| **lawn_mower.rs** | 4 | `draw`、`draw_shadow`、`update_pool`、`enable_super_mower` |
-| **challenge.rs** | 9 | 纯绘制：`draw_backdrop`、`draw_rain`、`draw_art_challenge`、`draw_beghouled`、`draw_slot_machine`、`tree_of_wisdom_draw`、`i_zombie_draw_plant`、`i_zombie_setup_plant`、`i_zombie_set_plant_filter_effect` |
-| **coin.rs** | 1 | `draw` |
-| **projectile.rs** | 1 | `draw_shadow` |
-| **seed_packet.rs** | 4 | `draw`、`mouse_down`、`flash_if_ready`、`pick_next_slot_machine_seed` |
-| **cursor_object.rs** | 2 | `draw`、`plant_draw_seed_type` |
+| **zombie.rs**（22） | `AddAttachedReanim`、`AnimateChewEffect`、`AnimateChewSound`、`ApplyZombatarHead`、`BalloonPropellerHatSpin`、`BobsledBurn`、`BobsledDie`、`BungeeDie`、`BungeeDropPlant`、`DrawZombieHead`、`DrawZombiePart`、`DrawZombieWithParts`、`HasYuckyFaceImage`、`OverrideParticleColor`、`OverrideParticleScale`、`SetupReanimForLostArm`、`SetupReanimForLostHead`、`ShowYuckyFace`、`StartMindControlled`、`UpdateZombieGatlingHead`、`UpdateZombieJalapenoHead`、`UpdateZombiePeaHead`、`UpdateZombieSquashHead` | `drop_arm`/`drop_head`（4530/4536）只清字段，未做 reanim 头/臂掉落设置；`IsImmobilizied`→`is_immobilized`(3853)、`IsTanglekelpTarget`→`is_tangle_kelp_target`(3446)、`FindPlantTarget`→`find_plant_target_index`(2486)、`CountBungees…`→`count_bungees_targeting_sunflowers`(5914) 已改名存在；C++ `DrawZombie` 手工部件绘制由 `draw()`(4752)+`draw_reanim` 承担（reanim 驱动，非手工图层） |
+| **plant.rs**（8） | `AnimateGarlic`、`AnimateNuts`、`AnimatePumpkin`、`DrawMagnetItems`、`DrawMagnetItemsOnTop`、`GetToolTip`、`UpdateBowling`、`UpdateReanimColor` | `StarFruitFire`→`launch_star_fruit`(594)、`MagnetShroomAttactItem`→`magnet_shroom_attack_item`(1806)、`GetFreeMagnetItem`→`get_free_magnet_item_idx`(1792)、`IsAGoldMagnetAboutToSuck`→`is_a_gold_magnet_about_to_suck`(2098) 已改名存在；`UpdateBowling` 全仓库无保龄球逻辑 |
+| **board.rs**（11） | `AddBossRenderItem`、`CreateRakeReanim`、`DrawGameObjects`、`DrawDebugText`、`DrawDebugObjectRects`、`DrawHouseDoorBottom`、`DrawHouseDoorTop`、`SpecialPlantHitTest`、`ToolHitTestHelper`、`HighlightPlantsForMouse`、`ResetFPSStats` | 顶层 `draw()`(1426) 已驱动各实体绘制，但 C++ `DrawGameObjects/HouseDoor*/Debug*` 拆分未搬；`DrawUITop/UIBottom/UICoinBank/Shovel/ProgressMeter/ZenButtons/ZenWheelBarrowButton/TopRightUI` 部分并入 `draw_ui`(1545)（种子槽/阳光/铲子已画）；`AddACrater/AddAGraveStone/AddALadder`→`add_crater/add_grave_stone/add_ladder`、`CountSunFlowers`→`count_sunflowers`(2650)、`StageHas6Rows`→`stage_has_6_rows`(2204)、`GetIceZPos`→`get_ice_z_pos`(3249)、`PixelToGrid*KeepOnBoard`/`OffsetYForPlanting` 均已有 |
+| **coin.rs**（9） | `CoinGetsBouncyArrow`、`DroppedUsableSeed`、`GetDisappearTime`、`IsLevelAward`、`IsPresentWithAdvice`、`PlayCollectSound`、`PlayGroundSound`、`PlayLaunchSound`、`TryAutoCollectAfterLevelAward` | `IsSun` 由初始化字段 `is_sun` + `is_sun_type()`(305) 等价；收集音效在 `collect`(239)/`score_coin`(310) 内以注释占位 |
+| **projectile.rs**（1） | `PlayImpactSound` | `DoImpact`→`do_impact_by_index`(388)、碰撞→`check_for_collision`(333)/`find_collision_target_plant`(427) 已改名存在 |
+| **message_widget.rs**（2） | `DrawReanimatedText`、`LayoutReanimText` | |
+| **system/player_info.rs**（6） | `LoadDetails`、`SaveDetails`、`SyncDetails`、`SyncSummary`、`DeleteUserFiles`、`ResetChallengeRecord` | 存档读写只有基础容器方法 |
+| **system/profile_mgr.rs**（1） | `SyncState` | |
 
-### 3. widget/ 子目录空函数（对话框/界面层）
-
-| 文件 | 空函数数 | 文件 | 空函数数 |
-|---|---|---|---|
-| credit_screen.rs | 18 | lawn_dialog.rs | 12 |
-| challenge_screen.rs | 11 | user_dialog.rs | 11 |
-| new_user_dialog.rs | 8 | store_screen.rs | 7 |
-| cheat_dialog.rs | 7 | continue_dialog.rs | 7 |
-| almanac_dialog.rs | 5 | award_screen.rs | 5 |
-| seed_chooser_screen.rs | 5 | game_button.rs | 4 |
-| new_options_dialog.rs | 4 | imitater_dialog.rs | 3 |
-| game_selector.rs | 3 | achievements_screen.rs | 2 |
-
-### 4. system/ 子目录空函数（少量）
-
-`music.rs` 1、`profile_mgr.rs` 1、`reanimation_lawn.rs` 3。`save_game.rs`(43)、`player_info.rs`、`data_sync.rs`(50)、`typing_check.rs`、`pool_effect.rs` 无空函数。
+**等价替代（不视为缺失）**：`DataSync::Sync*`→`read_u*/write_u*` 系列；`Music::PvzpLoadMusic`→`tod_load_music`；`PoolEffect::PoolEffectDraw/Initialize/Update`→`draw/initialize/update`（注意 `pool_effect.rs::draw`(167) 忽略 `is_night` 参数，夜晚水面绘制未区分）。
 
 ---
 
-## 二、行为简化 / 注释保留的差异（`TRANSLATION_NOTE` 残留）
+## 三、存在但为空体/stub/占位（扫描口径：EMPTY 空体 / STUB / TODO / 函数体含 TRANSLATION_NOTE，后者可能有部分实现）
 
-这些函数有实体代码，但与 C++ 不一致：相关逻辑被注释保留原文或以简化写法替代。
+扫描共标出 **329 个函数**，按文件分布（前 20）：
 
-- **plant.rs**（约 27 处）：reanim 动画链路未接入 —— `update()` 仅 `update_abilities()`+血量检查，C++ 的 `Animate/UpdateReanim/DoBlink` 流程缺失；玉米炮 / 模仿者 / 磁力菇 / 大蒜等处的轨道触发、粒子、音效多为注释（`ShouldTriggerTimedEvent`、`FOLEY_*`、`ReanimShowPrefix`、`AttachEffect` 等）。
-- **board.rs**（约 12 处 + 空函数）：`update()`（628 行）注释声明"完整 C++ 实现还包含 CutScene 更新、鼠标位置更新、按钮更新、震动等"；波次音效、`FadeOutLevel()`、粒子 ID 系统、大波提示、特殊模式波次间隔等未接入；`draw()` 相关缺第一节 UI/背景函数。
-- **zombie.rs**（约 36 处）：reanim/particle/音效轨道大量以注释保留 C++ 原文；另有"comment garbled in local file"（822/3319/3385/3406/3445–3538 行区域）与 `boss_die` 内 `AttachEffect(PARTICLE_ZAMBONI_SMOKE)` 等未接入。
-- **lawn_app.rs**（13 处）：部分模式判定为硬编码/近似（如挑战定义缺失导致的值近似）。
+| 文件 | 数量 | 代表（C++ 均有实体逻辑） |
+|---|---|---|
+| zombie.rs | 42 | `load_plain_zombie_reanim`(5633)、`update_reanim`(5687)、`attach/detach_shield`(5666/…)、`setup_door_arms`(5740)、`setup_reanim_layers`(5743)、`show_door_arms`(5746)、`set_anim_rate`(5660)/`apply_anim_rate`、`reanim_show_prefix/show_track`(5649/5652)、`add_attached_particle`(5672→None)、`setup_zombatar_flag_reanim`(5737)、`drop_shield/drop_arm/drop_head`（简化） |
+| lawn_app.rs | 29 | Crazy Dave 整套（`crazy_dave_enter/update/draw/talk_message/…`）、`show/kill_award_screen`、`do_almanac_dialog`、`do_pause_dialog`、`write_to_registry`、`switch_screen_mode`(1763 空)、`do_high_score_dialog`(1765 空)、`confirm_quit`（C++ LawnApp 共 181 方法，界面流程类为主） |
+| plant.rs | 29 | reanim 动画接口全空：`set_body_reanim_frame/rate/loop/frame_base_pose`(1378–1387)、`add_head_reanim/2/3`(1390–1396)、`play_body_reanim`(1399)、`play_idle_anim`(1404)、`set_sleeping`(1286)、`preload_plant_resources`(1120)、`update_blover` |
+| zen_garden.rs | 19 | `zen_garden_update/start/init_level`、`do_feeding_tool`、`potted_plant_update`、`plant_update_production`、`draw_potted_plant(+icon)` 等 |
+| projectile.rs | 16 | `update` 分支、`do_impact_by_index` 内音效/特效占位 |
+| cutscene.rs | 15 | `load_intro_board`、`load_upsell_board_pool/fog/roof`、`update_upsell`/`draw_upsell`、`preload_resources`、`clear_upsell_board` |
+| board.rs | 14 | `save_game`、`setup_waves`、`update_fwoosh`、`process_delete_queue`(4047 空)、`do_typing_check`、`pick_up_tool`、`update_level_end_sequence`（简化）、`tutorial_arrow_show` |
+| widget/credit_screen.rs | 13 | 09-02/09-03 已补 update/阶段推进/播放 reanim，仍以资源占位为主 |
+| challenge.rs | 12 | **EMPTY 空体 9 个**：`draw_backdrop`(425)、`draw_art_challenge`(429)、`draw_beghouled`(519)、`draw_slot_machine`(683)、`draw_rain`(1788)、`tree_of_wisdom_draw`(2550)、`i_zombie_draw_plant`(1750)、`i_zombie_set_plant_filter_effect`(1754)、`i_zombie_setup_plant`(1985)；NOTE 3 个：`start_level`(102)、`update`(330)、`init_level`(810)。其余 IZombie/Whack/Portal/Beghouled 系列（`i_zombie_eat_brain` 1996、`i_zombie_get_brain_target` 2011、`i_zombie_place_*`、`i_zombie_score_brain` 2170、`whack_a_zombie_*` 等）已有实体 |
+| system/music.rs | 9 | `music_init/dispose/update` 部分占位、`tod_load_music`/`load_song` 主体（openmpt 接入） |
+| grid_item.rs | 8 | `update_portal`/`update_rake`/`update_scary_pot`、`draw_stinky`/`draw_scary_pot` 等 |
+| widget/*（cheat_dialog 8、challenge_screen 7、lawn_dialog 7、award_screen 6、seed_chooser_screen 6、store_screen 6、game_button 5…） | ~70 | 对话框/商店/选卡界面，多为"依赖图片/3D 资源"注释占位 |
+| coin.rs / lawn_mower.rs / seed_packet.rs / cursor_object.rs | 7 / 7 / 7 / 2 | `coin::draw`(230)、`lawn_mower::draw`(209)/`draw_shadow`(204)/`update_pool`(197)/`enable_super_mower`(193 空)、`seed_packet::draw`(153 空)/`mouse_down`/`flash_if_ready`/`pick_next_slot_machine_seed`、`cursor_object::draw`(120 空)/`plant_draw_seed_type`(368 空) |
 
-**共性根因**：reanim（动画）、particle（粒子）、音效三大子系统在游戏对象上的接入不完整，是"有骨架无血肉"差异的主来源。
-
----
-
-## 三、差异本质归类
-
-1. **绘制/UI 层整体缺失**：Board/Plant/Zombie 的绘制、全部背景/UI 绘制函数，及 widget 对话框、Crazy Dave、商店、奖杯/奖励屏幕多空 —— 画面与交互不完整。
-2. **reanim / particle / 音效未接入游戏对象**：大量 `TRANSLATION_NOTE` 注释原文代替实际调用。
-3. **应用层流程空壳**：`lawn_app.rs` 的界面切换/对话框/Crazy Dave/注册表写入为空；`board::save_game` 等存档入口为空（`system/save_game.rs` 本体无空，但调用链未核对）。
-4. **已消除项**：枚举数值错位、Boss 战、Beghouled 等挑战模式逻辑、cutscene 状态判定（见第〇节）。
-
----
-
-## 四、优先级建议（按严重程度）
-
-| 优先级 | 模块 | 主要问题 | 影响 |
-|---|---|---|---|
-| 🔴 最高 | lawn_app.rs + widget/ | 36 + 约 115 个空函数 | 主界面流程/对话框/商店/奖励不可用 |
-| 🔴 最高 | zen_garden.rs | 26 空 | 禅境花园交互/喂养/商店不可用 |
-| 🔴 最高 | reanim/particle/音效接入 | plant/zombie/board 大量 `TRANSLATION_NOTE` | 动画特效音效缺失 |
-| 🟠 高 | 绘制层 | board/plant/zombie/coin/seed_packet 的 draw 及 DrawBackdrop 等 | 画面不完整 |
-| 🟠 高 | cutscene.rs | 13 空（过场/UPSELL 板） | 过场与导入流程缺 |
-| 🟡 中 | board.rs | 14 空 + update() 简化 | 存档/波次/打字/进度条缺失 |
-| 🟡 中 | coin/seed_packet/projectile/zombie/plant | 缺失辅助函数（音效、传送带、碰撞目标等） | 局部逻辑不完整 |
-| 🟢 低 | lawn_mower/grid_item/system | 少量空函数 | 局部不完整 |
+> 注：09-02 版报告所列 widget 空函数（credit/challenge_screen 等）在 09-02/09-03 的"绘制层"提交中已有部分补齐（如 `CreditScreen update/update_blink/play_reanim`、`ChallengeScreen` 挑战定义表与解锁状态机、`seed_packet draw_seed_packet` 骨架）。
 
 ---
 
-*本报告为只读核对产物；`src/todlib`、`src/framework` 及 widget 各对话框内部逻辑未逐函数比对，可按需继续深入。*
+## 四、相对 09-02 版报告的进展（已修复/新增）
+
+- 09-02 之后新增提交均集中于**绘制/UI 层**：CreditScreen 阶段机、ChallengeScreen 解锁与 72 项挑战表、seed_packet 绘制骨架、plant `draw_seed_type`/zen_garden 盆栽绘制接入。
+- 09-02 版确认已修复项（GameMode/HelmType 枚举对齐、Boss 战斗系列、`can_plant_at` 种植限制、`is_zombie_allowed` 等）经复核在当前 HEAD 依然成立。
+- zombie/plant 的伤害链（`take_damage` 4017 → 飞行物/盾牌/头盔/身体）与 Board 主循环（`update` 658 → update_game/碰撞/清理/状态/火焰）已较完整。
+
+## 五、建议后续顺序
+
+1. 高危项（第一节 1–3）：修复 `find_plant_at`/`find_zombie_in_row`，统一割草机触发路径——直接影响核心玩法可玩性；
+2. coin/seed_packet/特殊植物效果接入（第一节 4–5 与第三节）；
+3. 绘制/UI 资源层（第三节 widget/board/cutscene 占位）；
+4. reanim/音效接口层（zombie/plant 动画接口全空，为绘制与特效的共同依赖，建议优先于 3）。
