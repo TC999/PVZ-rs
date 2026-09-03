@@ -34,6 +34,9 @@ pub struct Coin {
     pub is_being_collected: bool,
     pub collection_distance: f32,
     pub attachment_id: AttachmentID,
+    pub needs_bouncy_arrow: bool,
+    pub has_bouncy_arrow: bool,
+    pub times_dropped: i32,
 }
 
 impl Coin {
@@ -65,6 +68,9 @@ impl Coin {
             is_being_collected: false,
             collection_distance: 0.0,
             attachment_id: ATTACHMENTID_NULL,
+            needs_bouncy_arrow: false,
+            has_bouncy_arrow: false,
+            times_dropped: 0,
         }
     }
 
@@ -102,6 +108,14 @@ impl Coin {
                 self.value = 0;
             }
         }
+
+        // 对应 C++ CoinInitialize 中 CoinGetsBouncyArrow/PlayLaunchSound 调用
+        if self.coin_gets_bouncy_arrow() {
+            self.needs_bouncy_arrow = true;
+        }
+        // [TRANSLATION_NOTE]: C++ 判定 mCoinMotion != COIN_MOTION_FROM_PRESENT（Rust 枚举暂无该变体）
+        // Rust 侧 add_coin 先调用本初始化再设置 app/board，故此处音效/棋盘依赖在调用时尚未就绪
+        self.play_launch_sound();
     }
 
     /// 更新（对应 C++ Coin::Update）
@@ -169,12 +183,15 @@ impl Coin {
             } else {
                 if !self.hit_ground {
                     self.hit_ground = true;
+                    self.play_ground_sound();
                 }
                 self.pos_y = self.ground_y;
-                // 消失计时
-                self.disappear_counter += 1;
-                if self.disappear_counter >= 600 {
-                    self.start_fade();
+                // 消失计时（对应 C++ UpdateFall：IsLevelAward/IsPresentWithAdvice 不消失）
+                if !self.is_level_award() && !self.is_present_with_advice() {
+                    self.disappear_counter += 1;
+                    if self.disappear_counter >= self.get_disappear_time() {
+                        self.start_fade();
+                    }
                 }
             }
         }
@@ -304,6 +321,158 @@ impl Coin {
     /// 是否是阳光（对应 C++ IsSun）
     pub fn is_sun_type(&self) -> bool {
         self.is_sun
+    }
+
+    /// 是否带建议的礼物（对应 C++ IsPresentWithAdvice）
+    pub fn is_present_with_advice(&self) -> bool {
+        matches!(self.coin_type,
+            CoinType::PresentMinigames | CoinType::PresentPuzzleMode | CoinType::PresentSurvivalMode)
+    }
+
+    /// 是否关卡奖励（对应 C++ IsLevelAward）
+    pub fn is_level_award(&self) -> bool {
+        matches!(self.coin_type,
+            CoinType::FinalSeedPacket | CoinType::Trophy |
+            CoinType::AwardSilverSunflower | CoinType::AwardGoldSunflower |
+            CoinType::Shovel | CoinType::Carkeys | CoinType::Almanac |
+            CoinType::Vase | CoinType::WateringCan | CoinType::Taco |
+            CoinType::Note | CoinType::AwardMoneyBag | CoinType::AwardBagDiamond |
+            CoinType::AwardPresent | CoinType::AwardChocolate)
+    }
+
+    /// 是否需要弹跳箭头（对应 C++ CoinGetsBouncyArrow）
+    pub fn coin_gets_bouncy_arrow(&self) -> bool {
+        if self.is_level_award() {
+            return true;
+        }
+        if self.coin_type == CoinType::Silver || self.coin_type == CoinType::Gold {
+            if let Some(app) = self.base.get_app() {
+                if let Some(board) = self.base.get_board() {
+                    if app.is_first_time_adventure_mode() && board.level == 11 && !board.m_dropped_first_coin {
+                        return true;
+                    }
+                }
+            }
+        }
+        self.is_present_with_advice()
+    }
+
+    /// 获取消失时间（对应 C++ GetDisappearTime）
+    pub fn get_disappear_time(&self) -> i32 {
+        let mut a_time = 750;
+        if self.coin_type == CoinType::Diamond
+            || self.coin_type == CoinType::PresentPlant
+            || self.coin_type == CoinType::Chocolate
+            || self.has_bouncy_arrow
+        {
+            a_time = 1500;
+        }
+        if let Some(app) = self.base.get_app() {
+            if (app.is_scary_potter_level() || app.is_slot_machine_level())
+                && self.coin_type == CoinType::UsableSeedPacket
+            {
+                a_time = 1500;
+            }
+            if app.game_mode == GameMode::ChallengeZenGarden {
+                a_time = 6000;
+            }
+        }
+        a_time
+    }
+
+    /// 丢弃可用种子包（对应 C++ DroppedUsableSeed）
+    pub fn dropped_usable_seed(&mut self) {
+        self.is_being_collected = false;
+        if self.times_dropped == 0 {
+            self.disappear_counter = self.disappear_counter.min(1200);
+        }
+        self.times_dropped += 1;
+    }
+
+    /// 关卡奖励后尝试自动收集（对应 C++ TryAutoCollectAfterLevelAward）
+    pub fn try_auto_collect_after_level_award(&mut self) {
+        let mut a_can_be_auto_collected = false;
+        if self.is_money() && self.coin_motion != CoinMotion::FromSky {
+            // [TRANSLATION_NOTE]: C++ 比较的是 COIN_MOTION_FROM_PRESENT，Rust 枚举暂无该变体，以 FromSky 近似
+            a_can_be_auto_collected = true;
+        }
+        if self.is_sun {
+            a_can_be_auto_collected = true;
+        }
+        if self.coin_type == CoinType::PresentPlant
+            || self.coin_type == CoinType::Chocolate
+            || self.is_present_with_advice()
+        {
+            a_can_be_auto_collected = true;
+        }
+        if a_can_be_auto_collected {
+            self.play_collect_sound();
+            self.collect();
+        }
+    }
+
+    /// 播放发射音效（对应 C++ PlayLaunchSound）
+    pub fn play_launch_sound(&self) {
+        if self.coin_type == CoinType::Diamond
+            || self.coin_type == CoinType::Chocolate
+            || self.coin_type == CoinType::AwardChocolate
+            || self.coin_type == CoinType::PresentPlant
+            || self.coin_type == CoinType::AwardPresent
+            || self.is_present_with_advice()
+        {
+            if let Some(app) = self.base.get_app() {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::Chime as i32);
+            }
+        }
+    }
+
+    /// 播放落地音效（对应 C++ PlayGroundSound）
+    pub fn play_ground_sound(&self) {
+        if self.coin_type == CoinType::Gold {
+            if let Some(app) = self.base.get_app() {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::MoneyFalls as i32);
+            }
+        }
+    }
+
+    /// 播放收集音效（对应 C++ PlayCollectSound）
+    pub fn play_collect_sound(&self) {
+        if self.coin_type == CoinType::UsableSeedPacket {
+            // [TRANSLATION_NOTE]: PlaySample(SOUND_SEEDLIFT) 未接入
+            return;
+        }
+        if self.coin_type == CoinType::Silver || self.coin_type == CoinType::Gold {
+            if let Some(app) = self.base.get_app() {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::Coin as i32);
+            }
+            return;
+        }
+        if self.coin_type == CoinType::Diamond {
+            // [TRANSLATION_NOTE]: PlaySample(SOUND_DIAMOND) 未接入
+            return;
+        }
+        if self.is_sun {
+            if let Some(app) = self.base.get_app() {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::Sun as i32);
+            }
+            return;
+        }
+        if self.coin_type == CoinType::Chocolate
+            || self.coin_type == CoinType::PresentPlant
+            || self.is_present_with_advice()
+            || self.coin_type == CoinType::AwardPresent
+            || self.coin_type == CoinType::AwardChocolate
+        {
+            if let Some(app) = self.base.get_app() {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::Prize as i32);
+            }
+            return;
+        }
+        if self.is_sun {
+            if let Some(app) = self.base.get_app() {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::Sun as i32);
+            }
+        }
     }
 
     /// 计分收集（对应 C++ ScoreCoin）

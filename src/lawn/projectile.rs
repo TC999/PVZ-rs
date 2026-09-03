@@ -384,8 +384,71 @@ impl Projectile {
         }
     }
 
+    /// 命中音效（对应 C++ Projectile::PlayImpactSound）
+    pub fn play_impact_sound(&mut self, zombie_idx: Option<usize>) {
+        let mut a_play_helm_sound = true;
+        let mut a_play_splat_sound = true;
+
+        match self.projectile_type {
+            ProjectileType::Kernel => {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::KernelSplat as i32);
+                }
+                a_play_helm_sound = false;
+                a_play_splat_sound = false;
+            }
+            ProjectileType::Butter => {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Butter as i32);
+                }
+                a_play_splat_sound = false;
+            }
+            ProjectileType::Fireball if self.is_splash_damage() => {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Ignite as i32);
+                }
+                a_play_helm_sound = false;
+                a_play_splat_sound = false;
+            }
+            ProjectileType::Melon | ProjectileType::Wintermelon => {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::MelonImpact as i32);
+                }
+                a_play_splat_sound = false;
+            }
+            _ => {}
+        }
+
+        if a_play_helm_sound {
+            if let Some(idx) = zombie_idx {
+                let helm_type = self.base.get_board().and_then(|b| b.zombies.get(idx)).map(|z| z.helm_type);
+                match helm_type {
+                    Some(HelmType::Pail) => {
+                        if let Some(app) = self.base.get_app() {
+                            app.play_foley(crate::todlib::tod_foley::FoleyType::ShieldHit as i32);
+                        }
+                        a_play_splat_sound = false;
+                    }
+                    Some(HelmType::TrafficCone) | Some(HelmType::Digger) | Some(HelmType::FootballHelmet) => {
+                        if let Some(app) = self.base.get_app() {
+                            app.play_foley(crate::todlib::tod_foley::FoleyType::PlasticHit as i32);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        if a_play_splat_sound {
+            if let Some(app) = self.base.get_app() {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::Splat as i32);
+            }
+        }
+    }
+
     /// 通过索引对僵尸造成碰撞效果（对应 C++ DoImpact 主体）
     pub fn do_impact_by_index(&mut self, zombie_idx: usize) {
+        self.play_impact_sound(Some(zombie_idx));
         let proj_type = self.projectile_type;
         let mut zombie_opt = None;
         if let Some(board) = self.base.get_board_mut() {
