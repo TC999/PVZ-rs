@@ -151,10 +151,11 @@ impl ZenGarden {
             if Plant::is_aquatic(a_seed_type) {
                 a_pot_variation = DrawVariation::ZenGardenWater;
             }
-            // [TRANSLATION_NOTE]: C++ 中 Plant::DrawSeedType(&aPottedPlantG, FLOWERPOT, SEED_NONE,
-            // aPotVariation2, x, y + aPotOffsetY*scale) 绘制花盆；待 Plant::DrawSeedType 实现后接入
-            let _ = a_pot_variation;
-            let _ = a_pot_offset_y;
+            // 对应 C++ Plant::DrawSeedType(&aPottedPlantG, FLOWERPOT, SEED_NONE, aPotVariation2, ...)
+            crate::lawn::plant::Plant::draw_seed_type(
+                g, SeedType::Flowerpot, SeedType::None, a_pot_variation,
+                x, y + a_pot_offset_y * scale,
+            );
         }
 
         if potted_plant.facing == FacingDirection::Left {
@@ -175,9 +176,11 @@ impl ZenGarden {
         }
         a_offset_y += self.plant_potted_draw_height_offset(a_seed_type, scale);
 
-        // [TRANSLATION_NOTE]: C++ 中 Plant::DrawSeedType(&aPottedPlantG, aSeedType, SEED_NONE,
-        // aPlantVariation, x + aOffsetX, y + aOffsetY) 绘制植物；待 Plant::DrawSeedType 实现后接入
-        let _ = (g, a_plant_variation, a_offset_x, a_offset_y);
+        // 对应 C++ Plant::DrawSeedType(&aPottedPlantG, aSeedType, SEED_NONE, aPlantVariation, ...)
+        crate::lawn::plant::Plant::draw_seed_type(
+            g, a_seed_type, SeedType::None, a_plant_variation,
+            x + a_offset_x, y + a_offset_y,
+        );
     }
 
     pub fn is_zen_garden_full(&self, include_dropped_presents: bool) -> bool {

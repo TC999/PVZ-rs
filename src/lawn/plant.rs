@@ -1119,6 +1119,87 @@ impl Plant {
     /// reanim 定义加载在 reanim_loader 中处理，此处骨架保留调用链
     pub fn preload_plant_resources(_seed_type: SeedType) {}
 
+    /// 绘制植物种子图像（对应 C++ Plant::DrawSeedType）
+    pub fn draw_seed_type(
+        g: &mut Graphics,
+        seed_type: SeedType,
+        imitater_type: SeedType,
+        draw_variation: DrawVariation,
+        pos_x: f32,
+        pos_y: f32,
+    ) {
+        // 模仿者变体选择
+        let mut a_seed_type = seed_type;
+        let mut a_draw_variation = draw_variation;
+        if seed_type == SeedType::Imitater && imitater_type != SeedType::None {
+            a_seed_type = imitater_type;
+            a_draw_variation = DrawVariation::Imitater;
+            if matches!(imitater_type, SeedType::Hypnoshroom | SeedType::Squash
+                | SeedType::PotatoMine | SeedType::Garlic | SeedType::Lilypad)
+            {
+                a_draw_variation = DrawVariation::ImitaterLess;
+            }
+        } else if draw_variation == DrawVariation::Normal && seed_type == SeedType::Tanglekelp {
+            a_draw_variation = DrawVariation::Aquarium;
+        }
+
+        // 缩放（对应 C++ aSeedG.mScaleX/mScaleY）
+        let mut a_scale_x = g.scale_x as f32;
+        let mut a_scale_y = g.scale_y as f32;
+        let mut a_offset_x = 0.0f32;
+        let mut a_offset_y = 0.0f32;
+
+        if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
+            if app.game_mode == GameMode::ChallengeBigTime
+                && matches!(a_seed_type, SeedType::Wallnut | SeedType::Sunflower | SeedType::Marigold)
+            {
+                a_scale_x *= 1.5;
+                a_scale_y *= 1.5;
+                a_offset_x = -20.0;
+                a_offset_y = -40.0;
+            }
+        }
+        if a_seed_type == SeedType::Leftpeater {
+            a_offset_x += a_scale_x * 80.0;
+            a_scale_x *= -1.0;
+        }
+
+        if crate::lawn::challenge::Challenge::is_zombie_seed_type(a_seed_type) != 0 {
+            let a_zombie_type = crate::lawn::challenge::Challenge::i_zombie_seed_type_to_zombie_type(a_seed_type);
+            if a_zombie_type == ZombieType::Dancer {
+                a_scale_x *= 0.8;
+                a_scale_y *= 0.8;
+                a_offset_x = 20.0;
+                a_offset_y = 42.0;
+            }
+            // 对应 C++ gLawnApp->mReanimatorCache->DrawCachedZombie(...)
+            if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
+                unsafe {
+                    if let Some(cache) = app.m_reanimator_cache {
+                        (*cache).draw_cached_zombie(g, pos_x + a_offset_x, pos_y + a_offset_y, a_zombie_type);
+                    }
+                }
+            }
+        } else {
+            let a_plant_def = get_plant_definition(a_seed_type);
+            // [TRANSLATION_NOTE]: C++ 中 SEED_GIANT_WALLNUT 以 IMAGE_REANIM_WALLNUT_BODY
+            // 特殊绘制；Rust 侧图片资源未接入，暂略
+            if a_plant_def.reanimation_type != ReanimationType::None {
+                // 对应 C++ gLawnApp->mReanimatorCache->DrawCachedPlant(...)
+                if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
+                    unsafe {
+                        if let Some(cache) = app.m_reanimator_cache {
+                            (*cache).draw_cached_plant(g, pos_x + a_offset_x, pos_y + a_offset_y, a_seed_type, a_draw_variation);
+                        }
+                    }
+                }
+            } else {
+                // [TRANSLATION_NOTE]: C++ 中非 reanim 植物按 cel 绘制 Plant::GetImage；
+                // Rust 侧 get_image/植物图片未接入，暂略
+            }
+        }
+    }
+
     /// 是否可升级（对应 C++ IsUpgradableTo）
     pub fn is_upgradable_to(&self, upgraded_type: SeedType) -> bool {
         if upgraded_type == SeedType::Gatlingpea && self.seed_type == SeedType::Repeater {
