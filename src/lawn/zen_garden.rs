@@ -1313,8 +1313,180 @@ impl ZenGarden {
     }
 
     pub fn mouse_down_with_feeding_tool(&mut self, x: i32, y: i32, cursor_type: CursorType) {
-        // [TRANSLATION_NOTE]: 完整实现依赖 Board 植物查找、浇水/施肥判定与音效；核心逻辑见 PlantWatered/PlantFertilized
-        let _ = (x, y, cursor_type);
+        // 对应 C++ ZenGarden::MouseDownWithFeedingTool
+        let board_ptr = match self.board {
+            Some(b) => b,
+            None => return,
+        };
+
+        // C++: 遍历 mBoard->mPlants 找 mHighlighted && mPottedPlantIndex != -1 的植物
+        let mut a_plant_to_feed_idx: Option<usize> = None;
+        unsafe {
+            let board = &mut *board_ptr;
+            for (i, plant) in board.plants.iter().enumerate() {
+                if plant.dead {
+                    continue;
+                }
+                if plant.highlighted && plant.potted_plant_index != -1 {
+                    a_plant_to_feed_idx = Some(i);
+                    break;
+                }
+            }
+        }
+
+        if cursor_type == CursorType::Chocolate {
+            if let Some(stinky_ptr) = self.get_stinky() {
+                unsafe {
+                    if (*stinky_ptr).highlighted {
+                        self.wake_stinky();
+                        // [TRANSLATION_NOTE]: C++ 中 AddPvzpParticle(stinky, PARTICLE_PRESENT_PICKUP)
+                        // 粒子附加未接入，暂略
+                        if let Some(app) = self.app {
+                            if let Some(info) = (*app).player_info.as_mut() {
+                                info.m_last_stinky_chocolate_time = self.now_time as u32;
+                                let idx = StoreItem::Chocolate as usize;
+                                if idx < info.m_purchases.len() {
+                                    info.m_purchases[idx] -= 1;
+                                }
+                            }
+                            (*app).play_foley(FoleyType::WakeUp as i32);
+                            (*app).play_sample(
+                                crate::framework::resources::ResourceId::SoundMindcontrolled as i32,
+                            );
+                        }
+                    }
+                }
+            }
+            if let Some(idx) = a_plant_to_feed_idx {
+                unsafe {
+                    let plants = &mut (*board_ptr).plants;
+                    let plant = &mut plants[idx];
+                    if let Some(app) = self.app {
+                        if let Some(info) = (*app).player_info.as_mut() {
+                            let cidx = StoreItem::Chocolate as usize;
+                            if cidx < info.m_purchases.len() {
+                                info.m_purchases[cidx] -= 1;
+                            }
+                        }
+                    }
+                    self.feed_chocolate_to_plant(plant);
+                    if let Some(app) = self.app {
+                        (*app).play_foley(FoleyType::WakeUp as i32);
+                    }
+                }
+            }
+        }
+
+        if let Some(idx) = a_plant_to_feed_idx {
+            unsafe {
+                let board = &mut *board_ptr;
+                let plant = &board.plants[idx];
+                let mut a_zen_tool = GridItem::new();
+                a_zen_tool.grid_item_type = crate::lawn::grid_item::GridItemType::ZenTool;
+                a_zen_tool.grid_x = plant.plant_col;
+                a_zen_tool.grid_y = plant.base.row;
+                a_zen_tool.pos_x = plant.pos_x + 40.0;
+                a_zen_tool.pos_y = plant.pos_y + 40.0;
+                a_zen_tool.render_order =
+                    crate::lawn::board::make_render_order(RENDER_LAYER_ABOVE_UI, 0, 0);
+
+                let app = self.app;
+                if cursor_type == CursorType::WateringCan {
+                    let has_gold = app.map_or(false, |a| unsafe {
+                        let info = (*a).player_info.as_ref().unwrap();
+                        let gi = StoreItem::GoldWateringcan as usize;
+                        gi < info.m_purchases.len() && info.m_purchases[gi] != 0
+                    });
+                    if has_gold {
+                        a_zen_tool.pos_x = x as f32;
+                        a_zen_tool.pos_y = y as f32;
+                        if let Some(a) = app {
+                            if let Some(rp) = (*a).add_reanimation(
+                                x as f32,
+                                y as f32,
+                                0,
+                                ReanimationType::ZengardenWateringcan as i32,
+                            ) {
+                                (*rp).play_reanim("anim_water_area", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, 0, 8.0);
+                                a_zen_tool.grid_item_reanim_id = (*a).reanimation_get_id(rp);
+                            }
+                            a_zen_tool.grid_item_state = GridItemState::ZenToolGoldWateringCan;
+                            (*a).play_foley(FoleyType::Watering as i32);
+                        }
+                    } else {
+                        if let Some(a) = app {
+                            if let Some(rp) = (*a).add_reanimation(
+                                plant.pos_x + 32.0,
+                                plant.pos_y,
+                                0,
+                                ReanimationType::ZengardenWateringcan as i32,
+                            ) {
+                                (*rp).play_reanim("anim_water", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, 0, 0.0);
+                                a_zen_tool.grid_item_reanim_id = (*a).reanimation_get_id(rp);
+                            }
+                            a_zen_tool.grid_item_state = GridItemState::ZenToolWateringCan;
+                            (*a).play_foley(FoleyType::Watering as i32);
+                        }
+                    }
+                } else if cursor_type == CursorType::Fertilizer {
+                    if let Some(a) = app {
+                        if let Some(rp) = (*a).add_reanimation(
+                            plant.pos_x,
+                            plant.pos_y,
+                            0,
+                            ReanimationType::ZengardenFertilizer as i32,
+                        ) {
+                            (*rp).m_loop_type = crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold;
+                            a_zen_tool.grid_item_reanim_id = (*a).reanimation_get_id(rp);
+                        }
+                        a_zen_tool.grid_item_state = GridItemState::ZenToolFertilizer;
+                        (*a).play_foley(FoleyType::Fertilizer as i32);
+                        let info = (*a).player_info.as_mut().unwrap();
+                        let fi = StoreItem::Fertilizer as usize;
+                        if fi < info.m_purchases.len() {
+                            info.m_purchases[fi] -= 1;
+                        }
+                    }
+                } else if cursor_type == CursorType::BugSpray {
+                    if let Some(a) = app {
+                        if let Some(rp) = (*a).add_reanimation(
+                            plant.pos_x + 54.0,
+                            plant.pos_y,
+                            0,
+                            ReanimationType::ZengardenBugspray as i32,
+                        ) {
+                            (*rp).m_loop_type = crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold;
+                            a_zen_tool.grid_item_reanim_id = (*a).reanimation_get_id(rp);
+                        }
+                        a_zen_tool.grid_item_state = GridItemState::ZenToolBugSpray;
+                        (*a).play_foley(FoleyType::BugSpray as i32);
+                        let info = (*a).player_info.as_mut().unwrap();
+                        let bi = StoreItem::BugSpray as usize;
+                        if bi < info.m_purchases.len() {
+                            info.m_purchases[bi] -= 1;
+                        }
+                    }
+                } else if cursor_type == CursorType::Phonograph {
+                    if let Some(a) = app {
+                        if let Some(rp) = (*a).add_reanimation(
+                            plant.pos_x + 20.0,
+                            plant.pos_y + 34.0,
+                            0,
+                            ReanimationType::ZengardenPhonograph as i32,
+                        ) {
+                            (*rp).m_anim_rate = 20.0;
+                            (*rp).m_loop_type = crate::todlib::reanimator::ReanimLoopType::Loop;
+                            a_zen_tool.grid_item_reanim_id = (*a).reanimation_get_id(rp);
+                        }
+                        a_zen_tool.grid_item_state = GridItemState::ZenToolPhonograph;
+                        (*a).play_foley(FoleyType::Phonograph as i32);
+                    }
+                }
+                board.grid_items.push(a_zen_tool);
+            }
+        }
+
+        unsafe { (*board_ptr).clear_cursor() };
     }
 
     pub fn draw_plant_overlay(&self, g: &mut Graphics, plant: &Plant) {

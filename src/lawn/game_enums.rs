@@ -625,6 +625,7 @@ pub const RENDER_LAYER_PARTICLE: i32 = 307000;
 pub const RENDER_LAYER_TOP: i32 = 400000;
 pub const RENDER_LAYER_FOG: i32 = 500000;
 pub const RENDER_LAYER_SCREEN_FADE: i32 = 900000;
+pub const RENDER_LAYER_ABOVE_UI: i32 = 800000;
 
 // TodCurves
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
