@@ -13,7 +13,9 @@ use crate::framework::color::Color;
 use crate::framework::widget::widget::{Widget, WidgetImpl};
 use crate::framework::widget::widget_manager::WidgetManager;
 use crate::framework::key_codes::{KeyCode, KEYCODE_C};
+use crate::framework::widget::dialog::BUTTONS_FOOTER;
 use crate::lawn::lawn_app::LawnApp;
+use crate::lawn::system::music::MusicTune;
 use crate::lawn::game_enums::*;
 use crate::todlib::tod_common::*;
 use crate::lawn::tool_tip_widget::ToolTipWidget;
@@ -594,8 +596,8 @@ impl GameSelectorImpl {
                 let mut a_transform = crate::todlib::definition::ReanimatorTransform::default();
                 reanim.get_current_transform(a_track_index, &mut a_transform);
                 if !button.is_null() {
-                    (*button).x = (a_transform.m_trans_x + offset_x) as i32;
-                    (*button).y = (a_transform.m_trans_y + offset_y) as i32;
+                    (&mut *button).x = (a_transform.m_trans_x + offset_x) as i32;
+                    (&mut *button).y = (a_transform.m_trans_y + offset_y) as i32;
                 }
             }
         }
@@ -1069,6 +1071,237 @@ impl GameSelectorImpl {
             unsafe { g.draw_image_xy(&*img, draw_x + 1, draw_y + 1); }
         } else {
             unsafe { g.draw_image_xy(&*img, draw_x, draw_y); }
+        }
+    }
+
+    /// [TRANSLATION_NOTE]: C++ GameSelector::AddedToManager
+    pub fn added_to_manager(&mut self, _the_widget_manager: *mut WidgetManager) {
+        // C++: WidgetManager::AddWidget(mZombatarWidget) + AddWidget(mAchievementsWidget)
+        // [TRANSLATION_NOTE]: zombatar/achievements widget 未接入（zombatar.rs 刚起步），暂占位
+    }
+
+    /// [TRANSLATION_NOTE]: C++ GameSelector::RemovedFromManager
+    pub fn removed_from_manager(&mut self, _the_widget_manager: *mut WidgetManager) {
+        // C++: RemoveWidget(mZombatarWidget) + RemoveWidget(mAchievementsWidget)；同上占位
+    }
+
+    /// [TRANSLATION_NOTE]: C++ GameSelector::ButtonPress
+    pub fn button_press(&mut self, the_id: i32) {
+        // C++: 主菜单栏按钮播 SOUND_GRAVEBUTTON，其余播 SOUND_TAP
+        let a_is_stone_button = the_id == 100  // GameSelector_Adventure
+            || the_id == 101                 // GameSelector_Minigame
+            || the_id == 102                 // GameSelector_Puzzle
+            || the_id == 110                 // GameSelector_Survival
+            || the_id == 111;                // GameSelector_Zombatar
+        if let Some(app) = unsafe { self.app.as_mut() } {
+            unsafe {
+                let a_sound = if a_is_stone_button {
+                    crate::framework::resources::ResourceId::SoundGravebutton
+                } else {
+                    crate::framework::resources::ResourceId::SoundTap
+                };
+                (*app).play_sample(a_sound as i32);
+            }
+        }
+    }
+
+    /// [TRANSLATION_NOTE]: C++ GameSelector::ButtonMouseEnter
+    pub fn button_mouse_enter(&mut self, the_id: i32) {
+        let a_locked = (the_id == 101 && self.minigames_locked)
+            || (the_id == 102 && self.puzzle_locked)
+            || (the_id == 110 && self.survival_locked);
+        if a_locked {
+            return;
+        }
+        // C++: mApp->PlayFoley(FOLEY_BLEEP)；Rust FoleyType 以 Beep 对应
+        if let Some(app) = unsafe { self.app.as_mut() } {
+            unsafe {
+                (*app).play_foley(crate::todlib::tod_foley::FoleyType::Beep as i32);
+            }
+        }
+    }
+
+    /// [TRANSLATION_NOTE]: C++ GameSelector::OrderInManagerChanged
+    pub fn order_in_manager_changed(&mut self) {
+        // C++: PutInfront(mAchievementsWidget, this) + BringToFront(mZombatarWidget)
+        // [TRANSLATION_NOTE]: Rust WidgetManager 无 PutInfront/BringToFront，暂占位
+    }
+
+    /// [TRANSLATION_NOTE]: C++ GameSelector::SlideTo
+    pub fn slide_to(&mut self, the_x: i32, the_y: i32) {
+        if self.slide_counter > 0 {
+            return;
+        }
+        self.slide_counter = 75;
+        self.dest_x = the_x;
+        self.dest_y = the_y;
+        self.start_x = self.offset_x;
+        self.start_y = self.offset_y;
+    }
+
+    /// [TRANSLATION_NOTE]: C++ GameSelector::ShowZombatarScreen
+    pub fn show_zombatar_screen(&mut self) {
+        // C++: if (!mZombatarWidget) return;
+        //      if (mApp->mPlayerInfo && !mApp->mPlayerInfo->mZombatarAccepted) ShowZombatarTOS();
+        //      else mZombatarWidget->Open();
+        // [TRANSLATION_NOTE]: Rust 侧 zombatar widget / ShowZombatarTOS 未接入，读取状态后占位
+        let _a_accepted = if let Some(app) = unsafe { self.app.as_mut() } {
+            unsafe { (*app).player_info.as_ref().map_or(true, |pi| pi.m_zombatar_accepted != 0) }
+        } else {
+            true
+        };
+    }
+
+    /// [TRANSLATION_NOTE]: C++ GameSelector::AddTrophySparkle
+    pub fn add_trophy_sparkle(&mut self) {
+        // C++: AddPvzpParticle(85.0f, 330.0f, RENDER_LAYER_TOP, PARTICLE_TROPHY_SPARKLE) + ParticleGetID
+        // [TRANSLATION_NOTE]: Rust 侧 PvzpParticle 系统未接入，暂占位
+    }
+
+    /// [TRANSLATION_NOTE]: C++ GameSelector::ShowAchievementsScreen
+    pub fn show_achievements_screen(&mut self) {
+        // C++: SlideTo(0, -mApp->mHeight) + mWidgetManager->SetFocus(mAchievementsWidget)
+        let a_height = if let Some(app) = unsafe { self.app.as_mut() } {
+            unsafe { (*app).base.height }
+        } else {
+            0
+        };
+        self.slide_to(0, -a_height);
+        // [TRANSLATION_NOTE]: mAchievementsWidget 未接入，SetFocus 省略
+    }
+
+    /// [TRANSLATION_NOTE]: C++ GameSelector::ShouldDoZenTuturialBeforeAdventure
+    pub fn should_do_zen_tuturial_before_adventure(&self) -> bool {
+        // C++: !HasFinishedAdventure && PlayerInfo->GetLevel() == 45 && mNumPottedPlants == 0
+        if let Some(app) = unsafe { self.app.as_mut() } {
+            unsafe {
+                if (*app).has_finished_adventure() {
+                    return false;
+                }
+                if let Some(pi) = (*app).player_info.as_ref() {
+                    return pi.m_level == 45 && pi.m_num_potted_plants == 0;
+                }
+            }
+        }
+        false
+    }
+
+    /// [TRANSLATION_NOTE]: C++ GameSelector::ButtonDepress
+    pub fn button_depress(&mut self, the_id: i32) {
+        if self.slide_counter > 0 {
+            return;
+        }
+
+        // 锁定模式弹窗（C++ LawnMessageBox → Rust do_dialog + wait_for_result）
+        let a_locked_message: Option<&str> = if the_id == 101 && self.minigames_locked {
+            Some("[MINIGAME_LOCKED_MESSAGE]")
+        } else if the_id == 102 && self.puzzle_locked {
+            Some("[PUZZLE_LOCKED_MESSAGE]")
+        } else if the_id == 110 && self.survival_locked {
+            Some("[SURVIVAL_LOCKED_MESSAGE]")
+        } else {
+            None
+        };
+        if let Some(a_msg) = a_locked_message {
+            if let Some(app) = unsafe { self.app.as_mut() } {
+                unsafe {
+                    let a_dialog = (*app).do_dialog(48, true, "[MODE_LOCKED]", a_msg, "[DIALOG_BUTTON_OK]", BUTTONS_FOOTER);
+                    if let Some(d) = a_dialog {
+                        let _ = (&mut *d).wait_for_result(true);
+                    }
+                }
+            }
+            return;
+        }
+
+        match the_id {
+            100 => { // GameSelector_Adventure
+                self.clicked_adventure();
+            }
+            101 | 102 | 110 => { // Minigame / Puzzle / Survival → 挑战选择页
+                if let Some(app) = unsafe { self.app.as_mut() } {
+                    unsafe {
+                        (*app).kill_game_selector();
+                        let a_page = if the_id == 101 {
+                            ChallengePage::Challenge
+                        } else if the_id == 102 {
+                            ChallengePage::Puzzle
+                        } else {
+                            ChallengePage::Survival
+                        };
+                        (*app).show_challenge_screen(a_page as i32);
+                    }
+                }
+            }
+            105 => { // GameSelector_Quit
+                if let Some(app) = unsafe { self.app.as_mut() } {
+                    unsafe {
+                        (*app).confirm_quit();
+                    }
+                }
+            }
+            104 => { // GameSelector_Help
+                if let Some(app) = unsafe { self.app.as_mut() } {
+                    unsafe {
+                        (*app).kill_game_selector();
+                        (*app).show_award_screen(AwardType::HelpZombieNote as i32, false);
+                    }
+                }
+            }
+            103 => { // GameSelector_Options
+                // C++: mApp->DoNewOptions(true) —— Rust 侧未实现，保留调用点
+            }
+            106 => { // GameSelector_ChangeUser
+                // C++: mApp->DoUserDialog() —— Rust 侧未实现，保留调用点
+            }
+            107 => { // GameSelector_Store
+                if let Some(app) = unsafe { self.app.as_mut() } {
+                    unsafe {
+                        let a_store = LawnApp::show_store_screen(Some(app as *const _ as *mut _));
+                        // [TRANSLATION_NOTE]: C++ WaitForResult(true) 模态等待；Rust 商店为非模态 widget 驱动
+                        let a_go_to_tree = a_store.map_or(false, |s| {
+                            (*(s as *mut crate::lawn::widget::store_screen::StoreScreen)).go_to_tree_now
+                        });
+                        if a_go_to_tree {
+                            (*app).kill_game_selector();
+                            (*app).pre_new_game(GameMode::ChallengeTreeOfWisdom, false);
+                        } else if let Some(music) = (*app).music.as_mut() {
+                            music.make_sure_music_is_playing(MusicTune::TitleCrazyDaveMainTheme);
+                        }
+                    }
+                }
+            }
+            108 => { // GameSelector_Almanac
+                if let Some(app) = unsafe { self.app.as_mut() } {
+                    unsafe {
+                        // C++: DoAlmanacDialog()->WaitForResult(true)；Rust 版返回 ()
+                        (*app).do_almanac_dialog(SeedType::None, ZombieType::Invalid);
+                        if let Some(music) = (*app).music.as_mut() {
+                            music.make_sure_music_is_playing(MusicTune::TitleCrazyDaveMainTheme);
+                        }
+                    }
+                }
+            }
+            109 => { // GameSelector_ZenGarden
+                if let Some(app) = unsafe { self.app.as_mut() } {
+                    unsafe {
+                        (*app).kill_game_selector();
+                        (*app).pre_new_game(GameMode::ChallengeZenGarden, false);
+                        if self.should_do_zen_tuturial_before_adventure() {
+                            if let Some(zg) = (*app).zen_garden {
+                                (*zg).setup_for_zen_tutorial();
+                            }
+                        }
+                    }
+                }
+            }
+            111 => { // GameSelector_Zombatar
+                self.show_zombatar_screen();
+            }
+            112 => { // GameSelector_Achievements
+                self.show_achievements_screen();
+            }
+            _ => {}
         }
     }
 }

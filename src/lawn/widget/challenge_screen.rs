@@ -8,6 +8,7 @@ use crate::todlib::tod_foley::FoleyType;
 use crate::framework::widget::widget_manager::WidgetManager;
 use crate::framework::widget::button_widget::ButtonWidget;
 use crate::framework::widget::dialog_button::DialogButton;
+use crate::framework::key_codes::{KEYCODE_ESCAPE, KeyCode};
 use crate::lawn::game_enums::*;
 
 /// 挑战模式数量（对应 C++ #define NUM_CHALLENGE_MODES）
@@ -271,7 +272,12 @@ impl ChallengeScreen {
     }
 
     pub fn button_press(&mut self, _id: i32) {
-        // [TRANSLATION_NOTE]: C++ 中 PlaySample(SOUND_ALMANAC_BUTTON)
+        // 对应 C++ ChallengeScreen::ButtonPress（ChallengeScreen.cpp:647）：mApp->PlaySample(SOUND_BUTTONCLICK)
+        if let Some(app) = self.app {
+            unsafe {
+                (*app).play_sample(crate::framework::resources::ResourceId::SoundButtonclick as i32);
+            }
+        }
     }
 
     pub fn button_depress(&mut self, the_id: i32) {
@@ -294,6 +300,14 @@ impl ChallengeScreen {
                 self.page_index = std::mem::transmute::<i32, ChallengePage>(a_page_index);
                 self.update_buttons();
             }
+        }
+    }
+
+    /// 对应 C++ ChallengeScreen::KeyDown（ChallengeScreen.cpp）
+    pub fn key_down(&mut self, key: KeyCode) {
+        if key == KEYCODE_ESCAPE {
+            // C++: ButtonDepress(ChallengeScreen_Back)（ID 100）
+            self.button_depress(100);
         }
     }
 

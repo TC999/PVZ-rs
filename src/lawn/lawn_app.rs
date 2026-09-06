@@ -72,6 +72,8 @@ pub struct LawnApp {
     pub credit_screen: Option<*mut ()>,
     pub challenge_screen: Option<*mut ()>,
     pub store_screen: Option<*mut ()>,
+    /// 商店 Widget 包装指针（Box 拥有；store_screen 字段拥有 StoreScreen 本体）
+    pub store_screen_widget: Option<*mut Widget>,
     pub zen_garden: Option<*mut ZenGarden>,
 
     // ---- 系统/管理器 ----
@@ -187,7 +189,7 @@ impl LawnApp {
             board: None, title_screen: None, game_selector: None,
             seed_chooser_screen: None, award_screen: None, almanac_dialog: None,
             credit_screen: None, challenge_screen: None, zen_garden: None,
-            store_screen: None,
+            store_screen: None, store_screen_widget: None,
             sound_system: None, effect_system: None,
             profile_mgr: None, player_info: None, music: None, pool_effect: None,
             control_button_list: LinkedList::new(),
@@ -676,19 +678,52 @@ impl LawnApp {
     /// 显示商店（对应 C++ ShowStoreScreen）
     pub fn show_store_screen(app: Option<*mut LawnApp>) -> Option<*mut ()> {
         let app_ref = unsafe { app?.as_mut()? };
-        // [TRANSLATION_NOTE]: C++ 中通过 AddDialog(aStoreScreen) + SetFocus 注册，
-        // 待 widget 层实现 WidgetImpl 后接入
-        let mut screen = Box::new(crate::lawn::widget::store_screen::StoreScreen::new());
-        screen.app = app;
-        let ptr = Box::into_raw(screen) as *mut ();
-        app_ref.store_screen = Some(ptr);
-        Some(ptr)
+        // 重复打开时先清理旧的商店（避免泄漏旧 Box / 重复注册 widget）
+        if app_ref.store_screen.is_some() {
+            app_ref.kill_store_screen();
+        }
+
+        // 创建 StoreScreen 本体（Box 拥有，存于 self.store_screen）
+        let mut screen = Box::new(crate::lawn::widget::store_screen::StoreScreen::new(app));
+        let screen_ptr = Box::into_raw(screen);
+
+        // 创建 Widget 包装（impl_ 非拥有地引用 StoreScreen 本体）并注册进 WidgetManager
+        // 对应 C++：AddDialog(DIALOG_STORE, aStoreScreen, true) + SetFocus
+        let mut store_widget = Box::new(Widget::new());
+        store_widget.impl_ = Some(Box::new(crate::lawn::widget::store_screen::StoreScreenImpl::new(screen_ptr)));
+        store_widget.resize(0, 0, app_ref.base.width, app_ref.base.height);
+        let store_widget_ptr = Box::into_raw(store_widget);
+        if let Some(wm) = app_ref.base.widget_manager {
+            unsafe {
+                (*wm).add_widget(store_widget_ptr);
+                (*wm).set_focus(Some(store_widget_ptr));
+            }
+        }
+        app_ref.store_screen = Some(screen_ptr as *mut ());
+        app_ref.store_screen_widget = Some(store_widget_ptr);
+        eprintln!("[LawnApp] 已显示 StoreScreen");
+        Some(screen_ptr as *mut ())
     }
 
-    /// 销毁商店（对应 C++ KillStoreScreen）
+    /// 销毁商店（对应 C++ KillStoreScreen；含 C++ RemovedFromManager 语义）
     pub fn kill_store_screen(&mut self) {
+        // 1) 先移除并释放 Widget 包装（impl_ 非拥有，不触碰 StoreScreen 本体）
+        if let Some(widget_ptr) = self.store_screen_widget.take() {
+            if let Some(wm) = self.base.widget_manager {
+                unsafe {
+                    (*wm).remove_widget(widget_ptr);
+                }
+            }
+            unsafe {
+                let _ = Box::from_raw(widget_ptr);
+            }
+        }
+        // 2) 再释放 StoreScreen 本体（先跑 removed_from_manager 的 CrazyDaveDie）
         if let Some(screen) = self.store_screen.take() {
             unsafe {
+                let screen_ref = &mut *(screen as *mut crate::lawn::widget::store_screen::StoreScreen);
+                let wm_ptr = self.base.widget_manager.map_or(std::ptr::null_mut(), |wm| wm);
+                screen_ref.removed_from_manager(wm_ptr);
                 let _ = Box::from_raw(screen as *mut crate::lawn::widget::store_screen::StoreScreen);
             }
         }

@@ -4,6 +4,7 @@
 
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::widget::widget_manager::WidgetManager;
+use crate::framework::key_codes::{KEYCODE_ESCAPE, KEYCODE_RETURN, KEYCODE_SPACE, KeyCode};
 use crate::lawn::game_enums::*;
 use crate::lawn::widget::game_button::GameButton;
 
@@ -69,23 +70,67 @@ impl AwardScreen {
         if self.fade_in_counter > 0 {
             self.fade_in_counter -= 1;
         }
+        // C++: if (mShowingAchievements) { mAchievementAnimTime++; ... }
         if self.showing_achievements {
             self.achievement_anim_time += 1;
+            // C++: for (i...) { if (mAchievementAnimTime >= mStartAnimTime) mY = PvzpAnimateCurve(...EASE_IN_OUT) }
             for item in &mut self.achievement_items {
                 if self.achievement_anim_time >= item.start_anim_time && self.achievement_anim_time < item.end_anim_time {
-                    let progress = (self.achievement_anim_time - item.start_anim_time) as f32 / (item.end_anim_time - item.start_anim_time) as f32;
-                    item.y = item.start_y + ((item.dest_y - item.start_y) as f32 * progress) as i32;
+                    // C++: PvzpAnimateCurve(start, end, t, startY, destY, CURVE_EASE_IN_OUT)
+                    let a_progress = crate::todlib::tod_common::tod_animate_curve_float(
+                        item.start_anim_time, item.end_anim_time, self.achievement_anim_time,
+                        0.0, 1.0, TodCurves::EaseInOut,
+                    );
+                    item.y = item.start_y + ((item.dest_y - item.start_y) as f32 * a_progress) as i32;
                 } else if self.achievement_anim_time >= item.end_anim_time {
                     item.y = item.dest_y;
                 }
             }
+            // C++: 最后一项到位时启用继续按钮（mBtnNoDraw/mDisabled = false）
+            if let Some(last) = self.achievement_items.last() {
+                if last.y == last.dest_y {
+                    if let Some(btn) = self.continue_button {
+                        unsafe {
+                            (*btn).btn_no_draw = false;
+                            (*btn).disabled = false;
+                        }
+                    }
+                }
+            }
         }
+        // [TRANSLATION_NOTE]: C++ 其余部分（GetDialogCount 短路、mStartButton/MenuButton/ContinueButton
+        // 的 Update、SetCursor 手型/指针、MarkDirty）依赖 Widget 树/光标系统，Rust 未接入
     }
 
     pub fn key_char(&mut self, _c: char) {
         if let Some(app) = self.app { unsafe {
             (*app).kill_award_screen();
         } }
+    }
+
+    /// 对应 C++ AwardScreen::KeyDown（AwardScreen.cpp）
+    pub fn key_down(&mut self, key: KeyCode) {
+        if key == KEYCODE_SPACE || key == KEYCODE_RETURN {
+            self.start_button_pressed();
+            return;
+        }
+
+        if key == KEYCODE_ESCAPE {
+            // C++: if (!mMenuButton->mDisabled && !mMenuButton->mBtnNoDraw)
+            let a_menu_enabled = self.menu_button.map_or(false, |b| unsafe {
+                !(*b).disabled && !(*b).btn_no_draw
+            });
+            if a_menu_enabled {
+                if let Some(app) = self.app {
+                    unsafe {
+                        (*app).kill_award_screen();
+                        (*app).show_game_selector();
+                    }
+                }
+            } else {
+                self.start_button_pressed();
+            }
+        }
     }
 
     pub fn start_button_pressed(&mut self) {

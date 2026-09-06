@@ -4,11 +4,14 @@
 #![allow(dead_code)]
 
 use crate::framework::graphics::graphics::Graphics;
-use crate::framework::key_codes::KeyCode;
+use crate::framework::key_codes::{KEYCODE_ESCAPE, KEYCODE_RETURN, KEYCODE_SPACE, KeyCode};
+use crate::framework::color::Color;
+use crate::framework::widget::dialog::{BUTTONS_YES_NO, ID_YES};
 use crate::lawn::game_enums::*;
 use crate::lawn::widget::game_button::GameButton;
 use crate::todlib::tod_common::TodWeightedArray;
 use crate::framework::mt_rand::MTRand;
+use crate::lawn::system::music::MusicTune;
 
 /// 已选种子（对应 C++ ChosenSeed）
 pub struct ChosenSeed {
@@ -309,8 +312,258 @@ impl SeedChooserScreen {
         }
         SeedType::None
     }
-    pub fn enable_start_button(&self, _enabled: bool) {
-        // EnableStartButton — 简化版
+    pub fn enable_start_button(&mut self, enabled: bool) {
+        // 对应 C++ SeedChooserScreen::EnableStartButton（SeedChooserScreen.cpp:803）
+        if let Some(btn) = self.start_button {
+            unsafe {
+                (*btn).disabled = !enabled;
+                if enabled {
+                    (*btn).colors[GameButton::COLOR_LABEL] = Color::new(255, 255, 255, 255);
+                } else {
+                    (*btn).colors[GameButton::COLOR_LABEL] = Color::new(64, 64, 64, 255);
+                }
+            }
+        }
+    }
+    /// 对应 C++ SeedChooserScreen::UpdateAfterPurchase（SeedChooserScreen.cpp:1138）
+    /// 商店购买后刷新已选种子的位置（含商店购买种子槽后卡槽数变化）。
+    pub fn update_after_purchase(&mut self) {
+        // [TRANSLATION_NOTE]: C++ 用固定数组 mChosenSeeds[SeedType] 按种子类型索引，Rust 侧为 Vec；
+        // 先快照各槽状态计算新位置，再统一写回，避免借用冲突。
+        let a_positions: Vec<(usize, i32, i32, bool)> = self
+            .chosen_seeds
+            .iter()
+            .enumerate()
+            .map(|(idx, a_chosen_seed)| {
+                let mut a_new_x = 0;
+                let mut a_new_y = 0;
+                let a_updated = if a_chosen_seed.seed_state == ChosenSeedState::InBank {
+                    self.get_seed_position_in_bank(a_chosen_seed.seed_index_in_bank, &mut a_new_x, &mut a_new_y);
+                    true
+                } else if a_chosen_seed.seed_state == ChosenSeedState::InChooser {
+                    self.get_seed_position_in_chooser(a_chosen_seed.seed_type as i32, &mut a_new_x, &mut a_new_y);
+                    true
+                } else {
+                    false
+                };
+                (idx, a_new_x, a_new_y, a_updated)
+            })
+            .collect();
+        for (idx, a_new_x, a_new_y, a_updated) in a_positions {
+            if a_updated {
+                let a_chosen_seed = &mut self.chosen_seeds[idx];
+                a_chosen_seed.x = a_new_x;
+                a_chosen_seed.y = a_new_y;
+                a_chosen_seed.start_x = a_new_x;
+                a_chosen_seed.start_y = a_new_y;
+                a_chosen_seed.end_x = a_new_x;
+                a_chosen_seed.end_y = a_new_y;
+            }
+        }
+        // C++: EnableStartButton(mSeedsInBank == mBoard->mSeedBank->mNumPackets)
+        let a_in_bank_matches = self
+            .board
+            .map_or(false, |b| unsafe { (*b).get_num_seeds_in_bank() == self.seeds_in_bank });
+        self.enable_start_button(a_in_bank_matches);
+        // C++: UpdateImitaterButton()（Imitater 按钮状态刷新）
+        self.update_imitater_button();
+    }
+
+    /// 对应 C++ SeedChooserScreen::UpdateImitaterButton（SeedChooserScreen.cpp:831）
+    pub fn update_imitater_button(&mut self) {
+        let a_has_imitater = self.app.map_or(false, |app| unsafe { (*app).has_seed_type(SeedType::Imitater) });
+        if let Some(btn) = self.imitater_button {
+            unsafe {
+                if !a_has_imitater {
+                    (*btn).btn_no_draw = true;
+                    (*btn).disabled = true;
+                } else {
+                    (*btn).btn_no_draw = false;
+                    let a_state = self
+                        .chosen_seeds
+                        .iter()
+                        .find(|s| s.seed_type == SeedType::Imitater)
+                        .map_or(ChosenSeedState::Hidden, |s| s.seed_state);
+                    (*btn).disabled = a_state != ChosenSeedState::Hidden;
+                }
+            }
+        }
+    }
+
+    /// 对应 C++ SeedChooserScreen::KeyDown（SeedChooserScreen.cpp:802）
+    pub fn key_down(&mut self, key: KeyCode) {
+        if let Some(board) = self.board {
+            unsafe {
+                (*board).do_typing_check(key);
+            }
+        }
+
+        let a_view_lawn = self.choose_state == SeedChooserState::ViewLawn;
+        if a_view_lawn && (key == KEYCODE_SPACE || key == KEYCODE_RETURN || key == KEYCODE_ESCAPE) {
+            self.cancel_lawn_view();
+        } else if key == KEYCODE_ESCAPE {
+            // C++: ButtonDepress(SeedChooserScreen_Menu)（ID 104）
+            self.button_depress(104);
+        }
+    }
+
+    /// 对应 C++ SeedChooserScreen::KeyChar（SeedChooserScreen.cpp:816）
+    pub fn key_char(&mut self, the_char: char) {
+        // C++: mBoard->KeyChar(theChar)；Rust 侧 Board 未实现 KeyChar，保留调用点语义
+        let _ = the_char;
+    }
+
+    /// 对应 C++ SeedChooserScreen::MouseDown（SeedChooserScreen.cpp:908）
+    pub fn mouse_down(&mut self, x: i32, y: i32, _the_click_count: i32) {
+        // C++: Widget::MouseDown(x, y, theClickCount) —— Rust 无 Widget 基类，等效空操作
+
+        if self.seeds_in_flight > 0 {
+            // C++: for (i = 0; i < NUM_SEEDS_IN_CHOOSER; i++) LandFlyingSeed(mChosenSeeds[i])
+            // Rust chosen_seeds 为 Vec（仅含活跃种子），遍历等价。
+            let a_count = self.chosen_seeds.len();
+            for i in 0..a_count {
+                let seed_ptr = &mut self.chosen_seeds[i] as *mut ChosenSeed;
+                unsafe {
+                    self.land_flying_seed(&mut *seed_ptr);
+                }
+            }
+        }
+
+        if self.choose_state == SeedChooserState::ViewLawn {
+            self.cancel_lawn_view();
+            return;
+        }
+
+        if self.random_button.map_or(false, |b| unsafe { (*b).is_over }) {
+            if let Some(app) = self.app {
+                unsafe {
+                    (*app).play_sample(crate::framework::resources::ResourceId::SoundTap as i32);
+                }
+            }
+            // C++: ButtonDepress(SeedChooserScreen_Random)（ID 101）
+            self.button_depress(101);
+        } else if self.view_lawn_button.map_or(false, |b| unsafe { (*b).is_over }) {
+            if let Some(app) = self.app {
+                unsafe {
+                    (*app).play_sample(crate::framework::resources::ResourceId::SoundTap as i32);
+                }
+            }
+            // C++: ButtonDepress(SeedChooserScreen_ViewLawn)（ID 102）
+            self.button_depress(102);
+        } else if self.menu_button.map_or(false, |b| unsafe { (*b).is_over }) {
+            if let Some(app) = self.app {
+                unsafe {
+                    (*app).play_sample(crate::framework::resources::ResourceId::SoundGravebutton as i32);
+                }
+            }
+        } else if self.start_button.map_or(false, |b| unsafe { (*b).is_over })
+            || self.almanac_button.map_or(false, |b| unsafe { (*b).is_over })
+            || self.store_button.map_or(false, |b| unsafe { (*b).is_over })
+        {
+            if let Some(app) = self.app {
+                unsafe {
+                    (*app).play_sample(crate::framework::resources::ResourceId::SoundTap as i32);
+                }
+            }
+        } else if self.imitater_button.map_or(false, |b| unsafe { (*b).is_over }) {
+            // C++: if (mSeedsInBank != mBoard->mSeedBank->mNumPackets)
+            let a_seeds_available = self
+                .board
+                .map_or(false, |b| unsafe { (*b).get_num_seeds_in_bank() != self.seeds_in_bank });
+            if a_seeds_available {
+                if let Some(app) = self.app {
+                    unsafe {
+                        (*app).play_sample(crate::framework::resources::ResourceId::SoundTap as i32);
+                        // [TRANSLATION_NOTE]: C++ 中 new ImitaterDialog + AddDialog + Resize + SetFocus；
+                        // Rust 侧 ImitaterDialog 为独立结构（register 链未接入 widget 体系），暂以注释占位。
+                    }
+                }
+            }
+        } else {
+            // C++: !mBoard->mSeedBank->ContainsPoint(x, y) && !mAlmanacButton->IsMouseOver() && !mStoreButton->IsMouseOver() && mApp->CanShowAlmanac()
+            // [TRANSLATION_NOTE]: Rust 侧 seed_bank 为 Vec<SeedPacket>（无 ContainsPoint），暂按 false 处理
+            let a_seed_bank_contains = false;
+            let a_almanac_over = self.almanac_button.map_or(false, |b| unsafe { (*b).is_over });
+            let a_store_over = self.store_button.map_or(false, |b| unsafe { (*b).is_over });
+            if !a_seed_bank_contains && !a_almanac_over && !a_store_over {
+                if let Some(app) = self.app {
+                    unsafe {
+                        if (*app).can_show_almanac() {
+                            if let Some(board) = self.board {
+                                // C++: mBoard->ZombieHitTest(x - mBoard->mX, y - mBoard->mY)；Board.mX 恒 0
+                                let a_zombie_idx = (*board).zombie_hit_test(x, y);
+                                if let Some(idx) = a_zombie_idx {
+                                    // [TRANSLATION_NOTE]: nightly 禁止裸指针隐式 autoref，先显式解引用
+                                    let board_ref = unsafe { &*board };
+                                    if idx < board_ref.zombies.len() {
+                                        let a_zombie = &board_ref.zombies[idx];
+                                        if a_zombie.from_wave == crate::lawn::zombie::Zombie::ZOMBIE_WAVE_CUTSCENE
+                                            && a_zombie.zombie_type != ZombieType::RedeEyeGargantuar
+                                        {
+                                            (*app).play_sample(crate::framework::resources::ResourceId::SoundTap as i32);
+                                            let a_zombie_type = a_zombie.zombie_type;
+                                            // C++: DoAlmanacDialog(...)->WaitForResult(true)；Rust 版返回 ()，无模态等待
+                                            (*app).do_almanac_dialog(SeedType::None, a_zombie_type);
+                                            if let Some(music) = (*app).music.as_mut() {
+                                                music.make_sure_music_is_playing(MusicTune::ChooseYourSeeds);
+                                            }
+                                            return;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            let a_seed_type = self.seed_hit_test(x, y);
+            if a_seed_type != SeedType::None && !self.seed_not_allowed_to_pick(a_seed_type) {
+                if self.seed_not_allowed_during_trial(a_seed_type) {
+                    if let Some(app) = self.app {
+                        unsafe {
+                            (*app).play_sample(crate::framework::resources::ResourceId::SoundTap as i32);
+                            // C++: LawnMessageBox(DIALOG_MESSAGE, [GET_FULL_VERSION_TITLE], [GET_FULL_VERSION_BODY],
+                            //      [GET_FULL_VERSION_YES_BUTTON], [GET_FULL_VERSION_NO_BUTTON], BUTTONS_YES_NO)
+                            let a_dialog = (*app).do_dialog(
+                                48, // DIALOG_MESSAGE
+                                true,
+                                "[GET_FULL_VERSION_TITLE]",
+                                "[GET_FULL_VERSION_BODY]",
+                                "",
+                                BUTTONS_YES_NO,
+                            );
+                            let a_result = a_dialog.map_or(0, |d| unsafe { (&mut *d).wait_for_result(true) });
+                            if a_result == ID_YES {
+                                (*app).do_back_to_main();
+                            }
+                        }
+                    }
+                } else {
+                    let a_seed_idx = self.chosen_seeds.iter().position(|s| s.seed_type == a_seed_type);
+                    if let Some(seed_idx) = a_seed_idx {
+                        let seed_ptr = &mut self.chosen_seeds[seed_idx] as *mut ChosenSeed;
+                        unsafe {
+                            let a_chosen_seed = &mut *seed_ptr;
+                            if a_chosen_seed.seed_state == ChosenSeedState::InBank {
+                                if a_chosen_seed.crazy_dave_picked {
+                                    if let Some(app) = self.app {
+                                        (*app).play_sample(crate::framework::resources::ResourceId::SoundBuzzer as i32);
+                                    }
+                                    if let Some(tip) = self.tool_tip {
+                                        (*tip).flash_warning();
+                                    }
+                                } else {
+                                    self.clicked_seed_in_bank(a_chosen_seed);
+                                }
+                            } else if a_chosen_seed.seed_state == ChosenSeedState::InChooser {
+                                self.clicked_seed_in_chooser(a_chosen_seed);
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
     pub fn clicked_seed_in_bank(&mut self, seed: &mut ChosenSeed) {
         // ClickedSeedInBank — 简化版

@@ -5,6 +5,7 @@
 
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::widget::widget_manager::WidgetManager;
+use crate::framework::key_codes::{KEYCODE_ESCAPE, KeyCode};
 use crate::lawn::game_enums::*;
 use crate::lawn::widget::game_button::GameButton;
 use crate::lawn::widget::lawn_dialog::LawnDialog;
@@ -71,6 +72,24 @@ impl AlmanacDialog {
     pub fn set_page(&mut self, page: AlmanacPage) {
         self.open_page = page;
         self.clear_plants_and_zombies();
+    }
+
+    /// 对应 C++ AlmanacDialog::KeyDown（AlmanacDialog.cpp）
+    pub fn key_down(&mut self, key: KeyCode) {
+        if key == KEYCODE_ESCAPE {
+            if self.open_page == AlmanacPage::Index {
+                if let Some(app) = self.app {
+                    unsafe {
+                        (*app).kill_almanac_dialog();
+                    }
+                }
+            } else {
+                self.set_page(AlmanacPage::Index);
+            }
+            return;
+        }
+
+        // C++: LawnDialog::KeyDown(theKey) —— 基类按键处理，Rust 侧无对应实现
     }
     pub fn update(&mut self) {
         if let Some(app) = self.app { unsafe {

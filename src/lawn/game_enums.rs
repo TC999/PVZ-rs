@@ -783,8 +783,8 @@ pub enum CoinMotion {
     FromSkySlow = 1,
     FromPlant = 2,
     Coin = 3,
-    Squirrel = 4,
-    FromGui = 5,
+    LawnmowerCoin = 4,
+    FromPresent = 5,
     FromBoss = 6,
 }
 
@@ -1940,6 +1940,7 @@ pub enum ReanimationType {
     CreditsWearetheundead,
     CreditsDiscolights,
     Flag,
+    ZombatarHead,
     NumReanims,
 }
 
