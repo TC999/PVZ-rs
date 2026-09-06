@@ -61,6 +61,10 @@ pub struct Reanimation {
     pub m_extra_additive_color: Color,
     // 对应 C++ mEnableExtraAdditiveDraw（是否启用附加加法绘制）
     pub m_enable_extra_additive_draw: bool,
+    // 对应 C++ mExtraOverlayColor（覆盖色，TreeOfWisdomDraw 使用）
+    pub m_extra_overlay_color: Color,
+    // 对应 C++ mEnableExtraOverlayDraw（是否启用覆盖色绘制）
+    pub m_enable_extra_overlay_draw: bool,
     // 对应 C++ mLastFrameTime（上一帧动画时间，用于 ShouldTriggerTimedEvent）
     pub m_last_anim_time: f32,
     // 对应 C++ mRenderOrder（渲染顺序）
@@ -98,6 +102,8 @@ impl Reanimation {
             m_frame_base_pose: 0,
             m_extra_additive_color: Color::BLACK,
             m_enable_extra_additive_draw: false,
+            m_extra_overlay_color: Color::WHITE,
+            m_enable_extra_overlay_draw: false,
             m_last_anim_time: 0.0,
             m_render_order: 0,
             m_dead: false,

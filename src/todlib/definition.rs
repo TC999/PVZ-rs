@@ -65,6 +65,12 @@ pub struct ReanimatorTrackInstance {
     pub m_ignore_extra_additive_color: bool,
     // 对应 C++ mIgnoreColorOverride（忽略颜色覆盖）
     pub m_ignore_color_override: bool,
+    // 对应 C++ mAttachmentID（轨道附件锚点 ID，ApplyZombatarHead/BalloonPropellerHatSpin 使用）
+    pub m_attachment_id: crate::lawn::game_enums::AttachmentID,
+    // 对应 C++ mImageOverride（轨道图片覆盖，默认空指针）
+    pub m_image_override: *mut crate::framework::graphics::image::Image,
+    // 对应 C++ mTrackColor（轨道染色，默认白色不染色）
+    pub m_track_color: Color,
 }
 
 impl ReanimatorTrackInstance {
@@ -85,6 +91,9 @@ impl ReanimatorTrackInstance {
             m_ignore_clip_rect: false,
             m_ignore_extra_additive_color: false,
             m_ignore_color_override: false,
+            m_attachment_id: 0,
+            m_image_override: std::ptr::null_mut(),
+            m_track_color: Color::WHITE,
         }
     }
 }

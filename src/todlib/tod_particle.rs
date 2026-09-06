@@ -577,14 +577,132 @@ impl TodParticleSystem {
     }
 
     pub fn system_move(&mut self, _x: f32, _y: f32) {}
-    pub fn override_color(&mut self, _emitter: &str, _color: &Color) {}
-    pub fn override_extra_additive_draw(&mut self, _emitter: &str, _enable: bool) {}
-    pub fn override_image(&mut self, _emitter: &str, _image: *mut Image) {}
-    pub fn override_frame(&mut self, _emitter: &str, _frame: i32) {}
-    pub fn override_scale(&mut self, _emitter: &str, _scale: f32) {}
+    /// [TRANSLATION_NOTE]: C++ PvzpParticleSystem::OverrideColor (PvzpParticle.cpp:1099)
+    /// iterate emitter list; empty name == C++ nullptr (match all)
+    pub fn override_color(&mut self, the_emitter_name: &str, the_color: &Color) {
+        let mut a_node = self.emitter_list.head;
+        while !a_node.is_null() {
+            unsafe {
+                let a_emitter_id = (*a_node).value;
+                let a_emitter = (&mut *self.particle_holder).emitters.get_mut(a_emitter_id);
+                let a_matches = the_emitter_name.is_empty()
+                    || a_emitter.emitter_def.as_ref().map_or(false, |d| {
+                        (*d).name.eq_ignore_ascii_case(the_emitter_name)
+                    });
+                if a_matches {
+                    a_emitter.color_override = *the_color;
+                }
+                a_node = (*a_node).next;
+            }
+        }
+    }
+    /// [TRANSLATION_NOTE]: C++ PvzpParticleSystem::OverrideExtraAdditiveDraw (1109)
+    pub fn override_extra_additive_draw(&mut self, the_emitter_name: &str, the_enable: bool) {
+        let mut a_node = self.emitter_list.head;
+        while !a_node.is_null() {
+            unsafe {
+                let a_emitter_id = (*a_node).value;
+                let a_emitter = (&mut *self.particle_holder).emitters.get_mut(a_emitter_id);
+                let a_matches = the_emitter_name.is_empty()
+                    || a_emitter.emitter_def.as_ref().map_or(false, |d| {
+                        (*d).name.eq_ignore_ascii_case(the_emitter_name)
+                    });
+                if a_matches {
+                    a_emitter.extra_additive_draw_override = the_enable;
+                }
+                a_node = (*a_node).next;
+            }
+        }
+    }
+    /// [TRANSLATION_NOTE]: C++ PvzpParticleSystem::OverrideImage (1119)
+    pub fn override_image(&mut self, the_emitter_name: &str, the_image: *mut Image) {
+        let mut a_node = self.emitter_list.head;
+        while !a_node.is_null() {
+            unsafe {
+                let a_emitter_id = (*a_node).value;
+                let a_emitter = (&mut *self.particle_holder).emitters.get_mut(a_emitter_id);
+                let a_matches = the_emitter_name.is_empty()
+                    || a_emitter.emitter_def.as_ref().map_or(false, |d| {
+                        (*d).name.eq_ignore_ascii_case(the_emitter_name)
+                    });
+                if a_matches {
+                    a_emitter.image_override = the_image;
+                }
+                a_node = (*a_node).next;
+            }
+        }
+    }
+    /// [TRANSLATION_NOTE]: C++ PvzpParticleSystem::OverrideFrame (1129)
+    pub fn override_frame(&mut self, the_emitter_name: &str, the_frame: i32) {
+        let mut a_node = self.emitter_list.head;
+        while !a_node.is_null() {
+            unsafe {
+                let a_emitter_id = (*a_node).value;
+                let a_emitter = (&mut *self.particle_holder).emitters.get_mut(a_emitter_id);
+                let a_matches = the_emitter_name.is_empty()
+                    || a_emitter.emitter_def.as_ref().map_or(false, |d| {
+                        (*d).name.eq_ignore_ascii_case(the_emitter_name)
+                    });
+                if a_matches {
+                    a_emitter.frame_override = the_frame;
+                }
+                a_node = (*a_node).next;
+            }
+        }
+    }
+    /// [TRANSLATION_NOTE]: C++ PvzpParticleSystem::OverrideScale (1139)
+    pub fn override_scale(&mut self, the_emitter_name: &str, the_scale: f32) {
+        let mut a_node = self.emitter_list.head;
+        while !a_node.is_null() {
+            unsafe {
+                let a_emitter_id = (*a_node).value;
+                let a_emitter = (&mut *self.particle_holder).emitters.get_mut(a_emitter_id);
+                let a_matches = the_emitter_name.is_empty()
+                    || a_emitter.emitter_def.as_ref().map_or(false, |d| {
+                        (*d).name.eq_ignore_ascii_case(the_emitter_name)
+                    });
+                if a_matches {
+                    a_emitter.scale_override = the_scale;
+                }
+                a_node = (*a_node).next;
+            }
+        }
+    }
+    /// [TRANSLATION_NOTE]: C++ PvzpParticleSystem::CrossFade (1196)
+    /// depends on FloatTrackIsSet / emitter alloc backbone (untranslated), keep empty
     pub fn cross_fade(&mut self, _emitter: &str) {}
-    pub fn find_emitter_by_name(&self, _name: &str) -> Option<&TodParticleEmitter> { None }
-    pub fn find_emitter_def_by_name(&self, _name: &str) -> Option<&TodEmitterDefinition> { None }
+    /// [TRANSLATION_NOTE]: C++ PvzpParticleSystem::FindEmitterByName (1149)
+    pub fn find_emitter_by_name(&self, the_name: &str) -> Option<&TodParticleEmitter> {
+        let mut a_node = self.emitter_list.head;
+        while !a_node.is_null() {
+            unsafe {
+                let a_emitter_id = (*a_node).value;
+                let a_emitter = (*self.particle_holder).emitters.get(a_emitter_id);
+                let a_matches = a_emitter.emitter_def.as_ref().map_or(false, |d| {
+                    (*d).name.eq_ignore_ascii_case(the_name)
+                });
+                if a_matches {
+                    return Some(a_emitter);
+                }
+                a_node = (*a_node).next;
+            }
+        }
+        None
+    }
+    /// [TRANSLATION_NOTE]: C++ PvzpParticleSystem::FindEmitterDefByName (1160)
+    pub fn find_emitter_def_by_name(&self, the_name: &str) -> Option<&TodEmitterDefinition> {
+        let a_def = self.particle_def;
+        unsafe {
+            if !a_def.is_null() {
+                for a_emitter_def in &(*a_def).emitter_defs {
+                    if a_emitter_def.name.eq_ignore_ascii_case(the_name) {
+                        return Some(a_emitter_def);
+                    }
+                }
+            }
+        }
+        None
+    }
 }
 
 // ============================================================

@@ -6,14 +6,16 @@ use crate::lawn::game_enums::*;
 use crate::lawn::plant::Plant;
 use crate::todlib::reanimator::{Reanimation, ReanimationType, ReanimLoopType};
 use crate::todlib::tod_particle::ParticleSystem;
-use crate::todlib::attachment::Attachment;
+use crate::todlib::attachment::{Attachment, attach_reanim, find_reanim_attachment};
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
 use crate::framework::rect::Rect;
 use crate::framework::color::Color;
+use crate::framework::sexy_matrix::SexyMatrix3;
 use crate::framework::common::{Rand, RandRange, RandFloat};
 use crate::lawn::lawn_app::LawnApp;
 use crate::lawn::board::Board;
+use crate::lawn::zombatar::*;
 
 pub const MAX_ZOMBIE_FOLLOWERS: usize = 4;
 pub const NUM_BACKUP_DANCERS: usize = 4;
@@ -39,6 +41,19 @@ pub const BOSS_ZOMBIE_LIST: [ZombieType; 12] = [
 // C++ Zombie.cpp 文件级常量
 const CLIP_HEIGHT_LIMIT: f32 = -100.0; // C++ constexpr CLIP_HEIGHT_LIMIT = -100.0f
 const ZOMBIE_MINDCONTROLLED_COLOR: Color = Color { r: 128, g: 64, b: 192, a: 255 }; // C++ Color(128, 64, 192, 255)
+
+/// 缩放旋转矩阵（对应 C++ PvzpLib/PvzpCommon.cpp PvzpScaleRotateTransformMatrix）
+fn pvzp_scale_rotate_transform_matrix(m: &mut SexyMatrix3, x: f32, y: f32, rad: f32, the_scale_x: f32, the_scale_y: f32) {
+    m.m[0][0] = rad.cos() * the_scale_x;
+    m.m[1][0] = -rad.sin() * the_scale_x;
+    m.m[2][0] = 0.0;
+    m.m[0][1] = rad.sin() * the_scale_y;
+    m.m[1][1] = rad.cos() * the_scale_y;
+    m.m[2][1] = 0.0;
+    m.m[0][2] = x;
+    m.m[1][2] = y;
+    m.m[2][2] = 1.0;
+}
 
 // C++ DamageFlags 位索引（对应 ConstEnums.h DamageFlags）
 const DAMAGE_BYPASSES_SHIELD: u32 = 0;
@@ -182,6 +197,7 @@ pub struct Zombie {
     pub boss_head_counter: i32,
     pub boss_fire_ball_reanim_id: ReanimationID,
     pub special_head_reanim_id: ReanimationID,
+    pub zombatar_head_reanim_id: ReanimationID,
     pub fireball_row: i32,
     pub is_fire_ball: bool,
     pub mowered_reanim_id: ReanimationID,
@@ -302,6 +318,7 @@ impl Zombie {
             boss_head_counter: 0,
             boss_fire_ball_reanim_id: REANIMATIONID_NULL,
             special_head_reanim_id: REANIMATIONID_NULL,
+            zombatar_head_reanim_id: REANIMATIONID_NULL,
             fireball_row: 0,
             is_fire_ball: false,
             mowered_reanim_id: REANIMATIONID_NULL,
@@ -378,6 +395,7 @@ impl Zombie {
         self.boss_mode = 0;
         self.boss_fire_ball_reanim_id = REANIMATIONID_NULL;
         self.special_head_reanim_id = REANIMATIONID_NULL;
+        self.zombatar_head_reanim_id = REANIMATIONID_NULL;
         self.target_row = -1;
         self.fireball_row = -1;
         self.is_fire_ball = false;
@@ -4578,12 +4596,42 @@ impl Zombie {
 
     /// 掉手臂（对应 C++ DropArm）
     pub fn drop_arm(&mut self, damage_flags: u32) {
+        // C++ DropArm：CanLoseBodyParts + 盾牌/海豚/报纸相位 + mHasArm 前置检查（Zombie.cpp:3878）
+        if !self.can_lose_body_parts() {
+            return;
+        }
+        if self.shield_type == ShieldType::Door || self.shield_type == ShieldType::Newspaper {
+            return;
+        }
+        if self.zombie_phase == ZombiePhase::SnorkelIntoPool
+            || self.zombie_phase == ZombiePhase::DolphinWalking
+            || self.zombie_phase == ZombiePhase::DolphinIntoPool
+            || self.zombie_phase == ZombiePhase::DolphinRiding
+            || self.zombie_phase == ZombiePhase::DolphinInJump
+            || self.zombie_phase == ZombiePhase::NewspaperReading
+        {
+            return;
+        }
+        if !self.has_arm {
+            return;
+        }
+
         self.has_arm = false;
-        let _ = damage_flags;
+        self.setup_reanim_for_lost_arm(damage_flags);
+        // [TRANSLATION_NOTE]: C++ 末尾 PlayFoley(FOLEY_LIMBS_POP) 音效未接入
     }
 
-    /// 掉头（对应 C++ DropHead）
+    /// 掉头（对应 C++ DropHead：CanLoseBodyParts + mHasHead 前置检查，Zombie.cpp:3508）
     pub fn drop_head(&mut self, damage_flags: u32) {
+        if !self.can_lose_body_parts() || !self.has_head {
+            return;
+        }
+
+        if self.buttered_counter > 0 {
+            self.buttered_counter = 0;
+            self.update_anim_speed();
+        }
+
         self.has_head = false;
         self.setup_reanim_for_lost_head();
         if test_bit(damage_flags, DAMAGE_DOESNT_LEAVE_BODY) {
@@ -5016,33 +5064,217 @@ impl Zombie {
         }
     }
 
-    /// 附加 reanim（对应 C++ AddAttachedReanim）
-    pub fn add_attached_reanim(&mut self, _pos_x: i32, _pos_y: i32, _reanim_type: ReanimationType) -> Option<*mut Reanimation> {
+    /// 附加 reanim（对应 C++ AddAttachedReanim，Zombie.cpp）
+    pub fn add_attached_reanim(&mut self, the_pos_x: i32, the_pos_y: i32, the_reanim_type: ReanimationType) -> Option<*mut Reanimation> {
         if self.dead {
             return None;
         }
-        // [TRANSLATION_NOTE]: C++ mApp->AddReanimation + AttachReanim — reanim 附着系统未接入
-        None
+        // C++: aReanim = mApp->AddReanimation(mX + thePosX, mY + thePosY, 0, theReanimType)
+        let app = self.base.get_app_mut()?;
+        let a_reanim = app.add_reanimation(
+            self.pos_x + the_pos_x as f32,
+            self.pos_y + the_pos_y as f32,
+            0,
+            the_reanim_type as i32,
+        )?;
+        // C++: if (aReanim) AttachReanim(mAttachmentID, aReanim, thePosX, thePosY)
+        crate::todlib::attachment::attach_reanim(
+            &mut self.attachment_id,
+            a_reanim as *mut std::ffi::c_void,
+            the_pos_x as f32,
+            the_pos_y as f32,
+        );
+        Some(a_reanim)
     }
 
     /// 气球螺旋桨旋转（对应 C++ BalloonPropellerHatSpin）
-    pub fn balloon_propeller_hat_spin(&mut self, _the_spinning: bool) {
-        // [TRANSLATION_NOTE]: C++ 通过 hat 轨道附件 reanim 的 mAnimRate 控制螺旋桨 — reanim 未接入
+    pub fn balloon_propeller_hat_spin(&mut self, the_spinning: bool) {
+        // [TRANSLATION_NOTE]: C++ 用 ReanimationGet（强制存在）+ GetTrackInstanceByName("hat") 后直接
+        // FindReanimAttachment(mAttachmentID)；此处以 Option 安全化。find_reanim_attachment 为附着接入层（当前 stub 恒 None）
+        let mut a_hat_attachment_id: AttachmentID = 0;
+        if let Some(app) = self.base.get_app_mut() {
+            if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                if let Some(a_hat_track_instance) = a_body_reanim.get_track_instance_by_name("hat") {
+                    a_hat_attachment_id = a_hat_track_instance.m_attachment_id;
+                }
+            }
+        }
+        if let Some(a_propeller_reanim) = find_reanim_attachment(&mut a_hat_attachment_id) {
+            let a_propeller_reanim = a_propeller_reanim as *mut Reanimation;
+            if the_spinning {
+                unsafe {
+                    // C++: aPropellerReanim->mAnimRate = aPropellerReanim->mDefinition->mFPS;
+                    if let Some(a_definition) = (*a_propeller_reanim).m_definition {
+                        (*a_propeller_reanim).m_anim_rate = (*a_definition).m_fps;
+                    }
+                }
+            } else {
+                unsafe {
+                    (*a_propeller_reanim).m_anim_rate = 0.0;
+                }
+            }
+        }
     }
 
     /// 覆盖粒子缩放（对应 C++ OverrideParticleScale）
-    pub fn override_particle_scale(&mut self) {
-        // [TRANSLATION_NOTE]: C++ aParticle->OverrideScale(nullptr, mScaleZombie) — 粒子未接入
+    pub fn override_particle_scale(&mut self, a_particle: *mut ParticleSystem) {
+        if !a_particle.is_null() {
+            // [TRANSLATION_NOTE]: C++ 传 nullptr 表示作用于全部 emitter，Rust 接口以空串占位
+            unsafe {
+                (*a_particle).override_scale("", self.scale_zombie);
+            }
+        }
     }
 
     /// 覆盖粒子颜色（对应 C++ OverrideParticleColor）
-    pub fn override_particle_color(&mut self) {
-        // [TRANSLATION_NOTE]: C++ 按精神控制/冰冻设置粒子颜色与附加绘制 — 粒子未接入
+    pub fn override_particle_color(&mut self, a_particle: *mut ParticleSystem) {
+        if !a_particle.is_null() {
+            if self.mind_controlled {
+                unsafe {
+                    (*a_particle).override_color("", &ZOMBIE_MINDCONTROLLED_COLOR);
+                    (*a_particle).override_extra_additive_draw("", true);
+                }
+            } else if self.chilled_counter > 0 || self.ice_trap_counter > 0 {
+                unsafe {
+                    (*a_particle).override_color("", &Color::new(75, 75, 255, 255));
+                    (*a_particle).override_extra_additive_draw("", true);
+                }
+            }
+        }
     }
 
     /// 应用 Zombatar 头部（对应 C++ ApplyZombatarHead）
-    pub fn apply_zombatar_head(&mut self, _the_record: &[u8]) {
-        // [TRANSLATION_NOTE]: C++ 完整 Zombatar 头部 reanim 装配（轨道颜色/渲染组/附件矩阵）— reanim 未接入
+    pub fn apply_zombatar_head(&mut self, the_record: &[u8]) {
+        // 渲染组常量：RENDER_GROUP_ZOMBATAR_HEAD=3（Zombie.cpp），RENDER_GROUP_HIDDEN=-1（PvzpLib/Reanimator.h）
+        let render_group_zombatar_head: i32 = 3;
+        let render_group_hidden: i32 = -1;
+
+        // C++ 全局 IMAGE_BLANK（extern Image*）→ 从资源管理器取图
+        let a_image_blank: *mut Image = {
+            let mut a_ptr: *mut Image = std::ptr::null_mut();
+            if let Some(app) = self.base.get_app() {
+                if let Some(a_rm_ptr) = app.base.resource_manager {
+                    unsafe {
+                        let a_rm = &*a_rm_ptr;
+                        let a_shared = a_rm.get_image("IMAGE_BLANK");
+                        let a_img_ptr = a_shared.as_image_ptr();
+                        if !a_img_ptr.is_null() {
+                            a_ptr = a_img_ptr;
+                        }
+                    }
+                }
+            }
+            a_ptr
+        };
+
+        // [TRANSLATION_NOTE]: C++ GetTrackInstanceByName("anim_head1")/AttachReanim 假定对象存在；Rust 侧 Option 安全化，
+        // mAttachmentID 为值类型提前复制，避免跨操作借用冲突
+        let mut a_track_attachment_id: AttachmentID = 0;
+        if let Some(app) = self.base.get_app_mut() {
+            // C++: aBodyReanim = mApp->ReanimationTryToGet(mBodyReanimID); if (!aBodyReanim) return;
+            if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                // C++: aTrackInstance->mImageOverride = IMAGE_BLANK;
+                if let Some(a_track_instance) = a_body_reanim.get_track_instance_by_name("anim_head1") {
+                    a_track_instance.m_image_override = a_image_blank;
+                    a_track_attachment_id = a_track_instance.m_attachment_id;
+                }
+                a_body_reanim.assign_render_group_to_track("anim_head1", render_group_zombatar_head);
+                a_body_reanim.assign_render_group_to_prefix("anim_head2", render_group_hidden);
+                a_body_reanim.assign_render_group_to_prefix("anim_hair", render_group_hidden);
+                a_body_reanim.m_frame_base_pose = 0;
+            }
+        }
+
+        // C++: aHeadReanim = mApp->ReanimationTryToGet(mZombatarHeadReanimID); if (!aHeadReanim) { 新建 }
+        let a_head_exists = self
+            .base
+            .get_app()
+            .and_then(|app| app.reanimation_get(self.zombatar_head_reanim_id))
+            .is_some();
+        if !a_head_exists {
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(a_head_ptr) = app.add_reanimation(0.0, 0.0, 0, ReanimationType::ZombatarHead as i32) {
+                    unsafe {
+                        (*a_head_ptr).play_reanim("anim_head_idle", ReanimLoopType::Loop, 0, 15.0);
+                    }
+                    self.zombatar_head_reanim_id = app.reanimation_get_id(a_head_ptr);
+                    // C++: AttachEffect* aAttachEffect = AttachReanim(aTrackInstance->mAttachmentID, aHeadReanim, 0.0f, 0.0f);
+                    //       PvzpScaleRotateTransformMatrix(aAttachEffect->mOffset, -20.0f, -1.0f, 0.2f, 1.0f, 1.0f);
+                    if let Some(a_attach_effect) = attach_reanim(&mut a_track_attachment_id, a_head_ptr as *mut std::ffi::c_void, 0.0, 0.0) {
+                        unsafe {
+                            pvzp_scale_rotate_transform_matrix(&mut (*a_attach_effect).offset, -20.0, -1.0, 0.2, 1.0, 1.0);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 对头部 reanim 统一设置渲染组/前缀隐藏 + 按记录装配部件轨道（C++ ApplyZombatarHead 后半段）
+        if let Some(app) = self.base.get_app_mut() {
+            if let Some(a_head_reanim) = app.reanimation_get_mut(self.zombatar_head_reanim_id) {
+                a_head_reanim.assign_render_group_to_track("anim_hair", render_group_hidden);
+                a_head_reanim.assign_render_group_to_prefix("hats_", render_group_hidden);
+                a_head_reanim.assign_render_group_to_prefix("hair_", render_group_hidden);
+                a_head_reanim.assign_render_group_to_prefix("facialHair_", render_group_hidden);
+                a_head_reanim.assign_render_group_to_prefix("accessories_", render_group_hidden);
+                a_head_reanim.assign_render_group_to_prefix("eyeWear_", render_group_hidden);
+                a_head_reanim.assign_render_group_to_prefix("tidBits_", render_group_hidden);
+
+                // C++ RuntimePart 表（static constexpr aRuntimeParts[]）
+                struct RuntimePart {
+                    m_part_slot: i32,
+                    m_color_slot: i32,
+                    m_max_count: i32,
+                    m_prefix: &'static str,
+                    m_page: ZombatarPage,
+                    m_remap_accessory: bool,
+                    m_compact_track_range: bool,
+                }
+                const A_RUNTIME_PARTS: [RuntimePart; 6] = [
+                    RuntimePart { m_part_slot: ZOMBATAR_SLOT_HATS, m_color_slot: ZOMBATAR_SLOT_HATS_COLOR, m_max_count: 14, m_prefix: "hats_", m_page: ZombatarPage::Hats, m_remap_accessory: false, m_compact_track_range: false },
+                    RuntimePart { m_part_slot: ZOMBATAR_SLOT_HAIR, m_color_slot: ZOMBATAR_SLOT_HAIR_COLOR, m_max_count: 16, m_prefix: "hair_", m_page: ZombatarPage::Hair, m_remap_accessory: false, m_compact_track_range: false },
+                    RuntimePart { m_part_slot: ZOMBATAR_SLOT_TIDBITS, m_color_slot: ZOMBATAR_SLOT_TIDBITS_COLOR, m_max_count: 14, m_prefix: "tidBits_", m_page: ZombatarPage::Tidbits, m_remap_accessory: false, m_compact_track_range: false },
+                    RuntimePart { m_part_slot: ZOMBATAR_SLOT_EYEWEAR, m_color_slot: ZOMBATAR_SLOT_EYEWEAR_COLOR, m_max_count: 16, m_prefix: "eyeWear_", m_page: ZombatarPage::Eyewear, m_remap_accessory: false, m_compact_track_range: false },
+                    RuntimePart { m_part_slot: ZOMBATAR_SLOT_ACCESSORY, m_color_slot: ZOMBATAR_SLOT_ACCESSORY_COLOR, m_max_count: 15, m_prefix: "accessories_", m_page: ZombatarPage::Accessory, m_remap_accessory: true, m_compact_track_range: false },
+                    RuntimePart { m_part_slot: ZOMBATAR_SLOT_FACIAL_HAIR, m_color_slot: ZOMBATAR_SLOT_FACIAL_HAIR_COLOR, m_max_count: 25, m_prefix: "facialHair_", m_page: ZombatarPage::FacialHair, m_remap_accessory: false, m_compact_track_range: true },
+                ];
+
+                for a_part in A_RUNTIME_PARTS.iter() {
+                    // C++: int aPartIndex = ZombatarReadSignedRecordSlot(theRecord, aPart.mPartSlot);
+                    let a_part_index = zombatar_read_signed_record_slot(the_record, a_part.m_part_slot);
+                    if a_part_index < 0 || a_part_index >= a_part.m_max_count {
+                        continue;
+                    }
+                    let mut a_track_index = a_part_index;
+                    if a_part.m_compact_track_range && a_track_index > 16 {
+                        a_track_index -= a_track_index / 17;
+                    }
+                    if a_part.m_remap_accessory {
+                        a_track_index = zombatar_remap_accessory_for_runtime(a_track_index);
+                    }
+                    let a_track_name = zombatar_track_name(a_part.m_prefix, a_track_index);
+
+                    // C++: const int aDrawOrder = aLayout ? aLayout->mDrawOrder : 0;
+                    let a_layout = get_part_layout(a_part.m_page, a_part_index);
+                    let a_draw_order = match a_layout {
+                        Some(a_layout) => a_layout.m_draw_order,
+                        None => 0,
+                    };
+                    if a_head_reanim.track_exists(&a_track_name) {
+                        a_head_reanim.assign_render_group_to_track(&a_track_name, a_draw_order);
+                        if let Some(a_track_instance) = a_head_reanim.get_track_instance_by_name(&a_track_name) {
+                            a_track_instance.m_track_color = zombatar_get_color(zombatar_read_signed_record_slot(the_record, a_part.m_color_slot));
+                        }
+                    }
+
+                    // C++: some parts exist only as a "_line" detail track without a base track
+                    let a_line_track_name = a_track_name.clone() + "_line";
+                    if a_head_reanim.track_exists(&a_line_track_name) {
+                        a_head_reanim.assign_render_group_to_track(&a_line_track_name, a_draw_order + 1);
+                    }
+                }
+            }
+        }
     }
 
     /// 绘制僵尸部位（对应 C++ DrawZombiePart；C++ 注释"normally never called"）

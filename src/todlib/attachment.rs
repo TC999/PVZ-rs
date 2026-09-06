@@ -169,27 +169,54 @@ impl AttachmentHolder {
 
 // ── 自由函数 ──────────────────────────────────────────
 
-/// 附着重动画效果
+/// 附着重动画效果（对应 C++ AttachReanim，Attachment.cpp）
 pub fn attach_reanim(
-    _attachment_id: &mut AttachmentID,
-    _reanimation: *mut std::ffi::c_void,
-    _offset_x: f32,
-    _offset_y: f32,
+    the_attachment_id: &mut AttachmentID,
+    the_reanimation: *mut std::ffi::c_void,
+    the_offset_x: f32,
+    the_offset_y: f32,
 ) -> Option<*mut AttachEffect> {
-    None
+    let app = crate::lawn::lawn_app::LawnApp::instance()?;
+    let es = app.effect_system.as_mut()?;
+    // C++: mReanimations.DataArrayGetID(theReanimation) —— Rust Vec 按指针查索引
+    let a_reanim_id = es.reanimations.iter().position(|r| {
+        std::ptr::eq(r as *const crate::todlib::reanimator::Reanimation,
+                     the_reanimation as *const crate::todlib::reanimator::Reanimation)
+    })? as u32;
+    let a_attach_effect = create_effect_attachment(
+        the_attachment_id, EffectType::Reanim, a_reanim_id, the_offset_x, the_offset_y,
+    )?;
+    // C++: theReanimation->mIsAttachment = true
+    if let Some(a_reanim) = es.reanimations.get_mut(a_reanim_id as usize) {
+        a_reanim.m_is_attachment = true;
+    }
+    Some(a_attach_effect)
 }
 
-/// 附着粒子效果
+/// 附着粒子效果（对应 C++ AttachParticle，Attachment.cpp）
 pub fn attach_particle(
-    _attachment_id: &mut AttachmentID,
-    _particle_system: *mut std::ffi::c_void,
-    _offset_x: f32,
-    _offset_y: f32,
+    the_attachment_id: &mut AttachmentID,
+    the_particle_system: *mut std::ffi::c_void,
+    the_offset_x: f32,
+    the_offset_y: f32,
 ) -> Option<*mut AttachEffect> {
-    None
+    let app = crate::lawn::lawn_app::LawnApp::instance()?;
+    let es = app.effect_system.as_mut()?;
+    let a_ps_id = es.particle_systems.iter().position(|ps| {
+        std::ptr::eq(ps as *const crate::todlib::tod_particle::TodParticleSystem,
+                     the_particle_system as *const crate::todlib::tod_particle::TodParticleSystem)
+    })? as u32;
+    let a_attach_effect = create_effect_attachment(
+        the_attachment_id, EffectType::Particle, a_ps_id, the_offset_x, the_offset_y,
+    )?;
+    if let Some(a_ps) = es.particle_systems.get_mut(a_ps_id as usize) {
+        a_ps.is_attachment = true;
+    }
+    Some(a_attach_effect)
 }
 
-/// 附着拖尾效果
+/// 附着拖尾效果（对应 C++ AttachTrail，Attachment.cpp）
+/// [TRANSLATION_NOTE]: Rust EffectSystem 尚无 trails 存储（mTrailHolder 未接入），暂保留占位
 pub fn attach_trail(
     _attachment_id: &mut AttachmentID,
     _trail: *mut std::ffi::c_void,
@@ -199,24 +226,97 @@ pub fn attach_trail(
     None
 }
 
-/// 创建效果附着
+/// 创建效果附着（对应 C++ CreateEffectAttachment，Attachment.cpp）
+/// attachment id 无效或已死时分配新 Attachment 并回写 id
 pub fn create_effect_attachment(
-    _attachment_id: &mut AttachmentID,
-    _effect_type: EffectType,
-    _data_id: u32,
-    _offset_x: f32,
-    _offset_y: f32,
+    the_attachment_id: &mut AttachmentID,
+    the_effect_type: EffectType,
+    the_data_id: u32,
+    the_offset_x: f32,
+    the_offset_y: f32,
 ) -> Option<*mut AttachEffect> {
-    None
+    let app = crate::lawn::lawn_app::LawnApp::instance()?;
+    let es = app.effect_system.as_mut()?;
+    unsafe {
+        // C++: DataArrayTryToGet(id)；无效或 mDead → AllocAttachment
+        let a_existing: Option<usize> = {
+            let id = *the_attachment_id;
+            if id != ATTACHMENTID_NULL {
+                let idx = id as usize;
+                if idx < es.attachments.len() && !es.attachments[idx].dead {
+                    Some(idx)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        };
+        let a_attachment: *mut Attachment;
+        let a_index = match a_existing {
+            Some(idx) => idx,
+            None => {
+                es.attachments.push(Attachment::new());
+                let idx = es.attachments.len() - 1;
+                *the_attachment_id = idx as AttachmentID;
+                idx
+            }
+        };
+        a_attachment = &mut es.attachments[a_index];
+        // C++: PVZP_ASSERT(mNumEffects < MAX_EFFECTS_PER_ATTACHMENT)
+        if (*a_attachment).num_effects as usize >= MAX_EFFECTS_PER_ATTACHMENT {
+            return None;
+        }
+        let a_attach_effect = &mut (*a_attachment).effect_array[(*a_attachment).num_effects as usize];
+        a_attach_effect.effect_type = the_effect_type;
+        a_attach_effect.effect_id = the_data_id;
+        a_attach_effect.dont_draw_if_parent_hidden = false;
+        // C++: mOffset.LoadIdentity(); mOffset.m02 = theOffsetX; mOffset.m12 = theOffsetY
+        a_attach_effect.offset = SexyMatrix3::translation(the_offset_x, the_offset_y);
+        (*a_attachment).num_effects += 1;
+        Some(a_attach_effect as *mut AttachEffect)
+    }
 }
 
-/// 查找第一个附着
-pub fn find_first_attachment(_attachment_id: &mut AttachmentID) -> Option<*mut AttachEffect> {
-    None
+/// 查找第一个附着（对应 C++ FindFirstAttachment，Attachment.cpp）
+/// [TRANSLATION_NOTE]: 有附着效果时返回第一个（C++ 语义：返回效果数组中索引 0 的效果）
+pub fn find_first_attachment(the_attachment_id: &mut AttachmentID) -> Option<*mut AttachEffect> {
+    let app = crate::lawn::lawn_app::LawnApp::instance()?;
+    let es = app.effect_system.as_ref()?;
+    let id = *the_attachment_id;
+    if id == ATTACHMENTID_NULL {
+        return None;
+    }
+    unsafe {
+        let a_attachment = es.attachments.get(id as usize)?;
+        if a_attachment.dead || a_attachment.num_effects <= 0 {
+            return None;
+        }
+        Some(&a_attachment.effect_array[0] as *const AttachEffect as *mut AttachEffect)
+    }
 }
 
-/// 查找重动画附着
-pub fn find_reanim_attachment(_attachment_id: &mut AttachmentID) -> Option<*mut std::ffi::c_void> {
+/// 查找重动画附着（对应 C++ FindReanimAttachment，Attachment.cpp）
+pub fn find_reanim_attachment(the_attachment_id: &mut AttachmentID) -> Option<*mut std::ffi::c_void> {
+    let app = crate::lawn::lawn_app::LawnApp::instance()?;
+    let es = app.effect_system.as_ref()?;
+    let id = *the_attachment_id;
+    if id == ATTACHMENTID_NULL {
+        return None;
+    }
+    unsafe {
+        let a_attachment = es.attachments.get(id as usize)?;
+        if a_attachment.dead {
+            return None;
+        }
+        for i in 0..a_attachment.num_effects as usize {
+            let a_attach_effect = &a_attachment.effect_array[i];
+            if a_attach_effect.effect_type == EffectType::Reanim {
+                let a_reanim = es.reanimations.get(a_attach_effect.effect_id as usize)?;
+                return Some(a_reanim as *const crate::todlib::reanimator::Reanimation as *mut std::ffi::c_void);
+            }
+        }
+    }
     None
 }
 
