@@ -66,6 +66,7 @@ impl Default for PottedPlant {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct PlayerInfo {
     pub name: String,
     pub m_id: u32,

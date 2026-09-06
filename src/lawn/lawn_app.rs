@@ -75,6 +75,12 @@ pub struct LawnApp {
     /// 商店 Widget 包装指针（Box 拥有；store_screen 字段拥有 StoreScreen 本体）
     pub store_screen_widget: Option<*mut Widget>,
     pub zen_garden: Option<*mut ZenGarden>,
+    // ---- 对话框持有（对应 C++ WidgetManager 中 AddDialog 的对话框实例；Rust 独立类以裸指针持有）----
+    pub user_dialog: Option<*mut crate::lawn::widget::user_dialog::UserDialog>,
+    pub new_user_dialog: Option<*mut crate::lawn::widget::new_user_dialog::NewUserDialog>,
+    pub rename_user_dialog: Option<*mut crate::lawn::widget::new_user_dialog::NewUserDialog>,
+    pub cheat_dialog: Option<*mut crate::lawn::widget::cheat_dialog::CheatDialog>,
+    pub new_options_dialog: Option<*mut crate::lawn::widget::new_options_dialog::NewOptionsDialog>,
 
     // ---- 系统/管理器 ----
     pub sound_system: Option<Box<FoleyManager>>,
@@ -190,6 +196,8 @@ impl LawnApp {
             seed_chooser_screen: None, award_screen: None, almanac_dialog: None,
             credit_screen: None, challenge_screen: None, zen_garden: None,
             store_screen: None, store_screen_widget: None,
+            user_dialog: None, new_user_dialog: None, rename_user_dialog: None,
+            cheat_dialog: None, new_options_dialog: None,
             sound_system: None, effect_system: None,
             profile_mgr: None, player_info: None, music: None, pool_effect: None,
             control_button_list: LinkedList::new(),
@@ -818,14 +826,315 @@ impl LawnApp {
 
     /// 移除新选项对话框（对应 C++ KillNewOptionsDialog）
     pub fn kill_new_options_dialog(&mut self) -> bool {
+        if let Some(a_ptr) = self.new_options_dialog.take() {
+            unsafe {
+                let _ = Box::from_raw(a_ptr);
+            }
+            // [TRANSLATION_NOTE]: C++ 中由全屏/硬件加速复选框状态调用
+            // SwitchScreenMode(wantWindowed, want3D, false)；Rust 侧 NewOptionsDialog
+            // 尚无复选框字段，略过屏幕模式切换（switch_screen_mode 为空实现）。
+            self.base.kill_dialog(Dialogs::NewOptions as i32);
+            return true;
+        }
         if !self.base.dialog_map.contains_key(&(Dialogs::NewOptions as i32)) {
             return false;
         }
-        // [TRANSLATION_NOTE]: C++ 中由全屏/硬件加速复选框状态调用
-        // SwitchScreenMode(wantWindowed, want3D, false)；Rust 侧 NewOptionsDialog
-        // 尚无复选框字段，略过屏幕模式切换（switch_screen_mode 为空实现）。
         self.base.kill_dialog(Dialogs::NewOptions as i32);
         true
+    }
+
+    // ====================================================================
+    // 对话框链（对应 C++ LawnApp.cpp 703-1096）
+    // ====================================================================
+
+    /// 新选项对话框（对应 C++ DoNewOptions）
+    pub fn do_new_options(&mut self, the_from_game_selector: bool) {
+        // [TRANSLATION_NOTE]: C++ 中 CenterDialog(aDialog, IMAGE_OPTIONS_MENUBACK 尺寸) +
+        // AddDialog(DIALOG_NEWOPTIONS, aDialog) + SetFocus；Rust 侧 NewOptionsDialog 为
+        // 独立类（非 framework::Dialog 子类），以字段持有，居中尺寸用兜底 400x340。
+        let mut a_dialog = Box::new(crate::lawn::widget::new_options_dialog::NewOptionsDialog::new());
+        a_dialog.app = Some(self as *mut LawnApp);
+        a_dialog.from_game_selector = the_from_game_selector;
+        a_dialog.x = (BOARD_WIDTH - 400) / 2;
+        a_dialog.y = (BOARD_HEIGHT - 340) / 2;
+        a_dialog.width = 400;
+        a_dialog.height = 340;
+        self.new_options_dialog = Some(Box::into_raw(a_dialog));
+    }
+
+    /// 用户对话框（对应 C++ DoUserDialog）
+    pub fn do_user_dialog(&mut self) {
+        self.kill_dialog(Dialogs::UserDialog);
+        let mut a_dialog = Box::new(crate::lawn::widget::user_dialog::UserDialog::new(Some(self as *mut LawnApp)));
+        // [TRANSLATION_NOTE]: C++ CenterDialog(aDialog, aDialog->mWidth, aDialog->mHeight) +
+        // AddDialog(DIALOG_USERDIALOG) + SetFocus；Rust 侧 UserDialog 独立持有。
+        a_dialog.x = (BOARD_WIDTH - a_dialog.width) / 2;
+        a_dialog.y = (BOARD_HEIGHT - a_dialog.height) / 2;
+        self.user_dialog = Some(Box::into_raw(a_dialog));
+    }
+
+    /// 完成用户对话框（对应 C++ FinishUserDialog）
+    pub fn finish_user_dialog(&mut self, is_yes: bool) {
+        if let Some(a_ptr) = self.user_dialog.take() {
+            unsafe {
+                let a_user_dialog = &mut *a_ptr;
+                if is_yes {
+                    let a_name = a_user_dialog.get_sel_name();
+                    // C++: mProfileMgr->GetProfile(aName) → mPlayerInfo = aProfile
+                    if let Some(a_profile) = self.profile_mgr.as_mut().and_then(|pm| pm.get_profile(&a_name)) {
+                        self.player_info = Some(Box::new(a_profile.clone()));
+                        // C++: mWidgetManager->MarkAllDirty()
+                        if let Some(gs) = self.game_selector {
+                            // C++: mGameSelector->SyncProfile(true)
+                            (*(gs as *mut crate::lawn::widget::game_selector::GameSelectorImpl)).sync_profile(true);
+                        }
+                    }
+                }
+                let _ = Box::from_raw(a_ptr);
+            }
+        }
+        self.kill_dialog(Dialogs::UserDialog);
+    }
+
+    /// 新建用户对话框（对应 C++ DoCreateUserDialog）
+    pub fn do_create_user_dialog(&mut self) {
+        self.kill_dialog(Dialogs::CreateUser);
+        let mut a_dialog = Box::new(crate::lawn::widget::new_user_dialog::NewUserDialog::new(Some(self as *mut LawnApp)));
+        // [TRANSLATION_NOTE]: C++ CenterDialog + AddDialog(DIALOG_CREATEUSER)
+        a_dialog.x = (BOARD_WIDTH - a_dialog.width) / 2;
+        a_dialog.y = (BOARD_HEIGHT - a_dialog.height) / 2;
+        self.new_user_dialog = Some(Box::into_raw(a_dialog));
+    }
+
+    /// 完成新建用户对话框（对应 C++ FinishCreateUserDialog）
+    pub fn finish_create_user_dialog(&mut self, is_yes: bool) {
+        let a_name = if let Some(a_ptr) = self.new_user_dialog.as_ref() {
+            unsafe { (*(*a_ptr)).get_name() }
+        } else {
+            return;
+        };
+
+        if is_yes && a_name.is_empty() {
+            self.do_dialog(
+                Dialogs::CreateUserError as i32,
+                true,
+                "Enter Your Name",
+                "Please enter your name to create a new user profile for storing high score data and game progress.",
+                "[DIALOG_BUTTON_OK]",
+                BUTTONS_FOOTER,
+            );
+        } else if self.player_info.is_none() && (!is_yes || a_name.is_empty()) {
+            self.do_dialog(
+                Dialogs::CreateUserError as i32,
+                true,
+                "Enter Your Name",
+                "Please enter your name to create a new user profile for storing high score data and game progress.",
+                "[DIALOG_BUTTON_OK]",
+                BUTTONS_FOOTER,
+            );
+        } else if !is_yes {
+            self.kill_dialog(Dialogs::CreateUser);
+        } else {
+            // C++: mProfileMgr->AddProfile(aName)，冲突则错误框
+            if self.profile_mgr.as_mut().and_then(|pm| pm.add_profile(&a_name)).is_none() {
+                self.do_dialog(
+                    Dialogs::CreateUserError as i32,
+                    true,
+                    "Name Conflict",
+                    "The name you entered is already being used.  Please enter a unique player name.",
+                    "[DIALOG_BUTTON_OK]",
+                    BUTTONS_FOOTER,
+                );
+            } else {
+                if let Some(pm) = self.profile_mgr.as_mut() {
+                    pm.save();
+                }
+                // C++: mPlayerInfo = aProfile
+                if let Some(a_profile) = self.profile_mgr.as_mut().and_then(|pm| pm.get_profile(&a_name)) {
+                    self.player_info = Some(Box::new(a_profile.clone()));
+                }
+                self.kill_dialog(Dialogs::UserDialog);
+                self.kill_dialog(Dialogs::CreateUser);
+                // C++: mWidgetManager->MarkAllDirty() + mGameSelector->SyncProfile(true)
+                if let Some(gs) = self.game_selector {
+                    unsafe { (*(gs as *mut crate::lawn::widget::game_selector::GameSelectorImpl)).sync_profile(true); }
+                }
+            }
+        }
+    }
+
+    /// 确认删除用户对话框（对应 C++ DoConfirmDeleteUserDialog）
+    pub fn do_confirm_delete_user_dialog(&mut self, the_name: &str) {
+        self.kill_dialog(Dialogs::ConfirmDeleteUser);
+        let a_warning = format!("This will permanently remove '{}' from the player roster!", the_name);
+        self.do_dialog(
+            Dialogs::ConfirmDeleteUser as i32,
+            true,
+            "Are You Sure?",
+            &a_warning,
+            "",
+            crate::framework::widget::dialog::BUTTONS_YES_NO,
+        );
+    }
+
+    /// 完成确认删除用户（对应 C++ FinishConfirmDeleteUserDialog）
+    pub fn finish_confirm_delete_user_dialog(&mut self, is_yes: bool) {
+        self.kill_dialog(Dialogs::ConfirmDeleteUser);
+        if !is_yes {
+            return;
+        }
+        let a_cur_name = self.player_info.as_ref().map(|p| p.name.clone()).unwrap_or_default();
+        let a_name = if let Some(a_ptr) = self.user_dialog.as_ref() {
+            unsafe { (*(*a_ptr)).get_sel_name() }
+        } else {
+            return;
+        };
+        if a_name == a_cur_name {
+            self.player_info = None;
+        }
+        // C++: mProfileMgr->DeleteProfile(aName)
+        if let Some(pm) = self.profile_mgr.as_mut() {
+            pm.delete_profile(&a_name);
+        }
+        if let Some(a_ptr) = self.user_dialog.as_ref() {
+            unsafe { (*(*a_ptr)).finish_delete_user(); }
+        }
+        if self.player_info.is_none() {
+            // C++: mPlayerInfo = GetProfile(GetSelName())；失败则 GetAnyProfile()
+            if let Some(pm) = self.profile_mgr.as_mut() {
+                if let Some(a_profile) = pm.get_profile(&a_name) {
+                    self.player_info = Some(Box::new(a_profile.clone()));
+                }
+            }
+            if self.player_info.is_none() {
+                if let Some(pm) = self.profile_mgr.as_mut() {
+                    if let Some(a_profile) = pm.get_any_profile() {
+                        self.player_info = Some(Box::new(a_profile.clone()));
+                    }
+                }
+            }
+        }
+        if let Some(pm) = self.profile_mgr.as_mut() {
+            pm.save();
+        }
+        if self.player_info.is_none() {
+            self.do_create_user_dialog();
+        }
+        // C++: mWidgetManager->MarkAllDirty() + mGameSelector->SyncProfile(true)
+        if let Some(gs) = self.game_selector {
+            unsafe { (*(gs as *mut crate::lawn::widget::game_selector::GameSelectorImpl)).sync_profile(true); }
+        }
+    }
+
+    /// 重命名用户对话框（对应 C++ DoRenameUserDialog）
+    pub fn do_rename_user_dialog(&mut self, the_name: &str) {
+        self.kill_dialog(Dialogs::RenameUser);
+        let mut a_dialog = Box::new(crate::lawn::widget::new_user_dialog::NewUserDialog::new(Some(self as *mut LawnApp)));
+        // [TRANSLATION_NOTE]: C++ CenterDialog + AddDialog(DIALOG_RENAMEUSER) + SetName
+        a_dialog.x = (BOARD_WIDTH - a_dialog.width) / 2;
+        a_dialog.y = (BOARD_HEIGHT - a_dialog.height) / 2;
+        a_dialog.set_name(the_name);
+        self.rename_user_dialog = Some(Box::into_raw(a_dialog));
+    }
+
+    /// 完成重命名用户对话框（对应 C++ FinishRenameUserDialog）
+    pub fn finish_rename_user_dialog(&mut self, is_yes: bool) {
+        if !is_yes {
+            self.kill_dialog(Dialogs::RenameUser);
+            return;
+        }
+        let a_old_name = if let Some(a_ptr) = self.user_dialog.as_ref() {
+            unsafe { (*(*a_ptr)).get_sel_name() }
+        } else {
+            return;
+        };
+        let a_new_name = if let Some(a_ptr) = self.rename_user_dialog.as_ref() {
+            unsafe { (*(*a_ptr)).get_name() }
+        } else {
+            return;
+        };
+        if a_new_name.is_empty() {
+            return;
+        }
+        // [TRANSLATION_NOTE]: C++ 以 mProfileMgr->GetProfile(anOldName) == mPlayerInfo
+        // 指针比较判定"当前用户"；Rust 侧 profile_mgr 与 player_info 为不同对象，按名字等价判定。
+        let is_current_user = self.player_info.as_ref().map_or(false, |pi| pi.name == a_old_name);
+        if !self.profile_mgr.as_mut().map_or(false, |pm| pm.rename_profile(&a_old_name, &a_new_name)) {
+            self.do_dialog(
+                Dialogs::RenameUserError as i32,
+                true,
+                "Name Conflict",
+                "The name you entered is already being used.  Please enter a unique player name.",
+                "[DIALOG_BUTTON_OK]",
+                BUTTONS_FOOTER,
+            );
+            return;
+        }
+        if let Some(pm) = self.profile_mgr.as_mut() {
+            pm.save();
+        }
+        if is_current_user {
+            // C++: mPlayerInfo = mProfileMgr->GetProfile(aNewName)
+            if let Some(pm) = self.profile_mgr.as_mut() {
+                if let Some(a_profile) = pm.get_profile(&a_new_name) {
+                    self.player_info = Some(Box::new(a_profile.clone()));
+                }
+            }
+        }
+        if let Some(a_ptr) = self.user_dialog.as_ref() {
+            unsafe { (*(*a_ptr)).finish_rename_user(&a_new_name); }
+        }
+        // C++: mWidgetManager->MarkAllDirty() + KillDialog(DIALOG_RENAMEUSER) + SetFocus
+        self.kill_dialog(Dialogs::RenameUser);
+    }
+
+    /// 名称错误对话框关闭（对应 C++ FinishNameError）
+    pub fn finish_name_error(&mut self, the_id: i32) {
+        // C++: KillDialog(theId)
+        self.kill_dialog(if the_id == Dialogs::CreateUserError as i32 {
+            Dialogs::CreateUserError
+        } else {
+            Dialogs::RenameUserError
+        });
+        // [TRANSLATION_NOTE]: C++ 中随后恢复焦点到 NewUserDialog 的名称编辑框
+        //（mNameEditWidget）；Rust 侧编辑框未接入，略。
+    }
+
+    /// 作弊对话框（对应 C++ DoCheatDialog）
+    pub fn do_cheat_dialog(&mut self) {
+        self.kill_dialog(Dialogs::Cheat);
+        let mut a_dialog = Box::new(crate::lawn::widget::cheat_dialog::CheatDialog::new(Some(self as *mut LawnApp)));
+        // [TRANSLATION_NOTE]: C++ CenterDialog + AddDialog(DIALOG_CHEAT)
+        a_dialog.x = (BOARD_WIDTH - a_dialog.width) / 2;
+        a_dialog.y = (BOARD_HEIGHT - a_dialog.height) / 2;
+        self.cheat_dialog = Some(Box::into_raw(a_dialog));
+    }
+
+    /// 完成作弊对话框（对应 C++ FinishCheatDialog）
+    pub fn finish_cheat_dialog(&mut self, is_yes: bool) {
+        if let Some(a_ptr) = self.cheat_dialog.take() {
+            unsafe {
+                // C++: isYes && !ApplyCheat() 时 return（对话框保留）
+                if is_yes && !(*a_ptr).apply_cheat() {
+                    self.cheat_dialog = Some(a_ptr);
+                    return;
+                }
+                let _ = Box::from_raw(a_ptr);
+            }
+        }
+        self.kill_dialog(Dialogs::Cheat);
+        if is_yes {
+            if let Some(music) = &mut self.music {
+                music.stop_all_music();
+            }
+            self.board_result = BoardResult::Cheat;
+            self.pre_new_game(self.game_mode, false);
+        }
+    }
+
+    /// 关闭时间到对话框（对应 C++ FinishTimesUpDialog）
+    pub fn finish_times_up_dialog(&mut self) {
+        self.kill_dialog(Dialogs::TimesUp);
     }
 
     /// 暂停（对应 C++ DoPauseDialog）
