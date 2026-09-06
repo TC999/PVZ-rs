@@ -4053,9 +4053,132 @@ impl Zombie {
     }
 
     /// 吃植物
-    pub fn eat_plant(&mut self, _plant: &mut Plant) {
-        if !self.is_eating {
-            self.is_eating = true;
+    /// 对应 C++ Zombie::EatPlant（Zombie.cpp 7026）
+    /// 通过 base 裸指针访问 board/app，与项目内 burn_row 等既有模式一致。
+    pub fn eat_plant(&mut self, plant: &mut Plant) {
+        if self.zombie_phase == ZombiePhase::DancerDancingIn {
+            self.phase_counter = 1;
+            return;
+        }
+
+        if self.yucky_face {
+            return;
+        }
+
+        // C++: mBoard->GetLadderAt(thePlant->mPlantCol, thePlant->mRow)
+        let board_ptr = self.base.board;
+        if let Some(board) = board_ptr {
+            unsafe {
+                let b = &*board;
+                if b.get_ladder_at(plant.plant_col, plant.base.row).is_some() {
+                    if self.zombie_type != ZombieType::Digger {
+                        self.stop_eating();
+                        if self.zombie_height == ZombieHeight::Normal && self.use_ladder_col != plant.plant_col {
+                            self.zombie_height = ZombieHeight::UpLadder;
+                            self.use_ladder_col = plant.plant_col;
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+
+        self.start_eating();
+        if plant.seed_type == SeedType::Jalapeno ||
+            plant.seed_type == SeedType::Cherrybomb ||
+            plant.seed_type == SeedType::Doomshroom ||
+            plant.seed_type == SeedType::Iceshroom ||
+            plant.seed_type == SeedType::Hypnoshroom ||
+            plant.state == PlantState::FlowerpotInvulnerable ||
+            plant.state == PlantState::LilypadInvulnerable ||
+            plant.state == PlantState::SquashLook ||
+            plant.state == PlantState::SquashPreLaunch
+        {
+            if !plant.is_asleep {
+                return;
+            }
+        }
+        if plant.seed_type == SeedType::PotatoMine && plant.state != PlantState::NotReady {
+            return;
+        }
+
+        let mut triggered = false;
+        if plant.seed_type == SeedType::Blover {
+            triggered = true;
+        }
+        if plant.seed_type == SeedType::Iceshroom && !plant.is_asleep {
+            triggered = true;
+        }
+        if triggered {
+            plant.do_special();
+            return;
+        }
+
+        if self.chilled_counter > 0 && self.zombie_age % 2 == 1 {
+            return;
+        }
+
+        let app_ptr = self.base.app;
+        if let Some(app) = app_ptr {
+            unsafe {
+                if (*app).is_izombie_level() && plant.seed_type == SeedType::Sunflower {
+                    let a_stage_before_chew = plant.plant_health / 40;
+                    let a_stage_after_chew = (plant.plant_health - DAMAGE_PER_EAT) / 40;
+                    // C++: if this chew lowers the plant's health by at least one stage
+                    if a_stage_after_chew < a_stage_before_chew || plant.plant_health - DAMAGE_PER_EAT <= 0 {
+                        if let Some(board) = board_ptr {
+                            (*board).add_coin(plant.pos_x, plant.pos_y, CoinType::Sun, CoinMotion::FromPlant);
+                        }
+                    }
+                }
+            }
+        }
+
+        plant.plant_health -= DAMAGE_PER_EAT;
+        plant.recently_eaten_countdown = 50;
+        if let Some(app) = app_ptr {
+            unsafe {
+                if (*app).is_izombie_level() && self.just_got_shot_counter < -500 {
+                    if plant.seed_type == SeedType::Wallnut ||
+                        plant.seed_type == SeedType::Tallnut ||
+                        plant.seed_type == SeedType::Pumpkinshell
+                    {
+                        plant.plant_health -= DAMAGE_PER_EAT;
+                    }
+                }
+            }
+        }
+
+        if plant.plant_health <= 0 {
+            if let Some(app) = app_ptr {
+                unsafe {
+                    (*app).play_sample(crate::framework::resources::ResourceId::SoundGulp as i32);
+                }
+            }
+            if let Some(board) = board_ptr {
+                unsafe {
+                    let b = &mut *board;
+                    b.m_plants_eaten += 1;
+                    plant.die();
+                    if let Some(challenge) = &mut b.challenge {
+                        challenge.zombie_ate_plant(plant);
+                    }
+                    if b.level >= 2 && b.level <= 4 {
+                        if let Some(app) = app_ptr {
+                            if (*app).is_first_time_adventure_mode() &&
+                                plant.plant_col > 4 && b.plants.len() < 15 &&
+                                plant.seed_type == SeedType::Peashooter
+                            {
+                                b.display_advice(
+                                    "[ADVICE_PEASHOOTER_DIED]",
+                                    MessageStyle::HintTallFast as i32,
+                                    AdviceType::PeashooterDied,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -5515,9 +5638,27 @@ impl Zombie {
         }
     }
 
-    /// 施加冻结（对应 C++ ApplyChill）
-    pub fn apply_chill(&mut self, _is_ice_trap: bool) {
-        self.chilled_counter = 100;
+    /// 施加冻结（对应 C++ ApplyChill，Zombie.cpp 7519）
+    pub fn apply_chill(&mut self, is_ice_trap: bool) {
+        if !self.can_be_chilled() {
+            return;
+        }
+
+        if self.chilled_counter == 0 {
+            if let Some(app) = self.base.app {
+                unsafe {
+                    (*app).play_foley(crate::todlib::tod_foley::FoleyType::Frozen as i32);
+                }
+            }
+        }
+
+        let mut a_chill_time = 1000;
+        if is_ice_trap {
+            a_chill_time = 2000;
+        }
+        self.chilled_counter = a_chill_time.max(self.chilled_counter);
+
+        self.update_anim_speed();
     }
 
     /// 直接死亡（对应 C++ DieNoLoot）

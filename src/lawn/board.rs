@@ -1007,11 +1007,22 @@ impl Board {
             }
         }
 
-        // 僵尸与植物碰撞
+        // 僵尸与植物碰撞（进食判定；对应 C++ Zombie::UpdateEating 的进食频率门控 + EatPlant）
         for zombie in &mut self.zombies {
-            if zombie.dead || zombie.is_eating { continue; }
+            if zombie.dead { continue; }
+
+            // C++ Zombie::UpdateEating：chilled 时啃咬间隔加倍
+            let mut a_ticks_between_eats = crate::lawn::zombie::DAMAGE_PER_EAT;
+            if zombie.chilled_counter > 0 {
+                a_ticks_between_eats *= 2;
+            }
+            if zombie.zombie_age % a_ticks_between_eats != 0 {
+                continue;
+            }
+
             let z_attack = zombie.get_zombie_attack_rect();
 
+            let mut a_plant_eaten = false;
             for plant in &mut self.plants {
                 if plant.dead || !plant.is_on_board { continue; }
                 if plant.base.row != zombie.base.row { continue; }
@@ -1019,31 +1030,13 @@ impl Board {
                 let p_rect = plant.plant_rect;
                 if z_attack.intersects(&p_rect) {
                     zombie.eat_plant(plant);
+                    a_plant_eaten = true;
                     break;
                 }
             }
-        }
-
-        // 僵尸吃植物（对应 C++ Zombie::EatPlant 的伤害结算）
-        let zombie_eat_data: Vec<(usize, i32, i32)> = self.zombies.iter().enumerate()
-            .filter(|(_, z)| !z.dead && z.is_eating && z.zombie_age % 4 == 0)
-            .map(|(i, z)| (i, z.base.row, z.target_col))
-            .collect();
-        for (zombie_idx, row, target_col) in zombie_eat_data {
-            if let Some(plant) = self.find_plant_at(row, target_col as usize) {
-                plant.plant_health -= crate::lawn::zombie::DAMAGE_PER_EAT;
-                plant.recently_eaten_countdown = 50;
-                if plant.plant_health <= 0 {
-                    plant.die();
-                    self.m_plants_eaten += 1;
-                    if let Some(zombie) = self.zombies.get_mut(zombie_idx) {
-                        zombie.stop_eating();
-                    }
-                }
-            } else {
-                if let Some(zombie) = self.zombies.get_mut(zombie_idx) {
-                    zombie.stop_eating();
-                }
+            // C++ Zombie::UpdateEating：目标不在了则停止进食
+            if !a_plant_eaten && zombie.is_eating {
+                zombie.stop_eating();
             }
         }
 
