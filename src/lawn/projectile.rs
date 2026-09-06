@@ -15,6 +15,8 @@ pub enum ProjectileMotion {
     Floating,
     Threepeater,
     Star,
+    /// 对应 C++ MOTION_BACKWARDS（ZombiePea 向左直飞）
+    Backwards,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -255,6 +257,10 @@ impl Projectile {
                 if self.vel_y != 0.0 {
                     // [TRANSLATION_NOTE]: PixelToGridYKeepOnBoard 暂未实现
                 }
+            }
+            // C++: MOTION_BACKWARDS —— ZombiePea 向左直飞（与默认向右镜像）
+            ProjectileMotion::Backwards => {
+                self.pos_x -= 3.33;
             }
             _ => {
                 self.pos_x += 3.33;

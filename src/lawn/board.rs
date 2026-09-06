@@ -1222,7 +1222,7 @@ impl Board {
 
     /// [TRANSLATION_NOTE]: C++ Board::DrawDebugText (Board.cpp:6912-7051)
     /// string logic complete; font/image drawing placeholder
-    pub fn draw_debug_text(&self, _g: &mut Graphics) {
+    pub fn draw_debug_text(&self, g: &mut Graphics) {
         let mut a_text = String::new();
         match self.m_debug_text_mode {
             DebugTextMode::None => {}
@@ -1322,31 +1322,85 @@ Spawn: {}
             }
             _ => {}
         }
-        // C++: FONT_PICO129 + DrawStringWordWrapped (shadow x4 + white) — placeholder
-        let _ = a_text;
+        // C++: SetFont(FONT_PICO129)；黑描边 4 次 + 白字（DrawStringWordWrapped）
+        // [TRANSLATION_NOTE]: Rust 端无 DrawStringWordWrapped/位图字体，用 Font 近似并按行绘制
+        let mut a_font = crate::framework::graphics::font::Font::new("Pico", 129);
+        a_font.ascent = 13;
+        a_font.font_height = 16;
+        g.set_font(&mut a_font as *mut crate::framework::graphics::font::Font);
+        let a_lines: Vec<&str> = a_text.lines().collect();
+        for (a_x, a_y) in [(10, 89), (11, 91), (9, 90), (11, 90)] {
+            g.set_color(&Color::BLACK);
+            for (i, a_line) in a_lines.iter().enumerate() {
+                g.draw_string(a_line, a_x, a_y + i as i32 * 16);
+            }
+        }
+        g.set_color(&Color::WHITE);
+        for (i, a_line) in a_lines.iter().enumerate() {
+            g.draw_string(a_line, 10, 90 + i as i32 * 16);
+        }
     }
 
     /// [TRANSLATION_NOTE]: C++ Board::DrawDebugObjectRects (Board.cpp:7052) — collision rects;
     /// iterate plants/zombies/lawn mowers, drawing placeholder until images wired
-    pub fn draw_debug_object_rects(&self, _g: &mut Graphics) {
+    /// 对应 C++ Board::DrawDebugObjectRects (Board.cpp 7052-7118)
+    /// 植物绿框 + 主/副武器攻击框 + 僵尸/割草机/投射物红框
+    pub fn draw_debug_object_rects(&self, g: &mut Graphics) {
         if self.m_debug_text_mode != DebugTextMode::Collision {
             return;
         }
+        // C++: 植物 — 本体绿框，主/副攻击框（宽度 < BOARD_WIDTH 才画）红/粉
         for plant in &self.plants {
-            if !plant.dead {
-                let _ = plant.get_plant_rect();
+            if plant.dead {
+                continue;
+            }
+            let a_rect = plant.get_plant_rect();
+            g.set_color(&Color::new(0, 255, 0, 255));
+            g.draw_rect(&a_rect);
+
+            let a_attack_rect = plant.get_plant_attack_rect(PlantWeapon::Primary);
+            if a_attack_rect.width < BOARD_WIDTH {
+                g.set_color(&Color::new(255, 0, 0, 255));
+                g.draw_rect(&a_attack_rect);
+            }
+            let a_secondary_rect = plant.get_plant_attack_rect(PlantWeapon::Secondary);
+            if a_secondary_rect.width < BOARD_WIDTH {
+                g.set_color(&Color::new(255, 0, 128, 255));
+                g.draw_rect(&a_secondary_rect);
             }
         }
+        // C++: 僵尸 — 本体绿框 + 攻击红框
         for zombie in &self.zombies {
-            if !zombie.dead && !zombie.is_dead_or_dying() {
-                let _ = zombie.get_zombie_rect();
-                let _ = zombie.get_zombie_attack_rect();
+            if zombie.dead {
+                continue;
+            }
+            if !zombie.is_dead_or_dying() {
+                let a_rect = zombie.get_zombie_rect();
+                g.set_color(&Color::new(0, 255, 0, 255));
+                g.draw_rect(&a_rect);
+
+                let a_attack_rect = zombie.get_zombie_attack_rect();
+                g.set_color(&Color::new(255, 0, 0, 255));
+                g.draw_rect(&a_attack_rect);
             }
         }
+        // C++: 割草机 — 攻击红框
         for mower in &self.lawn_mowers {
-            if !mower.dead {
-                let _ = mower.get_lawn_mower_attack_rect();
+            if mower.dead {
+                continue;
             }
+            let a_attack_rect = mower.get_lawn_mower_attack_rect();
+            g.set_color(&Color::new(255, 0, 0, 255));
+            g.draw_rect(&a_attack_rect);
+        }
+        // C++: 投射物 — 伤害红框
+        for projectile in &self.projectiles {
+            if projectile.dead {
+                continue;
+            }
+            g.set_color(&Color::new(255, 0, 0, 255));
+            let a_damage_rect = projectile.get_projectile_rect();
+            g.draw_rect(&a_damage_rect);
         }
     }
 
@@ -1395,80 +1449,126 @@ Spawn: {}
         a_items
     }
 
-    /// [TRANSLATION_NOTE]: C++ Board::DrawProgressMeter (Board.cpp:6556-6650)
-    /// gate + mode-text logic complete; flag meter drawing placeholder
-    pub fn draw_progress_meter(&self, _g: &mut Graphics) {
+    /// 对应 C++ Board::DrawProgressMeter (Board.cpp:6556-6633)
+    /// gate + mode-text + flags + head 完整绘制；图片未接入资源表时整体跳过（TRANSLATION_NOTE）
+    pub fn draw_progress_meter(&self, g: &mut Graphics) {
         if !self.has_progress_meter() {
             return;
         }
-        // C++: PROGRESS_METER_COUNTER = 150
-        let a_clip_width = crate::todlib::tod_common::tod_animate_curve(
-            0, 150, self.m_progress_meter_width, 0, 143, TodCurves::Linear,
-        );
-        let _ = a_clip_width;
-        let a_mode_text: Option<String> = if let Some(app) = self.app {
-            unsafe {
+        let Some(app) = self.app else { return };
+        unsafe {
+            let a_flag_meter = get_overlay_image(&*app, "IMAGE_FLAGMETER");
+            if a_flag_meter.is_null() {
+                // [TRANSLATION_NOTE]: IMAGE_FLAGMETER 未接入资源表时，进度条本体及
+                // 依赖 aCelWidth/aCelHeight 的文本/旗/头均无法定位，整体跳过。
+                return;
+            }
+            let a_flag_meter_ref = &*a_flag_meter;
+
+            // C++: DrawImageCel(IMAGE_FLAGMETER, 600, 575, 0)
+            g.draw_image_cel(a_flag_meter_ref, 600, 575, 0);
+            let a_cel_width = a_flag_meter_ref.get_cel_width();
+            let a_cel_height = a_flag_meter_ref.get_cel_height();
+
+            // C++: aClipWidth = PvzpAnimateCurve(0, PROGRESS_METER_COUNTER, mProgressMeterWidth, 0, 143, LINEAR)
+            let a_clip_width = crate::todlib::tod_common::tod_animate_curve(
+                0, PROGRESS_METER_COUNTER, self.m_progress_meter_width, 0, 143, TodCurves::Linear,
+            );
+            // C++: Rect aSrcRect(aCelWidth - aClipWidth - 7, aCelHeight, aClipWidth, aCelHeight);
+            //      Rect aDstRect(aCelWidth - aClipWidth + 593, 575, aClipWidth, aCelHeight);
+            //      DrawImage(IMAGE_FLAGMETER, aDstRect, aSrcRect);
+            let a_src_rect = Rect::new(a_cel_width - a_clip_width - 7, a_cel_height, a_clip_width, a_cel_height);
+            let a_dst_rect = Rect::new(a_cel_width - a_clip_width + 593, 575, a_clip_width, a_cel_height);
+            g.draw_image_stretch(a_flag_meter_ref, &a_dst_rect, &a_src_rect);
+
+            // C++: 进度条上的模式文本或旗（Board.cpp 6570-6620）
+            let a_pos_x = a_cel_width / 2 + 600;
+            let a_color = Color::new(224, 187, 98, 255);
+            let a_mode_text: Option<String> = if let Some(a_challenge) = self.challenge.as_ref() {
                 let a_gm = (*app).game_mode;
                 if a_gm == GameMode::ChallengeBeghouled || a_gm == GameMode::ChallengeBeghouledTwist {
-                    let a_score = self.challenge.as_ref().map_or(0, |c| c.challenge_score);
-                    Some(format!("{}/{} [MATCHES]", a_score, 75))
+                    Some(format!("{}/{} [MATCHES]", a_challenge.challenge_score, 75))
                 } else if (*app).is_squirrel_level() {
-                    let a_score = self.challenge.as_ref().map_or(0, |c| c.challenge_score);
-                    Some(format!("{}/{} [SQUIRRELS]", a_score, 7))
-                } else if (*app).is_slot_machine_level() {
-                    let a_sun = self.m_sun_money.clamp(0, 2000);
-                    Some(format!("{}/{} [SUN]", a_sun, 2000))
+                    Some(format!("{}/{} [SQUIRRELS]", a_challenge.challenge_score, 7))
+                } else if a_gm == GameMode::ChallengeSlotMachine {
+                    Some(format!("{}/{} [SUN]", self.m_sun_money.clamp(0, 2000), 2000))
                 } else if a_gm == GameMode::ChallengeZombiquarium {
-                    let a_sun = self.m_sun_money.clamp(0, 1000);
-                    Some(format!("{}/{} [SUN]", a_sun, 1000))
+                    Some(format!("{}/{} [SUN]", self.m_sun_money.clamp(0, 1000), 1000))
                 } else if (*app).is_izombie_level() {
-                    let a_score = self.challenge.as_ref().map_or(0, |c| c.challenge_score);
-                    Some(format!("{}/{} [BRAINS]", a_score, 5))
+                    Some(format!("{}/{} [BRAINS]", a_challenge.challenge_score, 5))
                 } else {
                     None
                 }
-            }
-        } else {
-            None
-        };
-        let _ = a_mode_text;
-
-        if self.progress_meter_has_flags() {
-            let a_num_waves_per_flag = self.get_num_waves_per_flag();
-            if a_num_waves_per_flag != 0 {
-                let a_num_flag_waves = self.m_num_waves / a_num_waves_per_flag;
-                for a_flag_wave in 1..=a_num_flag_waves {
-                    let a_total_waves_at_flag = a_flag_wave * a_num_waves_per_flag;
-                    if a_total_waves_at_flag == self.m_current_wave {
-                        let _a_height = crate::todlib::tod_common::tod_animate_curve(
-                            100, 0, self.m_flag_raise_counter, 0, 14, TodCurves::Linear,
+            } else {
+                None
+            };
+            if let Some(a_match_str) = a_mode_text {
+                // C++: PvzpDrawString(aMatchStr, aPosX, 589, FONT_DWARVENTODCRAFT12, aColor, DS_ALIGN_CENTER)
+                let mut a_font = crate::framework::graphics::font::Font::new("Dwarventodcraft", 12);
+                a_font.ascent = 13;
+                a_font.font_height = 12;
+                g.set_font(&mut a_font as *mut crate::framework::graphics::font::Font);
+                g.set_color(&a_color);
+                let a_text_width = a_font.string_width(&a_match_str);
+                g.draw_string(&a_match_str, a_pos_x - a_text_width / 2, 589);
+            } else if self.progress_meter_has_flags() {
+                let a_num_waves_per_flag = self.get_num_waves_per_flag();
+                if a_num_waves_per_flag != 0 {
+                    let a_num_flag_waves = self.m_num_waves / a_num_waves_per_flag;
+                    let a_flags_pos_end = 590 + a_cel_width;
+                    let a_flag_parts = get_overlay_image(&*app, "IMAGE_FLAGMETERPARTS");
+                    for a_flag_wave in 1..=a_num_flag_waves {
+                        let mut a_height = 0;
+                        let a_total_waves_at_flag = a_flag_wave * a_num_waves_per_flag;
+                        if a_total_waves_at_flag < self.m_current_wave {
+                            a_height = 14;
+                        } else if a_total_waves_at_flag == self.m_current_wave {
+                            a_height = crate::todlib::tod_common::tod_animate_curve(
+                                100, 0, self.m_flag_raise_counter, 0, 14, TodCurves::Linear,
+                            );
+                        }
+                        // C++: aPosX = PvzpAnimateCurve(0, mNumWaves, aTotalWavesAtFlag, aFlagsPosEnd, 606, LINEAR)
+                        let a_pos_x_flag = crate::todlib::tod_common::tod_animate_curve(
+                            0, self.m_num_waves, a_total_waves_at_flag, a_flags_pos_end, 606, TodCurves::Linear,
                         );
+                        if !a_flag_parts.is_null() {
+                            // C++: DrawImageCel(FLAGMETERPARTS, aPosX, 571, 1, 0) 旗杆 / (aPosX, 572-aHeight, 2, 0) 旗面
+                            g.draw_image_cel(&*a_flag_parts, a_pos_x_flag, 571, 1);
+                            g.draw_image_cel(&*a_flag_parts, a_pos_x_flag, 572 - a_height, 2);
+                        }
                     }
-                    let _a_pos_x = crate::todlib::tod_common::tod_animate_curve(
-                        0, self.m_num_waves, a_total_waves_at_flag, 590 + 74, 606, TodCurves::Linear,
-                    );
                 }
             }
-        }
 
-        if let Some(app) = self.app {
-            unsafe {
-                let a_gm = (*app).game_mode;
-                let a_early = a_gm == GameMode::ChallengeBeghouled
-                    || a_gm == GameMode::ChallengeBeghouledTwist
-                    || a_gm == GameMode::ChallengeZombiquarium
-                    || (*app).is_squirrel_level()
-                    || (*app).is_slot_machine_level()
-                    || (*app).is_izombie_level()
-                    || (*app).is_final_boss_level();
-                if a_early {
-                    return;
-                }
+            // C++: DrawImage(IMAGE_FLAGMETERLEVELPROGRESS, 638, 589)
+            let a_level_progress = get_overlay_image(&*app, "IMAGE_FLAGMETERLEVELPROGRESS");
+            if !a_level_progress.is_null() {
+                g.draw_image_xy(&*a_level_progress, 638, 589);
+            }
+
+            // C++: 这些模式不绘制头部进度
+            let a_gm = (*app).game_mode;
+            if a_gm == GameMode::ChallengeBeghouled
+                || a_gm == GameMode::ChallengeBeghouledTwist
+                || a_gm == GameMode::ChallengeZombiquarium
+                || (*app).is_squirrel_level()
+                || (*app).is_slot_machine_level()
+                || (*app).is_izombie_level()
+                || (*app).is_final_boss_level()
+            {
+                return;
+            }
+
+            // C++: aHeadProgress = PvzpAnimateCurve(0, 150, mProgressMeterWidth, 0, 135, LINEAR)
+            //      DrawImageCel(FLAGMETERPARTS, aCelWidth - aHeadProgress + 580, 572, 0, 0)
+            let a_head_progress = crate::todlib::tod_common::tod_animate_curve(
+                0, PROGRESS_METER_COUNTER, self.m_progress_meter_width, 0, 135, TodCurves::Linear,
+            );
+            let a_flag_parts2 = get_overlay_image(&*app, "IMAGE_FLAGMETERPARTS");
+            if !a_flag_parts2.is_null() {
+                g.draw_image_cel(&*a_flag_parts2, a_cel_width - a_head_progress + 580, 572, 0);
             }
         }
-        let _a_head_progress = crate::todlib::tod_common::tod_animate_curve(
-            0, 150, self.m_progress_meter_width, 0, 135, TodCurves::Linear,
-        );
     }
 
     /// 检查能否在该位置添加墓碑（对应 C++ CanAddGraveStoneAt）

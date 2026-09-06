@@ -5061,27 +5061,66 @@ impl Zombie {
         }
     }
 
-    /// 豌豆头射击（对应 C++ UpdateZombiePeaHead）
+    /// 豌豆头射击（对应 C++ UpdateZombiePeaHead，Zombie.cpp 2316-2358）
     pub fn update_zombie_pea_head(&mut self) {
         if !self.has_head {
             return;
         }
 
         if self.phase_counter == 35 {
-            // [TRANSLATION_NOTE]: mSpecialHeadReanimID 的 anim_shooting 播放未接入
+            // C++: aHeadReanim->PlayReanim("anim_shooting", PLAY_ONCE_AND_HOLD, 20, 35.0f)
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(a_head_reanim) = app.reanimation_get_mut(self.special_head_reanim_id) {
+                    a_head_reanim.play_reanim("anim_shooting", ReanimLoopType::PlayOnceAndHold, 20, 35.0);
+                }
+            }
         } else if self.phase_counter == 0 {
-            // [TRANSLATION_NOTE]: anim_head_idle + 头部动画帧位置读取未接入
-            if let Some(app) = self.base.get_app() {
+            // C++: aHeadReanim->PlayReanim("anim_head_idle", PLAY_ONCE_AND_HOLD, 20, 15.0f)
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(a_head_reanim) = app.reanimation_get_mut(self.special_head_reanim_id) {
+                    a_head_reanim.play_reanim("anim_head_idle", ReanimLoopType::PlayOnceAndHold, 20, 15.0);
+                }
                 app.play_foley(crate::todlib::tod_foley::FoleyType::Throw as i32);
             }
-            let a_origin_x = self.pos_x - 9.0;
-            let a_origin_y = self.pos_y + 6.0 - self.altitude;
+
+            // C++: 从身体 reanim 的 anim_head1 变换读取发射原点
+            let mut a_origin_x = self.pos_x - 9.0;
+            let mut a_origin_y = self.pos_y + 6.0 - self.altitude;
+            if let Some(app) = self.base.get_app() {
+                if let Some(a_body_reanim) = app.reanimation_get(self.body_reanim_id) {
+                    let a_track_index = a_body_reanim.find_track_index("anim_head1");
+                    let mut a_transform = crate::todlib::definition::ReanimatorTransform {
+                        m_trans_x: 0.0,
+                        m_trans_y: 0.0,
+                        m_skew_x: 0.0,
+                        m_skew_y: 0.0,
+                        m_scale_x: 1.0,
+                        m_scale_y: 1.0,
+                        m_alpha: 1.0,
+                        m_frame: 0.0,
+                        m_image: 0,
+                        m_visible: true,
+                        m_font: 0,
+                        m_text: 0,
+                        m_color: Color::WHITE,
+                        m_extra_int: 0,
+                        m_extra_float: 0.0,
+                    };
+                    if a_body_reanim.get_current_transform(a_track_index, &mut a_transform) {
+                        a_origin_x = self.pos_x + a_transform.m_trans_x - 9.0;
+                        a_origin_y = self.pos_y + a_transform.m_trans_y + 6.0 - self.altitude;
+                    }
+                }
+            }
+
+            // C++: AddProjectile(PROJECTILE_ZOMBIE_PEA) + mMotionType = MOTION_BACKWARDS
             let a_row = self.base.row;
             if let Some(board) = self.base.get_board_mut() {
                 let idx = board.add_projectile(a_origin_x, a_origin_y, a_row, SeedType::Peashooter);
                 board.projectiles[idx].projectile_type = crate::lawn::projectile::ProjectileType::ZombiePea;
-                // [TRANSLATION_NOTE]: C++ MOTION_BACKWARDS（ZombiePea 向左飞行）未在 Rust 枚举中
+                board.projectiles[idx].motion = crate::lawn::projectile::ProjectileMotion::Backwards;
             }
+            // [TRANSLATION_NOTE]: C++ DO_FIX_BUGS 分支（mMindControlled 时改发友方豌豆）未翻译
             self.phase_counter = 150;
         }
     }
