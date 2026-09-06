@@ -6,10 +6,9 @@
 use std::cmp;
 use crate::framework::color::Color;
 use crate::framework::rect::Rect;
-use crate::framework::point::Point;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::font::Font;
-use crate::framework::widget::insets::Insets;
+use crate::framework::widget::widget::Widget;
 use crate::framework::widget::widget_manager::WidgetManager;
 use crate::framework::key_codes::{KeyCode, KEYCODE_SHIFT, KEYCODE_CONTROL, KEYCODE_LEFT, KEYCODE_RIGHT, KEYCODE_BACKSPACE, KEYCODE_DELETE, KEYCODE_HOME, KEYCODE_END, KEYCODE_RETURN, KEYCODE_UNKNOWN, KEYCODE_DOWN};
 
@@ -37,17 +36,14 @@ pub(crate) struct WidthCheck {
 }
 
 /// 编辑框控件（对应 C++ EditWidget）
+/// 文本输入框（对应 C++ EditWidget : Widget）
+/// [TRANSLATION_NOTE]: C++ EditWidget 继承 Widget；Rust 组合：首字段内嵌 `Widget`
+/// 基座（`&mut self.widget as *mut Widget` 可挂接 WidgetManager），其余字段通过
+/// Deref/DerefMut 转发使 `ew.x` 等调用点不变。
+#[repr(C)]
 pub struct EditWidget {
-    pub x: i32, pub y: i32, pub width: i32, pub height: i32,
-    pub widget_manager: Option<*mut WidgetManager>,
-    pub visible: bool, pub disabled: bool,
-    pub has_focus: bool, pub is_down: bool, pub is_over: bool,
-    pub has_alpha: bool, pub has_transparencies: bool,
-    pub colors: Vec<Color>,
-    pub mouse_insets: Insets,
-    pub do_finger: bool,
-    pub wants_focus: bool,
-
+    /// Widget 基座（含 x/y/width/height/状态/颜色等）
+    pub widget: Widget,
     pub id: i32,
     pub text: String,
     pub password_display: String,
@@ -71,17 +67,23 @@ pub struct EditWidget {
     pub last_modify_idx: i32,
 }
 
+impl std::ops::Deref for EditWidget {
+    type Target = Widget;
+    fn deref(&self) -> &Widget {
+        &self.widget
+    }
+}
+
+impl std::ops::DerefMut for EditWidget {
+    fn deref_mut(&mut self) -> &mut Widget {
+        &mut self.widget
+    }
+}
+
 impl EditWidget {
     pub fn new(the_id: i32, the_listener: Option<Box<dyn EditListener>>) -> Self {
         let mut ew = EditWidget {
-            x: 0, y: 0, width: 0, height: 0,
-            widget_manager: None,
-            visible: true, disabled: false,
-            has_focus: false, is_down: false, is_over: false,
-            has_alpha: true, has_transparencies: false,
-            colors: Vec::new(),
-            mouse_insets: Insets::new(0,0,0,0),
-            do_finger: false, wants_focus: true,
+            widget: Widget::new(),
             id: the_id,
             text: String::new(),
             password_display: String::new(),
@@ -104,8 +106,11 @@ impl EditWidget {
             undo_hilite_pos: 0,
             last_modify_idx: -1,
         };
-        ew.colors.clear();
-        for c in &G_EDIT_COLORS { ew.colors.push(Color::from_rgb(c[0], c[1], c[2])); }
+        // Widget 基座默认值
+        ew.visible = true;
+        ew.has_alpha = true;
+        ew.wants_focus = true;
+        ew.colors = G_EDIT_COLORS.iter().map(|c| Color::from_rgb(c[0], c[1], c[2])).collect();
         ew
     }
 

@@ -15,8 +15,13 @@ use crate::todlib::reanimator::Reanimation;
 /// 对话框头部偏移常量
 pub const DIALOG_HEADER_OFFSET: i32 = 45;
 
-/// 重动画小部件（对应 C++ ReanimationWidget）
+/// 重动画小部件（对应 C++ ReanimationWidget : Widget）
+/// [TRANSLATION_NOTE]: Rust 组合 `Widget` 基座，`&mut self.widget as *mut Widget`
+/// 可挂接 WidgetManager（对应 C++ AddWidget(mReanimation)）
+#[repr(C)]
 pub struct ReanimationWidget {
+    /// Widget 基座
+    pub widget: crate::framework::widget::widget::Widget,
     pub app: Option<*mut crate::lawn::lawn_app::LawnApp>,
     pub reanim: Option<*mut Reanimation>,
     pub lawn_dialog: Option<*mut LawnDialog>,
@@ -24,9 +29,23 @@ pub struct ReanimationWidget {
     pub pos_y: f32,
 }
 
+impl std::ops::Deref for ReanimationWidget {
+    type Target = crate::framework::widget::widget::Widget;
+    fn deref(&self) -> &crate::framework::widget::widget::Widget {
+        &self.widget
+    }
+}
+
+impl std::ops::DerefMut for ReanimationWidget {
+    fn deref_mut(&mut self) -> &mut crate::framework::widget::widget::Widget {
+        &mut self.widget
+    }
+}
+
 impl ReanimationWidget {
     pub fn new() -> Self {
         ReanimationWidget {
+            widget: crate::framework::widget::widget::Widget::new(),
             app: None,
             reanim: None,
             lawn_dialog: None,
@@ -159,10 +178,10 @@ impl LawnDialog {
     pub fn set_button_delay(&mut self, delay: i32) {
         self.button_delay = delay;
         if let Some(btn) = self.lawn_yes_button {
-            unsafe { (*btn).disabled = true; }
+            unsafe { (&mut *btn).disabled = true; }
         }
         if let Some(btn) = self.lawn_no_button {
-            unsafe { (*btn).disabled = true; }
+            unsafe { (&mut *btn).disabled = true; }
         }
     }
 
@@ -170,17 +189,22 @@ impl LawnDialog {
         // 对应 C++ Update：延迟结束后启用按钮
         if self.button_delay == 0 {
             if let Some(btn) = self.lawn_yes_button {
-                unsafe { (*btn).disabled = false; }
+                unsafe { (&mut *btn).disabled = false; }
             }
             if let Some(btn) = self.lawn_no_button {
-                unsafe { (*btn).disabled = false; }
+                unsafe { (&mut *btn).disabled = false; }
             }
         }
     }
 
     /// 按钮按下（对应 C++ ButtonPress）
     pub fn button_press(&mut self, _id: i32) {
-        // [TRANSLATION_NOTE]: PlaySample(SOUND_GRAVEBUTTON) 依赖音效系统，暂不执行
+        // C++: (void)theId; mApp->PlaySample(SOUND_GRAVEBUTTON);
+        if let Some(app) = self.app {
+            unsafe {
+                (*app).play_sample(crate::framework::resources::ResourceId::SoundGravebutton as i32);
+            }
+        }
     }
 
     pub fn button_depress(&mut self, _id: i32) {
@@ -191,8 +215,12 @@ impl LawnDialog {
     }
 
     pub fn checkbox_checked(&mut self) {
-        // 对应 C++ CheckboxChecked
-        // [TRANSLATION_NOTE]: PlaySample(SOUND_BUTTONCLICK) 依赖音效系统，暂不执行
+        // 对应 C++ CheckboxChecked：mApp->PlaySample(SOUND_BUTTONCLICK)
+        if let Some(app) = self.app {
+            unsafe {
+                (*app).play_sample(crate::framework::resources::ResourceId::SoundButtonclick as i32);
+            }
+        }
     }
 
     pub fn key_down(&mut self, key: KeyCode) {
@@ -217,12 +245,43 @@ impl LawnDialog {
         }
     }
 
-    pub fn added_to_manager(&mut self, _manager: &mut WidgetManager) {
-        // 对应 C++ AddedToManager
+    pub fn added_to_manager(&mut self, manager: &mut WidgetManager) {
+        // 对应 C++ AddedToManager：AddWidget(mReanimation) / AddWidget(mLawnYesButton) / AddWidget(mLawnNoButton)
+        // C++: Dialog::AddedToManager（Widget 树挂接）由 manager 管理
+        if let Some(reanim) = self.reanimation {
+            unsafe {
+                manager.add_widget(&mut (*reanim).widget as *mut crate::framework::widget::widget::Widget);
+            }
+        }
+        if let Some(btn) = self.lawn_yes_button {
+            unsafe {
+                manager.add_widget((&mut *btn).as_widget_ptr());
+            }
+        }
+        if let Some(btn) = self.lawn_no_button {
+            unsafe {
+                manager.add_widget((&mut *btn).as_widget_ptr());
+            }
+        }
     }
 
-    pub fn removed_from_manager(&mut self, _manager: &mut WidgetManager) {
-        // 对应 C++ RemovedFromManager
+    pub fn removed_from_manager(&mut self, manager: &mut WidgetManager) {
+        // 对应 C++ RemovedFromManager：RemoveWidget(mLawnYesButton) / RemoveWidget(mLawnNoButton) / RemoveWidget(mReanimation)
+        if let Some(btn) = self.lawn_yes_button {
+            unsafe {
+                manager.remove_widget((&mut *btn).as_widget_ptr());
+            }
+        }
+        if let Some(btn) = self.lawn_no_button {
+            unsafe {
+                manager.remove_widget((&mut *btn).as_widget_ptr());
+            }
+        }
+        if let Some(reanim) = self.reanimation {
+            unsafe {
+                manager.remove_widget(&mut (*reanim).widget as *mut crate::framework::widget::widget::Widget);
+            }
+        }
     }
 
     pub fn resize(&mut self, x: i32, y: i32, width: i32, height: i32) {
@@ -433,10 +492,10 @@ impl GameOverDialog {
         // 对应 C++ MouseDrag：拖动时保持菜单按钮位置
         if let Some(btn) = self.menu_button {
             unsafe {
-                (*btn).x = 635 - self.x;
-                (*btn).y = -10 - self.y;
-                (*btn).width = 163;
-                (*btn).height = 46;
+                (&mut *btn).x = 635 - self.x;
+                (&mut *btn).y = -10 - self.y;
+                (&mut *btn).width = 163;
+                (&mut *btn).height = 46;
             }
         }
         let _ = (x, y);

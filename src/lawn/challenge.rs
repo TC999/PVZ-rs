@@ -3,6 +3,7 @@
 
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::rect::Rect;
+use crate::framework::color::Color;
 use crate::lawn::game_enums::*;
 use crate::lawn::board::HitResult;
 use crate::lawn::grid_item::GridItem;
@@ -999,17 +1000,49 @@ impl Challenge {
         }
     }
 
-    pub fn draw_slot_machine(&self, _g: &mut Graphics) {
-        // 对应 C++ Challenge::DrawSlotMachine：
-        // ① mGameScene == SCENE_ZOMBIES_WON 直接返回；
-        // ② 复制 Graphics 为 gBoardParent，当 mSlotMachineRollCount < 3 且
-        //    mCursorObject->mCursorType == CURSOR_TYPE_NORMAL 且 challengeState !=
-        //    STATECHALLENGE_SLOT_MACHINE_ROLLING 且 !HasLevelAwardDropped() 时，
-        //    SetColor(GetFlashingColor(mMainCounter, 75)) + SetColorizeImages(true)；
-        // ③ gBoardParent.mTransX/Y = mSeedBank->mX/Y - mBoard->mX/Y；
-        // ④ ReanimationGet(mReanimChallenge)->Draw(&gBoardParent)。
-        // [TRANSLATION_NOTE]: 依赖 Graphics 复制构造（Rust 无 Clone）、CursorObject、
-        // GetFlashingColor 与 SeedBank 坐标体系，绘制时一并接入
+    pub fn draw_slot_machine(&self, g: &mut Graphics) {
+        // 对应 C++ Challenge::DrawSlotMachine
+        let Some(app) = self.app else { return; };
+        let Some(board_ptr) = self.board else { return; };
+        let app = unsafe { &*app };
+        let board = unsafe { &*board_ptr };
+
+        // C++: if (mApp->mGameScene == SCENE_ZOMBIES_WON) return;
+        if app.game_scene == crate::lawn::lawn_app::GameScenes::ZombiesWon {
+            return;
+        }
+
+        // [TRANSLATION_NOTE]: C++ 复制 Graphics(*g) 为 gBoardParent 后修改副本；Rust 侧保存/恢复被改字段
+        let old_trans_x = g.trans_x;
+        let old_trans_y = g.trans_y;
+        let old_color = *g.get_color();
+        let old_colorize = g.get_colorize_images();
+
+        // C++: mSlotMachineRollCount < 3 && mCursorObject->mCursorType == CURSOR_TYPE_NORMAL &&
+        //      mChallengeState != STATECHALLENGE_SLOT_MACHINE_ROLLING && !mBoard->HasLevelAwardDropped()
+        if self.slot_machine_roll_count < 3
+            && board.cursor_object.cursor_type == CursorType::Normal
+            && self.challenge_state != ChallengeState::SlotMachineRolling
+            && !board.has_level_award_dropped()
+        {
+            let a_flash_color = crate::todlib::tod_common::get_flashing_color(board.m_main_counter, 75);
+            g.set_color(&a_flash_color);
+            g.set_colorize_images(true);
+        }
+
+        // C++: gBoardParent.mTransX/Y = mBoard->mSeedBank->mX/Y - mBoard->mX/Y
+        g.trans_x = (board.m_seed_bank_x - board.m_x) as f64;
+        g.trans_y = (board.m_seed_bank_y - board.m_y) as f64;
+
+        // C++: mApp->ReanimationGet(mReanimChallenge)->Draw(&gBoardParent)
+        if let Some(reanim) = app.reanimation_get(self.reanim_challenge) {
+            reanim.draw(g);
+        }
+
+        g.trans_x = old_trans_x;
+        g.trans_y = old_trans_y;
+        g.set_color(&old_color);
+        g.set_colorize_images(old_colorize);
     }
 
     pub fn update_tool_tip(&self, x: i32, y: i32) -> i32 {
@@ -2167,12 +2200,77 @@ impl Challenge {
         }
     }
 
-    pub fn draw_rain(&self, _g: &mut Graphics) {
-        // 对应 C++ Challenge::DrawRain：
-        // ① mBoard->mCutScene->IsBeforePreloading() 或 !Is3DAccelerated() 直接返回；
-        // ② 计算雨滴/雨丝粒子并 DrawParticle 渲染，受 mBoard->mMainCounter 驱动。
-        // [TRANSLATION_NOTE]: 依赖 3D 加速标志与粒子系统（ParticleSystem::DrawParticle），
-        // Rust 侧 3D/粒子绘制未接入，暂保留主计数器驱动的粒子生成骨架
+    pub fn draw_rain(&self, g: &mut Graphics) {
+        // 对应 C++ Challenge::DrawRain
+        let Some(board_ptr) = self.board else { return; };
+        let board = unsafe { &*board_ptr };
+
+        // C++: if (mBoard->mCutScene->IsBeforePreloading() || !mApp->Is3DAccelerated()) return;
+        // [TRANSLATION_NOTE]: Rust 侧未接入 Is3DAccelerated()（3D 加速标志），按始终加速处理
+        if let Some(cut_scene) = board.m_cut_scene {
+            if unsafe { (*cut_scene).is_before_preloading() } {
+                return;
+            }
+        }
+
+        // C++: aBoardOffsetX = mBoard->mX / 100 * -100;
+        let a_board_offset_x = board.m_x / 100 * -100;
+
+        // C++: const uint32_t aTime = mBoard->mEffectCounter;
+        let a_time = board.m_effect_counter;
+
+        // C++: 远景雨偏移（PvzpAnimateCurve 整数版本）
+        let a_time_offset_x_est = crate::todlib::tod_common::tod_animate_curve(
+            0, 100, (a_time % 100u32) as i32, 0, -100, TodCurves::Linear);
+        let a_time_offset_y_est = crate::todlib::tod_common::tod_animate_curve(
+            0, 20, (a_time % 20u32) as i32, -100, 0, TodCurves::Linear);
+
+        // C++: g->DrawImage(Sexy::IMAGE_RAIN, aImageX, aImageY)
+        let a_rain_img = get_image(self.get_app(), "IMAGE_RAIN");
+        if !a_rain_img.is_null() {
+            // C++: 远景雨（9x7 网格，自远到近递减计数）
+            let mut a_hor_cnt = 9;
+            while a_hor_cnt > 0 {
+                let mut a_ver_cnt = 7;
+                while a_ver_cnt > 0 {
+                    let a_image_x = a_time_offset_x_est + 100 * a_hor_cnt + a_board_offset_x;
+                    let a_image_y = a_time_offset_y_est + 100 * a_ver_cnt;
+                    unsafe {
+                        g.draw_image_xy(&*a_rain_img, a_image_x, a_image_y);
+                    }
+                    a_ver_cnt -= 1;
+                }
+                a_hor_cnt -= 1;
+            }
+        }
+
+        // C++: 近景雨偏移（PvzpAnimateCurve 结果赋给 float，隐式转浮点）
+        let a_time_offset_x_cls = crate::todlib::tod_common::tod_animate_curve(
+            0, 161, (a_time % 161u32) as i32, 0, -100, TodCurves::Linear) as f32;
+        let a_time_offset_y_cls = crate::todlib::tod_common::tod_animate_curve(
+            0, 33, (a_time % 33u32) as i32, -100, 0, TodCurves::Linear) as f32;
+
+        if !a_rain_img.is_null() {
+            // C++: 近景雨（9x7 网格，缩放 1.5 倍，PvzpDrawImageScaledF）
+            let mut a_hor_cnt = 0;
+            while a_hor_cnt < 9 {
+                let mut a_ver_cnt = 0;
+                while a_ver_cnt < 7 {
+                    let a_rain_scale_cls = 1.5f32;
+                    let a_image_cls_x =
+                        (a_hor_cnt as f32 * 100.0 + a_time_offset_x_cls) * a_rain_scale_cls + a_board_offset_x as f32;
+                    let a_image_cls_y = (a_ver_cnt as f32 * 100.0 + a_time_offset_y_cls) * a_rain_scale_cls;
+                    unsafe {
+                        let a_img = &*a_rain_img;
+                        let a_scaled_w = (a_img.width as f32 * a_rain_scale_cls) as i32;
+                        let a_scaled_h = (a_img.height as f32 * a_rain_scale_cls) as i32;
+                        g.draw_image_stretch_xy(a_img, a_image_cls_x as i32, a_image_cls_y as i32, a_scaled_w, a_scaled_h);
+                    }
+                    a_ver_cnt += 1;
+                }
+                a_hor_cnt += 1;
+            }
+        }
     }
 
     pub fn draw_weather(&self, g: &mut Graphics) {
@@ -2957,16 +3055,129 @@ impl Challenge {
         0
     }
 
-    pub fn tree_of_wisdom_draw(&self, _g: &mut Graphics) {
-        // 对应 C++ Challenge::TreeOfWisdomDraw：
-        // ① DrawRenderGroup(0) 绘背景 + 6 个云彩 reanim；
-        // ② 根据高度与鼠标悬停设置 mExtraOverlayColor/mEnableExtraOverlayDraw 后
-        //    按组绘树干(2)/地面(3)/根系(4)；
-        // ③ STATECHALLENGE_TREE_GIVE_WISDOM/BABBLING 时绘制气泡 + 包裹文字；
-        // ④ 高度 >= 50 时用 FONT_HOUSEOFTERROR16 + PvzpDrawStringMatrix 绘制尺寸。
-        // [TRANSLATION_NOTE]: 依赖 mEnableExtraOverlayDraw/mExtraOverlayColor（Rust
-        // Reanimation 已有 m_extra_overlay_* 字段待接）、字体矩阵绘制与 StrFormat/
-        // PvzpReplaceNumberString 字符串系统；TreeOfWisdomMouseOn/GetSize 已实现
+    pub fn tree_of_wisdom_draw(&self, g: &mut Graphics) {
+        // 对应 C++ Challenge::TreeOfWisdomDraw
+        let Some(app_ptr) = self.app else { return; };
+        let Some(board_ptr) = self.board else { return; };
+        let board = unsafe { &*board_ptr };
+
+        // C++: int aMouseOn = TreeOfWisdomMouseOn(mApp->mWidgetManager->mLastMouseX - mBoard->mX,
+        //                                        mApp->mWidgetManager->mLastMouseY - mBoard->mY);
+        let (a_last_mouse_x, a_last_mouse_y) = unsafe {
+            let a = &*app_ptr;
+            match a.base.widget_manager {
+                Some(wm) => {
+                    let wm = &*wm;
+                    (wm.last_mouse_x, wm.last_mouse_y)
+                }
+                None => (0, 0),
+            }
+        };
+        let a_mouse_on = self.tree_of_wisdom_mouse_on(a_last_mouse_x - board.m_x, a_last_mouse_y - board.m_y) != 0;
+
+        let app = unsafe { &mut *app_ptr };
+        let a_height = self.tree_of_wisdom_get_size();
+
+        // C++: aReanimTree->mEnableExtraOverlayDraw = false; aReanimTree->DrawRenderGroup(g, 0); // background
+        if let Some(a_reanim_tree) = app.reanimation_get_mut(self.reanim_challenge) {
+            a_reanim_tree.m_enable_extra_overlay_draw = false;
+            a_reanim_tree.draw_render_group(g, 0);
+        }
+        // C++: 6 个云彩 reanim 全部 DrawRenderGroup(g, 0)
+        for i in 0..6 {
+            if let Some(a_cloud_reanim) = app.reanimation_get_mut(self.reanim_clouds[i]) {
+                a_cloud_reanim.draw_render_group(g, 0);
+            }
+        }
+
+        // C++: trunk（渲染组 2），鼠标悬停时叠加高亮
+        if a_mouse_on {
+            if let Some(a_reanim_tree) = app.reanimation_get_mut(self.reanim_challenge) {
+                a_reanim_tree.m_extra_overlay_color = Color::new(255, 255, 255, if a_height < 18 { 128 } else { 48 });
+                a_reanim_tree.m_enable_extra_overlay_draw = true;
+            }
+        } else {
+            if let Some(a_reanim_tree) = app.reanimation_get_mut(self.reanim_challenge) {
+                a_reanim_tree.m_enable_extra_overlay_draw = false;
+            }
+        }
+        if let Some(a_reanim_tree) = app.reanimation_get_mut(self.reanim_challenge) {
+            a_reanim_tree.draw_render_group(g, 2);
+        }
+
+        // C++: ground（渲染组 3），关闭覆盖绘制
+        if let Some(a_reanim_tree) = app.reanimation_get_mut(self.reanim_challenge) {
+            a_reanim_tree.m_enable_extra_overlay_draw = false;
+            a_reanim_tree.draw_render_group(g, 3);
+        }
+
+        // C++: roots（渲染组 4），鼠标悬停时叠加高亮
+        if a_mouse_on {
+            if let Some(a_reanim_tree) = app.reanimation_get_mut(self.reanim_challenge) {
+                a_reanim_tree.m_extra_overlay_color = Color::new(255, 255, 255, 32);
+                a_reanim_tree.m_enable_extra_overlay_draw = true;
+            }
+        } else {
+            if let Some(a_reanim_tree) = app.reanimation_get_mut(self.reanim_challenge) {
+                a_reanim_tree.m_enable_extra_overlay_draw = false;
+            }
+        }
+        if let Some(a_reanim_tree) = app.reanimation_get_mut(self.reanim_challenge) {
+            a_reanim_tree.draw_render_group(g, 4);
+        }
+
+        // C++: 给予智慧/喃喃自语状态绘制气泡 + 包裹文字
+        if self.challenge_state == ChallengeState::TreeGiveWisdom || self.challenge_state == ChallengeState::TreeBabbling {
+            let (a_pos_x, a_pos_y) = if a_height < 7 {
+                (400, 152)
+            } else if a_height < 12 {
+                (395, 60)
+            } else {
+                (390, 52)
+            };
+
+            // C++: g->DrawImage(Sexy::IMAGE_STORE_SPEECHBUBBLE2, aPosX, aPosY)
+            let a_bubble_img = get_image(app, "IMAGE_STORE_SPEECHBUBBLE2");
+            if !a_bubble_img.is_null() {
+                unsafe {
+                    g.draw_image_xy(&*a_bubble_img, a_pos_x, a_pos_y);
+                }
+            }
+
+            // C++: std::string aText = StrFormat("[TREE_OF_WISDOM_%d]", mTreeOfWisdomTalkIndex);
+            let a_text = format!("[TREE_OF_WISDOM_{}]", self.tree_of_wisdom_talk_index);
+            // C++: mApp->GetInteger("TREE_OF_WISDOM_TEXT_WRAP_ENUM", DS_ALIGN_CENTER_VERTICAL_MIDDLE)
+            let a_wrap_enum = app.get_integer(
+                "TREE_OF_WISDOM_TEXT_WRAP_ENUM",
+                DrawStringJustification::DS_ALIGN_CENTER_VERTICAL_MIDDLE as i32,
+            );
+            // [TRANSLATION_NOTE]: PvzpDrawStringWrapped 内部做字符串翻译并设置字体（FONT_BRIANNETOD16）与颜色；
+            // Rust 字体系统未接入，用 draw_string_word_wrapped 以当前字体/黑色近似，行距取 10
+            g.set_color(&Color::BLACK);
+            g.draw_string_word_wrapped(&a_text, a_pos_x + 25, a_pos_y + 6, 233, 10, a_wrap_enum, None);
+        }
+
+        // C++: 高度标注文字（FONT_HOUSEOFTERROR16 + PvzpDrawStringMatrix）
+        let mut a_cur_size = a_height;
+        let mut a_scale = 1.0f32;
+        if self.challenge_state == ChallengeState::TreeJustGrew {
+            if self.challenge_state_counter > 30 {
+                a_cur_size -= 1;
+            }
+            // C++: PvzpAnimateCurveFloat(55, 20, mChallengeStateCounter, 1.0f, 1.2f, CURVE_BOUNCE)
+            a_scale = crate::todlib::tod_common::tod_animate_curve_float(55, 20, self.challenge_state_counter, 1.0, 1.2, TodCurves::Bounce);
+        }
+        if a_cur_size >= 50 {
+            // C++: PvzpReplaceNumberString("[TREE_OF_WISDOM_HIEGHT]", "{HEIGHT}", aCurSize) =
+            //      翻译字符串并把 {HEIGHT} 替换为数字；Rust 无对应函数，内联等价
+            let a_size_str = crate::todlib::tod_common::tod_string_translate("[TREE_OF_WISDOM_HIEGHT]")
+                .replace("{HEIGHT}", &a_cur_size.to_string());
+            // [TRANSLATION_NOTE]: C++ 计算 StringWidth/mAscent 后经 PvzpScaleTransformMatrix +
+            // PvzpDrawStringMatrix 绘制；Rust 字体矩阵绘制未接入（无 FONT_HOUSEOFTERROR16），
+            // 以白色 draw_string 在 C++ 矩阵平移基准点 (400, 20) 近似
+            g.set_color(&Color::new(255, 255, 255, 255));
+            g.draw_string(&a_size_str, 400, 20);
+        }
     }
 
     pub fn tree_of_wisdom_next_garden(&self) {
