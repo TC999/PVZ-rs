@@ -94,6 +94,10 @@ pub struct Plant {
     pub highlighted: bool,
 }
 
+// [TRANSLATION_NOTE]: sentinel pointers for nut/garlic/pumpkin crack images (replace with real image resources)
+static CRACK_IMAGE_1: u8 = 0;
+static CRACK_IMAGE_2: u8 = 0;
+
 impl Plant {
     pub fn new() -> Self {
         Plant {
@@ -425,18 +429,99 @@ impl Plant {
     pub fn update(&mut self) {
         if self.dead { return; }
 
+        // 对应 C++ Plant::Update 的 doUpdate 四情形判定（Plant.cpp:2856-2865）
+        let app_ptr = self.base.app;
+        let on_board = self.is_on_board();
         let mut do_update = false;
-        // 依赖底层系统
-        do_update = true;
+        if let Some(app) = app_ptr {
+            unsafe {
+                if on_board
+                    && (*app).game_scene == crate::lawn::lawn_app::GameScenes::LevelIntro
+                    && (*app).is_wallnut_bowling_level()
+                {
+                    do_update = true;
+                } else if on_board && (*app).game_mode == GameMode::ChallengeZenGarden {
+                    do_update = true;
+                } else if on_board
+                    && self.base.get_board().map_or(false, |b| unsafe {
+                        b.m_cut_scene.map_or(false, |c| unsafe { (*c).should_run_upsell_board() })
+                    })
+                {
+                    do_update = true;
+                } else if !on_board || (*app).game_scene == crate::lawn::lawn_app::GameScenes::Playing {
+                    do_update = true;
+                }
+            }
+        }
 
         if do_update {
             self.update_abilities();
-            // 依赖底层系统
+            self.animate();
 
             if self.plant_health < 0 {
                 self.die();
             }
+
+            // C++ Update 中 UpdateReanim() 内的重动画颜色更新（Plant.cpp:2745）
+            self.update_reanim_color();
         }
+    }
+
+    /// 对应 C++ Plant::Animate（Plant.cpp:3419-3493）
+    /// 帧推进与受损闪白/眨眼/压扁短路的动画主体
+    pub fn animate(&mut self) {
+        // C++: (CHERRYBOMB || JALAPENO) && 非禅园模式时随机抖动
+        if (self.seed_type == SeedType::Cherrybomb || self.seed_type == SeedType::Jalapeno)
+            && self.base.app.map_or(false, |a| unsafe {
+                (*a).game_mode != GameMode::ChallengeZenGarden
+            })
+        {
+            self.shake_offset_x = crate::todlib::tod_common::rand_range_float(-1.0, 1.0);
+            self.shake_offset_y = crate::todlib::tod_common::rand_range_float(-1.0, 1.0);
+        }
+
+        if self.recently_eaten_countdown > 0 {
+            self.recently_eaten_countdown -= 1;
+        }
+        if self.eaten_flash_countdown > 0 {
+            self.eaten_flash_countdown -= 1;
+        }
+        if self.beghouled_flash_countdown > 0 {
+            self.beghouled_flash_countdown -= 1;
+        }
+
+        if self.squished {
+            self.frame = 0;
+            return;
+        }
+
+        // C++: 坚果/大蒜/南瓜受损动画分支（Plant.cpp:3447-3458）
+        if self.seed_type == SeedType::Wallnut || self.seed_type == SeedType::Tallnut {
+            self.animate_nuts();
+        } else if self.seed_type == SeedType::Garlic {
+            self.animate_garlic();
+        } else if self.seed_type == SeedType::Pumpkinshell {
+            self.animate_pumpkin();
+        }
+
+        // C++: UpdateBlink()（Plant.cpp:3459）
+        self.update_blink();
+
+        // C++: mAnimPing/mAnimCounter 帧推进（Plant.cpp:3461-3482）
+        if self.anim_ping {
+            if self.anim_counter < self.frame_length * self.num_frames - 1 {
+                self.anim_counter += 1;
+            } else {
+                self.anim_ping = false;
+                self.anim_counter -= self.frame_length;
+            }
+        } else if self.anim_counter > 0 {
+            self.anim_counter -= 1;
+        } else {
+            self.anim_ping = true;
+            self.anim_counter += self.frame_length;
+        }
+        self.frame = self.anim_counter / self.frame_length;
     }
 
     /// 是否不在土地上（对应 C++ NotOnGround）
@@ -1160,6 +1245,12 @@ impl Plant {
             self.state_countdown -= 1;
         }
 
+        // C++: if (mApp->IsWallnutBowlingLevel()) { UpdateBowling(); return; }
+        if self.base.get_app().map_or(false, |app| app.is_wallnut_bowling_level()) {
+            self.update_bowling();
+            return;
+        }
+
         // 特殊植物更新分发
         match self.seed_type {
             SeedType::Squash => self.update_squash(),
@@ -1197,6 +1288,520 @@ impl Plant {
             if self.do_special_countdown == 0 {
                 self.do_special();
             }
+        }
+    }
+
+    /// 更新重动画颜色（对应 C++ UpdateReanimColor，Plant.cpp:2640）
+    pub fn update_reanim_color(&mut self) {
+        if !self.is_on_board() {
+            return;
+        }
+
+        // C++: aBodyReanim = mApp->ReanimationTryToGet(mBodyReanimID); if (!aBodyReanim) return;
+        if self
+            .base
+            .get_app()
+            .and_then(|app| app.reanimation_get(self.body_reanim_id))
+            .is_none()
+        {
+            return;
+        }
+
+        let a_seed_type = self.base.get_board().map_or(SeedType::None, |b| b.get_seed_type_in_cursor());
+        let mut a_color_override;
+
+        // C++: mBoard->mCursorObject->mCursorType == CURSOR_TYPE_PLANT_FROM_GLOVE
+        let mut is_on_glove = false;
+        if let Some(board) = self.base.get_board() {
+            if board.cursor_object.cursor_type == CursorType::PlantFromGlove {
+                let a_glove_plant_id = board.cursor_object.glove_plant_id;
+                // C++: mBoard->mPlants.DataArrayTryToGet(aGlovePlantID)
+                let a_plant = board.plants.get(a_glove_plant_id as usize).map(|p| p as *const Plant);
+                if let Some(a_plant) = a_plant {
+                    unsafe {
+                        if (*a_plant).plant_col == self.plant_col && (*a_plant).base.row == self.base.row {
+                            is_on_glove = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        if is_on_glove {
+            a_color_override = Color::new(128, 128, 128, 255);
+        } else if self.is_part_of_upgradable_to(a_seed_type)
+            && self
+                .base
+                .get_board()
+                .map_or(false, |b| b.can_plant_at(self.plant_col, self.base.row, a_seed_type) == PlantingReason::Ok)
+        {
+            let a_counter = self.base.get_board().map_or(0, |b| b.m_main_counter);
+            a_color_override = crate::todlib::tod_common::get_flashing_color(a_counter, 90);
+        } else if a_seed_type == SeedType::Cobcannon
+            && self.seed_type == SeedType::Kernelpult
+            && self
+                .base
+                .get_board()
+                .map_or(false, |b| b.can_plant_at(self.plant_col - 1, self.base.row, a_seed_type) == PlantingReason::Ok)
+        {
+            let a_counter = self.base.get_board().map_or(0, |b| b.m_main_counter);
+            a_color_override = crate::todlib::tod_common::get_flashing_color(a_counter, 90);
+        } else if self.seed_type == SeedType::ExplodeONut {
+            a_color_override = Color::new(255, 64, 64, 255);
+        } else {
+            a_color_override = Color::new(255, 255, 255, 255);
+        }
+
+        // C++: aBodyReanim 的颜色/附加绘制设置（此处重新取 mutable 引用应用）
+        if let Some(a_body_reanim) = self
+            .base
+            .get_app_mut()
+            .and_then(|app| app.reanimation_get_mut(self.body_reanim_id))
+        {
+            a_body_reanim.m_color_override = a_color_override;
+
+            if self.highlighted {
+                a_body_reanim.m_extra_additive_color = Color::new(255, 255, 255, 196);
+                a_body_reanim.m_enable_extra_additive_draw = true;
+                if self.imitater_type == SeedType::Imitater {
+                    a_body_reanim.m_extra_additive_color = Color::new(255, 255, 255, 92);
+                }
+            } else if self.beghouled_flash_countdown > 0 {
+                let an_alpha = crate::todlib::tod_common::tod_animate_curve(
+                    50, 0, self.beghouled_flash_countdown % 50, 1, 128, TodCurves::Bounce,
+                );
+                a_body_reanim.m_extra_additive_color = Color::new(255, 255, 255, an_alpha as u8);
+                a_body_reanim.m_enable_extra_additive_draw = true;
+            } else if self.eaten_flash_countdown > 0 {
+                let a_grayness = crate::todlib::tod_common::clamp_int(
+                    self.eaten_flash_countdown * 3,
+                    0,
+                    if self.imitater_type == SeedType::Imitater { 128 } else { 255 },
+                ) as u8;
+                a_body_reanim.m_extra_additive_color = Color::new(a_grayness, a_grayness, a_grayness, 255);
+                a_body_reanim.m_enable_extra_additive_draw = true;
+            } else {
+                a_body_reanim.m_enable_extra_additive_draw = false;
+            }
+
+            if self.beghouled_flash_countdown > 0 {
+                let an_alpha = crate::todlib::tod_common::tod_animate_curve(
+                    50, 0, self.beghouled_flash_countdown % 50, 1, 128, TodCurves::Bounce,
+                );
+                a_body_reanim.m_extra_overlay_color = Color::new(255, 255, 255, an_alpha as u8);
+                a_body_reanim.m_enable_extra_overlay_draw = true;
+            } else {
+                a_body_reanim.m_enable_extra_overlay_draw = false;
+            }
+
+            // [TRANSLATION_NOTE]: C++ 末尾 aBodyReanim->PropogateColorToAttachments()
+            // （把颜色覆盖传播给附件 reanim）；Rust 附件颜色传播未接入
+        }
+    }
+
+    /// 坚果类受损动画（对应 C++ AnimateNuts，Plant.cpp:3090）
+// [TRANSLATION_NOTE]: C++ 使用 IMAGE_REANIM_WALLNUT_CRACKED1/2 等全局图片资源；
+// Rust 图片未接入，用两个静态哨兵指针表示不同裂纹等级，使 Get/SetImageOverride 的
+// 记录比较成立（C++ 以 Image* 指针比较决定裂纹覆盖与粒子只触发一次）。
+    pub fn animate_nuts(&mut self) {
+        let a_track_to_override = match self.seed_type {
+            SeedType::Wallnut => "anim_face",
+            SeedType::Tallnut => "anim_idle",
+            _ => return,
+        };
+        // C++: aCracked1/aCracked2 = IMAGE_REANIM_*_CRACKED1/2；哨兵指针代替（接入图片后替换为资源指针）
+        let a_cracked1: *mut crate::framework::graphics::image::Image = &CRACK_IMAGE_1 as *const u8 as *mut _;
+        let a_cracked2: *mut crate::framework::graphics::image::Image = &CRACK_IMAGE_2 as *const u8 as *mut _;
+
+        let mut a_pos_x = self.pos_x as i32 + 40;
+        let mut a_pos_y = self.pos_y as i32 + 10;
+        if self.seed_type == SeedType::Tallnut {
+            a_pos_y -= 32;
+        }
+
+        // C++: aBodyReanim->GetImageOverride / SetImageOverride + AddPvzpParticle
+        let mut a_spawn_particle = false;
+        if let Some(a_body_reanim) = self
+            .base
+            .get_app_mut()
+            .and_then(|app| app.reanimation_get_mut(self.body_reanim_id))
+        {
+            let a_image_override = a_body_reanim.get_image_override(a_track_to_override);
+            if self.plant_health < self.plant_max_health / 3 {
+                if a_image_override != a_cracked2 {
+                    a_body_reanim.set_image_override(a_track_to_override, a_cracked2);
+                    a_spawn_particle = true;
+                }
+            } else if self.plant_health < self.plant_max_health * 2 / 3 {
+                if a_image_override != a_cracked1 {
+                    a_body_reanim.set_image_override(a_track_to_override, a_cracked1);
+                    a_spawn_particle = true;
+                }
+            } else {
+                a_body_reanim.set_image_override(a_track_to_override, std::ptr::null_mut());
+            }
+        }
+        if a_spawn_particle {
+            self.add_attached_particle(a_pos_x, a_pos_y, self.base.render_order + 4, ParticleEffect::WallnutEatLarge);
+        }
+
+        // C++: if (IsInPlay() && !mApp->IsIZombieLevel())
+        if self.is_in_play() {
+            if let Some(app) = self.base.get_app() {
+                if app.is_izombie_level() {
+                    return;
+                }
+            }
+            if let Some(a_body_reanim) = self
+                .base
+                .get_app_mut()
+                .and_then(|app| app.reanimation_get_mut(self.body_reanim_id))
+            {
+                if self.recently_eaten_countdown > 0 {
+                    a_body_reanim.m_anim_rate = 0.1;
+                    return;
+                }
+                if a_body_reanim.m_anim_rate < 1.0 && self.on_bungee_state != PlantOnBungeeState::RisingWithBungee {
+                    a_body_reanim.m_anim_rate = crate::todlib::tod_common::rand_range_float(10.0, 15.0);
+                }
+            }
+        }
+    }
+
+    /// 大蒜受损动画（对应 C++ AnimateGarlic，Plant.cpp:3157）
+    pub fn animate_garlic(&mut self) {
+        // [TRANSLATION_NOTE]: C++ 使用 IMAGE_REANIM_GARLIC_BODY2/BODY3 全局图片，Rust 图片未接入用空指针占位
+        let a_body_reanim = self
+            .base
+            .get_app_mut()
+            .and_then(|app| app.reanimation_get_mut(self.body_reanim_id));
+        let Some(a_body_reanim) = a_body_reanim else { return; };
+        let a_image_override = a_body_reanim.get_image_override("anim_face");
+
+        if self.plant_health < self.plant_max_health / 3 {
+            // C++: aImageOverride != IMAGE_REANIM_GARLIC_BODY3 → SetImageOverride(BODY3) + 隐藏茎
+            if a_image_override != (&CRACK_IMAGE_2 as *const u8 as *mut crate::framework::graphics::image::Image) {
+                a_body_reanim.set_image_override("anim_face", &CRACK_IMAGE_2 as *const u8 as *mut _);
+                a_body_reanim.assign_render_group_to_prefix("Garlic_stem", -1); // RENDER_GROUP_HIDDEN
+            }
+        } else if self.plant_health < self.plant_max_health * 2 / 3 {
+            // C++: aImageOverride != IMAGE_REANIM_GARLIC_BODY2 → SetImageOverride(BODY2)
+            if a_image_override != (&CRACK_IMAGE_1 as *const u8 as *mut crate::framework::graphics::image::Image) {
+                a_body_reanim.set_image_override("anim_face", &CRACK_IMAGE_1 as *const u8 as *mut _);
+            }
+        } else {
+            // C++: SetImageOverride(nullptr) —— 健康恢复时清除覆盖
+            a_body_reanim.set_image_override("anim_face", std::ptr::null_mut());
+        }
+    }
+
+    /// 南瓜受损动画（对应 C++ AnimatePumpkin，Plant.cpp:3183）
+    pub fn animate_pumpkin(&mut self) {
+        // [TRANSLATION_NOTE]: C++ 使用 IMAGE_REANIM_PUMPKIN_DAMAGE1/DAMAGE3，图片未接入用哨兵指针
+        let a_body_reanim = self
+            .base
+            .get_app_mut()
+            .and_then(|app| app.reanimation_get_mut(self.body_reanim_id));
+        let Some(a_body_reanim) = a_body_reanim else { return; };
+        let a_image_override = a_body_reanim.get_image_override("Pumpkin_front");
+
+        if self.plant_health < self.plant_max_health / 3 {
+            // C++: != IMAGE_REANIM_PUMPKIN_DAMAGE3 → SetImageOverride(DAMAGE3)
+            if a_image_override != (&CRACK_IMAGE_2 as *const u8 as *mut crate::framework::graphics::image::Image) {
+                a_body_reanim.set_image_override("Pumpkin_front", &CRACK_IMAGE_2 as *const u8 as *mut _);
+            }
+        } else if self.plant_health < self.plant_max_health * 2 / 3 {
+            // C++: != IMAGE_REANIM_PUMPKIN_DAMAGE1 → SetImageOverride(DAMAGE1)
+            if a_image_override != (&CRACK_IMAGE_1 as *const u8 as *mut crate::framework::graphics::image::Image) {
+                a_body_reanim.set_image_override("Pumpkin_front", &CRACK_IMAGE_1 as *const u8 as *mut _);
+            }
+        } else {
+            // C++: SetImageOverride(nullptr)
+            a_body_reanim.set_image_override("Pumpkin_front", std::ptr::null_mut());
+        }
+    }
+
+    /// 磁铁物是否绘制在顶层（对应 C++ DrawMagnetItemsOnTop，Plant.cpp:1971）
+    pub fn draw_magnet_items_on_top(&self) -> bool {
+        if self.seed_type == SeedType::GoldMagnet {
+            for item in &self.magnet_items {
+                if item.item_type != MagnetItemType::None {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        if self.seed_type == SeedType::Magnetshroom {
+            for item in &self.magnet_items {
+                if item.item_type != MagnetItemType::None {
+                    // C++: SexyVector2 aVectorToPlant(mX + mDestOffsetX - mPosX, mY + mDestOffsetY - mPosY)
+                    let a_dx = self.pos_x + item.dest_offset_x - item.pos_x;
+                    let a_dy = self.pos_y + item.dest_offset_y - item.pos_y;
+                    if (a_dx * a_dx + a_dy * a_dy).sqrt() > 20.0 {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
+    /// 绘制磁铁吸附物（对应 C++ DrawMagnetItems，Plant.cpp:3691）
+    pub fn draw_magnet_items(&self, g: &mut Graphics) {
+        let a_offset_x = 0.0f32;
+        let a_offset_y = Self::plant_draw_height_offset(
+            self.base.get_board(),
+            Some(self),
+            self.seed_type,
+            self.plant_col,
+            self.base.row,
+        );
+
+        for item in &self.magnet_items {
+            if item.item_type == MagnetItemType::None {
+                continue;
+            }
+            let mut a_cel_row = 0;
+            let mut a_cel_col = 0;
+            let mut a_image: *mut crate::framework::graphics::image::Image = std::ptr::null_mut();
+            let mut a_scale = 0.8f32;
+
+            // [TRANSLATION_NOTE]: C++ 使用 IMAGE_REANIM_ZOMBIE_BUCKET1/2/3、FOOTBALL_HELMET、
+            // SCREENDOOR、LADDER、JACKBOX、DIGGER_PICKAXE、COIN_*、DIAMOND 等全局图片，
+            // Rust 图片资源未接入，用空指针占位
+            match item.item_type {
+                MagnetItemType::Pail1 => {}
+                MagnetItemType::Pail2 => {}
+                MagnetItemType::Pail3 => {}
+                MagnetItemType::FootballHelmet1 => {}
+                MagnetItemType::FootballHelmet2 => {}
+                MagnetItemType::FootballHelmet3 => {}
+                MagnetItemType::Door1 => {}
+                MagnetItemType::Door2 => {}
+                MagnetItemType::Door3 => {}
+                MagnetItemType::Pogo1 | MagnetItemType::Pogo2 | MagnetItemType::Pogo3 => {
+                    a_cel_col = item.item_type as i32 - MagnetItemType::Pogo1 as i32;
+                }
+                MagnetItemType::Ladder1 => {}
+                MagnetItemType::Ladder2 => {}
+                MagnetItemType::Ladder3 => {}
+                MagnetItemType::LadderPlaced => {}
+                MagnetItemType::JackInTheBox => {}
+                MagnetItemType::PickAxe => {}
+                MagnetItemType::SilverCoin | MagnetItemType::GoldCoin | MagnetItemType::Diamond => {
+                    a_scale = 1.0;
+                }
+                MagnetItemType::None => {}
+            }
+
+            if a_image.is_null() {
+                continue;
+            }
+
+            let a_pos_x = (item.pos_x - self.pos_x + a_offset_x) as i32;
+            let a_pos_y = (item.pos_y - self.pos_y + a_offset_y) as i32;
+            unsafe {
+                let a_img = &*a_image;
+                if a_scale == 1.0 {
+                    // C++: g->DrawImageCel(aImage, x, y, aCelCol, aCelRow)
+                    g.draw_image_cel_rc(a_img, a_pos_x, a_pos_y, a_cel_col, a_cel_row);
+                } else {
+                    // [TRANSLATION_NOTE]: C++ PvzpDrawImageCelScaledF 用矩阵绕 cel 中心缩放；
+                    // Rust 无矩阵 cel 绘制，用 dest_rect 缩放近似（保持左上角位置）
+                    let cw = a_img.width / a_img.num_cols.max(1);
+                    let ch = a_img.height / a_img.num_rows.max(1);
+                    let dest = crate::framework::rect::Rect::new(
+                        a_pos_x,
+                        a_pos_y,
+                        (cw as f32 * a_scale) as i32,
+                        (ch as f32 * a_scale) as i32,
+                    );
+                    g.draw_image_cel_dest_rc(a_img, &dest, a_cel_col, a_cel_row);
+                }
+            }
+        }
+    }
+
+    /// 保龄球滚动更新（对应 C++ UpdateBowling，Plant.cpp:2361）
+    pub fn update_bowling(&mut self) {
+        // C++: Reanimation* aBodyReanim = mApp->ReanimationTryToGet(mBodyReanimID);
+        //      if (aBodyReanim && aBodyReanim->TrackExists("_ground")) { mX -= aSpeed; }
+        self.pos_x -= self
+            .base
+            .get_app()
+            .and_then(|app| app.reanimation_get(self.body_reanim_id))
+            .and_then(|r| if r.track_exists("_ground") { Some(r.get_track_velocity("_ground")) } else { None })
+            .map_or(0.0, |a_speed| {
+                if self.seed_type == SeedType::GiantWallnut {
+                    a_speed * 2.0
+                } else {
+                    a_speed
+                }
+            });
+        if self.pos_x > 800.0 {
+            self.die();
+        }
+
+        // C++: mState == STATE_BOWLING_UP → mY -= 2;  else mState == STATE_BOWLING_DOWN → mY += 2
+        if self.state == PlantState::BowlingUp {
+            self.pos_y -= 2.0;
+        } else if self.state == PlantState::BowlingDown {
+            self.pos_y += 2.0;
+        }
+        // C++: int aDistToGrid = mBoard->GridToPixelY(0, mRow) - mY; 超出 ±2 直接返回
+        let a_dist_to_grid = self.base.get_board().map_or(0, |b| b.grid_to_pixel_y(0, self.base.row)) - self.pos_y as i32;
+        if a_dist_to_grid < -2 || a_dist_to_grid > 2 {
+            return;
+        }
+
+        let mut a_new_state = self.state;
+        if self.state == PlantState::BowlingUp && self.base.row <= 0 {
+            a_new_state = PlantState::BowlingDown;
+        } else if self.state == PlantState::BowlingDown && self.base.row >= 4 {
+            a_new_state = PlantState::BowlingUp;
+        }
+
+        // C++: Zombie* aZombie = FindTargetZombie(mRow, WEAPON_PRIMARY);
+        let a_target_zombie = self.find_target_zombie(self.base.row, PlantWeapon::Primary);
+        if a_target_zombie.is_some() {
+            let a_pos_x = self.pos_x as i32 + self.base.width / 2;
+            let a_pos_y = self.pos_y as i32 + self.base.height / 2;
+
+            if self.seed_type == SeedType::ExplodeONut {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Cherrybomb as i32);
+                    app.play_sample(crate::framework::resources::ResourceId::SoundBowlingimpact2 as i32);
+                }
+                let a_damage_range_flags = self.get_damage_range_flags(PlantWeapon::Primary) | 32u32;
+                let a_row = self.base.row;
+                if let Some(board) = self.base.get_board_mut() {
+                    board.kill_all_zombies_in_radius(a_row, a_pos_x, a_pos_y, 90, 1, true, a_damage_range_flags);
+                    board.shake_board(3, -4);
+                }
+                self.add_attached_particle(a_pos_x, a_pos_y, crate::lawn::game_enums::RENDER_LAYER_TOP, ParticleEffect::Powie);
+                self.die();
+                return;
+            }
+
+            if let Some(app) = self.base.get_app() {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::BowlingImpact as i32);
+            }
+            if let Some(board) = self.base.get_board_mut() {
+                board.shake_board(1, -2);
+            }
+
+            // C++: 按是否巨核桃/门盾/其他盾/头盔分派伤害
+            let a_zombie = a_target_zombie.unwrap();
+            let mut a_zombie_take_damage = false;
+            let mut a_zombie_take_shield_damage = false;
+            let mut a_zombie_take_helm_damage = false;
+            if let Some(board) = self.base.get_board_mut() {
+                let a_zombie_ref = &mut board.zombies[a_zombie as usize];
+                if self.seed_type == SeedType::GiantWallnut {
+                    a_zombie_take_damage = true;
+                } else if a_zombie_ref.shield_type == ShieldType::Door && self.state != PlantState::NotReady {
+                    a_zombie_take_damage = true;
+                } else if a_zombie_ref.shield_type != ShieldType::None {
+                    a_zombie_take_shield_damage = true;
+                } else if a_zombie_ref.helm_type != HelmType::None {
+                    if a_zombie_ref.helm_type == HelmType::Pail {
+                        if let Some(app) = self.base.get_app() {
+                            app.play_foley(crate::todlib::tod_foley::FoleyType::ShieldHit as i32);
+                        }
+                    } else if a_zombie_ref.helm_type == HelmType::TrafficCone {
+                        if let Some(app) = self.base.get_app() {
+                            app.play_foley(crate::todlib::tod_foley::FoleyType::PlasticHit as i32);
+                        }
+                    }
+                    a_zombie_take_helm_damage = true;
+                } else {
+                    a_zombie_take_damage = true;
+                }
+            }
+            // [TRANSLATION_NOTE]: C++ 中 zombie 指针跨多个分支直接调用伤害接口；
+            // Rust 借用规则分派后统一执行，行为一致
+            if let Some(board) = self.base.get_board_mut() {
+                let a_zombie_ref = &mut board.zombies[a_zombie as usize];
+                if a_zombie_take_damage {
+                    a_zombie_ref.take_damage(1800, 0);
+                } else if a_zombie_take_shield_damage {
+                    a_zombie_ref.take_shield_damage(400, 0);
+                } else if a_zombie_take_helm_damage {
+                    a_zombie_ref.take_helm_damage(900, 0);
+                }
+            }
+
+            // C++: 普通核桃击中 2/3/4/5 次后掉落银币/金币（非首次冒险或已过 10 关）
+            let a_drop_coins = self
+                .base
+                .get_app()
+                .map_or(false, |app| !app.is_first_time_adventure_mode() || app.player_info.as_ref().map_or(false, |p| p.get_level() > 10));
+            if a_drop_coins && self.seed_type == SeedType::Wallnut {
+                self.launch_counter += 1;
+                if self.launch_counter == 2 {
+                    if let Some(app) = self.base.get_app() {
+                        app.play_foley(crate::todlib::tod_foley::FoleyType::SpawnSun as i32);
+                    }
+                    if let Some(board) = self.base.get_board_mut() {
+                        board.add_coin(a_pos_x as f32, a_pos_y as f32, CoinType::Silver, CoinMotion::Coin);
+                    }
+                } else if self.launch_counter == 3 {
+                    if let Some(app) = self.base.get_app() {
+                        app.play_foley(crate::todlib::tod_foley::FoleyType::SpawnSun as i32);
+                    }
+                    if let Some(board) = self.base.get_board_mut() {
+                        board.add_coin(a_pos_x as f32 - 5.0, a_pos_y as f32, CoinType::Silver, CoinMotion::Coin);
+                        board.add_coin(a_pos_x as f32 + 5.0, a_pos_y as f32, CoinType::Silver, CoinMotion::Coin);
+                    }
+                } else if self.launch_counter == 4 {
+                    if let Some(app) = self.base.get_app() {
+                        app.play_foley(crate::todlib::tod_foley::FoleyType::SpawnSun as i32);
+                    }
+                    if let Some(board) = self.base.get_board_mut() {
+                        board.add_coin(a_pos_x as f32 - 10.0, a_pos_y as f32, CoinType::Silver, CoinMotion::Coin);
+                        board.add_coin(a_pos_x as f32, a_pos_y as f32, CoinType::Silver, CoinMotion::Coin);
+                        board.add_coin(a_pos_x as f32 + 10.0, a_pos_y as f32, CoinType::Silver, CoinMotion::Coin);
+                    }
+                } else if self.launch_counter >= 5 {
+                    if let Some(app) = self.base.get_app() {
+                        app.play_foley(crate::todlib::tod_foley::FoleyType::SpawnSun as i32);
+                    }
+                    if let Some(board) = self.base.get_board_mut() {
+                        board.add_coin(a_pos_x as f32, a_pos_y as f32, CoinType::Gold, CoinMotion::Coin);
+                    }
+                    // [TRANSLATION_NOTE]: C++: ReportAchievement::GiveAchievement(mApp, RollSomeHeads, true)；
+                    // Rust 成就系统未接入
+                }
+            }
+
+            // C++: 非巨核桃：按行号/状态随机转向
+            if self.seed_type != SeedType::GiantWallnut {
+                if self.base.row == 4 || self.state == PlantState::BowlingDown {
+                    a_new_state = PlantState::BowlingUp;
+                } else if self.base.row == 0 || self.state == PlantState::BowlingUp {
+                    a_new_state = PlantState::BowlingDown;
+                } else {
+                    // C++: Sexy::Rand(2) ? UP : DOWN
+                    a_new_state = if crate::framework::common::rand() % 2 != 0 {
+                        PlantState::BowlingUp
+                    } else {
+                        PlantState::BowlingDown
+                    };
+                }
+            }
+        }
+
+        // C++: 应用新状态并移动行
+        if a_new_state == PlantState::BowlingUp {
+            self.base.row -= 1;
+            self.state = PlantState::BowlingUp;
+            self.base.render_order = self.calc_render_order();
+        } else if a_new_state == PlantState::BowlingDown {
+            self.state = PlantState::BowlingDown;
+            self.base.render_order = self.calc_render_order();
+            self.base.row += 1;
         }
     }
 
