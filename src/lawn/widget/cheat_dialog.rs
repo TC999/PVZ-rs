@@ -49,7 +49,28 @@ impl CheatDialog {
         self.height = h;
     }
 
-    pub fn draw(&self, _g: &mut Graphics) {}
+    /// 对应 C++ CheatDialog::Draw（CheatDialog.cpp 87-89：LawnDialog::Draw + DrawEditBox）
+    pub fn draw(&mut self, g: &mut Graphics) {
+        // [TRANSLATION_NOTE]: C++ 中 LawnDialog::Draw 绘制背景/标题/按钮；Rust 端 CheatDialog
+        // 无父类组合，仅补编辑框绘制（对应 DrawEditBox(mLevelEditWidget)）
+        if let Some(w) = self.level_edit_widget {
+            unsafe {
+                let w = &*w;
+                if w.visible {
+                    g.set_color(&crate::framework::color::Color::WHITE);
+                    g.fill_rect_xywh(w.x, w.y, w.width, w.height);
+                    if !w.text.is_empty() {
+                        let mut a_font = crate::framework::graphics::font::Font::new("Briannetod", 12);
+                        a_font.ascent = 13;
+                        a_font.font_height = 12;
+                        g.set_font(&mut a_font as *mut crate::framework::graphics::font::Font);
+                        g.set_color(&crate::framework::color::Color::BLACK);
+                        g.draw_string(&w.text, w.x + 4, w.y + 4);
+                    }
+                }
+            }
+        }
+    }
 
     pub fn update(&mut self) {}
 

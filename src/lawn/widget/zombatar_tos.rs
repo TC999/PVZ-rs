@@ -94,26 +94,53 @@ impl ZombatarTOS {
         // [TRANSLATION_NOTE]: 图片未接入，子控件定位暂略
     }
 
-    /// 对应 C++ ZombatarTOS::Draw
-    pub fn draw(&mut self, _g: &mut Graphics) {
-        // C++: LawnDialog::Draw + 正文 PvzpDrawStringWrapped（FONT_PICO129）+ 裁剪滚动 +
-        // 箭头闪烁绘制（IMAGE_ZOMBATAR_TOS_ARROW + alpha）
+    /// 从 ResourceManager 按 key 取图（对应 C++ IMAGE_* 全局资源；未接入资源表时返回 null）
+    fn get_resource_image(&self, a_key: &str) -> *mut crate::framework::graphics::image::Image {
+        let Some(app) = self.app else { return std::ptr::null_mut() };
+        unsafe {
+            let app_ref = &*app;
+            let Some(rm) = app_ref.base.resource_manager else { return std::ptr::null_mut() };
+            let rm_ref = &*rm;
+            rm_ref.get_image(a_key).as_image_ptr()
+        }
+    }
+
+    /// 对应 C++ ZombatarTOS::Draw（ZombatarTOS.cpp 127-177）
+    pub fn draw(&mut self, g: &mut Graphics) {
+        // C++: LawnDialog::Draw（背景/标题）——Rust 端独立类，无父类组合
         if self.body_text.is_empty() {
             self.body_text = tod_string_translate("[ZOMBATAR_TOS]");
         }
         if self.text_height <= 0 {
-            // C++: mTextHeight = PvzpDrawStringWrappedHelper(..., FONT_PICO129, ...) —— 文字测量占位
+            // [TRANSLATION_NOTE]: C++ PvzpDrawStringWrappedHelper 测量（FONT_PICO129）；此处以裁剪高兜底
             self.text_height = TOS_CLIP_HEIGHT;
         }
 
         let a_max_scroll = (self.text_height - TOS_CLIP_HEIGHT).max(0);
-        let _a_offset = (self.slider_val * a_max_scroll as f64) as i32;
+        let a_offset = (self.slider_val * a_max_scroll as f64) as i32;
 
-        // [TRANSLATION_NOTE]: 正文裁剪区域与箭头图绘制均依赖 FONT_PICO129 / IMAGE_ZOMBATAR_TOS_ARROW，
-        // 图片资源未接入，绘制占位
+        // [TRANSLATION_NOTE]: C++ PvzpDrawStringWrapped（FONT_PICO129）按字符断行；Rust 端近似为按行绘制
+        g.set_clip_rect(&Rect::new(TOS_TEXT_X, TOS_TEXT_Y, TOS_TEXT_WIDTH, TOS_CLIP_HEIGHT));
+        let mut a_font = crate::framework::graphics::font::Font::new("Pico", 129);
+        a_font.ascent = 13;
+        a_font.font_height = 16;
+        g.set_font(&mut a_font as *mut crate::framework::graphics::font::Font);
+        g.set_color(&Color::WHITE);
+        let a_lines: Vec<&str> = self.body_text.lines().collect();
+        for (i, a_line) in a_lines.iter().enumerate() {
+            g.draw_string(a_line, TOS_TEXT_X, TOS_TEXT_Y - a_offset + i as i32 * 16);
+        }
+        g.clear_clip_rect();
+
         if self.flash_arrow {
-            // C++: 带 mArrowAlpha 的箭头绘制
-            let _ = Color::new(255, 255, 255, self.arrow_alpha as u8);
+            let a_arrow = self.get_resource_image("IMAGE_ZOMBATAR_TOS_ARROW");
+            if !a_arrow.is_null() {
+                g.set_colorize_images(true);
+                g.set_color(&Color::new(255, 255, 255, self.arrow_alpha as u8));
+                g.draw_image_xy(unsafe { &*a_arrow }, TOS_ARROW_X, TOS_ARROW_Y);
+                g.set_colorize_images(false);
+                g.set_color(&Color::WHITE);
+            }
         }
     }
 

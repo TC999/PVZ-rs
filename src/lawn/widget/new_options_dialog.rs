@@ -45,9 +45,50 @@ impl NewOptionsDialog {
         }
     }
     pub fn resize(&mut self, x: i32, y: i32, w: i32, h: i32) { self.x = x; self.y = y; self.width = w; self.height = h; }
-    pub fn draw(&self, _g: &mut Graphics) {
-        // [TRANSLATION_NOTE]: C++ 中绘制 IMAGE_OPTIONS_MENUBACK 背景与 Music/Sound FX/
-        // 3D Acceleration/Full Screen 文字标签；Rust 侧图片资源未接入，暂略
+    /// 从 ResourceManager 按 key 取图（对应 C++ IMAGE_* 全局资源；未接入资源表时返回 null）
+    fn get_resource_image(&self, a_key: &str) -> *mut crate::framework::graphics::image::Image {
+        let Some(app) = self.app else { return std::ptr::null_mut() };
+        unsafe {
+            let app_ref = &*app;
+            let Some(rm) = app_ref.base.resource_manager else { return std::ptr::null_mut() };
+            let rm_ref = &*rm;
+            rm_ref.get_image(a_key).as_image_ptr()
+        }
+    }
+
+    /// FONT_DWARVENTODCRAFT18 右对齐标签（对应 C++ PvzpDrawString DS_ALIGN_RIGHT）
+    fn draw_label_right(&self, g: &mut Graphics, a_text: &str, a_right_x: i32, a_y: i32) {
+        let mut a_font = crate::framework::graphics::font::Font::new("Dwarventodcraft", 18);
+        a_font.ascent = 13;
+        a_font.font_height = 18;
+        g.set_font(&mut a_font as *mut crate::framework::graphics::font::Font);
+        g.set_color(&crate::framework::color::Color::new(107, 109, 145, 255));
+        let a_w = a_font.string_width(a_text);
+        g.draw_string(a_text, a_right_x - a_w, a_y);
+    }
+
+    /// 对应 C++ NewOptionsDialog::Draw（NewOptionsDialog.cpp 184-207）
+    pub fn draw(&self, g: &mut Graphics) {
+        let a_back = self.get_resource_image("IMAGE_OPTIONS_MENUBACK");
+        if !a_back.is_null() {
+            g.draw_image_xy(unsafe { &*a_back }, 0, 0);
+        }
+
+        // C++: mFromGameSelector 时四行标签分别下移 5/10/15/20
+        let a_music_offset = if self.from_game_selector { 5 } else { 0 };
+        let a_sfx_offset = if self.from_game_selector { 10 } else { 0 };
+        let a_3d_accel_offset = if self.from_game_selector { 15 } else { 0 };
+        let a_full_screen_offset = if self.from_game_selector { 20 } else { 0 };
+
+        // [TRANSLATION_NOTE]: C++ mApp->GetInteger("OPTION_DLG_SLIDER_LABELS_OFFSET_X", 186) /
+        // ("OPTION_DLG_CHECKBOX_LABELS_OFFSET_X", 274) 及标签文案 GetString（本地化表），Rust 用默认值/英文
+        let a_slider_labels_x = 186;
+        let a_checkbox_labels_x = 274;
+        self.draw_label_right(g, "Music", a_slider_labels_x, 140 + a_music_offset);
+        self.draw_label_right(g, "Sound FX", a_slider_labels_x, 167 + a_sfx_offset);
+        self.draw_label_right(g, "3D Acceleration", a_checkbox_labels_x, 197 + a_3d_accel_offset);
+        self.draw_label_right(g, "Full Screen", a_checkbox_labels_x, 229 + a_full_screen_offset);
+        // [TRANSLATION_NOTE]: C++ aFontScale（OPTION_DLG_LABEL_FONT_SCALE）缩放未模拟
     }
     pub fn update(&mut self) {}
     pub fn key_down(&mut self, key: i32) {

@@ -192,28 +192,318 @@ impl StoreScreen {
         StoreItem::Invalid
     }
 
-    pub fn draw_item_icon(&self, _g: &mut Graphics, _pos: i32, _item: StoreItem, _highlight: bool) {
-        // [TRANSLATION_NOTE]: C++ DrawItemIcon 按商品类型绘制 IMAGE_* 图标 + PvzpDrawStringWrapped
-        // 文字（StoreScreen.cpp 309-416）；图片资源未接入，控制流占位。
-    }
-    pub fn draw_item(&self, _g: &mut Graphics, _pos: i32, _item: StoreItem) {
-        // [TRANSLATION_NOTE]: C++ DrawItem（418-460）：IsItemUnavailable 短路 → DrawItemIcon →
-        // 价格标签/COMING_SOON/SOLD_OUT/mMouseOverItem 三分支；图片未接入，保留短路判定。
-        if self.is_item_unavailable(_item) {
-            return;
+    /// 从 ResourceManager 按 key 取图（对应 C++ IMAGE_* 全局资源；未接入资源表时返回 null）
+    fn get_resource_image(&self, a_key: &str) -> *mut crate::framework::graphics::image::Image {
+        let Some(app) = self.app else { return std::ptr::null_mut() };
+        unsafe {
+            let app_ref = &*app;
+            let Some(rm) = app_ref.base.resource_manager else { return std::ptr::null_mut() };
+            let rm_ref = &*rm;
+            rm_ref.get_image(a_key).as_image_ptr()
         }
     }
-    pub fn draw(&self, _g: &mut Graphics) {
-        // [TRANSLATION_NOTE]: C++ Draw（462-534）：mDrawnOnce=true、背景昼夜分支、后车厢开合分支、
-        // DrawCrazyDave、商品循环、coinbank、分页文案；图片未接入，保留控制流（商品循环）。
-        let _a_store_sign_pos_y = tod_animate_curve(50, 110, self.store_time, -150, 0, TodCurves::EaseInOut);
+
+    /// 对应 C++ StoreScreen::DrawItemIcon（StoreScreen.cpp 309-416）
+    pub fn draw_item_icon(&self, g: &mut Graphics, the_item_position: i32, the_item_type: StoreItem, the_is_for_highlight: bool) {
+        if the_is_for_highlight {
+            // C++: DRAWMODE_ADDITIVE + Color(255,255,255,96) 调亮
+            g.set_draw_mode(1); // Graphics::DRAWMODE_ADDITIVE
+            g.set_color(&crate::framework::color::Color::new(255, 255, 255, 96));
+            g.set_colorize_images(true);
+        }
+
+        let (mut a_pos_x, mut a_pos_y) = (0, 0);
+        Self::get_store_position(the_item_position, &mut a_pos_x, &mut a_pos_y);
+        match the_item_type {
+            StoreItem::PacketUpgrade => {
+                let a_img = self.get_resource_image("IMAGE_STORE_PACKETUPGRADE");
+                if !a_img.is_null() {
+                    g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 7, a_pos_y + 7);
+                }
+                if the_is_for_highlight {
+                    g.set_draw_mode(0); // Graphics::DRAWMODE_NORMAL
+                    g.set_colorize_images(false);
+                }
+                // C++: [STORE_UPGRADE_SLOTS] = mPurchases[PACKET_UPGRADE] + 7，HOUSEOFTERROR16 居中
+                let a_slot_text = self.app.map_or(String::new(), |app| unsafe {
+                    (*app).player_info.as_ref().map_or(String::new(), |pi| {
+                        let a_purchases = pi.m_purchases.get(StoreItem::PacketUpgrade as usize).copied().unwrap_or(0);
+                        format!("{}", a_purchases + 7)
+                    })
+                });
+                self.draw_item_label_centered(g, &a_slot_text, a_pos_x + 28, a_pos_y + 30, 16);
+            }
+            StoreItem::PoolCleaner => {
+                let a_img = self.get_resource_image("IMAGE_ICON_POOLCLEANER");
+                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x + 1, a_pos_y + 7); }
+            }
+            StoreItem::Rake => {
+                let a_img = self.get_resource_image("IMAGE_ICON_RAKE");
+                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 5, a_pos_y + 10); }
+            }
+            StoreItem::RoofCleaner => {
+                let a_img = self.get_resource_image("IMAGE_ICON_ROOFCLEANER");
+                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x, a_pos_y + 28); }
+            }
+            StoreItem::PlantImitater => {
+                let a_img = self.get_resource_image("IMAGE_IMITATERSEED");
+                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x, a_pos_y); }
+            }
+            StoreItem::MushroomGarden => {
+                let a_img = self.get_resource_image("IMAGE_STORE_MUSHROOMGARDENICON");
+                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 8, a_pos_y + 2); }
+            }
+            StoreItem::AquariumGarden => {
+                let a_img = self.get_resource_image("IMAGE_STORE_AQUARIUMGARDENICON");
+                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 8, a_pos_y + 2); }
+            }
+            StoreItem::TreeOfWisdom => {
+                let a_img = self.get_resource_image("IMAGE_STORE_TREEOFWISDOMICON");
+                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 8, a_pos_y + 2); }
+            }
+            StoreItem::Firstaid => {
+                let a_img = self.get_resource_image("IMAGE_STORE_FIRSTAIDWALLNUTICON");
+                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 1, a_pos_y + 13); }
+            }
+            StoreItem::Pvz => {
+                let a_img = self.get_resource_image("IMAGE_STORE_PVZICON");
+                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x, a_pos_y - 9); }
+            }
+            StoreItem::TreeFood => {
+                let a_img = self.get_resource_image("IMAGE_TREEFOOD");
+                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 8, a_pos_y - 2); }
+            }
+            StoreItem::StinkyTheSnail => {
+                let a_img = self.get_resource_image("IMAGE_REANIM_STINKY_TURN3");
+                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 24, a_pos_y + 14); }
+            }
+            StoreItem::GoldWateringcan => {
+                let a_img = self.get_resource_image("IMAGE_WATERINGCANGOLD");
+                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 14, a_pos_y - 4); }
+            }
+            StoreItem::Fertilizer => {
+                let a_img = self.get_resource_image("IMAGE_FERTILIZER");
+                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 11, a_pos_y - 2); }
+                self.draw_item_label_right(g, "x5", a_pos_x + 56, a_pos_y + 62, 16);
+            }
+            StoreItem::Phonograph => {
+                let a_img = self.get_resource_image("IMAGE_PHONOGRAPH");
+                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 12, a_pos_y + 3); }
+            }
+            StoreItem::BugSpray => {
+                let a_img = self.get_resource_image("IMAGE_BUG_SPRAY");
+                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 12, a_pos_y + 3); }
+                self.draw_item_label_right(g, "x5", a_pos_x + 56, a_pos_y + 62, 16);
+            }
+            StoreItem::GardeningGlove => {
+                let a_img = self.get_resource_image("IMAGE_ZEN_GARDENGLOVE");
+                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 12, a_pos_y + 3); }
+            }
+            StoreItem::WheelBarrow => {
+                let a_img = self.get_resource_image("IMAGE_ZEN_WHEELBARROW");
+                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 12, a_pos_y + 3); }
+            }
+            _ => {
+                if Self::is_potted_plant(the_item_type) {
+                    // C++: mApp->mZenGarden->DrawPottedPlantIcon(g, aPosX, aPosY, &mPottedPlantSpecs)
+                    if let Some(app) = self.app {
+                        unsafe {
+                            if let Some(zg) = (*app).zen_garden.as_mut() {
+                                (**zg).draw_potted_plant_icon(g, a_pos_x as f32, a_pos_y as f32, &self.potted_plant_specs);
+                            }
+                        }
+                    }
+                } else {
+                    // C++: DrawSeedPacket(g, aPosX, aPosY, (SeedType)(theItemType + 40), SEED_NONE, 0, 255, false, false)
+                    let a_seed_type = unsafe { std::mem::transmute::<i32, crate::lawn::game_enums::SeedType>((the_item_type as i32) + 40) };
+                    crate::lawn::seed_packet::draw_seed_packet(g, a_pos_x as f32, a_pos_y as f32, a_seed_type, crate::lawn::game_enums::SeedType::None, 0.0, 255, false, false);
+                }
+            }
+        }
+
+        g.set_draw_mode(0); // Graphics::DRAWMODE_NORMAL
+        g.set_colorize_images(false);
+    }
+
+    /// 用 HOUSEOFTERROR 字号在 (x,y) 水平居中绘制商品标签文字（TRANSLATION_NOTE: PvzpDrawStringWrapped 简化）
+    fn draw_item_label_centered(&self, g: &mut Graphics, a_text: &str, a_center_x: i32, a_y: i32, a_size: i32) {
+        let mut a_font = crate::framework::graphics::font::Font::new("Houseofterror", a_size);
+        a_font.ascent = 13;
+        a_font.font_height = a_size;
+        g.set_font(&mut a_font as *mut crate::framework::graphics::font::Font);
+        g.set_color(&crate::framework::color::Color::WHITE);
+        let a_w = a_font.string_width(a_text);
+        g.draw_string(a_text, a_center_x - a_w / 2, a_y);
+    }
+
+    /// 右对齐商品标签文字（对应 C++ DS_ALIGN_RIGHT）
+    fn draw_item_label_right(&self, g: &mut Graphics, a_text: &str, a_right_x: i32, a_y: i32, a_size: i32) {
+        let mut a_font = crate::framework::graphics::font::Font::new("Houseofterror", a_size);
+        a_font.ascent = 13;
+        a_font.font_height = a_size;
+        g.set_font(&mut a_font as *mut crate::framework::graphics::font::Font);
+        g.set_color(&crate::framework::color::Color::WHITE);
+        let a_w = a_font.string_width(a_text);
+        g.draw_string(a_text, a_right_x - a_w, a_y);
+    }
+/// 对应 C++ StoreScreen::DrawItem（StoreScreen.cpp 418-460）
+    pub fn draw_item(&self, g: &mut Graphics, the_item_position: i32, the_item_type: StoreItem) {
+        if self.is_item_unavailable(the_item_type) {
+            return;
+        }
+
+        self.draw_item_icon(g, the_item_position, the_item_type, false);
+
+        let (mut a_pos_x, mut a_pos_y) = (0, 0);
+        Self::get_store_position(the_item_position, &mut a_pos_x, &mut a_pos_y);
+        if the_item_type != StoreItem::Pvz {
+            // C++: IMAGE_STORE_PRICETAG + 价格（BRIANNETOD12 黑字居中）
+            let a_price_img = self.get_resource_image("IMAGE_STORE_PRICETAG");
+            if !a_price_img.is_null() {
+                g.draw_image_xy(unsafe { &*a_price_img }, a_pos_x - 3, a_pos_y + 70);
+            }
+            let a_cost_string = crate::lawn::lawn_app::LawnApp::get_money_string(Self::get_item_cost(the_item_type));
+            let mut a_font = crate::framework::graphics::font::Font::new("Briannetod", 12);
+            a_font.ascent = 13;
+            a_font.font_height = 12;
+            g.set_font(&mut a_font as *mut crate::framework::graphics::font::Font);
+            g.set_color(&crate::framework::color::Color::BLACK);
+            let a_w = a_font.string_width(&a_cost_string);
+            g.draw_string(&a_cost_string, a_pos_x + 23 - a_w / 2, a_pos_y + 85);
+        }
+        if self.is_coming_soon(the_item_type) {
+            // C++: [COMING_SOON] 红字 HOUSEOFTERROR16 居中于商品区
+            self.draw_item_label_centered(g, "[COMING_SOON]", a_pos_x + 30, a_pos_y + 28, 16);
+            g.set_color(&crate::framework::color::Color::new(255, 0, 0, 255));
+        } else if self.is_item_sold_out(the_item_type) {
+            self.draw_item_label_centered(g, "[SOLD_OUT]", a_pos_x + 25, a_pos_y + 28, 16);
+            g.set_color(&crate::framework::color::Color::new(255, 0, 0, 255));
+        } else if self.mouse_over_item == the_item_type {
+            if the_item_type as i32 >= 0 && the_item_type as i32 <= 8 {
+                // C++: IMAGE_SEEDPACKETFLASH（种子包高亮）
+                let a_flash = self.get_resource_image("IMAGE_SEEDPACKETFLASH");
+                if !a_flash.is_null() {
+                    g.draw_image_xy(unsafe { &*a_flash }, a_pos_x, a_pos_y);
+                }
+            } else {
+                self.draw_item_icon(g, the_item_position, the_item_type, true);
+            }
+        }
+    }
+    /// 对应 C++ StoreScreen::Draw（StoreScreen.cpp 462-533）
+    pub fn draw(&self, g: &mut Graphics) {
+        g.set_linear_blend(true);
+        // [TRANSLATION_NOTE]: C++ mDrawnOnce = true（&self 下不写成员）
+
+        // C++: aStoreSignPosY = PvzpAnimateCurve(50, 110, mStoreTime, -150, 0, CURVE_EASE_IN_OUT)
+        let a_store_sign_pos_y = crate::todlib::tod_common::tod_animate_curve(
+            50, 110, self.store_time, -150, 0, TodCurves::EaseInOut,
+        );
+
+        // 背景（昼夜）
+        let a_is_night = self.app.map_or(false, |app| unsafe { (*app).is_night() });
+        let a_bg_key = if a_is_night { "IMAGE_STORE_BACKGROUNDNIGHT" } else { "IMAGE_STORE_BACKGROUND" };
+        let a_bg = self.get_resource_image(a_bg_key);
+        if !a_bg.is_null() {
+            g.draw_image_xy(unsafe { &*a_bg }, 0, 0);
+        }
+
+        // 疯狂戴夫的车（后车厢开/合分支）
+        if self.hatch_timer == 0 && self.hatch_open {
+            let a_car = self.get_resource_image("IMAGE_STORE_CAR");
+            if !a_car.is_null() {
+                g.draw_image_xy(unsafe { &*a_car }, self.shake_x + 196, self.shake_y + 138);
+            }
+            let a_hatch = self.get_resource_image("IMAGE_STORE_HATCHBACKOPEN");
+            if !a_hatch.is_null() {
+                g.draw_image_xy(unsafe { &*a_hatch }, self.shake_x + 299, self.shake_y);
+            }
+            if a_is_night {
+                let a_car_night = self.get_resource_image("IMAGE_STORE_CAR_NIGHT");
+                if !a_car_night.is_null() {
+                    g.draw_image_xy(unsafe { &*a_car_night }, self.shake_x + 688, self.shake_y + 193);
+                }
+            }
+        } else {
+            let a_car_closed = self.get_resource_image("IMAGE_STORE_CARCLOSED");
+            if !a_car_closed.is_null() {
+                g.draw_image_xy(unsafe { &*a_car_closed }, self.shake_x + 196, self.shake_y + 138);
+            }
+            if a_is_night {
+                let a_car_night = self.get_resource_image("IMAGE_STORE_CAR_NIGHT");
+                if !a_car_night.is_null() {
+                    g.draw_image_xy(unsafe { &*a_car_night }, self.shake_x + 688, self.shake_y + 193);
+                }
+                let a_car_closed_night = self.get_resource_image("IMAGE_STORE_CARCLOSED_NIGHT");
+                if !a_car_closed_night.is_null() {
+                    g.draw_image_xy(unsafe { &*a_car_closed_night }, self.shake_x + 337, self.shake_y + 187);
+                }
+            }
+        }
+
+        // 商店招牌
+        let a_sign = self.get_resource_image("IMAGE_STORE_SIGN");
+        if !a_sign.is_null() {
+            g.draw_image_xy(unsafe { &*a_sign }, 285, a_store_sign_pos_y);
+        }
+
+        // C++: Graphics gCrazyDave(*g) 平移后 mApp->DrawCrazyDave(&gCrazyDave)
+        // [TRANSLATION_NOTE]: Graphics 复制 + mTransX/Y 偏移未模拟，直接调用等价绘制
+        if let Some(app) = self.app {
+            unsafe { (*app).draw_crazy_dave(g); }
+        }
+
+        // 商品循环
         if self.hatch_timer == 0 && self.hatch_open {
             for i in 0..MAX_PAGE_SPOTS {
                 let a_store_item = self.get_store_item_type(i as i32);
                 if a_store_item != StoreItem::Invalid {
-                    self.draw_item(_g, i as i32, a_store_item);
+                    self.draw_item(g, i as i32, a_store_item);
                 }
             }
+        }
+
+        // coinbank + 金币数（C++: IMAGE_COINBANK + FONT_CONTINUUMBOLD14 右对齐）
+        let a_coinbank = self.get_resource_image("IMAGE_COINBANK");
+        if !a_coinbank.is_null() {
+            g.draw_image_xy(unsafe { &*a_coinbank }, STORESCREEN_COINBANK_X, STORESCREEN_COINBANK_Y);
+        }
+        let a_coin_label = self.app.map_or(String::new(), |app| unsafe {
+            (*app).player_info.as_ref().map_or(String::new(), |pi| {
+                crate::lawn::lawn_app::LawnApp::get_money_string(pi.m_coins)
+            })
+        });
+        let mut a_coin_font = crate::framework::graphics::font::Font::new("Continuumbold", 14);
+        a_coin_font.ascent = 13;
+        a_coin_font.font_height = 14;
+        g.set_font(&mut a_coin_font as *mut crate::framework::graphics::font::Font);
+        g.set_color(&crate::framework::color::Color::new(180, 255, 90, 255));
+        let a_coin_w = a_coin_font.string_width(&a_coin_label);
+        g.draw_string(&a_coin_label, STORESCREEN_COINBANK_X + 116 - a_coin_w, STORESCREEN_COINBANK_Y + 24);
+
+        // 分页文本（C++: !mPrevButton->mDisabled 时 [STORE_PAGE]）
+        let a_prev_disabled = self.prev_button.map_or(true, |b| unsafe {
+            let b_ref = &*b;
+            b_ref.disabled
+        });
+        if !a_prev_disabled {
+            let mut a_num_pages = 0;
+            // C++: for (StorePages aPage = STORE_PAGE_SLOT_UPGRADES; aPage < NUM_STORE_PAGES; aPage++)
+            let mut a_page = StorePages::SlotUpgrades;
+            while (a_page as i32) < (StorePages::NumPages as i32) {
+                if self.is_page_shown(a_page) {
+                    a_num_pages += 1;
+                }
+                a_page = unsafe { std::mem::transmute::<i32, StorePages>(a_page as i32 + 1) };
+            }
+            let a_page_string = format!("Page {} / {}", self.page as i32 + 1, a_num_pages);
+            let mut a_page_font = crate::framework::graphics::font::Font::new("Briannetod", 12);
+            a_page_font.ascent = 13;
+            a_page_font.font_height = 12;
+            g.set_font(&mut a_page_font as *mut crate::framework::graphics::font::Font);
+            g.set_color(&crate::framework::color::Color::new(80, 80, 80, 255));
+            let a_page_w = a_page_font.string_width(&a_page_string);
+            g.draw_string(&a_page_string, STORESCREEN_PAGESTRING_X - a_page_w / 2, STORESCREEN_PAGESTRING_Y);
         }
     }
     pub fn draw_overlay(&self, g: &mut Graphics) {

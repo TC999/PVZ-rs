@@ -54,16 +54,211 @@ impl AwardScreen {
         matches!(self.award_type, AwardType::CreditsZombieNote | AwardType::HelpZombieNote)
     }
 
-    pub fn draw_bottom(_g: &mut Graphics, _title: &str, _award: &str, _message: &str) {
-        // 依赖图片资源，暂用占位
+    /// 从 ResourceManager 按 key 取图（对应 C++ IMAGE_* 全局资源；未接入资源表时返回 null）
+    fn get_resource_image(&self, a_key: &str) -> *mut crate::framework::graphics::image::Image {
+        let Some(app) = self.app else { return std::ptr::null_mut() };
+        unsafe {
+            let app_ref = &*app;
+            let Some(rm) = app_ref.base.resource_manager else { return std::ptr::null_mut() };
+            let rm_ref = &*rm;
+            rm_ref.get_image(a_key).as_image_ptr()
+        }
     }
 
-    pub fn draw_award_seed(&self, _g: &mut Graphics) {
-        // 依赖图片资源，暂用占位
+    /// 用指定字号在 (center_x, y) 水平居中绘制文本（TRANSLATION_NOTE: PvzpDrawString 的 DS_ALIGN_CENTER 简化）
+    fn draw_text_centered(&self, g: &mut Graphics, a_text: &str, a_center_x: i32, a_y: i32, a_size: i32, a_color: &crate::framework::color::Color) {
+        let mut a_font = crate::framework::graphics::font::Font::new("Dwarventodcraft", a_size);
+        a_font.ascent = 13;
+        a_font.font_height = a_size;
+        g.set_font(&mut a_font as *mut crate::framework::graphics::font::Font);
+        g.set_color(a_color);
+        let a_w = a_font.string_width(a_text);
+        g.draw_string(a_text, a_center_x - a_w / 2, a_y);
     }
 
-    pub fn draw(&self, _g: &mut Graphics) {
-        // 依赖图片资源，暂用占位
+    /// 对应 C++ AwardScreen::DrawBottom（AwardScreen.cpp 271-277）
+    pub fn draw_bottom(&self, g: &mut Graphics, the_title: &str, the_award: &str, the_message: &str) {
+        let a_back = self.get_resource_image("IMAGE_AWARDSCREEN_BACK");
+        if !a_back.is_null() {
+            g.draw_image_xy(unsafe { &*a_back }, 0, 0);
+        }
+        // C++: FONT_DWARVENTODCRAFT24 金标题（BOARD_WIDTH/2, 58）
+        self.draw_text_centered(g, the_title, BOARD_WIDTH / 2, 58, 24, &crate::framework::color::Color::new(213, 159, 43, 255));
+        // C++: FONT_DWARVENTODCRAFT18YELLOW 白奖项名（BOARD_WIDTH/2, 326）
+        self.draw_text_centered(g, the_award, BOARD_WIDTH / 2, 326, 18, &crate::framework::color::Color::WHITE);
+        // C++: 说明 wrapped（Rect(285,360,230,90), BRIANNETOD16, Color(40,50,90)）——居中近似
+        self.draw_text_centered(g, the_message, 400, 375, 16, &crate::framework::color::Color::new(40, 50, 90, 255));
+    }
+
+    /// 对应 C++ AwardScreen::DrawAwardSeed（AwardScreen.cpp 279-292）
+    pub fn draw_award_seed(&self, g: &mut Graphics) {
+        let a_level = self.app.map_or(0, |app| unsafe { (*app).player_info.as_ref().map_or(0, |pi| pi.m_level) });
+        let a_seed_type = crate::lawn::lawn_app::LawnApp::get_award_seed_for_level(a_level - 1);
+        let a_award = crate::lawn::plant::Plant::get_name_string(a_seed_type, SeedType::None);
+        let a_message = if self.app.map_or(false, |app| unsafe { (*app).is_trial_stage_locked() })
+            && a_seed_type as i32 >= SeedType::Squash as i32
+            && a_seed_type != SeedType::Tanglekelp
+        {
+            "[AVAILABLE_IN_FULL_VERSION]".to_string()
+        } else {
+            crate::lawn::plant::Plant::get_tool_tip(a_seed_type)
+        };
+        self.draw_bottom(g, "[NEW_PLANT]", &a_award, &a_message);
+        // C++: SetScale(2,2,350,129) 后 DrawSeedPacket(350,129,...,draw_cost=true)；Rust 端缩放未模拟
+        crate::lawn::seed_packet::draw_seed_packet(g, 350.0, 129.0, a_seed_type, SeedType::None, 0.0, 255, true, false);
+    }
+
+    /// 对应 C++ AwardScreen::Draw（AwardScreen.cpp 295-470）
+    pub fn draw(&self, g: &mut Graphics) {
+        g.set_linear_blend(true);
+        let a_level = self.app.map_or(0, |app| unsafe { (*app).player_info.as_ref().map_or(0, |pi| pi.m_level) });
+
+        if self.showing_achievements {
+            // C++: DrawAchievements(g)（成就列表动画绘制，另行实现）
+        } else if self.award_type == AwardType::CreditsZombieNote {
+            let a_bg = self.get_resource_image("IMAGE_BACKGROUND6BOSS");
+            if !a_bg.is_null() {
+                // C++: DrawImage(img, -900, -400, 2800, 1200) 蓝色调拉伸背景
+                g.set_colorize_images(true);
+                g.set_color(&crate::framework::color::Color::new(125, 200, 255, 255));
+                g.draw_image_stretch(
+                    unsafe { &*a_bg },
+                    &crate::framework::rect::Rect::new(-900, -400, 2800, 1200),
+                    &crate::framework::rect::Rect::new(0, 0, unsafe { (*a_bg).get_width() }, unsafe { (*a_bg).get_height() }),
+                );
+                g.set_colorize_images(false);
+            }
+            g.set_color(&crate::framework::color::Color::new(0, 0, 0, 64));
+            g.fill_rect_xywh(0, 525, BOARD_WIDTH, BOARD_HEIGHT - 525);
+            let a_note = self.get_resource_image("IMAGE_ZOMBIE_NOTE");
+            if !a_note.is_null() { g.draw_image_xy(unsafe { &*a_note }, 75, 60); }
+            let a_credits = self.get_resource_image("IMAGE_CREDITS_ZOMBIENOTE");
+            if !a_credits.is_null() {
+                g.draw_image_stretch(
+                    unsafe { &*a_credits },
+                    &crate::framework::rect::Rect::new(149, 103, 475, 325),
+                    &crate::framework::rect::Rect::new(0, 0, unsafe { (*a_credits).get_width() }, unsafe { (*a_credits).get_height() }),
+                );
+            }
+        } else if self.award_type == AwardType::HelpZombieNote {
+            let a_bg1 = self.get_resource_image("IMAGE_BACKGROUND1");
+            if !a_bg1.is_null() {
+                g.draw_image_stretch(
+                    unsafe { &*a_bg1 },
+                    &crate::framework::rect::Rect::new(-700, -300, 2800, 1200),
+                    &crate::framework::rect::Rect::new(0, 0, unsafe { (*a_bg1).get_width() }, unsafe { (*a_bg1).get_height() }),
+                );
+            }
+            let a_note = self.get_resource_image("IMAGE_ZOMBIE_NOTE");
+            if !a_note.is_null() { g.draw_image_xy(unsafe { &*a_note }, 80, 80); }
+            let a_help = self.get_resource_image("IMAGE_ZOMBIE_NOTE_HELP");
+            if !a_help.is_null() { g.draw_image_xy(unsafe { &*a_help }, 131, 132); }
+        } else if self.award_type != AwardType::AchievementOnly {
+            if !self.app.map_or(false, |app| unsafe { (*app).is_adventure_mode() }) {
+                if self.app.map_or(false, |app| unsafe { (*app).earned_gold_trophy() }) {
+                    self.draw_bottom(g, "[BEAT_GAME_MESSAGE1]", "[GOLD_SUNFLOWER_TROPHY]", "[BEAT_GAME_MESSAGE2]");
+                    // C++: PvzpDrawImageCelCenterScaledF(IMAGE_SUNFLOWER_TROPHY, 325, 65, 1, 0.6, 0.6)
+                    let a_trophy = self.get_resource_image("IMAGE_SUNFLOWER_TROPHY");
+                    if !a_trophy.is_null() { g.draw_image_xy(unsafe { &*a_trophy }, 325, 65); }
+                } else {
+                    let a_msg_char;
+                    if self.app.map_or(false, |app| unsafe { (*app).is_survival_mode() }) {
+                        let a_num_trophies = crate::lawn::lawn_app::LawnApp::get_num_trophies(crate::lawn::game_enums::ChallengePage::Survival as i32);
+                        a_msg_char = if a_num_trophies <= 7 {
+                            "[YOU_UNLOCKED_A_SURVIVAL]"
+                        } else if a_num_trophies == 10 {
+                            "[YOU_UNLOCKED_ENDLESS_SURVIVAL]"
+                        } else {
+                            "[EARN_MORE_TROPHIES_FOR_ENDLESS_SURVIVAL]"
+                        };
+                    } else if self.app.map_or(false, |app| unsafe { (*app).is_scary_potter_level() }) {
+                        a_msg_char = "[UNLOCKED_VASEBREAKER_LEVEL]";
+                    } else if self.app.map_or(false, |app| unsafe { (*app).is_puzzle_mode() }) {
+                        a_msg_char = "[UNLOCKED_I_ZOMBIE_LEVEL]";
+                    } else {
+                        let a_num_trophies = crate::lawn::lawn_app::LawnApp::get_num_trophies(crate::lawn::game_enums::ChallengePage::Challenge as i32);
+                        a_msg_char = if a_num_trophies <= 17 { "[CHALLENGE_UNLOCKED]" } else { "[GET_MORE_TROPHIES]" };
+                    }
+                    self.draw_bottom(g, "[GOT_TROPHY]", "[TROPHY]", a_msg_char);
+                    let a_trophy = self.get_resource_image("IMAGE_TROPHY_HI_RES");
+                    if !a_trophy.is_null() {
+                        unsafe {
+                            g.draw_image_xy(&*a_trophy, BOARD_WIDTH / 2 - (*a_trophy).get_width() / 2, 137);
+                        }
+                    }
+                }
+            } else if a_level == 5 {
+                self.draw_bottom(g, "[GOT_SHOVEL]", "[SHOVEL]", "[SHOVEL_DESCRIPTION]");
+                let a_shovel = self.get_resource_image("IMAGE_SHOVEL_HI_RES");
+                if !a_shovel.is_null() {
+                    unsafe { g.draw_image_xy(&*a_shovel, BOARD_WIDTH / 2 - (*a_shovel).get_width() / 2, 137); }
+                }
+            } else if a_level == 10 || a_level == 20 || a_level == 30 || a_level == 40 || a_level == 50 {
+                // C++: 便条关卡（背景1/2 + 对应便条图 + [FOUND_NOTE]）
+                let a_bg_key = if a_level == 20 || a_level == 40 { "IMAGE_BACKGROUND2" } else { "IMAGE_BACKGROUND1" };
+                let a_bg = self.get_resource_image(a_bg_key);
+                if !a_bg.is_null() {
+                    g.draw_image_stretch(
+                        unsafe { &*a_bg },
+                        &crate::framework::rect::Rect::new(-700, -300, 2800, 1200),
+                        &crate::framework::rect::Rect::new(0, 0, unsafe { (*a_bg).get_width() }, unsafe { (*a_bg).get_height() }),
+                    );
+                }
+                let a_note = self.get_resource_image("IMAGE_ZOMBIE_NOTE");
+                if !a_note.is_null() { g.draw_image_xy(unsafe { &*a_note }, 80, 80); }
+                let (a_note_key, a_note_x, a_note_y) = match a_level {
+                    20 => ("IMAGE_ZOMBIE_NOTE2", 133, 127),
+                    30 => ("IMAGE_ZOMBIE_NOTE3", 120, 117),
+                    40 => ("IMAGE_ZOMBIE_NOTE4", 102, 117),
+                    _ => ("IMAGE_ZOMBIE_FINAL_NOTE", 114, 138), // 50
+                };
+                let a_note_n = self.get_resource_image(a_note_key);
+                if !a_note_n.is_null() { g.draw_image_xy(unsafe { &*a_note_n }, a_note_x, a_note_y); }
+                self.draw_text_centered(g, "[FOUND_NOTE]", BOARD_WIDTH / 2, 70, 24, &crate::framework::color::Color::new(255, 200, 0, 255));
+            } else if a_level == 15 {
+                self.draw_bottom(g, "[FOUND_SUBURBAN_ALMANAC]", "[SUBURBAN_ALMANAC]", "[SUBURBAN_ALMANAC_DESCRIPTION]");
+                let a_almanac = self.get_resource_image("IMAGE_ALMANAC");
+                if !a_almanac.is_null() {
+                    unsafe { g.draw_image_xy(&*a_almanac, BOARD_WIDTH / 2 - (*a_almanac).get_width() / 2, 160); }
+                }
+            } else if a_level == 25 {
+                self.draw_bottom(g, "[FOUND_KEYS]", "[KEYS]", "[KEYS_DESCRIPTION]");
+                let a_keys = self.get_resource_image("IMAGE_CARKEYS");
+                if !a_keys.is_null() {
+                    unsafe { g.draw_image_xy(&*a_keys, BOARD_WIDTH / 2 - (*a_keys).get_width() / 2, 160); }
+                }
+            } else if a_level == 35 {
+                self.draw_bottom(g, "[FOUND_TACO]", "[TACO]", "[TACO_DESCRIPTION]");
+                let a_taco = self.get_resource_image("IMAGE_TACO");
+                if !a_taco.is_null() {
+                    unsafe { g.draw_image_xy(&*a_taco, BOARD_WIDTH / 2 - (*a_taco).get_width() / 2, 160); }
+                }
+            } else if a_level == 45 {
+                self.draw_bottom(g, "[FOUND_WATERING_CAN]", "[WATERING_CAN]", "[WATERING_CAN_DESCRIPTION]");
+                let a_can = self.get_resource_image("IMAGE_WATERINGCAN");
+                if !a_can.is_null() {
+                    unsafe { g.draw_image_xy(&*a_can, BOARD_WIDTH / 2 - (*a_can).get_width() / 2, 160); }
+                }
+            } else if a_level == 1 && self.app.map_or(false, |app| unsafe { (*app).has_finished_adventure() }) {
+                self.draw_bottom(g, "[WIN_MESSAGE1]", "[SILVER_SUNFLOWER_TROPHY]", "[WIN_MESSAGE2]");
+                // C++: PvzpDrawImageCelCenterScaledF(IMAGE_SUNFLOWER_TROPHY, 325, 65, 0, 0.7, 0.7)
+                let a_trophy = self.get_resource_image("IMAGE_SUNFLOWER_TROPHY");
+                if !a_trophy.is_null() { g.draw_image_xy(unsafe { &*a_trophy }, 325, 65); }
+            } else {
+                self.draw_award_seed(g);
+            }
+        }
+
+        // [TRANSLATION_NOTE]: C++ mStartButton/mMenuButton/mContinueButton->Draw(g)；Rust 按钮绘制未接入
+
+        // C++: fade-in 遮罩（便条黑 / 否则白）
+        let a_fade_in_alpha = crate::todlib::tod_common::tod_animate_curve(180, 0, self.fade_in_counter, 255, 0, TodCurves::Linear);
+        if self.is_paper_note() {
+            g.set_color(&crate::framework::color::Color::new(0, 0, 0, a_fade_in_alpha as u8));
+        } else {
+            g.set_color(&crate::framework::color::Color::new(255, 255, 255, a_fade_in_alpha as u8));
+        }
+        g.fill_rect_xywh(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
     }
 
     pub fn update(&mut self) {
