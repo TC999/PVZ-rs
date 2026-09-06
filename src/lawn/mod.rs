@@ -17,6 +17,7 @@ pub mod seed_packet;
 pub mod cursor_object;
 pub mod tool_tip_widget;
 pub mod zen_garden;
+pub mod zombatar;
 pub mod widget;
 pub mod system;
 

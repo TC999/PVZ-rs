@@ -18,3 +18,5 @@ pub mod new_options_dialog;
 pub mod new_user_dialog;
 pub mod user_dialog;
 pub mod message_widget;
+pub mod zombatar_tos;
+pub mod zombatar_widget;

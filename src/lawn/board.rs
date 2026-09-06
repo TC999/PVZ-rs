@@ -260,6 +260,8 @@ pub struct Board {
     pub m_seed_bank_darken: i32,
     /// 种子银行 X 位置（对应 C++ mSeedBank->mX）
     pub m_seed_bank_x: i32,
+    /// 种子银行 Y 位置（对应 C++ mSeedBank->mY，布局系统未接入时以 0 占位）
+    pub m_seed_bank_y: i32,
     pub ignore_mouse_up: bool,
     pub m_paused: bool,
 
@@ -400,6 +402,29 @@ pub struct Board {
     pub m_cut_scene: Option<*mut crate::lawn::cutscene::CutScene>,
 }
 
+/// 从资源管理器按资源 ID 取图（对应 C++ Sexy::IMAGE_* 全局图片），找不到返回空指针
+fn get_overlay_image(app: &LawnApp, name: &str) -> *mut crate::framework::graphics::image::Image {
+    let Some(rm_ptr) = app.base.resource_manager else {
+        return std::ptr::null_mut();
+    };
+    unsafe {
+        let rm = &*rm_ptr;
+        let shared = rm.get_image(name);
+        let img_ptr = shared.as_image_ptr();
+        if !img_ptr.is_null() {
+            return img_ptr;
+        }
+        // 尝试小写（与 challenge.rs get_image 一致）
+        let lower = crate::framework::common::string_to_lower(name);
+        let shared2 = rm.get_image(&lower);
+        let img_ptr2 = shared2.as_image_ptr();
+        if !img_ptr2.is_null() {
+            return img_ptr2;
+        }
+    }
+    std::ptr::null_mut()
+}
+
 impl Board {
     pub fn new() -> Self {
         Board {
@@ -428,6 +453,7 @@ impl Board {
             m_y: 0,
             m_seed_bank_darken: 0,
             m_seed_bank_x: 0,
+            m_seed_bank_y: 0,
             ignore_mouse_up: false,
             m_paused: false,
             m_sun_count: 50,
@@ -1181,6 +1207,276 @@ impl Board {
     pub fn get_rake_mut(&mut self) -> Option<&mut GridItem> {
         self.grid_items.iter_mut().find(|item| item.grid_item_type == GridItemType::Rake)
     }
+    /// [TRANSLATION_NOTE]: C++ Board::CreateRakeReanim (Board.cpp): AddReanimation(x+20,y,fUndefined,REANIM_RAKE)
+    pub fn create_rake_reanim(&self, the_rake_x: f32, the_rake_y: f32, the_render_order: i32) -> Option<*mut crate::todlib::reanimator::Reanimation> {
+        let app = self.app?;
+        let a_reanim = unsafe {
+            (*app).add_reanimation(
+                the_rake_x + 20.0,
+                the_rake_y,
+                the_render_order,
+                ReanimationType::Rake as i32,
+            )
+        }?;
+        // C++: mAnimRate = 0; mLoopType = REANIM_PLAY_ONCE_AND_HOLD; mIsAttachment = true
+        unsafe {
+            a_reanim.as_mut()?.m_anim_rate = 0.0;
+            a_reanim.as_mut()?.m_loop_type = crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold;
+            a_reanim.as_mut()?.m_is_attachment = true;
+        }
+        Some(a_reanim)
+    }
+
+    /// [TRANSLATION_NOTE]: C++ Board::DrawDebugText (Board.cpp:6912-7051)
+    /// string logic complete; font/image drawing placeholder
+    pub fn draw_debug_text(&self, _g: &mut Graphics) {
+        let mut a_text = String::new();
+        match self.m_debug_text_mode {
+            DebugTextMode::None => {}
+            DebugTextMode::ZombieSpawn => {
+                let a_time = self.m_zombie_count_down_start - self.m_zombie_count_down;
+                let a_fraction = if self.m_zombie_count_down_start != 0 {
+                    a_time as f32 / self.m_zombie_count_down_start as f32
+                } else {
+                    0.0
+                };
+                a_text.push_str("ZOMBIE SPAWNING DEBUG
+");
+                a_text.push_str(&format!("CurrentWave: {} of {}
+", self.m_current_wave, self.m_num_waves));
+                a_text.push_str(&format!(
+                    "TimeSinseLastSpawn: {} {}
+",
+                    a_time,
+                    if a_time > 400 { "" } else { "(too soon)" }
+                ));
+                a_text.push_str(&format!(
+                    "ZombieCountDown: {}/{} ({:.0}%)
+",
+                    self.m_zombie_count_down,
+                    self.m_zombie_count_down_start,
+                    a_fraction * 100.0
+                ));
+                if self.m_zombie_health_to_next_wave != -1 {
+                    let a_total_health = self.total_zombies_health_in_wave(self.m_current_wave - 1);
+                    let a_health_range = (self.m_zombie_health_wave_start - self.m_zombie_health_to_next_wave).max(1);
+                    let a_health_fraction = (self.m_zombie_health_to_next_wave - a_total_health + a_health_range) as f32 / a_health_range as f32;
+                    a_text.push_str(&format!(
+                        "ZombieHealth: CurZombieHealth {} trigger {} ({:.0}%)
+",
+                        a_total_health,
+                        self.m_zombie_health_to_next_wave,
+                        a_health_fraction * 100.0
+                    ));
+                } else {
+                    a_text.push_str("ZombieHealth: before first wave
+");
+                }
+                if self.m_huge_wave_count_down > 0 {
+                    a_text.push_str(&format!("HugeWaveCountDown: {}
+", self.m_huge_wave_count_down));
+                }
+                if let Some(a_boss) = self.get_boss_zombie() {
+                    a_text.push_str(&format!("
+Spawn: {}
+", a_boss.summon_counter));
+                    a_text.push_str(&format!("Stomp: {}
+", a_boss.boss_stomp_counter));
+                    a_text.push_str(&format!("Bungee: {}
+", a_boss.boss_bungee_counter));
+                    a_text.push_str(&format!("Head: {}
+", a_boss.boss_head_counter));
+                }
+            }
+            DebugTextMode::Music => {
+                // [TRANSLATION_NOTE]: C++ reads mApp->mMusic burst/drums state; Music fields not fully aligned
+                a_text.push_str("MUSIC DEBUG
+");
+                a_text.push_str(&format!("CurrentWave: {} of {}
+", self.m_current_wave, self.m_num_waves));
+            }
+            DebugTextMode::Memory => {
+                a_text.push_str("MEMORY DEBUG
+");
+                if let Some(app) = self.app {
+                    unsafe {
+                        if let Some(es) = (*app).effect_system.as_ref() {
+                            a_text.push_str(&format!("attachments {}
+", es.attachments.len()));
+                            a_text.push_str(&format!("particle systems {}
+", es.particle_systems.len()));
+                            a_text.push_str(&format!("reanimation {}
+", es.reanimations.len()));
+                        }
+                    }
+                }
+                a_text.push_str(&format!("zombies {}
+", self.zombies.len()));
+                a_text.push_str(&format!("plants {}
+", self.plants.len()));
+                a_text.push_str(&format!("projectiles {}
+", self.projectiles.len()));
+                a_text.push_str(&format!("coins {}
+", self.coins.len()));
+                a_text.push_str(&format!("lawn mowers {}
+", self.lawn_mowers.len()));
+                a_text.push_str(&format!("grid items {}
+", self.grid_items.len()));
+            }
+            DebugTextMode::Collision => {
+                a_text.push_str("COLLISION DEBUG
+");
+            }
+            _ => {}
+        }
+        // C++: FONT_PICO129 + DrawStringWordWrapped (shadow x4 + white) — placeholder
+        let _ = a_text;
+    }
+
+    /// [TRANSLATION_NOTE]: C++ Board::DrawDebugObjectRects (Board.cpp:7052) — collision rects;
+    /// iterate plants/zombies/lawn mowers, drawing placeholder until images wired
+    pub fn draw_debug_object_rects(&self, _g: &mut Graphics) {
+        if self.m_debug_text_mode != DebugTextMode::Collision {
+            return;
+        }
+        for plant in &self.plants {
+            if !plant.dead {
+                let _ = plant.get_plant_rect();
+            }
+        }
+        for zombie in &self.zombies {
+            if !zombie.dead && !zombie.is_dead_or_dying() {
+                let _ = zombie.get_zombie_rect();
+                let _ = zombie.get_zombie_attack_rect();
+            }
+        }
+        for mower in &self.lawn_mowers {
+            if !mower.dead {
+                let _ = mower.get_lawn_mower_attack_rect();
+            }
+        }
+    }
+
+    /// [TRANSLATION_NOTE]: C++ Board::AddBossRenderItem (Board.cpp:5960-6015)
+    /// boss part render-order computation; Rust output as (BossPart, renderOrder) list
+    pub fn add_boss_render_item(&self, the_boss_zombie: &crate::lawn::zombie::Zombie) -> Vec<(BossPart, i32)> {
+        let mut a_back_leg_row = 1;
+        let mut a_front_leg_row = 3;
+        let mut a_back_arm_row = 4;
+        if the_boss_zombie.is_dead_or_dying() {
+            a_back_arm_row = 1;
+        } else if the_boss_zombie.zombie_phase == ZombiePhase::BossStomping {
+            // C++: mAnimTime>0.25 && <0.75（ReanimationTryToGet(mBodyReanimID)）时踩踏
+            if the_boss_zombie.target_row == 1 {
+                a_back_leg_row = 2;
+            } else if the_boss_zombie.target_row == 3 {
+                a_front_leg_row = 4;
+            }
+        }
+        let mut a_items: Vec<(BossPart, i32)> = Vec::new();
+        a_items.push((
+            BossPart::BackLeg,
+            crate::lawn::board::make_render_order(crate::lawn::game_enums::RENDER_LAYER_BOSS, a_back_leg_row, 2),
+        ));
+        a_items.push((
+            BossPart::FrontLeg,
+            crate::lawn::board::make_render_order(crate::lawn::game_enums::RENDER_LAYER_BOSS, a_front_leg_row, 2),
+        ));
+        a_items.push((
+            BossPart::Main,
+            crate::lawn::board::make_render_order(crate::lawn::game_enums::RENDER_LAYER_BOSS, 4, 2),
+        ));
+        a_items.push((
+            BossPart::BackArm,
+            crate::lawn::board::make_render_order(crate::lawn::game_enums::RENDER_LAYER_BOSS, a_back_arm_row, 3),
+        ));
+        if the_boss_zombie.boss_fire_ball_reanim_id != REANIMATIONID_NULL {
+            if let Some(app) = self.app {
+                unsafe {
+                    if (*app).reanimation_get(the_boss_zombie.boss_fire_ball_reanim_id).is_some() {
+                        a_items.push((BossPart::Fireball, the_boss_zombie.base.render_order));
+                    }
+                }
+            }
+        }
+        a_items
+    }
+
+    /// [TRANSLATION_NOTE]: C++ Board::DrawProgressMeter (Board.cpp:6556-6650)
+    /// gate + mode-text logic complete; flag meter drawing placeholder
+    pub fn draw_progress_meter(&self, _g: &mut Graphics) {
+        if !self.has_progress_meter() {
+            return;
+        }
+        // C++: PROGRESS_METER_COUNTER = 150
+        let a_clip_width = crate::todlib::tod_common::tod_animate_curve(
+            0, 150, self.m_progress_meter_width, 0, 143, TodCurves::Linear,
+        );
+        let _ = a_clip_width;
+        let a_mode_text: Option<String> = if let Some(app) = self.app {
+            unsafe {
+                let a_gm = (*app).game_mode;
+                if a_gm == GameMode::ChallengeBeghouled || a_gm == GameMode::ChallengeBeghouledTwist {
+                    let a_score = self.challenge.as_ref().map_or(0, |c| c.challenge_score);
+                    Some(format!("{}/{} [MATCHES]", a_score, 75))
+                } else if (*app).is_squirrel_level() {
+                    let a_score = self.challenge.as_ref().map_or(0, |c| c.challenge_score);
+                    Some(format!("{}/{} [SQUIRRELS]", a_score, 7))
+                } else if (*app).is_slot_machine_level() {
+                    let a_sun = self.m_sun_money.clamp(0, 2000);
+                    Some(format!("{}/{} [SUN]", a_sun, 2000))
+                } else if a_gm == GameMode::ChallengeZombiquarium {
+                    let a_sun = self.m_sun_money.clamp(0, 1000);
+                    Some(format!("{}/{} [SUN]", a_sun, 1000))
+                } else if (*app).is_izombie_level() {
+                    let a_score = self.challenge.as_ref().map_or(0, |c| c.challenge_score);
+                    Some(format!("{}/{} [BRAINS]", a_score, 5))
+                } else {
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        let _ = a_mode_text;
+
+        if self.progress_meter_has_flags() {
+            let a_num_waves_per_flag = self.get_num_waves_per_flag();
+            if a_num_waves_per_flag != 0 {
+                let a_num_flag_waves = self.m_num_waves / a_num_waves_per_flag;
+                for a_flag_wave in 1..=a_num_flag_waves {
+                    let a_total_waves_at_flag = a_flag_wave * a_num_waves_per_flag;
+                    if a_total_waves_at_flag == self.m_current_wave {
+                        let _a_height = crate::todlib::tod_common::tod_animate_curve(
+                            100, 0, self.m_flag_raise_counter, 0, 14, TodCurves::Linear,
+                        );
+                    }
+                    let _a_pos_x = crate::todlib::tod_common::tod_animate_curve(
+                        0, self.m_num_waves, a_total_waves_at_flag, 590 + 74, 606, TodCurves::Linear,
+                    );
+                }
+            }
+        }
+
+        if let Some(app) = self.app {
+            unsafe {
+                let a_gm = (*app).game_mode;
+                let a_early = a_gm == GameMode::ChallengeBeghouled
+                    || a_gm == GameMode::ChallengeBeghouledTwist
+                    || a_gm == GameMode::ChallengeZombiquarium
+                    || (*app).is_squirrel_level()
+                    || (*app).is_slot_machine_level()
+                    || (*app).is_izombie_level()
+                    || (*app).is_final_boss_level();
+                if a_early {
+                    return;
+                }
+            }
+        }
+        let _a_head_progress = crate::todlib::tod_common::tod_animate_curve(
+            0, 150, self.m_progress_meter_width, 0, 135, TodCurves::Linear,
+        );
+    }
 
     /// 检查能否在该位置添加墓碑（对应 C++ CanAddGraveStoneAt）
     pub fn can_add_grave_stone_at(&self, grid_x: i32, grid_y: i32) -> bool {
@@ -1459,6 +1755,13 @@ impl Board {
             plant.draw(g);
         }
 
+        // C++ DrawGameObjects RENDER_ITEM_MAGNET_ITEMS：磁铁吸附物（非顶层）在植物之后绘制
+        for plant in &self.plants {
+            if !plant.draw_magnet_items_on_top() {
+                plant.draw_magnet_items(g);
+            }
+        }
+
         // 绘制僵尸（C++ RENDER_ITEM_ZOMBIE_SHADOW 在僵尸之前）
         for zombie in &self.zombies {
             if zombie.has_shadow() {
@@ -1472,6 +1775,13 @@ impl Board {
         for zombie in &self.zombies {
             if zombie.zombie_type == ZombieType::Bungee {
                 zombie.draw_bungee_target(g);
+            }
+        }
+
+        // C++ DrawGameObjects RENDER_ITEM_MAGNET_ITEMS_ON_TOP：顶层磁铁吸附物在僵尸之后绘制
+        for plant in &self.plants {
+            if plant.draw_magnet_items_on_top() {
+                plant.draw_magnet_items(g);
             }
         }
 
@@ -1497,8 +1807,40 @@ impl Board {
             }
         }
 
+        // C++ DrawGameObjects RENDER_ITEM_PARTICLE：粒子系统绘制
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(es) = (*app).effect_system.as_ref() {
+                    for ps in es.particle_systems.iter() {
+                        if ps.dead {
+                            continue;
+                        }
+                        ps.draw(g);
+                    }
+                }
+            }
+        }
+        // C++ DrawGameObjects RENDER_ITEM_REANIMATION：重动画绘制
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(es) = (*app).effect_system.as_ref() {
+                    for reanim in es.reanimations.iter() {
+                        if reanim.m_dead {
+                            continue;
+                        }
+                        reanim.draw(g);
+                    }
+                }
+            }
+        }
+
         // C++: 关卡名（DrawLevel）在 UI 底部区域
         self.draw_level(g);
+
+        // C++ DrawGameObjects RENDER_ITEM_DOOR_MASK：僵尸获胜场景绘制房门顶部（DrawHouseDoorTop）
+        if self.app.map_or(false, |app| unsafe { (*app).game_scene == crate::lawn::lawn_app::GameScenes::ZombiesWon }) {
+            self.draw_house_door_top(g);
+        }
 
         // 绘制 UI（阳光计数、种子槽等）
         self.draw_ui(g);
@@ -1556,6 +1898,11 @@ impl Board {
         for row in 0..=rows {
             let y = LAWN_YMIN + row * 85;
             g.draw_line(LAWN_XMIN, y, LAWN_XMIN + MAX_GRID_SIZE_X as i32 * 80, y);
+        }
+
+        // C++ DrawBackdrop：僵尸获胜场景绘制房门底部（DrawHouseDoorBottom，Board.cpp:5928）
+        if self.app.map_or(false, |app| unsafe { (*app).game_scene == crate::lawn::lawn_app::GameScenes::ZombiesWon }) {
+            self.draw_house_door_bottom(g);
         }
     }
 
@@ -1708,6 +2055,62 @@ impl Board {
     }
 
     /// 绘制关卡名称（对应 C++ Board::DrawLevel）
+    /// 绘制房门底部（GAMEOVER 界面，对应 C++ Board::DrawHouseDoorBottom）
+    pub fn draw_house_door_bottom(&self, g: &mut Graphics) {
+        let image_name = match self.m_background_type {
+            BackgroundType::Day => "IMAGE_BACKGROUND1_GAMEOVER_INTERIOR_OVERLAY",
+            BackgroundType::Night => "IMAGE_BACKGROUND2_GAMEOVER_INTERIOR_OVERLAY",
+            BackgroundType::Pool => "IMAGE_BACKGROUND3_GAMEOVER_INTERIOR_OVERLAY",
+            BackgroundType::Fog => "IMAGE_BACKGROUND4_GAMEOVER_INTERIOR_OVERLAY",
+            _ => return,
+        };
+        let (pos_x, pos_y) = match self.m_background_type {
+            BackgroundType::Day => (-126, 225),
+            BackgroundType::Night => (-125, 196),
+            BackgroundType::Pool => (-171, 241),
+            BackgroundType::Fog => (-172, 246),
+            _ => return,
+        };
+        let img_ptr = self
+            .app
+            .map_or(std::ptr::null_mut(), |app| unsafe { get_overlay_image(&*app, image_name) });
+        if !img_ptr.is_null() {
+            unsafe {
+                g.draw_image_xy(&*img_ptr, pos_x, pos_y);
+            }
+        }
+    }
+
+    /// 绘制房门顶部（GAMEOVER 界面，对应 C++ Board::DrawHouseDoorTop）
+    pub fn draw_house_door_top(&self, g: &mut Graphics) {
+        let image_name = match self.m_background_type {
+            BackgroundType::Day => "IMAGE_BACKGROUND1_GAMEOVER_MASK",
+            BackgroundType::Night => "IMAGE_BACKGROUND2_GAMEOVER_MASK",
+            BackgroundType::Pool => "IMAGE_BACKGROUND3_GAMEOVER_MASK",
+            BackgroundType::Fog => "IMAGE_BACKGROUND4_GAMEOVER_MASK",
+            BackgroundType::Roof => "IMAGE_BACKGROUND5_GAMEOVER_MASK",
+            BackgroundType::Boss => "IMAGE_BACKGROUND6_GAMEOVER_MASK",
+            _ => return,
+        };
+        let (pos_x, pos_y) = match self.m_background_type {
+            BackgroundType::Day => (-130, 202),
+            BackgroundType::Night => (-128, 207),
+            BackgroundType::Pool => (-172, 234),
+            BackgroundType::Fog => (-173, 133),
+            BackgroundType::Roof => (-220, 81),
+            BackgroundType::Boss => (-220, 81),
+            _ => return,
+        };
+        let img_ptr = self
+            .app
+            .map_or(std::ptr::null_mut(), |app| unsafe { get_overlay_image(&*app, image_name) });
+        if !img_ptr.is_null() {
+            unsafe {
+                g.draw_image_xy(&*img_ptr, pos_x, pos_y);
+            }
+        }
+    }
+
     fn draw_level(&self, g: &mut Graphics) {
         let a_level_str = self.app.map_or(String::new(), |app| unsafe {
             let app = &*app;
@@ -3411,6 +3814,9 @@ impl Board {
         let mx = self.m_prev_mouse_x;
         let my = self.m_prev_mouse_y;
         self.mouse_hit_test(mx, my, &mut hit_result);
+
+        // C++: UpdateMousePosition 中按光标类型高亮植物（金水壶/铲子等工具）
+        self.highlight_plants_for_mouse(mx, my);
     }
 
     /// 命中检测（对应 C++ MouseHitTest L4225 完整版）
@@ -3503,6 +3909,13 @@ impl Board {
             return false;
         }
 
+        // C++: MouseHitTestPlant 先做特殊植物检测（南瓜壳/飞行植物）
+        if let Some(a_special_plant) = self.special_plant_hit_test(x, y) {
+            result.object = Some(a_special_plant);
+            result.object_type = GameObjectType::Plant;
+            return true;
+        }
+
         let gx = self.pixel_to_grid_x(x, y);
         let gy = self.pixel_to_grid_y(x, y);
 
@@ -3585,6 +3998,121 @@ impl Board {
             result.object
         } else {
             None
+        }
+    }
+
+    /// 工具命中辅助（对应 C++ ToolHitTestHelper，Board.cpp:3975）
+    /// 墓碑在非 Zen 花园模式不可被工具点中
+    pub fn tool_hit_test_helper(&self, hit_result: &HitResult) -> Option<usize> {
+        let a_plant_index = hit_result.object?;
+        let a_plant = &self.plants[a_plant_index];
+        // C++: (mSeedType != SEED_GRAVEBUSTER || mGameMode == GAMEMODE_CHALLENGE_ZEN_GARDEN) ? aPlant : nullptr
+        if a_plant.seed_type == SeedType::Gravebuster
+            && self.app.map_or(true, |app| unsafe { (*app).game_mode != GameMode::ChallengeZenGarden })
+        {
+            return None;
+        }
+        Some(a_plant_index)
+    }
+
+    /// 特殊植物命中检测（对应 C++ SpecialPlantHitTest，Board.cpp:4050）
+    /// 南瓜壳：距离 25~50 且 y 在中心下方；飞行植物：距离 < 15
+    pub fn special_plant_hit_test(&self, x: i32, y: i32) -> Option<usize> {
+        for (i, a_plant) in self.plants.iter().enumerate() {
+            if a_plant.dead {
+                continue;
+            }
+            if a_plant.seed_type == SeedType::Pumpkinshell {
+                // C++: GetTopPlantAt(..., TOPPLANT_ONLY_NORMAL_POSITION) ? 25 : 0
+                let a_min_dist = if self.plants.iter().any(|p| {
+                    !p.dead && p.plant_col == a_plant.plant_col && p.base.row == a_plant.base.row
+                }) {
+                    25.0
+                } else {
+                    0.0
+                };
+                let a_distance = Self::distance_2d(x, y, a_plant.pos_x as i32 + 40, a_plant.pos_y as i32 + 40);
+                if a_distance >= a_min_dist && a_distance <= 50.0 && y > a_plant.pos_y as i32 + 25 {
+                    return Some(i);
+                }
+            } else if Self::is_plant_flying(a_plant.seed_type) {
+                let a_distance = Self::distance_2d(x, y, a_plant.pos_x as i32 + 40, a_plant.pos_y as i32);
+                if a_distance < 15.0 {
+                    return Some(i);
+                }
+            }
+        }
+        None
+    }
+
+    /// 两点距离（对应 C++ Distance2D）
+    pub fn distance_2d(x1: i32, y1: i32, x2: i32, y2: i32) -> f32 {
+        let a_dx = (x1 - x2) as f32;
+        let a_dy = (y1 - y2) as f32;
+        (a_dx * a_dx + a_dy * a_dy).sqrt()
+    }
+
+    /// 是否为飞行植物（对应 C++ Plant::IsFlying）
+    pub fn is_plant_flying(seed_type: SeedType) -> bool {
+        matches!(
+            seed_type,
+            SeedType::Lilypad
+                | SeedType::Seashroom
+                | SeedType::Tanglekelp
+                | SeedType::Cattail
+                | SeedType::Cobcannon
+                | SeedType::Spikeweed
+                | SeedType::Spikerock
+                | SeedType::Gravebuster
+        )
+    }
+
+    /// 鼠标悬停高亮植物（对应 C++ HighlightPlantsForMouse，Board.cpp:3087）
+    pub fn highlight_plants_for_mouse(&mut self, mouse_x: i32, mouse_y: i32) {
+        // C++: 金水壶购买后高亮范围内所有植物（含底层花盆）
+        if self.cursor_object.cursor_type == CursorType::WateringCan
+            && self.app.map_or(false, |app| unsafe {
+                (*app).player_info.as_ref().map_or(false, |p| {
+                    p.m_purchases.get(StoreItem::GoldWateringcan as usize).copied().unwrap_or(0) > 0
+                })
+            })
+        {
+            let mut a_plants_to_highlight: Vec<usize> = Vec::new();
+            for (i, a_plant) in self.plants.iter().enumerate() {
+                if a_plant.dead {
+                    continue;
+                }
+                if self.is_plant_in_gold_watering_can_range(mouse_x, mouse_y, a_plant) {
+                    a_plants_to_highlight.push(i);
+                }
+            }
+            for a_index in a_plants_to_highlight {
+                let a_plant_col = self.plants[a_index].plant_col;
+                let a_row = self.plants[a_index].base.row;
+                self.plants[a_index].highlighted = true;
+                // C++: GetTopPlantAt(..., TOPPLANT_ONLY_UNDER_PLANT) 的底层花盆
+                if let Some(a_flower_pot) = self.plants.iter_mut().find(|p| {
+                    !p.dead && p.seed_type == SeedType::Flowerpot
+                        && p.plant_col == a_plant_col && p.base.row == a_row
+                }) {
+                    a_flower_pot.highlighted = true;
+                }
+            }
+        } else {
+            // C++: ToolHitTest → 高亮植物；Zen 花园同时高亮底层花盆
+            if let Some(a_plant_index) = self.tool_hit_test(mouse_x, mouse_y) {
+                let a_plant_col = self.plants[a_plant_index].plant_col;
+                let a_row = self.plants[a_plant_index].base.row;
+                self.plants[a_plant_index].highlighted = true;
+                if self.app.map_or(false, |app| unsafe { (*app).game_mode == GameMode::ChallengeZenGarden }) {
+                    if let Some(a_flower_pot) = self.plants.iter_mut().find(|p| {
+                        !p.dead && p.seed_type == SeedType::Flowerpot
+                            && p.plant_col == a_plant_col && p.base.row == a_row
+                    }) {
+                        a_flower_pot.highlighted = true;
+                    }
+                }
+            }
         }
     }
 
