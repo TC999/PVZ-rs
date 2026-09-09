@@ -112,8 +112,23 @@ impl GameButton {
         let is_highlighted = self.is_over;
 
         if self.draw_stone_button {
-            // C++: DrawStoneButton(g, mX, mY, mWidth, mHeight, isDown, isHighLighted, mLabel)
-            // [TRANSLATION_NOTE]: DrawStoneButton 依赖游戏 UI 绘制原语，暂占位
+            // 对应 C++: DrawStoneButton(g, mX, mY, mWidth, mHeight, isDown, isHighLighted, mLabel)
+            let get_image = |a_key: &str| -> *mut crate::framework::graphics::image::Image {
+                crate::lawn::lawn_app::LawnApp::instance().map_or(std::ptr::null_mut(), |app| {
+                    let a_rm = match app.base.resource_manager {
+                        Some(r) => r,
+                        None => return std::ptr::null_mut(),
+                    };
+                    unsafe { (*a_rm).get_image(a_key).as_image_ptr() }
+                })
+            };
+            draw_stone_button(
+                g,
+                self.x, self.y, self.width, self.height,
+                is_down, is_highlighted, &self.label,
+                get_image("IMAGE_BUTTON_LEFT"), get_image("IMAGE_BUTTON_MIDDLE"), get_image("IMAGE_BUTTON_RIGHT"),
+                get_image("IMAGE_BUTTON_DOWN_LEFT"), get_image("IMAGE_BUTTON_DOWN_MIDDLE"), get_image("IMAGE_BUTTON_DOWN_RIGHT"),
+            );
             return;
         }
 

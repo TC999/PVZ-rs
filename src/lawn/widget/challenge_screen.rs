@@ -3,6 +3,7 @@
 
 #![allow(dead_code)]
 
+use crate::framework::widget::widget::{Widget, WidgetImpl};
 use crate::framework::graphics::graphics::Graphics;
 use crate::todlib::tod_foley::FoleyType;
 use crate::framework::widget::widget_manager::WidgetManager;
@@ -513,3 +514,33 @@ pub fn get_challenge_definition(challenge_mode: i32) -> Option<&'static Challeng
     }
     Some(&G_CHALLENGE_DEFS[challenge_mode as usize])
 }
+
+/// WidgetManager 包装（对应 C++ ChallengeScreen : Widget）
+pub struct ChallengeScreenImpl {
+    pub screen: *mut ChallengeScreen,
+}
+
+impl ChallengeScreenImpl {
+    pub fn new(screen: *mut ChallengeScreen) -> Self {
+        ChallengeScreenImpl { screen }
+    }
+}
+
+impl WidgetImpl for ChallengeScreenImpl {
+    fn update(&mut self, _widget: &mut Widget) {
+        unsafe { (*self.screen).update(); }
+    }
+    fn draw(&mut self, _widget: &Widget, g: &mut Graphics) {
+        unsafe { (*self.screen).draw(g); }
+    }
+    fn key_down(&mut self, _widget: &mut Widget, key: KeyCode, _wm: &mut WidgetManager) {
+        unsafe { (*self.screen).key_down(key); }
+    }
+    fn mouse_down_btn(&mut self, _widget: &mut Widget, x: i32, y: i32, _btn: i32, click: i32) {
+        unsafe { (*self.screen).mouse_down(x, y, click); }
+    }
+    fn mouse_move(&mut self, _widget: &mut Widget, _x: i32, _y: i32) {
+        // C++ 中悬停状态由 Update 驱动，此处无事件处理
+    }
+}
+

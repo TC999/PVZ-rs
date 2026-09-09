@@ -3,6 +3,8 @@
 
 #![allow(dead_code)]
 
+use crate::framework::widget::widget::{Widget, WidgetImpl};
+use crate::framework::widget::widget_manager::WidgetManager;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::key_codes::{KEYCODE_ESCAPE, KEYCODE_RETURN, KEYCODE_SPACE, KeyCode};
 use crate::framework::color::Color;
@@ -673,3 +675,36 @@ impl SeedChooserScreen {
 impl Default for SeedChooserScreen {
     fn default() -> Self { SeedChooserScreen::new() }
 }
+
+/// WidgetManager 包装（对应 C++ SeedChooserScreen : Widget）
+pub struct SeedChooserScreenImpl {
+    pub screen: *mut SeedChooserScreen,
+}
+
+impl SeedChooserScreenImpl {
+    pub fn new(screen: *mut SeedChooserScreen) -> Self {
+        SeedChooserScreenImpl { screen }
+    }
+}
+
+impl WidgetImpl for SeedChooserScreenImpl {
+    fn update(&mut self, _widget: &mut Widget) {
+        unsafe { (*self.screen).update(); }
+    }
+    fn draw(&mut self, _widget: &Widget, g: &mut Graphics) {
+        unsafe { (*self.screen).draw(g); }
+    }
+    fn key_char(&mut self, _widget: &mut Widget, c: u8) {
+        unsafe { (*self.screen).key_char(c as char); }
+    }
+    fn key_down(&mut self, _widget: &mut Widget, key: KeyCode, _wm: &mut WidgetManager) {
+        unsafe { (*self.screen).key_down(key); }
+    }
+    fn mouse_down_btn(&mut self, _widget: &mut Widget, x: i32, y: i32, _btn: i32, click: i32) {
+        unsafe { (*self.screen).mouse_down(x, y, click); }
+    }
+    fn mouse_up_btn(&mut self, _widget: &mut Widget, x: i32, y: i32, _btn: i32, click: i32) {
+        unsafe { (*self.screen).mouse_up(x, y, click); }
+    }
+}
+

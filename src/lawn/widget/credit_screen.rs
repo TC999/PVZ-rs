@@ -3,11 +3,11 @@
 
 #![allow(dead_code)]
 
+use crate::framework::widget::widget::{Widget, WidgetImpl};
 use crate::framework::graphics::graphics::Graphics;
 use crate::lawn::system::music::MusicTune;
 use crate::todlib::tod_foley::FoleyType;
 use crate::framework::widget::widget_manager::WidgetManager;
-use crate::framework::widget::widget::Widget;
 use crate::framework::key_codes::KeyCode;
 use crate::framework::widget::dialog_button::DialogButton;
 use crate::framework::color::Color;
@@ -917,3 +917,36 @@ pub fn draw_to_preload(g: &mut Graphics) {
     g.set_color(&Color::WHITE);
     g.draw_string("Loading...", BOARD_WIDTH / 2 - 30, BOARD_HEIGHT / 2);
 }
+
+/// WidgetManager 包装（对应 C++ CreditScreen : Widget）
+pub struct CreditScreenImpl {
+    pub screen: *mut CreditScreen,
+}
+
+impl CreditScreenImpl {
+    pub fn new(screen: *mut CreditScreen) -> Self {
+        CreditScreenImpl { screen }
+    }
+}
+
+impl WidgetImpl for CreditScreenImpl {
+    fn update(&mut self, _widget: &mut Widget) {
+        unsafe { (*self.screen).update(); }
+    }
+    fn draw(&mut self, _widget: &Widget, g: &mut Graphics) {
+        unsafe { (*self.screen).draw(g); }
+    }
+    fn draw_overlay(&mut self, _widget: &Widget, g: &mut Graphics) {
+        unsafe { (*self.screen).draw_overlay(g); }
+    }
+    fn key_char(&mut self, _widget: &mut Widget, c: u8) {
+        unsafe { (*self.screen).key_char(c as char); }
+    }
+    fn key_down(&mut self, _widget: &mut Widget, key: KeyCode, _wm: &mut WidgetManager) {
+        unsafe { (*self.screen).key_down(key); }
+    }
+    fn mouse_up_btn(&mut self, _widget: &mut Widget, x: i32, y: i32, _btn: i32, click: i32) {
+        unsafe { (*self.screen).mouse_up(x, y, click); }
+    }
+}
+

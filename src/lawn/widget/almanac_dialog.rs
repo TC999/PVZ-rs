@@ -97,10 +97,128 @@ impl AlmanacDialog {
             if self.seed_hit_test(mx, my) != SeedType::None || self.zombie_hit_test(mx, my) != ZombieType::Invalid {}
         } }
     }
-    pub fn draw_index(&self, _g: &mut Graphics) { /* \u4f9d\u8d56\u56fe\u7247\u8d44\u6e90 */ }
-    pub fn draw_plants(&self, _g: &mut Graphics) { /* \u4f9d\u8d56\u56fe\u7247\u8d44\u6e90 */ }
-    pub fn draw_zombies(&self, _g: &mut Graphics) { /* \u4f9d\u8d56\u56fe\u7247\u8d44\u6e90 */ }
-    pub fn draw(&self, _g: &mut Graphics) { /* \u4f9d\u8d56\u56fe\u7247\u8d44\u6e90 */ }
+    /// 图鉴页索引绘制（对应 C++ DrawIndex，:267）
+    fn draw_index(&self, g: &mut Graphics) {
+        // 对应 C++: g->DrawImage(IMAGE_ALMANAC_INDEXBACK, 0, 0)
+        draw_almanac_image(g, "IMAGE_ALMANAC_INDEXBACK", 0, 0);
+        // [TRANSLATION_NOTE]: 标题 [SUBURBAN_ALMANAC_INDEX] 的 HOUSEOFTERROR28 字体以 Font 简化
+        draw_almanac_text(g, "[SUBURBAN_ALMANAC_INDEX]", crate::lawn::game_enums::BOARD_WIDTH / 2, 60, 28,
+            &crate::framework::color::Color { r: 220, g: 220, b: 220, a: 255 });
+
+        // 对应 C++: 选中的植物/僵尸预览
+        // [TRANSLATION_NOTE]: C++ 的 mPlant->BeginDraw（变换栈）+ Draw；Rust 用直接 Draw 近似
+        if let Some(plant_ptr) = self.plant {
+            unsafe { (*plant_ptr).draw(g); }
+        }
+        if let Some(zombie_ptr) = self.zombie {
+            unsafe { (*zombie_ptr).draw(g); }
+        }
+    }
+
+    /// 图鉴植物页绘制（对应 C++ DrawPlants，:286）
+    fn draw_plants(&self, g: &mut Graphics) {
+        draw_almanac_image(g, "IMAGE_ALMANAC_PLANTBACK", 0, 0);
+        draw_almanac_text(g, "[SUBURBAN_ALMANAC_PLANTS]", crate::lawn::game_enums::BOARD_WIDTH / 2, 48, 20,
+            &crate::framework::color::Color { r: 213, g: 159, b: 43, a: 255 });
+
+        // 对应 C++: 遍历 0..NUM_ALMANAC_SEEDS 绘制已获得种子
+        for a_seed_index in 0..crate::lawn::widget::almanac_dialog::NUM_ALMANAC_SEEDS {
+            let a_seed_type = unsafe { std::mem::transmute::<i32, SeedType>(a_seed_index) };
+            let a_has_seed = self.app.map_or(false, |app| unsafe { (*app).has_seed_type(a_seed_type) });
+            if a_has_seed {
+                let mut a_pos_x = 0;
+                let mut a_pos_y = 0;
+                self.get_seed_position(a_seed_type, &mut a_pos_x, &mut a_pos_y);
+                if a_seed_type == SeedType::Imitater {
+                    // 对应 C++: IMAGE_ALMANAC_IMITATER（命中高亮与本体两张）
+                    draw_almanac_image(g, "IMAGE_ALMANAC_IMITATER", a_pos_x, a_pos_y);
+                    draw_almanac_image(g, "IMAGE_ALMANAC_IMITATER", a_pos_x, a_pos_y);
+                } else {
+                    crate::lawn::seed_packet::draw_seed_packet(
+                        g, a_pos_x as f32, a_pos_y as f32, a_seed_type, SeedType::None, 0.0, 255, true, false,
+                    );
+                    // [TRANSLATION_NOTE]: 鼠标命中亮框 IMAGE_SEEDPACKETFLASH 依赖命中检测，暂略
+                }
+            }
+        }
+
+        // 对应 C++: 地面背景（泳池/夜/屋顶）
+        let a_night_ground = crate::lawn::plant::Plant::is_nocturnal(self.selected_seed)
+            || self.selected_seed == SeedType::Gravebuster
+            || self.selected_seed == SeedType::Plantern;
+        if self.selected_seed == SeedType::Lilypad || self.selected_seed == SeedType::Tanglekelp
+            || self.selected_seed == SeedType::Cattail || self.selected_seed == SeedType::Seashroom
+        {
+            // 对应 C++: 泳池地面（IMAGE_ALMANAC_GROUNDPOOL/NIGHTPOOL）+ 池效果（3D 加速分支标注）
+            draw_almanac_image(
+                g,
+                if a_night_ground { "IMAGE_ALMANAC_GROUNDNIGHTPOOL" } else { "IMAGE_ALMANAC_GROUNDPOOL" },
+                521, 107,
+            );
+        } else {
+            let a_ground_key = if a_night_ground {
+                "IMAGE_ALMANAC_GROUNDNIGHT"
+            } else if self.selected_seed == SeedType::Flowerpot {
+                "IMAGE_ALMANAC_GROUNDROOF"
+            } else {
+                "IMAGE_ALMANAC_GROUNDDAY"
+            };
+            draw_almanac_image(g, a_ground_key, 521, 107);
+        }
+
+        // 对应 C++: 选中植物预览
+        if let Some(plant_ptr) = self.plant {
+            unsafe { (*plant_ptr).draw(g); }
+        }
+
+        // 对应 C++: 植物卡片 + 名称/描述/成本/冷却
+        draw_almanac_image(g, "IMAGE_ALMANAC_PLANTCARD", 459, 86);
+        let a_name = crate::lawn::plant::Plant::get_name_string(self.selected_seed, SeedType::None);
+        draw_almanac_text(g, &a_name, 617, 288, 18,
+            &crate::framework::color::Color { r: 255, g: 255, b: 255, a: 255 });
+        // [TRANSLATION_NOTE]: 描述/成本/冷却文案（PlantDefinition 表 + [XX_DESCRIPTION] 字符串系统）
+        // 依赖 PlantDef 资源表，暂以名称呈现
+    }
+
+    /// 图鉴僵尸页绘制（对应 C++ DrawZombies，:366）
+    fn draw_zombies(&self, g: &mut Graphics) {
+        draw_almanac_image(g, "IMAGE_ALMANAC_ZOMBIEBACK", 0, 0);
+        draw_almanac_text(g, "[SUBURBAN_ALMANAC_ZOMBIES]", crate::lawn::game_enums::BOARD_WIDTH / 2, 54, 24,
+            &crate::framework::color::Color { r: 0, g: 196, b: 0, a: 255 });
+
+        // 对应 C++: 遍历 26 个僵尸条目绘制窗口/剪影
+        // [TRANSLATION_NOTE]: 完整实现依赖 GetZombieDefinition 表（起始关卡/名称）、
+        // ZombieIsShown/Silhouette 判定与 ReanimatorCache::DrawCachedZombie；此处绘制骨架。
+        for i in 0..crate::lawn::widget::almanac_dialog::NUM_ALMANAC_ZOMBIES {
+            let _a_zombie_type = unsafe { std::mem::transmute::<i32, ZombieType>(i) };
+            // 简化网格（6 列×5 行）；C++ 走 GetZombiePosition 定位
+            let (a_pos_x, a_pos_y) = (23 + i % 6 * 85, 78 + i / 6 * 90);
+            draw_almanac_image(g, "IMAGE_ALMANAC_ZOMBIEWINDOW", a_pos_x, a_pos_y);
+            draw_almanac_image(g, "IMAGE_ALMANAC_ZOMBIEWINDOW2", a_pos_x, a_pos_y);
+        }
+
+        draw_almanac_image(g, "IMAGE_ALMANAC_GROUNDDAY", 518, 110);
+        if let Some(zombie_ptr) = self.zombie {
+            unsafe { (*zombie_ptr).draw(g); }
+        }
+        // [TRANSLATION_NOTE]: 僵尸卡片/名称/描述依赖 ZombieDefinition 表，暂略
+        draw_almanac_image(g, "IMAGE_ALMANAC_ZOMBIECARD", 455, 78);
+    }
+
+    /// 绘制（对应 C++ AlmanacDialog::Draw，:507）
+    pub fn draw(&self, g: &mut Graphics) {
+        match self.open_page {
+            crate::lawn::game_enums::AlmanacPage::Index => self.draw_index(g),
+            crate::lawn::game_enums::AlmanacPage::Plants => self.draw_plants(g),
+            crate::lawn::game_enums::AlmanacPage::Zombies => self.draw_zombies(g),
+        }
+
+        // 对应 C++: mCloseButton/mIndexButton/mPlantButton/mZombieButton->Draw(g)
+        if let Some(btn) = self.close_button { unsafe { (&mut *btn).draw(g); } }
+        if let Some(btn) = self.index_button { unsafe { (&mut *btn).draw(g); } }
+        if let Some(btn) = self.plant_button { unsafe { (&mut *btn).draw(g); } }
+        if let Some(btn) = self.zombie_button { unsafe { (&mut *btn).draw(g); } }
+    }
     pub fn get_seed_position(&self, t: SeedType, x: &mut i32, y: &mut i32) {
         if t == SeedType::Imitater { *x = 20; *y = 23; }
         else { *x = (t as i32) % 8 * 52 + 26; *y = (t as i32) / 8 * 78 + 92; }
@@ -191,6 +309,38 @@ pub static mut G_ZOMBIE_DEFEATED: [bool; NUM_ZOMBIE_TYPES as usize] = [false; NU
 
 /// 初始化玩家图鉴数据（对应 C++ AlmanacInitForPlayer）
 /// 重置所有僵尸的已击败标记
+/// 经全局 ResourceManager 按 key 取图并绘制（对应 C++ Sexy::IMAGE_* 引用）
+fn draw_almanac_image(g: &mut Graphics, a_key: &str, x: i32, y: i32) {
+    let a_image = crate::lawn::lawn_app::LawnApp::instance().map_or(std::ptr::null_mut(), |app| {
+        let a_rm = match app.base.resource_manager {
+            Some(r) => r,
+            None => return std::ptr::null_mut(),
+        };
+        unsafe { (*a_rm).get_image(a_key).as_image_ptr() }
+    });
+    if !a_image.is_null() {
+        unsafe { g.draw_image_xy(&*a_image, x, y); }
+    }
+}
+
+/// 居中绘制文本（TRANSLATION_NOTE: C++ 用 _Font* 字号与内嵌色；Rust 以 Font 简化）
+fn draw_almanac_text(
+    g: &mut Graphics,
+    a_text: &str,
+    a_center_x: i32,
+    a_y: i32,
+    a_size: i32,
+    a_color: &crate::framework::color::Color,
+) {
+    let mut a_font = crate::framework::graphics::font::Font::new("Dwarventodcraft", a_size);
+    a_font.ascent = (a_size as f32 * 0.72) as i32;
+    a_font.font_height = a_size;
+    g.set_font(&mut a_font as *mut crate::framework::graphics::font::Font);
+    g.set_color(a_color);
+    let a_width = a_font.string_width(a_text);
+    g.draw_string(a_text, a_center_x - a_width / 2, a_y);
+}
+
 pub fn almanac_init_for_player() {
     unsafe {
         for i in 0..NUM_ZOMBIE_TYPES as usize {

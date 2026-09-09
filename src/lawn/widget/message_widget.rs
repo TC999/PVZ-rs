@@ -105,15 +105,144 @@ impl MessageWidget {
         None
     }
 
-    /// 绘制消息（对应 C++ Draw）
+    /// 绘制消息（对应 C++ MessageWidget::Draw，MessageWidget.cpp:362）
     /// 按消息样式绘制不同位置和样式的文字
-    /// 支持：关卡名称、教程提示、大波警告、解锁消息等
-    pub fn draw(&self, _g: &mut Graphics) {
+    pub fn draw(&self, g: &mut Graphics) {
         if self.duration <= 0 {
             return;
         }
-        // [TRANSLATION_NOTE]: 完整绘制依赖字体/重动画系统
-        // 不同 MessageStyle 对应不同位置、颜色、字号、动画效果
+        // [TRANSLATION_NOTE]: C++ 以 _Font* 判定描边字（FONT_CONTINUUMBOLD14 → OUTLINE），
+        // Rust 字体系统简化（get_font 返回 None），描边字体判定标注为 false
+
+        // 对应 C++: 默认参数
+        let board_width = crate::lawn::game_enums::BOARD_WIDTH;
+        let mut a_pos_x = board_width / 2;
+        let mut a_pos_y = 596;
+        let mut a_text_offset_y = 0;
+        let mut a_rect_height = 0;
+        let mut a_min_alpha = 255;
+        let mut a_color = crate::framework::color::Color { r: 250, g: 250, b: 0, a: 255 };
+        let mut a_outline_color = crate::framework::color::Color { r: 0, g: 0, b: 0, a: 255 };
+        let mut a_fade_out = false;
+
+        // 对应 C++: switch (mMessageStyle)
+        match self.message_style {
+            MessageStyle::TutorialLevel1 | MessageStyle::TutorialLevel1Stay => {
+                a_pos_y = 400;
+                a_rect_height = 110;
+                a_text_offset_y = -4;
+                a_color = crate::framework::color::Color { r: 253, g: 245, b: 173, a: 255 };
+                a_min_alpha = 192;
+            }
+            MessageStyle::TutorialLevel2 | MessageStyle::TutorialLater
+            | MessageStyle::TutorialLaterStay | MessageStyle::HintTallFast
+            | MessageStyle::HintTallUnlockMessage | MessageStyle::HintTallLong
+            | MessageStyle::Achievement => {
+                a_pos_y = 476;
+                a_rect_height = 100;
+                a_text_offset_y = -4;
+                a_color = crate::framework::color::Color { r: 253, g: 245, b: 173, a: 255 };
+                a_min_alpha = 192;
+            }
+            MessageStyle::HintLong | MessageStyle::HintFast | MessageStyle::HintStay => {
+                a_pos_y = 527;
+                a_rect_height = 55;
+                a_text_offset_y = -4;
+                a_color = crate::framework::color::Color { r: 253, g: 245, b: 173, a: 255 };
+                a_min_alpha = 192;
+            }
+            MessageStyle::BigMiddle | MessageStyle::BigMiddleFast => {
+                a_pos_y = 300;
+                a_rect_height = 110;
+                a_color = crate::framework::color::Color { r: 253, g: 245, b: 173, a: 255 };
+                a_min_alpha = 192;
+            }
+            MessageStyle::HouseName => {
+                a_pos_y = 550;
+                a_color = crate::framework::color::Color { r: 255, g: 255, b: 255, a: 255 };
+                a_fade_out = true;
+            }
+            MessageStyle::HugeWave => {
+                a_pos_y = 330;
+                a_color = crate::framework::color::Color { r: 255, g: 0, b: 0, a: 255 };
+            }
+            MessageStyle::SlotMachine => {
+                a_pos_y = 93;
+                a_pos_x = 340;
+                a_min_alpha = 64;
+            }
+            MessageStyle::ZenGardenLong => {
+                a_pos_y = 514;
+                a_rect_height = 55;
+                a_text_offset_y = -4;
+                a_color = crate::framework::color::Color { r: 253, g: 245, b: 173, a: 255 };
+                a_min_alpha = 192;
+            }
+            _ => {}
+        }
+
+        if self.reanim_type != ReanimationType::None {
+            // 对应 C++: DrawReanimatedText（描边字缺失时仅主色）
+            self.draw_reanimated_text(g, a_color, a_pos_y as f32);
+        } else {
+            // 对应 C++: 非 255 最小 alpha 时按 75 帧曲线动画
+            if a_min_alpha != 255 {
+                let a_board_counter = crate::lawn::lawn_app::LawnApp::instance()
+                    .and_then(|app| app.board)
+                    .map_or(0i32, |b| unsafe { (*b).m_main_counter as i32 });
+                // [TRANSLATION_NOTE]: C++ CURVE_BOUNCE_SLOW_MIDDLE；Rust TodCurves 以 Bounce 近似
+                let a_alpha = crate::todlib::tod_common::tod_animate_curve(
+                    75, 0, a_board_counter % 75, a_min_alpha, 255,
+                    crate::lawn::game_enums::TodCurves::Bounce,
+                );
+                a_color.a = a_alpha as u8;
+                a_outline_color.a = a_color.a;
+            }
+            // 对应 C++: 淡出（HOUSE_NAME）
+            if a_fade_out {
+                a_color.a = (self.duration * 15).clamp(0, 255) as u8;
+                a_outline_color.a = a_color.a;
+            }
+
+            // 对应 C++: 半透明黑矩形容器 + 居中包装文字
+            let a_label_str = message_label_to_str(&self.label);
+            if a_rect_height > 0 {
+                a_outline_color = crate::framework::color::Color { r: 0, g: 0, b: 0, a: 128 };
+                g.set_color(&a_outline_color);
+                g.fill_rect_xywh(0, a_pos_y, board_width, a_rect_height);
+
+                // 对应 C++: PvzpDrawStringWrapped(DS_ALIGN_CENTER_VERTICAL_MIDDLE)
+                setup_default_font(g);
+                g.set_color(&a_color);
+                let a_rect_y = a_pos_y + a_text_offset_y;
+                g.draw_string_word_wrapped(
+                    &a_label_str,
+                    0,
+                    a_rect_y + 8,
+                    board_width,
+                    16,
+                    crate::lawn::game_enums::DrawStringJustification::DS_ALIGN_CENTER as i32,
+                    None,
+                );
+            } else {
+                // 对应 C++: 无矩形：居中绘制
+                setup_default_font(g);
+                g.set_color(&a_color);
+                let a_draw_x = a_pos_x - 400; // [TRANSLATION_NOTE]: C++ 中减 mBoard->mX - BOARD_WIDTH/2；board 未挂接时以 0 近似
+                g.draw_string_word_wrapped(
+                    &a_label_str,
+                    a_draw_x,
+                    a_pos_y,
+                    board_width * 2,
+                    16,
+                    crate::lawn::game_enums::DrawStringJustification::DS_ALIGN_CENTER as i32,
+                    None,
+                );
+            }
+        }
+
+        // [TRANSLATION_NOTE]: C++ 中 HOUSE_NAME 模式的 survival flags 副文本
+        //（[FLAGS_COMPLETED] 文案拼接）依赖 Challenge/Pluralize 链，暂未接入
     }
 
     /// 判断是否正在显示
@@ -204,4 +333,18 @@ impl MessageWidget {
             let _a_letter = &self.label[a_byte_start..a_byte_end.min(label_len)];
         }
     }
+}
+
+/// 将消息 label 字节数组转换为字符串（0 结尾截断，非法 UTF-8 以 lossy 处理）
+fn message_label_to_str(label: &[u8; MAX_MESSAGE_LENGTH]) -> String {
+    let a_len = label.iter().position(|&c| c == 0).unwrap_or(label.len());
+    String::from_utf8_lossy(&label[..a_len]).into_owned()
+}
+
+/// 设置默认字体（TRANSLATION_NOTE: C++ 用 _Font*（GetFont）；Rust 以 Font 简化）
+fn setup_default_font(g: &mut Graphics) {
+    let mut a_font = crate::framework::graphics::font::Font::new("Dwarventodcraft", 14);
+    a_font.ascent = 13;
+    a_font.font_height = 14;
+    g.set_font(&mut a_font as *mut crate::framework::graphics::font::Font);
 }
