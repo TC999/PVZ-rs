@@ -30,6 +30,10 @@ pub struct WidgetManager {
     pub last_down_widget: Option<*mut Widget>,
     pub last_down_btn_id: i32,
     pub last_down_click_count: i32,
+    /// 对应 C++ mDownButtons（当前按下的按钮掩码）
+    pub m_down_buttons: i32,
+    /// 对应 C++ mActualDownButtons（实际按下的按钮掩码，含禁用 widget 也记录）
+    pub m_actual_down_buttons: i32,
     pub over_widget: Option<*mut Widget>,
 
     // 键盘
@@ -76,6 +80,8 @@ impl WidgetManager {
             last_down_widget: None,
             last_down_btn_id: 0,
             last_down_click_count: 0,
+            m_down_buttons: 0,
+            m_actual_down_buttons: 0,
             over_widget: None,
             key_down: vec![false; 512],
             focus_widget: None,
@@ -94,10 +100,12 @@ impl WidgetManager {
         }
     }
 
-    /// 添加 Widget
+    /// 添加 Widget（对应 C++ AddWidget：设置所属 + 回调 AddedToManager）
     pub fn add_widget(&mut self, widget: *mut Widget) {
         unsafe {
             (*widget).widget_manager = Some(self as *mut WidgetManager);
+            // 对应 C++ AddWidget: aWidget->AddedToManager(this)
+            (*widget).added_to_manager(self as *mut WidgetManager);
         }
         self.widget_list.push(widget);
     }
@@ -145,6 +153,10 @@ impl WidgetManager {
         for &w in self.widget_list.iter().rev() {
             unsafe {
                 if (*w).visible && !(*w).disabled && (*w).contains(x, y) {
+                    // 对应 C++: 模态控件之下的 widget 不参与 over 判定
+                    if self.is_modal_blocked(w) {
+                        continue;
+                    }
                     hit = Some(w); break;
                 }
             }
@@ -196,33 +208,92 @@ impl WidgetManager {
         }
     }
 
-    /// 鼠标按下
+    /// 鼠标按下（对应 C++ WidgetManager::MouseDown，WidgetManager.cpp:640）
     pub fn mouse_down(&mut self, x: i32, y: i32, click_count: i32) -> bool {
-        for &w in self.widget_list.iter().rev() {
-            unsafe {
-                if (*w).visible && !(*w).disabled && (*w).contains(x, y) {
-                    self.last_down_widget = Some(w);
-                    self.last_down_click_count = click_count;
-                    (*w).mouse_down(x - (*w).x, y - (*w).y, click_count);
-                    return true;
+        // 对应 C++: 掩码与 mLastDownButtonId 设置
+        if click_count < 0 {
+            self.m_actual_down_buttons |= 0x02;
+            self.last_down_btn_id = -1;
+            self.m_down_buttons |= 0x02;
+        } else if click_count == 3 {
+            self.m_actual_down_buttons |= 0x04;
+            self.last_down_btn_id = 2;
+            self.m_down_buttons |= 0x04;
+        } else {
+            self.m_actual_down_buttons |= 0x01;
+            self.last_down_btn_id = 1;
+            self.m_down_buttons |= 0x01;
+        }
+
+        self.mouse_position(x, y);
+
+        // 对应 C++: GetWidgetAt；已有 last_down_widget 时全部按钮按发给它
+        let mut a_widget = {
+            let mut hit: Option<*mut Widget> = None;
+            for &w in self.widget_list.iter().rev() {
+                unsafe {
+                    if (*w).visible && !(*w).disabled && (*w).contains(x, y) {
+                        // 对应 C++: 模态控件之下的 widget 不接收按下
+                        if self.is_modal_blocked(w) {
+                            continue;
+                        }
+                        hit = Some(w);
+                        break;
+                    }
                 }
             }
+            hit
+        };
+        if self.last_down_widget.is_some() {
+            a_widget = self.last_down_widget;
         }
-        false
+
+        self.last_down_widget = a_widget;
+        self.last_down_click_count = click_count;
+        if let Some(w) = a_widget {
+            unsafe {
+                // 对应 C++: if (aWidget->WantsFocus()) SetFocus(aWidget);
+                if (*w).wants_focus() {
+                    self.set_focus(Some(w));
+                }
+                // 对应 C++: aWidget->mIsDown = true;
+                (*w).is_down = true;
+                (*w).mouse_down(x - (*w).x, y - (*w).y, click_count);
+            }
+        }
+        true
     }
 
-    /// 鼠标释放
-    pub fn mouse_up(&mut self, x: i32, y: i32, _click_count: i32) -> bool {
-        for &w in self.widget_list.iter().rev() {
-            unsafe {
-                if (*w).visible && (*w).contains(x, y) {
-                    (*w).mouse_up(x - (*w).x, y - (*w).y);
-                    return true;
+    /// 鼠标释放（对应 C++ WidgetManager::MouseUp，:581）
+    pub fn mouse_up(&mut self, x: i32, y: i32, click_count: i32) -> bool {
+        // 对应 C++: 掩码
+        let a_mask = if click_count < 0 { 0x02 } else if click_count == 3 { 0x04 } else { 0x01 };
+
+        // 对应 C++: mActualDownButtons &= ~aMask
+        self.m_actual_down_buttons &= !a_mask;
+
+        // 对应 C++: 仅当按下的按钮是发给 last_down_widget 时才派发释放
+        let a_last_down_widget = self.last_down_widget;
+        if let Some(w) = a_last_down_widget {
+            if self.m_down_buttons & a_mask != 0 {
+                self.m_down_buttons &= !a_mask;
+                if self.m_down_buttons == 0 {
+                    self.last_down_widget = None;
                 }
+                unsafe {
+                    // 对应 C++: aLastDownWidget->mIsDown = false;
+                    (*w).is_down = false;
+                    // 对应 C++: aLastDownWidget->MouseUp(x-mx, y-my, theClickCount)
+                    //（Rust mouse_up_ext 对应 C++ 三参 MouseUp：空 mouse_up + 按 id 派发 mouse_up_btn）
+                    (*w).mouse_up_ext(x - (*w).x, y - (*w).y, self.last_down_btn_id);
+                }
+            } else {
+                self.m_down_buttons &= !a_mask;
             }
         }
-        self.last_down_widget = None;
-        false
+
+        self.mouse_position(x, y);
+        true
     }
 
     /// 鼠标移动
@@ -243,9 +314,78 @@ impl WidgetManager {
         false
     }
 
-    /// 滚轮
+    /// 滚轮（对应 C++ WidgetManager::MouseWheel：发 mFocusWidget 而非 mOverWidget）
     pub fn mouse_wheel(&mut self, delta: i32) {
-        if let Some(w) = self.over_widget { unsafe { (*w).mouse_wheel(delta); } }
+        if let Some(w) = self.focus_widget { unsafe { (*w).mouse_wheel(delta); } }
+    }
+
+    /// widget1 是否绘制在 widget2 之下（对应 C++ WidgetContainer::IsBelow）
+    /// [TRANSLATION_NOTE]: C++ 为嵌套容器递归（IsBelowHelper）；Rust 扁平 widget_list 以索引顺序近似
+    pub fn is_below(&self, widget1: *mut Widget, widget2: *mut Widget) -> bool {
+        if widget1 == widget2 {
+            return false;
+        }
+        match (self.widget_list.iter().position(|&w| w == widget1),
+               self.widget_list.iter().position(|&w| w == widget2)) {
+            (Some(a), Some(b)) => a < b,
+            _ => false,
+        }
+    }
+
+    /// 设置基础模态控件（对应 C++ WidgetManager::SetBaseModal，:239）
+    pub fn set_base_modal(&mut self, widget: Option<*mut Widget>, below_flags_mod: i32) {
+        self.base_modal_widget = widget;
+        self.below_modal_flags_mod = below_flags_mod;
+        if let Some(base) = widget {
+            // 对应 C++: 位于 base 之下的 over/last_down/focus 状态清除
+            //（C++ 按 mBelowModalFlagsMod 的 ALLOW_MOUSE/ALLOW_FOCUS 移除，语义对等）
+            if self.over_widget.map_or(false, |w| self.is_below(w, base)) {
+                self.over_widget = None;
+            }
+            if self.last_down_widget.map_or(false, |w| self.is_below(w, base)) {
+                self.last_down_widget = None;
+            }
+            if self.focus_widget.map_or(false, |w| self.is_below(w, base)) {
+                self.focus_widget = None;
+            }
+        }
+    }
+
+    /// 添加基础模态控件并压入恢复信息（对应 C++ WidgetManager::AddBaseModal，:271）
+    pub fn add_base_modal(&mut self, widget: Option<*mut Widget>, below_flags_mod: i32) {
+        self.pre_modal_info_list.push(PreModalInfo {
+            prev_base_modal_widget: self.base_modal_widget,
+            prev_focus_widget: self.focus_widget,
+            prev_flags_mod: self.below_modal_flags_mod,
+            prev_is_over: self.base_modal_widget.is_none(),
+        });
+        self.set_base_modal(widget, below_flags_mod);
+    }
+
+    /// 添加基础模态控件（默认旗标；对应 C++ AddBaseModal(Widget*)，移除 ALLOW_MOUSE|ALLOW_FOCUS）
+    pub fn add_base_modal_default(&mut self, widget: Option<*mut Widget>) {
+        let a_default_below_flags_mod = 16 | 32; // WIDGETFLAGS_ALLOW_MOUSE | WIDGETFLAGS_ALLOW_FOCUS
+        self.add_base_modal(widget, a_default_below_flags_mod);
+    }
+
+    /// 移除基础模态控件并恢复上一个（对应 C++ RemoveBaseModal）
+    pub fn remove_base_modal(&mut self) {
+        if let Some(info) = self.pre_modal_info_list.pop() {
+            self.set_base_modal(info.prev_base_modal_widget, info.prev_flags_mod);
+            if self.focus_widget.is_none() {
+                self.focus_widget = info.prev_focus_widget;
+            }
+        } else {
+            self.base_modal_widget = None;
+        }
+    }
+
+    /// 命中检测是否被模态屏蔽（widget 在 base modal 之下且 base 存在）
+    pub fn is_modal_blocked(&self, widget: *mut Widget) -> bool {
+        match self.base_modal_widget {
+            Some(base) => self.is_below(widget, base),
+            None => false,
+        }
     }
 
     /// 按键按下

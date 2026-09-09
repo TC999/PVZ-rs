@@ -228,6 +228,50 @@ impl SexyVector2 {
     pub const fn new(x: f32, y: f32) -> Self {
         SexyVector2 { x, y }
     }
+
+    /// 模长（对应 C++ SexyVector2::Magnitude）
+    pub fn magnitude(self) -> f32 {
+        (self.x * self.x + self.y * self.y).sqrt()
+    }
+
+    /// 归一化（对应 C++ SexyVector2::Normalize）
+    pub fn normalize(self) -> SexyVector2 {
+        let mag = self.magnitude();
+        if mag != 0.0 { self / mag } else { self }
+    }
+
+    /// 垂直向量（对应 C++ SexyVector2::Perp：逆时针旋转 90°）
+    pub fn perp(self) -> SexyVector2 {
+        SexyVector2 { x: -self.y, y: self.x }
+    }
+}
+
+impl std::ops::Div<f32> for SexyVector2 {
+    type Output = Self;
+    fn div(self, rhs: f32) -> Self {
+        SexyVector2 { x: self.x / rhs, y: self.y / rhs }
+    }
+}
+
+impl std::ops::Mul<f32> for SexyVector2 {
+    type Output = Self;
+    fn mul(self, rhs: f32) -> Self {
+        SexyVector2 { x: self.x * rhs, y: self.y * rhs }
+    }
+}
+
+impl std::ops::AddAssign for SexyVector2 {
+    fn add_assign(&mut self, rhs: Self) {
+        self.x += rhs.x;
+        self.y += rhs.y;
+    }
+}
+
+impl std::ops::Neg for SexyVector2 {
+    type Output = Self;
+    fn neg(self) -> Self {
+        SexyVector2 { x: -self.x, y: -self.y }
+    }
 }
 
 impl std::ops::Add for SexyVector2 {

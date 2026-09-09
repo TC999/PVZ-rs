@@ -310,3 +310,15 @@ impl Default for Transform {
         Transform::new()
     }
 }
+
+impl std::ops::Mul<crate::framework::common::SexyVector2> for SexyMatrix3 {
+    type Output = crate::framework::common::SexyVector2;
+    /// 对应 C++ SexyMatrix3::operator*(const SexyVector2&)（SexyMatrix.cpp）：
+    /// x = m00*v.x + m01*v.y + m02；y = m10*v.x + m11*v.y + m12（行主序约定）
+    fn mul(self, v: crate::framework::common::SexyVector2) -> crate::framework::common::SexyVector2 {
+        crate::framework::common::SexyVector2::new(
+            self.m[0][0] * v.x + self.m[0][1] * v.y + self.m[0][2],
+            self.m[1][0] * v.x + self.m[1][1] * v.y + self.m[1][2],
+        )
+    }
+}

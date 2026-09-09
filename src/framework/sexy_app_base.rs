@@ -101,6 +101,11 @@ pub struct SexyAppBase {
     pub update_multiplier: f64,
     pub paused: bool,
 
+    // 帧钩子（对应 C++ 虚函数分派：LawnApp::UpdateFrames 覆写 SexyAppBase::UpdateFrames）。
+    // Rust 组合模型无继承虚分派，由 LawnApp 构造时挂载，主循环 DoUpdateFrames 每帧调用，
+    // 以驱动 Board::Update / MusicUpdate / CheckForGameEnd（C++ 中这些由 LawnApp::UpdateFrames 完成）。
+    pub(crate) lawn_frame_hook: Option<fn()>,
+
     // 安全删除列表（对应 C++ mSafeDeleteList）
     pub safe_delete_list: Vec<*mut std::ffi::c_void>,
 
@@ -244,6 +249,7 @@ impl SexyAppBase {
             update_app_depth: 0,
             update_multiplier: 1.0,
             paused: false,
+            lawn_frame_hook: None,
             safe_delete_list: Vec::new(),
             running: false,
             last_time: 0,
@@ -463,6 +469,11 @@ impl SexyAppBase {
             unsafe {
                 (*wm).update();
             }
+        }
+        // 对应 C++ 虚函数分派：调用 LawnApp::UpdateFrames 覆写中除 WidgetManager 外的其余部分
+        //（mBoard->ProcessDeleteQueue / Board::Update / mMusic->MusicUpdate / CheckForGameEnd）。
+        if let Some(hook) = self.lawn_frame_hook {
+            hook();
         }
         self.m_update_count += 1;
         true
