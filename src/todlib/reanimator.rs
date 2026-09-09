@@ -71,6 +71,9 @@ pub struct Reanimation {
     pub m_render_order: i32,
     // 对应 C++ mDead（动画是否已请求销毁）
     pub m_dead: bool,
+    // 对应 C++ mFrameStart/mFrameCount（SetFramesForLayer 计算的帧区间）
+    pub m_frame_start: i32,
+    pub m_frame_count: i32,
     // 对应 C++ 的轨道图片覆盖表（trackName -> Image）
     pub m_image_overrides: Vec<(String, *mut Image)>,
 }
@@ -107,6 +110,8 @@ impl Reanimation {
             m_last_anim_time: 0.0,
             m_render_order: 0,
             m_dead: false,
+            m_frame_start: 0,
+            m_frame_count: 0,
             m_image_overrides: Vec::new(),
         }
     }
@@ -233,13 +238,17 @@ impl Reanimation {
         if self.reanim_type == reanim_type {
             return Some(self);
         }
-        // 遍历轨道实例，查找附着动画
-        for track in &self.m_track_instances {
-            // 查找附着动画（简化实现）
-            // 完整版本需要遍历 AttachEffect 并递归
-            if track.m_last_visible {
-                // 这里可以通过 AttachmentSystem 查找子 Reanimation
-                // 但目前简化处理，仅返回自身匹配
+        // 对应 C++: 遍历轨道实例的附着动画并递归（借用规避：先收集 attachment id）
+        let a_attachment_ids: Vec<crate::lawn::game_enums::AttachmentID> =
+            self.m_track_instances.iter().map(|t| t.m_attachment_id).collect();
+        for mut a_attachment_id in a_attachment_ids {
+            if let Some(a_reanim) = crate::todlib::attachment::find_reanim_attachment(&mut a_attachment_id) {
+                unsafe {
+                    let a_reanim_ref = &mut *(a_reanim.cast::<Reanimation>());
+                    if let Some(a_sub_reanim) = a_reanim_ref.find_sub_reanim(reanim_type) {
+                        return Some(a_sub_reanim);
+                    }
+                }
             }
         }
         None
@@ -353,8 +362,139 @@ impl Reanimation {
     }
 
     /// 设置帧层（对应 C++ SetFramesForLayer）
-    pub fn set_frames_for_layer(&mut self, _layer: &str) {
-        // [TRANSLATION_NOTE]: 完整实现需要 layer 帧区间计算，当前为骨架
+    pub fn set_frames_for_layer(&mut self, layer: &str) {
+        // 对应 C++ SetFramesForLayer: 重置动画时间
+        if self.m_anim_rate >= 0.0 {
+            self.m_anim_time = 0.0;
+        } else {
+            self.m_anim_time = 0.9999999;
+        }
+        self.m_last_anim_time = -1.0;
+
+        let (a_frame_start, a_frame_count) = self.get_frames_for_layer(layer);
+        self.m_frame_start = a_frame_start;
+        self.m_frame_count = a_frame_count;
+    }
+
+    /// 计算指定轨道的帧区间（对应 C++ GetFramesForLayer：从首个非空白帧到最后一个非空白帧）
+    fn get_frames_for_layer(&self, track_name: &str) -> (i32, i32) {
+        let def = match self.m_definition {
+            Some(def) => def,
+            None => return (0, 1),
+        };
+        unsafe {
+            let def_ref = &*def;
+            if def_ref.m_tracks.is_empty() {
+                return (0, 0);
+            }
+            let a_track_index = self.find_track_index(track_name);
+            let mut a_frame_start = 0;
+            let mut a_frame_count = 1;
+            if a_track_index >= 0 && (a_track_index as usize) < def_ref.m_tracks.len() {
+                let a_track = &def_ref.m_tracks[a_track_index as usize];
+                // 第一个非空白帧（mFrame >= 0）
+                for i in 0..a_track.m_transforms.len() {
+                    if a_track.m_transforms[i].m_frame >= 0.0 {
+                        a_frame_start = i as i32;
+                        break;
+                    }
+                }
+                // 从起始帧到最后一个非空白帧的跨度
+                for j in (a_frame_start as usize)..a_track.m_transforms.len() {
+                    if a_track.m_transforms[j].m_frame >= 0.0 {
+                        a_frame_count = j as i32 - a_frame_start + 1;
+                    }
+                }
+            }
+            (a_frame_start, a_frame_count)
+        }
+    }
+
+    /// 从指定轨道设置基础姿态（对应 C++ SetBasePoseFromAnim）
+    pub fn set_base_pose_from_anim(&mut self, track_name: &str) {
+        let (a_frame_start, _) = self.get_frames_for_layer(track_name);
+        self.m_frame_base_pose = a_frame_start;
+    }
+
+    /// 指定轨道动画是否正在播放（对应 C++ IsAnimPlaying）
+    pub fn is_anim_playing(&self, track_name: &str) -> bool {
+        let (a_frame_start, a_frame_count) = self.get_frames_for_layer(track_name);
+        self.m_frame_start == a_frame_start && self.m_frame_count == a_frame_count
+    }
+
+    /// 仅显示指定轨道，其余隐藏（对应 C++ ShowOnlyTrack）
+    pub fn show_only_track(&mut self, track_name: &str) {
+        if let Some(def) = self.m_definition {
+            unsafe {
+                let def_ref = &*def;
+                for (i, track_def) in def_ref.m_tracks.iter().enumerate() {
+                    if let Some(ti) = self.m_track_instances.get_mut(i) {
+                        ti.m_render_group = if track_def.m_name.eq_ignore_ascii_case(track_name) {
+                            RENDER_GROUP_NORMAL
+                        } else {
+                            RENDER_GROUP_HIDDEN
+                        };
+                    }
+                }
+            }
+        }
+    }
+
+    /// 轨道是否正在显示（对应 C++ IsTrackShowing：当前帧对应变换非空白）
+    pub fn is_track_showing(&self, track_name: &str) -> bool {
+        let track_index = self.find_track_index(track_name);
+        if track_index < 0 {
+            return false;
+        }
+        let def = match self.m_definition {
+            Some(def) => def,
+            None => return false,
+        };
+        unsafe {
+            let def_ref = &*def;
+            if track_index as usize >= def_ref.m_tracks.len() {
+                return false;
+            }
+            let a_track = &def_ref.m_tracks[track_index as usize];
+            if a_track.m_transforms.is_empty() {
+                return false;
+            }
+            // 对应 C++ GetFrameTime 的 mAnimFrameAfterInt：当前动画时间对应的整数帧
+            let total_time = if def_ref.m_fps > 0.0 { def_ref.m_fps } else { 1.0 };
+            let frame_idx =
+                ((self.get_frame_time() % total_time) / total_time * a_track.m_transforms.len() as f32) as usize;
+            let idx = frame_idx.min(a_track.m_transforms.len() - 1);
+            a_track.m_transforms[idx].m_frame >= 0.0
+        }
+    }
+
+    /// 开始混合（对应 C++ StartBlend：记录当前变换为混合源）
+    pub fn start_blend(&mut self, blend_time: i32) {
+        let def = match self.m_definition {
+            Some(def) => def,
+            None => return,
+        };
+        unsafe {
+            let def_ref = &*def;
+            let track_count = def_ref.m_tracks.len();
+            for a_track_index in 0..track_count {
+                let mut a_transform = ReanimatorTransform::default();
+                if self.get_current_transform(a_track_index as i32, &mut a_transform) {
+                    // 对应 C++: FloatRoundToInt(mFrame) >= 0（非空白帧才记录混合源）
+                    if a_transform.m_frame.round() as i32 >= 0 {
+                        if let Some(a_track_instance) = self.m_track_instances.get_mut(a_track_index) {
+                            a_track_instance.m_blend_transform = a_transform;
+                            a_track_instance.m_blend_time = blend_time;
+                            a_track_instance.m_blend_count = blend_time as f32;
+                            // 对应 C++: 清空 font/text/image
+                            a_track_instance.m_blend_transform.m_font = -1;
+                            a_track_instance.m_blend_transform.m_text = -1;
+                            a_track_instance.m_blend_transform.m_image = -1;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// 给前缀分配渲染组（对应 C++ AssignRenderGroupToPrefix）
@@ -457,6 +597,101 @@ impl Reanimation {
         -1
     }
 
+    /// 获取帧时间结构（对应 C++ Reanimation::GetFrameTime）
+    /// 返回当前动画时间对应的前/后整数帧与插值分数
+    pub fn get_frame_time_frame(&self) -> ReanimatorFrameTime {
+        let mut a_frame_time = ReanimatorFrameTime::default();
+        if let Some(def) = self.m_definition {
+            unsafe {
+                let def_ref = &*def;
+                if def_ref.m_tracks.is_empty() {
+                    return a_frame_time;
+                }
+                if self.m_frame_count <= 0 {
+                    return a_frame_time;
+                }
+                // 对应 C++: 完整末帧类型不减少帧数；其余类型减一（mFrameCount - 1）
+                // [TRANSLATION_NOTE]: C++ 的 REANIM_LOOP_FULL_LAST_FRAME 在 Rust ReanimLoopType 中不存在
+                let a_frame_count = if self.m_loop_type == ReanimLoopType::PlayOnceFullLastFrame
+                    || self.m_loop_type == ReanimLoopType::PlayOnceFullLastFrameAndHold
+                {
+                    self.m_frame_count
+                } else {
+                    self.m_frame_count - 1
+                };
+                let a_anim_position = self.m_frame_start as f32 + self.m_anim_time * a_frame_count as f32;
+                let a_anim_frame_before = a_anim_position.floor();
+                a_frame_time.fraction = a_anim_position - a_anim_frame_before;
+                a_frame_time.anim_frame_before_int = a_anim_frame_before.round() as i32;
+                // 对应 C++: 在最后一帧时 before/after 相同
+                if a_frame_time.anim_frame_before_int >= self.m_frame_start + self.m_frame_count - 1 {
+                    a_frame_time.anim_frame_before_int = self.m_frame_start + self.m_frame_count - 1;
+                    a_frame_time.anim_frame_after_int = a_frame_time.anim_frame_before_int;
+                } else {
+                    a_frame_time.anim_frame_after_int = a_frame_time.anim_frame_before_int + 1;
+                }
+            }
+        }
+        a_frame_time
+    }
+
+    /// 获取轨道在指定帧时间的变换（对应 C++ GetTransformAtTime，前后帧插值）
+    pub fn get_transform_at_time(
+        &self,
+        track_index: i32,
+        out: &mut ReanimatorTransform,
+        frame_time: &ReanimatorFrameTime,
+    ) -> bool {
+        let def = match self.m_definition {
+            Some(def) => def,
+            None => return false,
+        };
+        unsafe {
+            let def_ref = &*def;
+            if track_index < 0 || track_index as usize >= def_ref.m_tracks.len() {
+                return false;
+            }
+            let a_track = &def_ref.m_tracks[track_index as usize];
+            if a_track.m_transforms.is_empty() {
+                return false;
+            }
+            let before_idx = (frame_time.anim_frame_before_int.max(0) as usize)
+                .min(a_track.m_transforms.len() - 1);
+            let after_idx = (frame_time.anim_frame_after_int.max(0) as usize)
+                .min(a_track.m_transforms.len() - 1);
+            let a_trans_before = a_track.m_transforms[before_idx];
+            let a_trans_after = a_track.m_transforms[after_idx];
+            let m_fraction = frame_time.fraction;
+
+            // 对应 C++: FloatLerp 插值各项
+            out.m_trans_x = crate::todlib::tod_common::lerp(a_trans_before.m_trans_x, a_trans_after.m_trans_x, m_fraction);
+            out.m_trans_y = crate::todlib::tod_common::lerp(a_trans_before.m_trans_y, a_trans_after.m_trans_y, m_fraction);
+            out.m_skew_x = crate::todlib::tod_common::lerp(a_trans_before.m_skew_x, a_trans_after.m_skew_x, m_fraction);
+            out.m_skew_y = crate::todlib::tod_common::lerp(a_trans_before.m_skew_y, a_trans_after.m_skew_y, m_fraction);
+            out.m_scale_x = crate::todlib::tod_common::lerp(a_trans_before.m_scale_x, a_trans_after.m_scale_x, m_fraction);
+            out.m_scale_y = crate::todlib::tod_common::lerp(a_trans_before.m_scale_y, a_trans_after.m_scale_y, m_fraction);
+            out.m_alpha = crate::todlib::tod_common::lerp(a_trans_before.m_alpha, a_trans_after.m_alpha, m_fraction);
+            out.m_image = a_trans_before.m_image;
+            out.m_font = a_trans_before.m_font;
+            out.m_text = a_trans_before.m_text;
+
+            // 对应 C++: 截断消失帧（过渡到空白帧时直接裁掉）
+            let a_truncate = self.m_track_instances
+                .get(track_index as usize)
+                .map_or(false, |ti| ti.m_truncate_disappearing_frames);
+            if a_trans_before.m_frame != -1.0
+                && a_trans_after.m_frame == -1.0
+                && m_fraction > 0.0
+                && a_truncate
+            {
+                out.m_frame = -1.0;
+            } else {
+                out.m_frame = a_trans_before.m_frame;
+            }
+            true
+        }
+    }
+
     /// 获取当前变换（对应 C++ GetCurrentTransform，简化版：取当前帧索引）
     pub fn get_current_transform(&self, track_index: i32, out: &mut crate::todlib::definition::ReanimatorTransform) -> bool {
         if let Some(def) = self.m_definition {
@@ -500,6 +735,136 @@ impl Reanimation {
             }
         }
         0.0
+    }
+
+    /// 传播颜色到附着动画（对应 C++ PropogateColorToAttachments）
+    pub fn propogate_color_to_attachments(&self) {
+        let a_attachment_ids: Vec<crate::lawn::game_enums::AttachmentID> =
+            self.m_track_instances.iter().map(|t| t.m_attachment_id).collect();
+        for mut a_attachment_id in a_attachment_ids {
+            crate::todlib::attachment::attachment_propogate_color(
+                &mut a_attachment_id,
+                &self.m_color_override,
+                self.m_enable_extra_additive_draw,
+                &self.m_extra_additive_color,
+                self.m_enable_extra_overlay_draw,
+                &self.m_extra_overlay_color,
+            );
+        }
+    }
+
+    /// 从变换构建 3x3 矩阵（对应 C++ Reanimation::MatrixFromTransform）
+    pub fn matrix_from_transform(the_transform: &ReanimatorTransform) -> crate::framework::sexy_matrix::SexyMatrix3 {
+        // 对应 C++: aSkewX = -DEG_TO_RAD(mSkewX) / aSkewY = -DEG_TO_RAD(mSkewY)
+        let a_skew_x = -the_transform.m_skew_x.to_radians();
+        let a_skew_y = -the_transform.m_skew_y.to_radians();
+        crate::framework::sexy_matrix::SexyMatrix3::new_from_values(
+            a_skew_x.cos() * the_transform.m_scale_x,  // m00
+            a_skew_y.sin() * the_transform.m_scale_y,  // m01
+            the_transform.m_trans_x,                   // m02
+            -a_skew_x.sin() * the_transform.m_scale_x, // m10
+            a_skew_y.cos() * the_transform.m_scale_y,  // m11
+            the_transform.m_trans_y,                   // m12
+            0.0,                                       // m20
+            0.0,                                       // m21
+            1.0,                                       // m22
+        )
+    }
+
+    /// 设置轨道震动覆盖（对应 C++ SetShakeOverride）
+    pub fn set_shake_override(&mut self, track_name: &str, shake_amount: f32) {
+        if let Some(track_instance) = self.get_track_instance_by_name(track_name) {
+            track_instance.m_shake_override = shake_amount;
+        }
+    }
+
+    /// 设置截断消失帧（对应 C++ SetTruncateDisappearingFrames；track_name 为 None 时作用于全部轨道）
+    pub fn set_truncate_disappearing_frames(&mut self, track_name: Option<&str>, value: bool) {
+        match track_name {
+            None => {
+                for track_instance in self.m_track_instances.iter_mut() {
+                    track_instance.m_truncate_disappearing_frames = value;
+                }
+            }
+            Some(name) => {
+                if let Some(track_instance) = self.get_track_instance_by_name(name) {
+                    track_instance.m_truncate_disappearing_frames = value;
+                }
+            }
+        }
+    }
+
+    /// 附着到另一动画（对应 C++ AttachToAnotherReanimation）
+    pub fn attach_to_another_reanimation(&mut self, the_attach_reanim: &mut Reanimation, track_name: &str) {
+        // 对应 C++: 目标动画无轨道则返回
+        let a_track_count = the_attach_reanim
+            .m_definition
+            .map_or(0, |def| unsafe { (*def).m_tracks.len() });
+        if a_track_count == 0 {
+            return;
+        }
+        // 对应 C++: mFrameBasePose == -1 时使用当前动画的起始帧作为基础姿态
+        if the_attach_reanim.m_frame_base_pose == -1 {
+            the_attach_reanim.m_frame_base_pose = the_attach_reanim.m_frame_start;
+        }
+        if let Some(a_track_instance) = the_attach_reanim.get_track_instance_by_name(track_name) {
+            // 对应 C++: AttachReanim(theTrackInstance->mAttachmentID, this, 0.0f, 0.0f)
+            let mut a_attachment_id = a_track_instance.m_attachment_id;
+            crate::todlib::attachment::attach_reanim(
+                &mut a_attachment_id,
+                self as *mut Reanimation as *mut std::ffi::c_void,
+                0.0,
+                0.0,
+            );
+            a_track_instance.m_attachment_id = a_attachment_id;
+        }
+    }
+
+    /// 获取轨道基础姿态矩阵（对应 C++ GetTrackBasePoseMatrix）
+    pub fn get_track_base_pose_matrix(&self, track_index: i32) -> crate::framework::sexy_matrix::SexyMatrix3 {
+        // 对应 C++: mFrameBasePose == NO_BASE_POSE 时单位矩阵
+        if self.m_frame_base_pose == NO_BASE_POSE {
+            return crate::framework::sexy_matrix::SexyMatrix3::identity();
+        }
+        // 对应 C++: aBasePos = mFrameBasePose == -1 ? mFrameStart : mFrameBasePose
+        let a_base_pos = if self.m_frame_base_pose == -1 {
+            self.m_frame_start
+        } else {
+            self.m_frame_base_pose
+        };
+        let a_start_time = ReanimatorFrameTime {
+            fraction: 0.0,
+            anim_frame_before_int: a_base_pos,
+            anim_frame_after_int: a_base_pos + 1,
+        };
+        let mut a_transform_start = ReanimatorTransform::default();
+        if self.get_transform_at_time(track_index, &mut a_transform_start, &a_start_time) {
+            Self::matrix_from_transform(&a_transform_start)
+        } else {
+            crate::framework::sexy_matrix::SexyMatrix3::identity()
+        }
+    }
+
+    /// 获取当前轨道图片（对应 C++ GetCurrentTrackImage）
+    pub fn get_current_track_image(&self, track_name: &str) -> *mut Image {
+        let a_track_index = self.find_track_index(track_name);
+        if a_track_index < 0 {
+            return std::ptr::null_mut();
+        }
+        // 对应 C++: mImageOverride 优先
+        if let Some(a_track_instance) = self.m_track_instances.get(a_track_index as usize) {
+            if !a_track_instance.m_image_override.is_null() {
+                return a_track_instance.m_image_override;
+            }
+        }
+        let mut a_transform = ReanimatorTransform::default();
+        if self.get_current_transform(a_track_index, &mut a_transform) {
+            // [TRANSLATION_NOTE]: C++ 中 aTransform.mImage 为 Image* 且 atlas 编码图会清空；
+            // Rust ReanimatorTransform.m_image 为资源 ID（i32）且 mReanimAtlas 为 stub，
+            // 无 ID→Image* 映射，此处返回空指针等效于 atlas 编码图清空分支
+            let _a_image_id = a_transform.m_image;
+        }
+        std::ptr::null_mut()
     }
 
     /// 按名称获取轨道实例（对应 C++ GetTrackInstanceByName）
@@ -601,21 +966,32 @@ impl ReanimationHolder {
     }
 
     pub fn initialize_holder(&mut self) {
-        // TODO: 从 Reanimator.cpp 翻译
+        // 对应 C++ ReanimationHolder::InitializeHolder: mReanimations.DataArrayInitialize(1024U, "reanims")
+        self.reanimations.initialize(1024, "reanims");
     }
 
     pub fn dispose_holder(&mut self) {
-        // TODO: 从 Reanimator.cpp 翻译
+        // 对应 C++ ReanimationHolder::DisposeHolder
+        self.reanimations.free_all();
+        self.reanimations.dispose();
     }
 
     pub fn alloc_reanimation(
         &mut self,
-        _x: f32,
-        _y: f32,
-        _render_order: i32,
-        _reanim_type: ReanimationType,
+        x: f32,
+        y: f32,
+        render_order: i32,
+        reanim_type: ReanimationType,
     ) -> Option<*mut Reanimation> {
-        None
+        // 对应 C++ ReanimationHolder::AllocReanimation
+        let a_reanim_ptr = self.reanimations.alloc();
+        unsafe {
+            (*a_reanim_ptr).m_render_order = render_order;
+            // [TRANSLATION_NOTE]: C++ 中 aReanim->mReanimationHolder = this（原数据数组回溯）；
+            // Rust Reanimation 无 m_reanimation_holder 字段，此关联暂缺
+            (*a_reanim_ptr).reanimation_initialize_type(x, y, reanim_type);
+        }
+        Some(a_reanim_ptr)
     }
 }
 

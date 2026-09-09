@@ -36,17 +36,28 @@ impl EffectSystem {
         }
     }
 
-    /// 更新所有特效
+    /// 更新所有特效（对应 C++ EffectSystem::Update；
+    /// 注意：C++ 中 Update 不回收对象，删除统一由 ProcessDeleteQueue 处理）
     pub fn update(&mut self) {
-        for reanim in &mut self.reanimations {
-            reanim.update();
-        }
+        // 对应 C++: for Particle（非 attachment）Update；Rust 无 mIsAttachment 区分，直接更新
         for ps in &mut self.particle_systems {
             ps.update();
         }
-        // 移除已完成的
-        self.reanimations.retain(|r| !r.is_completely_done());
+        // [TRANSLATION_NOTE]: C++ 中 Trail holder 的更新；Rust EffectSystem 尚无 Trail 存储
+        for reanim in &mut self.reanimations {
+            reanim.update();
+        }
+    }
+
+    /// 处理删除队列（对应 C++ EffectSystem::ProcessDeleteQueue：回收所有 mDead 对象）
+    pub fn process_delete_queue(&mut self) {
+        // 对应 C++: 粒子 mDead → DataArrayFree
         self.particle_systems.retain(|ps| !ps.dead);
+        // [TRANSLATION_NOTE]: C++ 中 Trail holder 的回收；Rust EffectSystem 尚无 Trail 存储
+        // 对应 C++: 动画 mDead → DataArrayFree（Rust 以 is_completely_done 近似，与既有判据一致）
+        self.reanimations.retain(|r| !r.is_completely_done());
+        // 对应 C++: 附着物 mDead → DataArrayFree
+        self.attachments.retain(|a| !a.dead);
     }
 
     /// 绘制所有特效
