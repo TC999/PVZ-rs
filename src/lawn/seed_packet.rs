@@ -544,7 +544,7 @@ impl Default for SeedBank {
     }
 }
 
-/// 绘制种子包（对应 C++ 全局函数 DrawSeedPacket）
+/// 绘制种子包（对应 C++ 全局函数 DrawSeedPacket，SeedPacket.cpp:285）
 pub fn draw_seed_packet(
     g: &mut Graphics,
     x: f32,
@@ -556,18 +556,23 @@ pub fn draw_seed_packet(
     draw_cost: bool,
     use_current_cost: bool,
 ) {
-    // 对应 C++ DrawSeedPacket：绘制种子包背景/种子图标/变暗遮罩/成本
+    // 对应 C++: 模仿者替换为被模仿种子
     let mut a_seed_type = seed_type;
     if a_seed_type == SeedType::Imitater && imitater_type != SeedType::None {
         a_seed_type = imitater_type;
     }
 
-    // [TRANSLATION_NOTE]: C++ 中 grayness != 255 或 percentDark > 0 时 SetColor +
-    // SetColorizeImages 灰化/变暗；Rust 侧颜色化绘制未接入
-    let _ = grayness;
+    // 对应 C++: 灰化/变暗颜色化
+    if grayness != 255 {
+        g.set_color(&crate::framework::color::Color { r: grayness as u8, g: grayness as u8, b: grayness as u8, a: 255 });
+        g.set_colorize_images(true);
+    } else if percent_dark > 0.0 {
+        g.set_color(&crate::framework::color::Color { r: 128, g: 128, b: 128, a: 255 });
+        g.set_colorize_images(true);
+    }
 
-    // 种子包背景类型（0-8：模仿者/升级/保龄球/老虎机/水族馆等）
-    let _a_packet_background = if seed_type == SeedType::Imitater {
+    // 对应 C++: 种子包背景类型（0-8）
+    let a_packet_background = if seed_type == SeedType::Imitater {
         0
     } else if crate::lawn::plant::Plant::is_upgrade(a_seed_type) {
         1
@@ -587,22 +592,140 @@ pub fn draw_seed_packet(
         2
     };
 
-    // [TRANSLATION_NOTE]: C++ 中按 g->mScaleX 绘制 IMAGE_SEEDPACKET_LARGER 或 IMAGE_SEEDS
-    // 背景；Rust 侧图片资源未接入，暂略
+    // 对应 C++: 背景绘制（放大态/普通态图集 cel）
+    let get_image = |a_key: &str| -> *mut crate::framework::graphics::image::Image {
+        crate::lawn::lawn_app::LawnApp::instance().map_or(std::ptr::null_mut(), |app| {
+            let a_rm = match app.base.resource_manager {
+                Some(r) => r,
+                None => return std::ptr::null_mut(),
+            };
+            unsafe { (*a_rm).get_image(a_key).as_image_ptr() }
+        })
+    };
+    let a_scale_x = g.scale_x as f32;
+    let a_scale_y = g.scale_y as f32;
+    if a_scale_x > 1.0 {
+        // 对应 C++: PvzpDrawImageCelScaledF(IMAGE_SEEDPACKET_LARGER, x, y, 0, 0, scaleX*0.5, scaleY*0.5)
+        let a_larger = get_image("IMAGE_SEEDPACKET_LARGER");
+        if !a_larger.is_null() {
+            unsafe { g.draw_image_cel_dest(&*a_larger, &crate::framework::rect::Rect::new(x as i32, y as i32, (80.0 * a_scale_x * 0.5) as i32, (86.0 * a_scale_y * 0.5) as i32), 0); }
+        }
+    } else {
+        // 对应 C++: PvzpDrawImageCelScaledF(IMAGE_SEEDS, x, y, aPacketBackground, 0, scaleX, scaleY)
+        let a_seeds = get_image("IMAGE_SEEDS");
+        if !a_seeds.is_null() {
+            unsafe { g.draw_image_cel_dest(&*a_seeds, &crate::framework::rect::Rect::new(x as i32, y as i32, (80.0 * a_scale_x) as i32, (86.0 * a_scale_y) as i32), a_packet_background); }
+        }
+    }
 
-    // [TRANSLATION_NOTE]: C++ 中按种子类型设置图标缩放/偏移表（约 40 项，如
-    // TALLNUT 0.3/12/22、COBCANNON 0.26/6/22 等）并调用 SeedPacketDrawSeed 绘制图标；
-    // 依赖图片资源，暂略。此处保留成本绘制结构。
+    // 对应 C++: 图标缩放/偏移表（switch 约 40 项）
+    let mut a_scale = 0.5f32;
+    let mut a_draw_seed_in_middle = true;
+    let mut a_offset_x = 5.0f32;
+    let mut a_offset_y = 8.0f32;
+    match a_seed_type {
+        SeedType::Tallnut => { a_scale = 0.3; a_offset_x = 12.0; a_offset_y = 22.0; }
+        SeedType::InstantCoffee => { a_scale = 0.55; a_offset_x = 0.0; a_offset_y = 9.0; }
+        SeedType::Cobcannon => { a_scale = 0.26; a_offset_x = 6.0; a_offset_y = 22.0; }
+        SeedType::Cactus => { a_offset_x = 9.0; a_offset_y = 13.0; }
+        SeedType::PotatoMine => { a_scale = 0.4; a_offset_x = 8.0; a_offset_y = 12.0; }
+        SeedType::Magnetshroom => { a_offset_y = 12.0; }
+        SeedType::Fumeshroom | SeedType::Pumpkinshell | SeedType::Chomper
+        | SeedType::Doomshroom | SeedType::Squash | SeedType::Hypnoshroom
+        | SeedType::Spikeweed | SeedType::Spikerock | SeedType::Plantern
+        | SeedType::Torchwood | SeedType::Tanglekelp => {
+            a_scale = 0.4; a_offset_x = 8.0; a_offset_y = 12.0;
+        }
+        SeedType::Twinsunflower | SeedType::Gloomshroom => {
+            a_scale = 0.45; a_offset_x = 7.0; a_offset_y = 14.0;
+        }
+        SeedType::Cattail => { a_scale = 0.45; a_offset_x = 8.0; a_offset_y = 13.0; }
+        SeedType::Umbrella => { a_scale = 0.5; a_offset_x = 5.0; a_offset_y = 10.0; }
+        SeedType::Kernelpult => { a_scale = 0.4; a_offset_x = 13.0; a_offset_y = 14.0; }
+        SeedType::Cabbagepult => { a_scale = 0.4; a_offset_x = 15.0; a_offset_y = 14.0; }
+        SeedType::Melonpult | SeedType::Wintermelon => {
+            a_scale = 0.35; a_offset_x = 18.0; a_offset_y = 19.0;
+        }
+        SeedType::Gravebuster => { a_scale = 0.4; a_offset_x = 10.0; a_offset_y = 15.0; }
+        SeedType::Splitpea => { a_scale = 0.45; a_offset_x = 12.0; a_offset_y = 12.0; }
+        SeedType::Blover => { a_scale = 0.4; a_offset_x = 8.0; a_offset_y = 17.0; }
+        SeedType::Starfruit => { a_scale = 0.5; a_offset_x = 6.0; a_offset_y = 8.0; }
+        SeedType::Threepeater => { a_scale = 0.5; a_offset_x = 5.0; a_offset_y = 10.0; }
+        SeedType::Gatlingpea => { a_scale = 0.5; a_offset_x = 2.0; a_offset_y = 8.0; }
+        SeedType::ZombieNormal | SeedType::ZombieTrafficCone | SeedType::ZombiePail => {
+            a_scale = 0.35; a_offset_x = -3.0; a_offset_y = -7.0;
+        }
+        SeedType::ZombieDancer => { a_scale = 0.375; a_offset_x = -19.0; a_offset_y = -40.0; }
+        SeedType::ZombiePolevaulter => { a_scale = 0.35; a_offset_x = -8.0; a_offset_y = -12.0; }
+        SeedType::ZombieLadder | SeedType::ZombieDigger | SeedType::ZombieScreenDoor
+        | SeedType::ZombiePogo => {
+            a_scale = 0.35; a_offset_x = -3.0; a_offset_y = -10.0;
+        }
+        SeedType::ZombieBungee => { a_scale = 0.3; a_offset_x = 1.0; a_offset_y = -1.0; }
+        SeedType::ZombieFootball => { a_scale = 0.33; a_offset_x = -7.0; a_offset_y = -9.0; }
+        SeedType::ZombieBalloon => { a_scale = 0.35; a_offset_x = -3.0; a_offset_y = -5.0; }
+        SeedType::ZombieImp => { a_scale = 0.4; a_offset_x = -12.0; a_offset_y = -17.0; }
+        SeedType::Zomboni => { a_scale = 0.23; a_offset_x = 12.0; a_offset_y = 3.0; }
+        SeedType::ZombieGargantuar => { a_scale = 0.23; a_offset_x = 4.0; a_offset_y = 3.0; }
+        SeedType::BeghouledButtonShuffle | SeedType::BeghouledButtonCrater
+        | SeedType::SlotMachineSun | SeedType::SlotMachineDiamond
+        | SeedType::ZombiquariumSnorkle | SeedType::ZombiquariumTrophy => {
+            a_draw_seed_in_middle = false;
+        }
+        _ => {}
+    }
+
+    // 对应 C++: BigTime 特判
+    if crate::lawn::lawn_app::LawnApp::instance()
+        .map_or(false, |app| unsafe { (*app).game_mode == GameMode::ChallengeBigTime })
+    {
+        if a_seed_type == SeedType::Wallnut || a_seed_type == SeedType::Sunflower || a_seed_type == SeedType::Marigold {
+            a_offset_x = 16.0;
+            a_offset_y = 34.0;
+        }
+    }
+    // 对应 C++: 巨型核桃缩放
+    if a_seed_type == SeedType::GiantWallnut {
+        a_scale *= 0.75;
+        a_offset_x = 52.0;
+        a_offset_y = 58.0;
+    }
+    a_offset_x = a_scale_x * a_offset_x;
+    a_offset_y = a_scale_y * (a_offset_y + 1.0);
+
+    // [TRANSLATION_NOTE]: C++ SeedPacketDrawSeed（种子图标绘制）依赖 IMAGE_SEED_BANK 等
+    // 资源 cel 映射表，Rust 侧资源体系未全接入，暂略（aDrawSeedInMiddle 判定保留）
 
     if percent_dark > 0.0 {
-        // [TRANSLATION_NOTE]: C++ 中 ClipRect + 变暗重绘（68*percentDark 高度）
+        let a_darkness_height = (68.0 * percent_dark) as i32 + 2;
+        // 对应 C++: 变暗区域 ClipRect + 灰 64 重绘背景与图标
+        g.set_color(&crate::framework::color::Color { r: 64, g: 64, b: 64, a: 255 });
+        g.set_colorize_images(true);
+        g.clip_rect_xywh(x as i32, y as i32, 80, a_darkness_height);
+        let a_seeds = get_image("IMAGE_SEEDS");
+        if !a_seeds.is_null() {
+            unsafe { g.draw_image_cel_dest(&*a_seeds, &crate::framework::rect::Rect::new(x as i32, y as i32, (80.0 * a_scale_x) as i32, (86.0 * a_scale_y) as i32), a_packet_background); }
+        }
     }
 
     if draw_cost {
-        // [TRANSLATION_NOTE]: C++ 中显示种子成本（Plant::GetCost 或加速定价），
-        // FONT_PICO129 绘制；Rust 侧成本/字体未接入，暂略
-        let _ = (x, y, use_current_cost);
+        // 对应 C++: 成本字符串（加速定价依赖 board，简化为 Plant::GetCost）
+        // [TRANSLATION_NOTE]: PlantUsesAcceleratedPricing/GetCurrentPlantCost 依赖 Board，暂略
+        let a_cost = crate::lawn::plant::Plant::get_cost(a_seed_type, imitater_type);
+        let a_cost_str = format!("{}", a_cost);
+        // 对应 C++: FONT_PICO129 黑字绘制（aTextOffsetX = 32 - StringWidth）
+        let mut a_font = crate::framework::graphics::font::Font::new("Pico", 12);
+        a_font.ascent = 13;
+        a_font.font_height = 12;
+        g.set_font(&mut a_font as *mut crate::framework::graphics::font::Font);
+        g.set_color(&crate::framework::color::Color { r: 0, g: 0, b: 0, a: 255 });
+        let a_text_width = a_font.string_width(&a_cost_str);
+        let a_text_offset_x = 32 - a_text_width;
+        let a_text_offset_y = 13 + 54;
+        g.draw_string(&a_cost_str, (x + a_text_offset_x as f32) as i32, (y + a_text_offset_y as f32) as i32);
     }
+
+    g.set_colorize_images(false);
 }
 
 

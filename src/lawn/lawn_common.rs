@@ -104,6 +104,27 @@ impl LawnEditWidget {
         }
         // EditWidget::KeyChar(theChar) 基类处理——TODO: 实际需要调用基类方法
     }
+
+    /// 按键文本输入（对应 C++ LawnEditWidget::KeyText，LawnCommon.cpp:117）
+    /// 整段文本逐字符做 AutoCapChar 检查：找到第一个可大写字母后停止自动大写
+    pub fn key_text(&mut self, the_text: &str) {
+        if !self.auto_cap_first_letter {
+            // EditWidget::KeyText(theText) 基类处理——[TRANSLATION_NOTE]: Rust 基类为
+            // 逐字符 key_char，无整段文本入口，此处仅保留状态逻辑
+            return;
+        }
+
+        // C++: for (char& aCh : aText) { if (AutoCapChar(aCh)) { mAutoCapFirstLetter = false; break; } }
+        // AutoCapChar：小写 a-z 转大写返回 true；大写 A-Z 返回 true；其余返回 false
+        for a_ch in the_text.chars() {
+            if a_ch.is_ascii_alphabetic() {
+                self.auto_cap_first_letter = false;
+                break;
+            }
+        }
+
+        // EditWidget::KeyText(aText) 基类处理——[TRANSLATION_NOTE]: 同上，无整段入口
+    }
 }
 
 // ====================================================================================================

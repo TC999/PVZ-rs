@@ -366,7 +366,7 @@ impl GridItem {
         let mut a_extra_top_clip = 0;
 
         // C++: 吃墓碑的植物正在啃食时顶部额外裁剪
-        if let Some(plant) = board.get_top_plant_at(self.grid_x, self.grid_y) {
+        if let Some(plant) = board.get_top_plant_at_any(self.grid_x, self.grid_y) {
             if plant.state == PlantState::GravebusterEating {
                 a_extra_top_clip = crate::todlib::tod_common::tod_animate_curve_float(
                     400, 0, plant.state_countdown, 10.0, 40.0, TodCurves::Linear,

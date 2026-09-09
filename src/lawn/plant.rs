@@ -618,15 +618,114 @@ impl Plant {
 
     /// 更新生产类植物（对应 C++ UpdateProductionPlant）
     pub fn update_production_plant(&mut self) {
-        // 依赖底层系统
-        if self.makes_sun() {
-            self.launch_counter -= 1;
-            if self.launch_counter <= 0 {
-                self.launch_counter = self.launch_rate;
-                let bx = self.base.x;
-                let by = self.base.y;
-                if let Some(board) = self.base.get_board_mut() {
-                    board.add_coin((bx + 20) as f32, (by - 10) as f32, CoinType::Sun, CoinMotion::FromPlant);
+        // 对应 C++: if (!IsInPlay() || mApp->IsIZombieLevel() ||
+        //                mApp->mGameMode == GAMEMODE_UPSELL || mApp->mGameMode == GAMEMODE_INTRO) return;
+        if !self.is_in_play() { return; }
+        let app_mode = self.base.get_app().map_or(GameMode::Adventure, |app| app.game_mode);
+        if app_mode == GameMode::Upsell || app_mode == GameMode::Intro { return; }
+        if self.base.get_app().map_or(true, |app| app.is_izombie_level()) { return; }
+
+        // 对应 C++: if (mBoard->HasLevelAwardDropped()) return;
+        let award_dropped = self
+            .base
+            .get_board_mut()
+            .map_or(false, |board| board.has_level_award_dropped());
+        if award_dropped { return; }
+
+        // 对应 C++: 金盏花在最后一波进入 Ending 状态，倒计时结束后停止生产
+        if self.seed_type == SeedType::Marigold {
+            let last_wave = self
+                .base
+                .get_board_mut()
+                .map_or(false, |board| board.m_current_wave == board.m_total_waves);
+            if last_wave {
+                if self.state != PlantState::MarigoldEnding {
+                    self.state = PlantState::MarigoldEnding;
+                    self.state_countdown = 6000;
+                } else if self.state_countdown <= 0 {
+                    return;
+                }
+            }
+        }
+
+        // 对应 C++: Last Stand 模式仅在 Onslaught 阶段生产
+        if app_mode == GameMode::ChallengeLastStand {
+            let onslaught = self.base.get_board_mut().map_or(false, |board| {
+                board
+                    .challenge
+                    .as_ref()
+                    .map_or(false, |challenge| {
+                        challenge.challenge_state == ChallengeState::LastStandOnslaught
+                    })
+            });
+            if !onslaught { return; }
+        }
+
+        // 对应 C++: mLaunchCounter--;
+        self.launch_counter -= 1;
+        if self.launch_counter <= 100 {
+            // 对应 C++: mEatenFlashCountdown =
+            //     max(mEatenFlashCountdown, PvzpAnimateCurve(100, 0, mLaunchCounter, 0, 100, CURVE_LINEAR));
+            let flash_countdown = crate::todlib::tod_common::tod_animate_curve(
+                100, 0, self.launch_counter, 0, 100, crate::lawn::game_enums::TodCurves::Linear,
+            );
+            self.eaten_flash_countdown = self.eaten_flash_countdown.max(flash_countdown);
+        }
+        if self.launch_counter <= 0 {
+            // 对应 C++: mLaunchCounter = RandRangeInt(mLaunchRate - 150, mLaunchRate);
+            self.launch_counter = self.launch_rate - 150 + RandRange(150);
+            // 对应 C++: mApp->PlayFoley(FOLEY_SPAWN_SUN);
+            if let Some(app) = self.base.get_app_mut() {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::SpawnSun as i32);
+            }
+
+            let plant_x = self.base.x;
+            let plant_y = self.base.y;
+            // 对应 C++: 按种子类型产出对应货币
+            match self.seed_type {
+                SeedType::Sunshroom => {
+                    if let Some(board) = self.base.get_board_mut() {
+                        if self.state == PlantState::SunshroomSmall {
+                            board.add_coin(plant_x as f32, plant_y as f32, CoinType::SmallSun, CoinMotion::FromPlant);
+                        } else {
+                            board.add_coin(plant_x as f32, plant_y as f32, CoinType::Sun, CoinMotion::FromPlant);
+                        }
+                    }
+                }
+                SeedType::Sunflower => {
+                    if let Some(board) = self.base.get_board_mut() {
+                        board.add_coin(plant_x as f32, plant_y as f32, CoinType::Sun, CoinMotion::FromPlant);
+                    }
+                }
+                SeedType::Twinsunflower => {
+                    if let Some(board) = self.base.get_board_mut() {
+                        board.add_coin(plant_x as f32, plant_y as f32, CoinType::Sun, CoinMotion::FromPlant);
+                        board.add_coin(plant_x as f32, plant_y as f32, CoinType::Sun, CoinMotion::FromPlant);
+                    }
+                }
+                SeedType::Marigold => {
+                    if let Some(board) = self.base.get_board_mut() {
+                        let coin_type = if RandRange(100) < 10 { CoinType::Gold } else { CoinType::Silver };
+                        board.add_coin(plant_x as f32, plant_y as f32, coin_type, CoinMotion::Coin);
+                    }
+                }
+                _ => {}
+            }
+
+            // 对应 C++: BIG_TIME 模式的额外生产
+            if app_mode == GameMode::ChallengeBigTime {
+                match self.seed_type {
+                    SeedType::Sunflower => {
+                        if let Some(board) = self.base.get_board_mut() {
+                            board.add_coin(plant_x as f32, plant_y as f32, CoinType::Sun, CoinMotion::FromPlant);
+                        }
+                    }
+                    SeedType::Marigold => {
+                        if let Some(board) = self.base.get_board_mut() {
+                            board.add_coin(plant_x as f32, plant_y as f32, CoinType::Silver, CoinMotion::Coin);
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
@@ -634,20 +733,43 @@ impl Plant {
 
     /// 寻找目标并开火（对应 C++ Plant::FindTargetAndFire）
     pub fn find_target_and_fire(&mut self, the_row: i32, weapon: PlantWeapon) -> bool {
-        // 检查发射计数器
-        self.shooting_counter += 1;
-        if self.shooting_counter < self.launch_rate {
-            return false;
-        }
-        self.shooting_counter = 0;
-
-        // 在 Board 中找到目标僵尸（返回 ZombieID）
+        // 在 Board 中找到目标僵尸（对应 C++ FindTargetZombie）
         let target_zombie_id = self.find_target_zombie(the_row, weapon);
         if target_zombie_id.is_none() {
             return false;
         }
-        // [TRANSLATION_NOTE]: C++ EndBlink + shooting reanim 动画设置未接入
-        self.fire(target_zombie_id, the_row, weapon);
+
+        // 对应 C++：有 anim_shooting 动画轨道的植物设置 mShootingCounter 节拍并播放动画，
+        // 子弹由 UpdateShooting 在计数到 1 时发射；
+        // [TRANSLATION_NOTE]: EndBlink/StartBlend/SetFramesForLayer 依赖 reanim 完整实现（当前 stub），
+        // 仅保留 mShootingCounter 数值决策，轨道存在性按种子类型近似（C++ Plant.cpp:731-820）。
+        self.shooting_counter = match self.seed_type {
+            SeedType::Splitpea if weapon == PlantWeapon::Secondary => 26,
+            SeedType::Repeater | SeedType::Splitpea | SeedType::Leftpeater => 26,
+            SeedType::Gatlingpea => 100,
+            SeedType::Cactus if self.state == PlantState::CactusHigh => 23,
+            SeedType::Gloomshroom => 200,
+            SeedType::Cattail => 50,
+            SeedType::Fumeshroom => 50,
+            SeedType::Puffshroom => 29,
+            SeedType::Scaredyshroom => 25,
+            SeedType::Cabbagepult => 32,
+            SeedType::Melonpult | SeedType::Wintermelon => 36,
+            SeedType::Kernelpult => {
+                // 对应 C++: Kernelpult 有 1/4 概率转 butter 模式（渲染组切换依赖 reanim stub）
+                if RandRange(4) == 0 {
+                    self.state = PlantState::KernelpultButter;
+                }
+                30
+            }
+            // 对应 C++ body track 的 SEED_CACTUS case
+            SeedType::Cactus => 35,
+            // 无 anim_shooting 轨道的植物直接开火（对应 C++ else 分支：Fire + return true）
+            _ => {
+                self.fire(target_zombie_id, the_row, weapon);
+                return true;
+            }
+        };
         true
     }
 
@@ -1022,10 +1144,52 @@ impl Plant {
         self.is_on_board && self.base.board.is_some()
     }
 
-    /// 植物死亡
+    /// 植物死亡（对应 C++ Plant::Die）
     pub fn die(&mut self) {
+        // 对应 C++: Tanglekelp（海草）死亡时拖死目标僵尸
+        if self.is_on_board() && self.seed_type == SeedType::Tanglekelp {
+            let a_target_zombie_id = self.target_zombie_id;
+            let a_has_target = self
+                .base
+                .get_board()
+                .map_or(false, |board| board.zombie_try_to_get(a_target_zombie_id).is_some());
+            if a_has_target {
+                if let Some(board) = self.base.get_board_mut() {
+                    if let Some(a_zombie) = board.zombie_try_to_get_mut(a_target_zombie_id) {
+                        a_zombie.die_with_loot();
+                    }
+                }
+            }
+        }
+
         self.dead = true;
         self.is_on_board = false;
+
+        // 对应 C++: RemoveEffects()
+        self.remove_effects();
+
+        // 对应 C++: 非飞行植物移除所在格的梯子（IsOnBoard 以 board 存在判定，
+        // 与 is_on_board 字段解耦——C++ 中 mDead 置位后 IsOnBoard 仍成立）
+        if !Self::is_flying(self.seed_type) && self.base.board.is_some() {
+            let a_ladder_idx = self
+                .base
+                .get_board()
+                .and_then(|board| {
+                    board.grid_items.iter().position(|item| {
+                        !item.dead
+                            && item.grid_item_type == crate::lawn::grid_item::GridItemType::Ladder
+                            && item.grid_x == self.plant_col
+                            && item.grid_y == self.base.row
+                    })
+                });
+            if let Some(idx) = a_ladder_idx {
+                if let Some(board) = self.base.get_board_mut() {
+                    board.grid_items[idx].grid_item_die();
+                }
+            }
+        }
+
+        // [TRANSLATION_NOTE]: C++ 中花盆顶部植物的 pot reanim 动画加速依赖 reanim 系统（stub），暂略
     }
 
     /// 绘制植物（对应 C++ Plant::Draw 简化：绘制 body reanim + 阴影）
@@ -1150,32 +1314,112 @@ impl Plant {
         let a_damage_range_flags = self.get_damage_range_flags(PlantWeapon::Primary);
         let a_attack_rect = self.get_plant_attack_rect(PlantWeapon::Primary);
         let my_row = self.base.row;
+        let my_seed_type = self.seed_type;
+        let is_on_high_ground = self.is_on_high_ground();
+        let board = match self.base.board { Some(b) => b, None => return };
 
-        if let Some(board) = self.base.get_board_mut() {
-            for (_idx, zombie) in board.zombies.iter_mut().enumerate() {
+        // 借用规避：先在 board 借用内收集命中目标索引，退出后统一结算
+        let mut targets: Vec<(usize, ZombieType)> = Vec::new();
+        unsafe {
+            let b = &*board;
+            for (idx, zombie) in b.zombies.iter().enumerate() {
                 if zombie.dead { continue; }
-                let a_diff_y = if zombie.zombie_type == ZombieType::Boss { 0 } else { zombie.base.row - my_row };
-                if self.seed_type == SeedType::Gloomshroom {
+                let a_diff_y = if zombie.zombie_type == ZombieType::Boss {
+                    0
+                } else {
+                    zombie.base.row - my_row
+                };
+                if my_seed_type == SeedType::Gloomshroom {
                     if a_diff_y < -1 || a_diff_y > 1 { continue; }
-                } else if a_diff_y != 0 { continue; }
-
-                let z_rect = zombie.get_zombie_rect();
-                if crate::lawn::board::get_rect_overlap(&a_attack_rect, &z_rect) > 0 {
-                    // 依赖底层系统
+                } else if a_diff_y != 0 {
+                    continue;
                 }
+
+                if zombie.on_high_ground == is_on_high_ground
+                    && zombie.effected_by_damage(a_damage_range_flags)
+                {
+                    let z_rect = zombie.get_zombie_rect();
+                    if crate::lawn::board::get_rect_overlap(&a_attack_rect, &z_rect) > 0 {
+                        targets.push((idx, zombie.zombie_type));
+                    }
+                }
+            }
+        }
+
+        for (idx, zombie_type) in targets {
+            let is_zamboni_or_catapult =
+                zombie_type == ZombieType::Zamboni || zombie_type == ZombieType::Catapult;
+
+            // 对应 C++: 地刺击中轮胎/投石车：aDamage = 1800；若带 DAMAGE_SPIKE，
+            // 尖刺石自身掉血/死亡（先于僵尸结算，与 C++ 顺序一致）
+            if is_zamboni_or_catapult && crate::lawn::zombie::test_bit(damage_flags, 5) {
+                if self.seed_type == SeedType::Spikerock {
+                    self.spike_rock_take_damage();
+                } else {
+                    self.die();
+                }
+            }
+
+            let a_damage = if is_zamboni_or_catapult {
+                1800
+            } else {
+                damage
+            };
+            if let Some(board) = self.base.get_board_mut() {
+                if let Some(zombie) = board.zombies.get_mut(idx) {
+                    zombie.take_damage(a_damage, damage_flags);
+                }
+            }
+            if let Some(app) = self.base.get_app() {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::Splat as i32);
             }
         }
     }
 
     /// 获取伤害范围标志（对应 C++ GetDamageRangeFlags）
-    pub fn get_damage_range_flags(&self, _weapon: PlantWeapon) -> u32 {
-        // 依赖底层系统
-        1
+    pub fn get_damage_range_flags(&self, weapon: PlantWeapon) -> u32 {
+        match self.seed_type {
+            SeedType::Cactus => {
+                if weapon == PlantWeapon::Secondary { 1 } else { 2 }
+            }
+            SeedType::Cherrybomb | SeedType::Jalapeno | SeedType::Cobcannon | SeedType::Doomshroom => 127,
+            SeedType::Melonpult | SeedType::Cabbagepult | SeedType::Kernelpult | SeedType::Wintermelon => 13,
+            SeedType::PotatoMine => 77,
+            SeedType::Squash => 13,
+            SeedType::Puffshroom | SeedType::Seashroom | SeedType::Fumeshroom
+            | SeedType::Gloomshroom | SeedType::Chomper => 9,
+            SeedType::Cattail => 11,
+            SeedType::Tanglekelp => 5,
+            SeedType::GiantWallnut => 17,
+            _ => 1,
+        }
     }
 
     /// 获取植物攻击矩形（对应 C++ GetPlantAttackRect）
-    pub fn get_plant_attack_rect(&self, _weapon: PlantWeapon) -> Rect {
-        Rect::new(self.base.x - 20, self.base.y - 20, self.base.width + 40, self.base.height + 40)
+    pub fn get_plant_attack_rect(&self, weapon: PlantWeapon) -> Rect {
+        let m_x = self.base.x;
+        let m_y = self.base.y;
+        let m_width = self.base.width;
+        let m_height = self.base.height;
+        if self.base.get_app().map_or(false, |app| app.is_wallnut_bowling_level()) {
+            return Rect::new(m_x, m_y, m_width - 20, m_height);
+        } else if weapon == PlantWeapon::Secondary && self.seed_type == SeedType::Splitpea {
+            return Rect::new(0, m_y, m_x + 16, m_height);
+        }
+        match self.seed_type {
+            SeedType::Leftpeater => Rect::new(0, m_y, m_x, m_height),
+            SeedType::Squash => Rect::new(m_x + 20, m_y, m_width - 35, m_height),
+            SeedType::Chomper => Rect::new(m_x + 80, m_y, 40, m_height),
+            SeedType::Spikeweed | SeedType::Spikerock => Rect::new(m_x + 20, m_y, m_width - 50, m_height),
+            SeedType::PotatoMine => Rect::new(m_x, m_y, m_width - 25, m_height),
+            SeedType::Torchwood => Rect::new(m_x + 50, m_y, 30, m_height),
+            SeedType::Puffshroom | SeedType::Seashroom => Rect::new(m_x + 60, m_y, 230, m_height),
+            SeedType::Fumeshroom => Rect::new(m_x + 60, m_y, 340, m_height),
+            SeedType::Gloomshroom => Rect::new(m_x - 80, m_y - 80, 240, 240),
+            SeedType::Tanglekelp => Rect::new(m_x, m_y, m_width, m_height),
+            SeedType::Cattail => Rect::new(-BOARD_WIDTH, -BOARD_HEIGHT, BOARD_WIDTH * 2, BOARD_HEIGHT * 2),
+            _ => Rect::new(m_x + 60, m_y, BOARD_WIDTH, m_height),
+        }
     }
 
     /// 到最近僵尸的距离（对应 C++ DistanceToClosestZombie）
@@ -1268,6 +1512,8 @@ impl Plant {
             SeedType::Magnetshroom => self.update_magnet_shroom(),
             SeedType::GoldMagnet => self.update_gold_magnet_shroom(),
             SeedType::Sunshroom => self.update_sun_shroom(),
+            // 对应 C++: else if (MakesSun() || mSeedType == SEED_MARIGOLD) UpdateProductionPlant();
+            SeedType::Sunflower | SeedType::Twinsunflower | SeedType::Marigold => self.update_production_plant(),
             SeedType::Gravebuster => self.update_grave_buster(),
             SeedType::Torchwood => self.update_torchwood(),
             SeedType::PotatoMine => self.update_potato(),
@@ -1396,6 +1642,156 @@ impl Plant {
 
             // [TRANSLATION_NOTE]: C++ 末尾 aBodyReanim->PropogateColorToAttachments()
             // （把颜色覆盖传播给附件 reanim）；Rust 附件颜色传播未接入
+        }
+    }
+
+    /// 更新重动画位置/缩放（对应 C++ Plant::UpdateReanim，Plant.cpp:2739）
+    pub fn update_reanim(&mut self) {
+        // ReanimationTryToGet(mBodyReanimID)：取不到直接返回
+        let has_body_reanim = {
+            let app = match self.base.get_app_mut() {
+                Some(a) => a,
+                None => return,
+            };
+            app.reanimation_get_mut(self.body_reanim_id).is_some()
+        };
+        if !has_body_reanim {
+            return;
+        }
+
+        self.update_reanim_color();
+
+        let seed_type = self.seed_type;
+        let mut a_offset_x = self.shake_offset_x;
+        let mut a_offset_y = Self::plant_draw_height_offset(
+            self.base.get_board(), Some(self), seed_type, self.plant_col, self.base.row,
+        );
+        let mut a_scale_x = 1.0;
+        let mut a_scale_y = 1.0;
+
+        let a_game_mode = self.base.get_app().map(|a| a.game_mode);
+        if a_game_mode == Some(GameMode::ChallengeBigTime)
+            && (seed_type == SeedType::Wallnut
+                || seed_type == SeedType::Sunflower
+                || seed_type == SeedType::Marigold)
+        {
+            a_scale_x = 1.5;
+            a_scale_y = 1.5;
+            a_offset_x -= 20.0;
+            a_offset_y -= 40.0;
+        }
+        if seed_type == SeedType::GiantWallnut {
+            a_scale_x = 2.0;
+            a_scale_y = 2.0;
+            a_offset_x -= 76.0;
+            a_offset_y -= 64.0;
+        }
+        if seed_type == SeedType::InstantCoffee {
+            a_scale_x = 0.8;
+            a_scale_y = 0.8;
+            a_offset_x += 12.0;
+            a_offset_y += 10.0;
+        }
+        if seed_type == SeedType::PotatoMine {
+            a_scale_x = 0.8;
+            a_scale_y = 0.8;
+            a_offset_x += 12.0;
+            a_offset_y += 12.0;
+        }
+        if self.state == PlantState::GravebusterEating {
+            a_offset_y += crate::todlib::tod_common::tod_animate_curve_float(
+                400, 0, self.state_countdown, 0.0, 30.0, TodCurves::Linear,
+            );
+        }
+        if self.wake_up_counter > 0 {
+            let a_scale_factor = crate::todlib::tod_common::tod_animate_curve_float(
+                70, 0, self.wake_up_counter, 1.0, 0.8, TodCurves::EaseSinWave,
+            );
+            a_scale_y *= a_scale_factor;
+            a_offset_y += 80.0 - 80.0 * a_scale_factor;
+        }
+
+        // aBodyReanim->Update()
+        if let Some(app) = self.base.get_app_mut() {
+            if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                a_body_reanim.update();
+            }
+        }
+
+        if seed_type == SeedType::Leftpeater {
+            a_offset_x += 80.0 * a_scale_x;
+            a_scale_x *= -1.0;
+        }
+
+        // 盆栽分支（mPottedPlantIndex != -1）
+        if self.potted_plant_index != -1 {
+            let potted_index = self.potted_plant_index as usize;
+            let zen_garden = self.base.get_app().and_then(|app| app.zen_garden);
+            if let Some(zg) = zen_garden {
+                unsafe {
+                    let a_potted_plant = (*zg).potted_plant_from_index(potted_index);
+                    if let Some(a_potted_plant) = a_potted_plant {
+                        if (*a_potted_plant).facing == crate::lawn::system::player_info::FacingDirection::Left {
+                            a_offset_x += 80.0 * a_scale_x;
+                            a_scale_x *= -1.0;
+                        }
+
+                        let mut a_offset_x_start = 0.0;
+                        let mut a_offset_x_end = 0.0;
+                        let mut a_offset_y_start = 0.0;
+                        let mut a_offset_y_end = 0.0;
+                        let mut a_scale_start = 0.0;
+                        let mut a_scale_end = 0.0;
+                        if (*a_potted_plant).plant_age == PottedPlantAge::Small {
+                            a_offset_x_start = 20.0;
+                            a_offset_x_end = 20.0;
+                            a_offset_y_start = 40.0;
+                            a_offset_y_end = 40.0;
+                            a_scale_start = 0.5;
+                            a_scale_end = 0.5;
+                        } else if (*a_potted_plant).plant_age == PottedPlantAge::Medium {
+                            a_offset_x_start = 20.0;
+                            a_offset_x_end = 10.0;
+                            a_offset_y_start = 40.0;
+                            a_offset_y_end = 20.0;
+                            a_scale_start = 0.5;
+                            a_scale_end = 0.75;
+                        } else {
+                            a_offset_x_start = 10.0;
+                            a_offset_x_end = 0.0;
+                            a_offset_y_start = 20.0;
+                            a_offset_y_end = 0.0;
+                            a_scale_start = 0.75;
+                            a_scale_end = 1.0;
+                        }
+
+                        let a_animated_offset_x = crate::todlib::tod_common::tod_animate_curve_float(
+                            100, 0, self.state_countdown, a_offset_x_start, a_offset_x_end, TodCurves::Linear,
+                        );
+                        let a_animated_offset_y = crate::todlib::tod_common::tod_animate_curve_float(
+                            100, 0, self.state_countdown, a_offset_y_start, a_offset_y_end, TodCurves::Linear,
+                        );
+                        let a_animated_scale = crate::todlib::tod_common::tod_animate_curve_float(
+                            100, 0, self.state_countdown, a_scale_start, a_scale_end, TodCurves::Linear,
+                        );
+
+                        a_offset_x += a_animated_offset_x * a_scale_x;
+                        a_offset_y += a_animated_offset_y * a_scale_y;
+                        a_scale_x *= a_animated_scale;
+                        a_scale_y *= a_animated_scale;
+                        a_offset_x += crate::lawn::zen_garden::ZenGarden::zen_plant_offset_x(&*a_potted_plant);
+                        a_offset_y += (*zg).plant_potted_draw_height_offset(seed_type, a_scale_y);
+                    }
+                }
+            }
+        }
+
+        // aBodyReanim->SetPosition(aOffsetX, aOffsetY); OverrideScale(aScaleX, aScaleY)
+        if let Some(app) = self.base.get_app_mut() {
+            if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                a_body_reanim.set_position(a_offset_x, a_offset_y);
+                a_body_reanim.override_scale(a_scale_x, a_scale_y);
+            }
         }
     }
 
@@ -1807,11 +2203,69 @@ impl Plant {
 
     /// 更新射击（对应 C++ UpdateShooting）
     pub fn update_shooting(&mut self) {
-        self.launch_counter -= 1;
-        if self.launch_counter <= 0 {
-            self.launch_counter = self.launch_rate - 15 + RandRange(15);
-            self.find_target_and_fire(self.base.row, PlantWeapon::Primary);
+        // 对应 C++: if (NotOnGround() || mShootingCounter == 0) return;
+        // [TRANSLATION_NOTE]: C++ NotOnGround() 依赖 mPlantHeight 等字段，Rust 暂无对应，跳过。
+        if self.shooting_counter == 0 { return; }
+
+        self.shooting_counter -= 1;
+
+        // 对应 C++: Gloomshroom 冒烟粒子时刻（粒子系统 stub，仅保留 Fire 时刻）
+        if self.seed_type == SeedType::Gloomshroom {
+            if self.shooting_counter == 126
+                || self.shooting_counter == 98
+                || self.shooting_counter == 70
+                || self.shooting_counter == 42
+            {
+                self.fire(None, self.base.row, PlantWeapon::Primary);
+            }
+        } else if self.seed_type == SeedType::Gatlingpea {
+            // 对应 C++: Gatlingpea 四连射
+            if self.shooting_counter == 18
+                || self.shooting_counter == 35
+                || self.shooting_counter == 51
+                || self.shooting_counter == 68
+            {
+                self.fire(None, self.base.row, PlantWeapon::Primary);
+            }
+        } else if self.seed_type == SeedType::Cattail {
+            // 对应 C++: Cattail 计数 19 时瞄准当前目标发射
+            if self.shooting_counter == 19 {
+                let a_target = self.find_target_zombie(self.base.row, PlantWeapon::Primary);
+                self.fire(a_target, self.base.row, PlantWeapon::Primary);
+            }
+        } else if self.shooting_counter == 1 {
+            // 对应 C++ mShootingCounter == 1 分支
+            // [TRANSLATION_NOTE]: Threepeater/Splitpea 的头部 reanim 动画判定依赖
+            // reanim 完整实现（当前 stub），简化为直接发射，数值节奏一致。
+            if self.state == PlantState::CactusLow {
+                self.fire(None, self.base.row, PlantWeapon::Secondary);
+            } else if self.seed_type == SeedType::Cabbagepult
+                || self.seed_type == SeedType::Kernelpult
+                || self.seed_type == SeedType::Melonpult
+                || self.seed_type == SeedType::Wintermelon
+            {
+                // 对应 C++ pult 分支：Kernelpult butter 判定切换弹种（渲染组切换依赖 reanim stub）
+                let a_plant_weapon = if self.seed_type == SeedType::Kernelpult
+                    && self.state == PlantState::KernelpultButter
+                {
+                    self.state = PlantState::NotReady;
+                    PlantWeapon::Secondary
+                } else {
+                    PlantWeapon::Primary
+                };
+                let a_target = self.find_target_zombie(self.base.row, a_plant_weapon);
+                self.fire(a_target, self.base.row, a_plant_weapon);
+            } else {
+                self.fire(None, self.base.row, PlantWeapon::Primary);
+            }
+            return;
         }
+
+        if self.shooting_counter != 0 { return; }
+
+        // 对应 C++ mShootingCounter == 0：头部/身体动画复位为 idle，计数器保活为 1。
+        // [TRANSLATION_NOTE]: StartBlend/SetFramesForLayer 依赖 reanim 完整实现（当前 stub），仅保留计数逻辑。
+        self.shooting_counter = 1;
     }
 
     /// 静态辅助函数
@@ -2038,7 +2492,7 @@ impl Plant {
         }
         if upgraded_type == SeedType::Cattail && self.seed_type == SeedType::Lilypad {
             let top_plant = self.base.board.map_or(false, |b| unsafe {
-                (*b).get_top_plant_at(self.plant_col, self.base.row).map_or(true, |p| p.seed_type != SeedType::Cattail)
+                (*b).get_top_plant_at_any(self.plant_col, self.base.row).map_or(true, |p| p.seed_type != SeedType::Cattail)
             });
             return top_plant;
         }
@@ -2622,9 +3076,54 @@ impl Plant {
             }
         }
     }
+    /// 发射五角星（对应 C++ Plant::StarFruitFire，Plant.cpp:920）
+    pub fn star_fruit_fire(&mut self) {
+        if let Some(app) = self.base.get_app() {
+            app.play_foley(crate::todlib::tod_foley::FoleyType::Throw as i32);
+        }
+
+        let a_shoot_angle_x = (30.0f32 * std::f32::consts::PI / 180.0).cos() * 3.33;
+        let a_shoot_angle_y = (30.0f32 * std::f32::consts::PI / 180.0).sin() * 3.33;
+        let a_damage_range_flags = self.get_damage_range_flags(PlantWeapon::Primary);
+        let row = self.base.row;
+        for i in 0..5 {
+            let a_projectile_idx = {
+                let board = match self.base.get_board_mut() {
+                    Some(b) => b,
+                    None => return,
+                };
+                board.add_projectile(self.pos_x + 25.0, self.pos_y + 25.0, row, SeedType::Starfruit)
+            };
+            if let Some(board) = self.base.get_board_mut() {
+                if let Some(a_projectile) = board.projectiles.get_mut(a_projectile_idx) {
+                    a_projectile.damage_range_flags = a_damage_range_flags;
+                    a_projectile.motion = crate::lawn::projectile::ProjectileMotion::Star;
+
+                    match i {
+                        0 => { a_projectile.vel_x = -3.33; a_projectile.vel_y = 0.0; }
+                        1 => { a_projectile.vel_x = 0.0; a_projectile.vel_y = 3.33; }
+                        2 => { a_projectile.vel_x = 0.0; a_projectile.vel_y = -3.33; }
+                        3 => { a_projectile.vel_x = a_shoot_angle_x; a_projectile.vel_y = a_shoot_angle_y; }
+                        4 => { a_projectile.vel_x = a_shoot_angle_x; a_projectile.vel_y = -a_shoot_angle_y; }
+                        _ => { /* C++: PVZP_ASSERT(false) */ }
+                    }
+                }
+            }
+        }
+    }
+
     pub fn update_blover(&mut self) {
-        // 依赖底层系统
-        // 特殊效果由 DoSpecial → BlowAwayFliers 处理
+        // 对应 C++ UpdateBlover（Plant.cpp:1612）：循环动画帧设置
+        if let Some(app) = self.base.get_app_mut() {
+            if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                if a_body_reanim.m_loop_count > 0
+                    && a_body_reanim.m_loop_type != crate::todlib::reanimator::ReanimLoopType::Loop
+                {
+                    a_body_reanim.set_frames_for_layer("anim_loop");
+                    a_body_reanim.m_loop_type = crate::todlib::reanimator::ReanimLoopType::Loop;
+                }
+            }
+        }
     }
 
     pub fn update_flower_pot(&mut self) {
@@ -3550,6 +4049,12 @@ pub struct PlantDefinition {
     pub sub_class: PlantSubClass,
     pub launch_rate: i32,
     pub plant_name: Option<&'static str>,
+}
+
+/// 获取植物图片（对应 C++ Plant::GetImage，Plant.cpp:3802）
+/// C++: GetPlantDefinition(theSeedType).mPlantImage[0]，无图返回 nullptr
+pub fn get_image(seed_type: SeedType) -> Option<*mut Image> {
+    get_plant_definition(seed_type).plant_image
 }
 
 /// 获取植物定义（对应 C++ GetPlantDefinition）

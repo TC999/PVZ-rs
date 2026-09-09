@@ -1216,7 +1216,7 @@ impl Zombie {
                     self.die_no_loot();
                 } else {
                     if let Some(board) = self.base.get_board_mut() {
-                        board.zombies_won();
+                        board.zombies_won_no_zombie();
                     }
                 }
             }
@@ -1306,15 +1306,27 @@ impl Zombie {
         }
     }
 
-    /// 更新从墓碑升起（对应 C++ UpdateZombieRiseFromGrave，stub）
+    /// 更新从墓碑升起（对应 C++ UpdateZombieRiseFromGrave）
     pub fn update_zombie_rise_from_grave(&mut self) {
-        if self.phase_counter > 0 { self.phase_counter -= 1; }
+        // 对应 C++：本函数不递减 mPhaseCounter（统一在 Zombie::Update 中每帧递减一次）
         if self.in_pool {
-            self.altitude = -150.0 + (50 - self.phase_counter).max(0) as f32 * 110.0 / 50.0;
+            self.altitude = crate::todlib::tod_common::tod_animate_curve(
+                50, 0, self.phase_counter, -150, -40, TodCurves::Linear,
+            ) as f32 * self.scale_zombie;
         } else {
-            self.altitude = -200.0 + (50 - self.phase_counter).max(0) as f32 * 200.0 / 50.0;
+            self.altitude = crate::todlib::tod_common::tod_animate_curve(
+                50, 0, self.phase_counter, -200, 0, TodCurves::Linear,
+            ) as f32;
         }
-        if self.phase_counter == 0 { self.zombie_phase = ZombiePhase::Normal; self.altitude = 0.0; }
+        if self.phase_counter == 0 {
+            self.zombie_phase = ZombiePhase::Normal;
+            // 对应 C++: if (IsOnHighGround()) mAltitude = HIGH_GROUND_HEIGHT;
+            if self.on_high_ground {
+                self.altitude = HIGH_GROUND_HEIGHT;
+            }
+            // [TRANSLATION_NOTE]: C++ 中 mInPool 分支的 ReanimIgnoreClipRect("Zombie_duckytube", true)
+            // 等 reanim 操作依赖贴图系统，Rust stub 暂缺。
+        }
     }
 
     /// 更新泳池僵尸（对应 C++ UpdateZombiePool，stub）
@@ -1734,12 +1746,15 @@ impl Zombie {
 
     /// 更新小丑僵尸（对应 C++ UpdateZombieJackInTheBox）
     pub fn update_zombie_jack_in_the_box(&mut self) {
+        // 对应 C++ UpdateZombieJackInTheBox（Zombie.cpp:2030）
+        // 半径常量：JACK_IN_THE_BOX_ZOMBIE_RADIUS = 115 / JACK_IN_THE_BOX_PLANT_RADIUS = 90
         if self.zombie_phase == ZombiePhase::JackInTheBoxRunning {
             if self.phase_counter <= 0 && self.has_head {
                 self.phase_counter = 110;
                 self.zombie_phase = ZombiePhase::JackInTheBoxPopping;
                 self.stop_zombie_sound();
-                // 依赖底层系统
+                // [TRANSLATION_NOTE]: C++ 的 mApp->PlaySample(SOUND_BOING) 为样本音，
+                // Rust 音效层（PlaySample）未接入，暂略
                 self.play_zombie_reanim("anim_pop", ReanimLoopType::PlayOnceAndHold, 20, 28.0);
             }
         } else if self.zombie_phase == ZombiePhase::JackInTheBoxPopping {
@@ -1753,25 +1768,37 @@ impl Zombie {
                 if let Some(app) = self.base.get_app() {
                     app.play_foley(crate::todlib::tod_foley::FoleyType::Explosion as i32);
                 }
-                // 依赖底层系统
-                // KillAllZombiesInRadius / KillAllPlantsInRadius / Particle 均在 Board 中未实现
-                // ScaryPotterJackExplode 在 Challenge 中已存在
+
                 let a_pos_x = self.base.x + self.base.width / 2;
                 let a_pos_y = self.base.y + self.base.height / 2;
-                if !self.mind_controlled {
-                    // 非精神控制：炸死植物
-                    // 依赖底层系统
+                let a_row = self.base.row;
+                let a_mind_controlled = self.mind_controlled;
+                if let Some(board) = self.base.get_board_mut() {
+                    if a_mind_controlled {
+                        // 对应 C++: 精神控制小丑只炸僵尸（flags 127）
+                        board.kill_all_zombies_in_radius(
+                            a_row, a_pos_x, a_pos_y, 115, 1, true, 127);
+                    } else {
+                        // 对应 C++: 非精神控制炸僵尸（flags 255）+ 炸植物（半径 90）
+                        board.kill_all_zombies_in_radius(
+                            a_row, a_pos_x, a_pos_y, 115, 1, true, 255);
+                        board.kill_all_plants_in_radius(a_pos_x, a_pos_y, 90);
+                    }
+                    // 对应 C++: mBoard->ShakeBoard(4, -6)
+                    board.shake_board(4, -6);
                 }
-                // 依赖底层系统
+                // [TRANSLATION_NOTE]: C++ 的 PARTICLE_JACKEXPLODE 粒子依赖 AddPvzpParticle，暂略
+
                 self.die_no_loot();
 
+                // 对应 C++: scary potter 关卡的瓦罐连锁爆炸
                 if let Some(app) = self.base.get_app() {
                     if app.is_scary_potter_level() {
-                        // 依赖底层系统
-                        // 通过 board 访问
-                        // if let Some(board) = self.base.get_board() {
-                        //     board.mChallenge.scary_potter_jack_explode(a_pos_x, a_pos_y);
-                        // }
+                        if let Some(board) = self.base.get_board_mut() {
+                            if let Some(challenge) = board.challenge.as_mut() {
+                                challenge.scary_potter_jack_explode(a_pos_x, a_pos_y);
+                            }
+                        }
                     }
                 }
             }
@@ -1781,27 +1808,83 @@ impl Zombie {
     /// 更新伽刚特尔（对应 C++ UpdateZombieGargantuar）
     pub fn update_zombie_gargantuar(&mut self) {
         if self.zombie_phase == ZombiePhase::GargantuarSmashing {
-            // 触发砸击事件
-            // 依赖底层系统
-            if self.anim_counter % 40 == 0 {
-                // 寻找并碾压植物（先取值，退出 board 借用后再修改 self）
-                let (has_target, plant_col, plant_row) = if let Some(board) = self.base.get_board() {
-                    let plant_col = self.plant_col_below();
-                    (plant_col != -1, plant_col, self.base.row)
-                } else {
-                    (false, -1, 0)
-                };
-                if has_target {
-                    self.squish_all_in_square(plant_col, plant_row, ZombieAttackType::Chew);
+            // 对应 C++: aBodyReanim->ShouldTriggerTimedEvent(0.64f)
+            let a_triggered = self.base.get_app().map_or(false, |app| {
+                app.reanimation_get(self.body_reanim_id)
+                    .map_or(false, |r| r.should_trigger_timed_event(0.64))
+            });
+            if a_triggered {
+                // 对应 C++: FindPlantTarget(ATTACKTYPE_CHEW)（借用规避：先提取目标信息）
+                let a_target_info: Option<(usize, i32, i32, bool)> =
+                    self.find_plant_target_index(ZombieAttackType::Chew).and_then(|idx| {
+                        if let Some(board) = self.base.get_board() {
+                            let p = &board.plants[idx];
+                            Some((idx, p.plant_col, p.base.row, p.seed_type == SeedType::Spikerock))
+                        } else {
+                            None
+                        }
+                    });
+                if let Some((idx, a_col, a_row, a_is_spikerock)) = a_target_info {
+                    if a_is_spikerock {
+                        // 对应 C++: TakeDamage(20, 32U) + SpikeRockTakeDamage + 植物死亡则碾压
+                        self.take_damage(20, 32);
+                        let a_plant_dead = if let Some(board) = self.base.get_board_mut() {
+                            if let Some(p) = board.plants.get_mut(idx) {
+                                p.spike_rock_take_damage();
+                                p.plant_health <= 0
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        };
+                        if a_plant_dead {
+                            self.squish_all_in_square(a_col, a_row, ZombieAttackType::Chew);
+                        }
+                    } else {
+                        self.squish_all_in_square(a_col, a_row, ZombieAttackType::Chew);
+                    }
                 }
-                // 音效与震动
+
+                // 对应 C++: PlayFoley(FOLEY_THUMP) + ShakeBoard(0, 3)
                 if let Some(app) = self.base.get_app() {
                     app.play_foley(crate::todlib::tod_foley::FoleyType::Thump as i32);
                 }
+                if let Some(board) = self.base.get_board_mut() {
+                    board.shake_board(0, 3);
+                }
+
+                // 对应 C++: scary potter 关卡的瓦罐被砸开
+                if self.base.get_app().map_or(false, |app| app.is_scary_potter_level()) {
+                    let a_row = self.base.row;
+                    let a_pos_x = self.base.x;
+                    if let Some(board) = self.base.get_board_mut() {
+                        let a_grid_x = board.pixel_to_grid_x_keep_on_board(a_pos_x, 0);
+                        if let Some(challenge) = board.challenge.as_mut() {
+                            // 对应 C++: mBoard->GetScaryPotAt(aGridX, mRow)；Rust 以 grid_items 查找
+                            let a_scary_idx = board
+                                .grid_items
+                                .iter()
+                                .position(|item| {
+                                    !item.dead
+                                        && item.grid_item_type == crate::lawn::grid_item::GridItemType::ScaryPot
+                                        && item.grid_x == a_grid_x
+                                        && item.grid_y == a_row
+                                });
+                            if let Some(sidx) = a_scary_idx {
+                                challenge.scary_potter_open_pot(&mut board.grid_items[sidx]);
+                            }
+                        }
+                    }
+                }
+                // [TRANSLATION_NOTE]: C++ IZombie 分支（IZombieGetBrainTarget/SquishBrain）依赖 IZombie 系统，暂未接入
             }
 
-            // 动画循环结束后回 Normal
-            if self.anim_counter % 120 == 0 {
+            // 对应 C++: aBodyReanim->mLoopCount > 0 → 回 Normal
+            let a_loop_done = self.base.get_app().map_or(false, |app| {
+                app.reanimation_get(self.body_reanim_id).map_or(false, |r| r.m_loop_count > 0)
+            });
+            if a_loop_done {
                 self.zombie_phase = ZombiePhase::Normal;
                 self.start_walk_anim(20);
             }
@@ -2627,7 +2710,7 @@ impl Zombie {
         }
 
         if attack_type == ZombieAttackType::Chew {
-            if let Some(top_plant) = board.get_top_plant_at(plant.plant_col, plant.base.row) {
+            if let Some(top_plant) = board.get_top_plant_at_any(plant.plant_col, plant.base.row) {
                 if !std::ptr::eq(top_plant, plant) && self.can_target_plant(top_plant, attack_type) {
                     return false;
                 }
@@ -2635,7 +2718,7 @@ impl Zombie {
         }
 
         if attack_type == ZombieAttackType::Vault {
-            if let Some(top_plant) = board.get_top_plant_at(plant.plant_col, plant.base.row) {
+            if let Some(top_plant) = board.get_top_plant_at_any(plant.plant_col, plant.base.row) {
                 if !std::ptr::eq(top_plant, plant) && self.can_target_plant(top_plant, attack_type) {
                     return false;
                 }
@@ -3520,9 +3603,30 @@ impl Zombie {
         false
     }
 
-    pub fn is_squash_target(&self, _the_except: Option<&Plant>) -> bool {
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+    pub fn is_squash_target(&self, the_except: Option<&Plant>) -> bool {
+        let board = match self.base.get_board() {
+            Some(b) => b,
+            None => return false,
+        };
+
+        let an_id = match board.zombies.iter().position(|z| std::ptr::eq(z, self)) {
+            Some(i) => i as ZombieID,
+            None => ZOMBIEID_NULL,
+        };
+
+        for plant in &board.plants {
+            if plant.dead {
+                continue;
+            }
+            let is_the_except = match the_except {
+                Some(p) => std::ptr::eq(plant, p),
+                None => false,
+            };
+            if !is_the_except && plant.seed_type == SeedType::Squash && plant.target_zombie_id == an_id {
+                return true;
+            }
+        }
+
         false
     }
 
@@ -3958,7 +4062,33 @@ impl Zombie {
 
     /// 是否在倒走（对应 C++ IsWalkingBackwards）
     pub fn is_walking_backwards(&self) -> bool {
-        false
+        if self.mind_controlled {
+            return true;
+        }
+
+        if self.zombie_height == ZombieHeight::Zombiquarium {
+            if self.vel_z < 1.5707964f32 || self.vel_z > 4.712389f32 {
+                return true;
+            }
+        }
+
+        if self.zombie_type == ZombieType::Digger {
+            if self.zombie_phase == ZombiePhase::DiggerRising
+                || self.zombie_phase == ZombiePhase::DiggerStunned
+                || self.zombie_phase == ZombiePhase::DiggerWalking
+            {
+                return true;
+            } else if self.zombie_phase == ZombiePhase::Dying
+                || self.zombie_phase == ZombiePhase::Burned
+                || self.zombie_phase == ZombiePhase::Mowered
+            {
+                return self.has_object;
+            }
+
+            return false;
+        }
+
+        self.zombie_type == ZombieType::Yeti && !self.has_object
     }
 
     /// 僵尸是否不该走动（对应 C++ ZombieNotWalking）
@@ -5608,24 +5738,225 @@ impl Zombie {
         self.play_zombie_reanim(a_death_track, ReanimLoopType::PlayOnceAndHold, 20, a_death_anim_rate);
     }
 
-    /// 更新死亡状态（对应 C++ UpdateDeath）
+    /// 更新死亡状态（对应 C++ UpdateDeath，Zombie.cpp:9068）
     pub fn update_death(&mut self) {
-        // 依赖底层系统
-        // 大多数僵尸类型在死亡动画播放完后通过 zombie_fade 消失
-        // 直接触发 DieNoLoot（已由播放死亡动画的调用方处理后半段）
-        if self.zombie_fade == -1 {
-            self.zombie_fade = if self.in_pool { 10 } else { 100 };
+        // 对应 C++: aBodyReanim 取不到 → DieNoLoot
+        let a_body_null = self.base.get_app().map_or(true, |app| {
+            app.reanimation_get(self.body_reanim_id).is_none()
+        });
+        if a_body_null {
+            self.die_no_loot();
+            return;
+        }
+
+        // 对应 C++: 下落高度 → UpdateZombieFalling
+        if self.zombie_height == crate::lawn::game_enums::ZombieHeight::Falling {
+            self.update_zombie_falling();
+        }
+
+        // 对应 C++: 伽刚特尔倒地震屏（0.89 / 0.98 时刻）
+        if self.zombie_type == ZombieType::Gargantuar || self.zombie_type == ZombieType::RedeEyeGargantuar {
+            let a_trigger_89 = self.base.get_app().map_or(false, |app| {
+                app.reanimation_get(self.body_reanim_id)
+                    .map_or(false, |r| r.should_trigger_timed_event(0.89))
+            });
+            let a_trigger_98 = self.base.get_app().map_or(false, |app| {
+                app.reanimation_get(self.body_reanim_id)
+                    .map_or(false, |r| r.should_trigger_timed_event(0.98))
+            });
+            if a_trigger_89 {
+                if let Some(board) = self.base.get_board_mut() { board.shake_board(0, 3); }
+            } else if a_trigger_98 {
+                if let Some(board) = self.base.get_board_mut() { board.shake_board(0, 1); }
+            }
+        }
+
+        // 对应 C++: 非泳池时按类型选择倒地时刻 aFallTime
+        if !self.in_pool {
+            let mut a_fall_time = -1.0f32;
+            match self.zombie_type {
+                ZombieType::Snorkel | ZombieType::Zamboni | ZombieType::DolphinRider
+                | ZombieType::Bungee | ZombieType::Catapult | ZombieType::Imp
+                | ZombieType::Boss => { a_fall_time = -1.0; }
+                ZombieType::Normal | ZombieType::Flag | ZombieType::TrafficCone
+                | ZombieType::Pail | ZombieType::Door | ZombieType::PeaHead
+                | ZombieType::WallnutHead | ZombieType::TallnutHead
+                | ZombieType::JalapenoHead | ZombieType::GatlingHead
+                | ZombieType::SquashHead | ZombieType::DuckyTube => {
+                    let a_superlong = self.base.get_app().map_or(false, |app| {
+                        app.reanimation_get(self.body_reanim_id)
+                            .map_or(false, |r| r.is_anim_playing("anim_superlongdeath"))
+                    });
+                    let a_death2 = self.base.get_app().map_or(false, |app| {
+                        app.reanimation_get(self.body_reanim_id)
+                            .map_or(false, |r| r.is_anim_playing("anim_death2"))
+                    });
+                    if a_superlong {
+                        a_fall_time = 0.788;
+                    } else if a_death2 {
+                        a_fall_time = 0.71;
+                    } else {
+                        a_fall_time = 0.77;
+                    }
+                }
+                ZombieType::Polevaulter => a_fall_time = 0.68,
+                ZombieType::Football => a_fall_time = 0.52,
+                ZombieType::Newspaper => a_fall_time = 0.63,
+                ZombieType::Dancer | ZombieType::BackupDancer => a_fall_time = 0.83,
+                ZombieType::Bobsled => a_fall_time = 0.81,
+                ZombieType::JackInTheBox => a_fall_time = 0.64,
+                ZombieType::Balloon => a_fall_time = 0.68,
+                ZombieType::Digger => a_fall_time = 0.85,
+                ZombieType::Pogo => a_fall_time = 0.84,
+                ZombieType::Yeti => a_fall_time = 0.68,
+                ZombieType::Ladder => a_fall_time = 0.62,
+                ZombieType::Gargantuar | ZombieType::RedeEyeGargantuar => a_fall_time = 0.86,
+                _ => {}
+            }
+
+            // 对应 C++: 到达倒地时刻 → 音效/雏菊
+            if a_fall_time > 0.0 {
+                let a_trigger_fall = self.base.get_app().map_or(false, |app| {
+                    app.reanimation_get(self.body_reanim_id)
+                        .map_or(false, |r| r.should_trigger_timed_event(a_fall_time))
+                });
+                if a_trigger_fall {
+                    if let Some(app) = self.base.get_app() {
+                        app.play_foley(crate::todlib::tod_foley::FoleyType::ZombieFalling as i32);
+                        if self.zombie_type == ZombieType::Gargantuar
+                            || self.zombie_type == ZombieType::RedeEyeGargantuar
+                        {
+                            app.play_foley(crate::todlib::tod_foley::FoleyType::Thump as i32);
+                        }
+                    }
+                    // 对应 C++: mBoard->mDaisyMode → DoDaisies()
+                    let a_daisy = self.base.get_board().map_or(false, |b| b.m_daisy_mode);
+                    if a_daisy {
+                        self.do_daisies();
+                    }
+                }
+            }
+        }
+
+        // 对应 C++: Boss 死亡爆炸与旗子
+        if self.zombie_type == ZombieType::Boss {
+            let a_boss_trigger = [0.1f32, 0.12, 0.15, 0.19, 0.2, 0.26, 0.3, 0.4, 0.42, 0.5, 0.58, 0.61, 0.71]
+                .iter().any(|&t| {
+                    self.base.get_app().map_or(false, |app| {
+                        app.reanimation_get(self.body_reanim_id)
+                            .map_or(false, |r| r.should_trigger_timed_event(t))
+                    })
+                });
+            if a_boss_trigger {
+                // 对应 C++: 随机位置 BOSS_EXPLOSION 粒子 + FOLEY_BOSS_EXPLOSION_SMALL
+                let a_explosion_x = 600.0 + RandFloat(150.0);
+                let a_explosion_y = 50.0 + RandFloat(250.0);
+                if let Some(app) = self.base.get_app_mut() {
+                    (*app).add_tod_particle(
+                        a_explosion_x, a_explosion_y,
+                        crate::lawn::game_enums::RENDER_LAYER_TOP as i32,
+                        crate::lawn::game_enums::ParticleEffect::BossExplosion as i32);
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::BossExplosionSmall as i32);
+                }
+            }
+            // [TRANSLATION_NOTE]: C++ 中 0.93 震屏、0.99 头部旗子 reanim（mSpecialHeadReanimID）、
+            // 头部旗子循环与 DropLoot 依赖头部 reanim/粒子封装，暂略
+        }
+
+        // 对应 C++: Zamboni/Catapult 倒计时爆炸，或通用 fade
+        if self.zombie_type == ZombieType::Zamboni {
+            if self.phase_counter > 0 {
+                self.phase_counter -= 1;
+                if self.phase_counter == 0 {
+                    // [TRANSLATION_NOTE]: PARTICLE_ZAMBONI_EXPLOSION2/EXPLOSION 按 anim_wheelie2 判定，暂略
+                    self.die_with_loot();
+                    if let Some(app) = self.base.get_app() {
+                        app.play_foley(crate::todlib::tod_foley::FoleyType::Explosion as i32);
+                    }
+                }
+            }
+        } else if self.zombie_type == ZombieType::Catapult {
+            self.phase_counter -= 1;
+            if self.phase_counter == 0 {
+                // [TRANSLATION_NOTE]: PARTICLE_CATAPULT_EXPLOSION 粒子，暂略
+                self.die_with_loot();
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Explosion as i32);
+                }
+            }
+        } else if self.zombie_fade == -1 && self.zombie_type != ZombieType::Boss {
+            let a_loop_done = self.base.get_app().map_or(false, |app| {
+                app.reanimation_get(self.body_reanim_id)
+                    .map_or(false, |r| r.m_loop_count > 0)
+            });
+            if a_loop_done {
+                self.zombie_fade = if self.in_pool { 10 } else { 100 };
+            }
         }
     }
 
-    /// 冰车僵尸死亡（对应 C++ ZamboniDeath）
+    /// 冰车僵尸死亡（对应 C++ ZamboniDeath，Zombie.cpp:6498）
     pub fn zamboni_death(&mut self, damage_flags: u32) {
-        let _ = damage_flags;
+        if crate::lawn::zombie::test_bit(damage_flags, 5) {
+            // 对应 C++: DAMAGE_SPIKE → 瘪胎
+            self.flat_tires = true;
+            if let Some(app) = self.base.get_app() {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::TirePop as i32);
+            }
+            self.zombie_phase = ZombiePhase::Dying;
+            let a_part_x = self.pos_x + 29.0;
+            let a_part_y = self.pos_y + 114.0;
+            let a_render = self.base.render_order + 1;
+            if let Some(app) = self.base.get_app_mut() {
+                (*app).add_tod_particle(
+                    a_part_x, a_part_y, a_render,
+                    crate::lawn::game_enums::ParticleEffect::ZamboniTire as i32);
+            }
+            self.vel_x = 0.0;
+            if RandRange(4) == 0 && self.pos_x < 600.0 {
+                self.play_zombie_reanim("anim_wheelie2", ReanimLoopType::PlayOnceAndHold, 10, 10.0);
+                self.phase_counter = 280;
+            } else {
+                // [TRANSLATION_NOTE]: C++ 中 PARTICLE_ZAMBONI_SMOKE + AttachParticleToTrack 粒子，暂略
+                self.phase_counter = 280;
+                self.play_zombie_reanim("anim_wheelie1", ReanimLoopType::PlayOnceAndHold, 10, 12.0);
+            }
+        } else {
+            // 对应 C++: 非地刺击杀 → 直接爆炸
+            let a_render = self.base.render_order + 1;
+            if let Some(app) = self.base.get_app_mut() {
+                (*app).add_tod_particle(
+                    self.pos_x + 80.0, self.pos_y + 60.0, a_render,
+                    crate::lawn::game_enums::ParticleEffect::ZamboniExplosion as i32);
+            }
+            self.die_with_loot();
+            if let Some(app) = self.base.get_app() {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::Explosion as i32);
+            }
+        }
     }
 
-    /// 投石车僵尸死亡（对应 C++ CatapultDeath）
+    /// 投石车僵尸死亡（对应 C++ CatapultDeath，Zombie.cpp:6534）
     pub fn catapult_death(&mut self, damage_flags: u32) {
-        let _ = damage_flags;
+        if crate::lawn::zombie::test_bit(damage_flags, 5) {
+            // 对应 C++: DAMAGE_SPIKE → 轮胎爆胎
+            if let Some(app) = self.base.get_app() {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::TirePop as i32);
+            }
+            self.zombie_phase = ZombiePhase::Dying;
+            let a_part_x = self.pos_x + 29.0;
+            let a_part_y = self.pos_y + 114.0;
+            let a_render = self.base.render_order + 1;
+            if let Some(app) = self.base.get_app_mut() {
+                (*app).add_tod_particle(
+                    a_part_x, a_part_y, a_render,
+                    crate::lawn::game_enums::ParticleEffect::ZamboniTire as i32);
+            }
+            self.vel_x = 0.0;
+            // [TRANSLATION_NOTE]: C++ 中 AddAttachedParticle(47,77,PARTICLE_ZAMBONI_SMOKE) 粒子，暂略
+            self.phase_counter = 280;
+            self.play_zombie_reanim("anim_bounce", ReanimLoopType::PlayOnceAndHold, 10, 12.0);
+        }
     }
 
     /// 停止僵尸音效（对应 C++ StopZombieSound）
@@ -6887,7 +7218,40 @@ impl Zombie {
     }
 
     /// 添加附加粒子（对应 C++ AddAttachedParticle）
-    pub fn add_attached_particle(&mut self, _pos_x: i32, _pos_y: i32, _effect: ParticleEffect) -> Option<*mut ParticleSystem> { None }
+    /// 附加粒子（对应 C++ Zombie::AddAttachedParticle，Zombie.cpp:8341）
+    pub fn add_attached_particle(
+        &mut self,
+        pos_x: i32,
+        pos_y: i32,
+        effect: ParticleEffect,
+    ) -> Option<*mut ParticleSystem> {
+        if self.dead {
+            return None;
+        }
+
+        if crate::todlib::attachment::is_full_of_attachments(self.attachment_id) {
+            return None;
+        }
+
+        let a_particle = {
+            let a_particle_x = self.base.x as f32 + pos_x as f32;
+            let a_particle_y = self.base.y as f32 + pos_y as f32;
+            if let Some(app) = self.base.get_app_mut() {
+                app.add_tod_particle(a_particle_x, a_particle_y, 0, effect as i32)
+            } else {
+                None
+            }
+        };
+        if let Some(a_particle) = a_particle {
+            crate::todlib::attachment::attach_particle(
+                &mut self.attachment_id,
+                a_particle as *mut std::ffi::c_void,
+                pos_x as f32,
+                pos_y as f32,
+            );
+        }
+        a_particle
+    }
 
     /// 设置动画速率（对应 C++ SetAnimRate）
     pub fn set_anim_rate(&mut self, anim_rate: f32) {
@@ -7429,7 +7793,7 @@ pub fn get_pos_y_based_on_row(&mut self, row: i32) -> f32 {
                                 continue;
                             }
 
-                            if let Some(a_plant) = board.get_top_plant_at(x, y) {
+                            if let Some(a_plant) = board.get_top_plant_at_any(x, y) {
                                 if !allow_sunflower_target && a_plant.makes_sun() {
                                     continue;
                                 }
@@ -7481,7 +7845,7 @@ pub fn get_pos_y_based_on_row(&mut self, row: i32) -> f32 {
                     continue;
                 }
                 if !zombie.is_dead_or_dying() && zombie.zombie_type == ZombieType::Bungee && zombie.target_col != -1 {
-                    if let Some(a_plant) = board.get_top_plant_at(zombie.target_col, zombie.base.row) {
+                    if let Some(a_plant) = board.get_top_plant_at_any(zombie.target_col, zombie.base.row) {
                         if a_plant.makes_sun() {
                             count += 1;
                         }
@@ -7516,7 +7880,7 @@ pub fn get_pos_y_based_on_row(&mut self, row: i32) -> f32 {
     pub fn bungee_steal_target(&mut self) {
         self.play_zombie_reanim("anim_grab", ReanimLoopType::PlayOnceAndHold, 20, 24.0);
         if let Some(board) = self.base.get_board() {
-            if let Some(a_plant) = board.get_top_plant_at(self.target_col, self.base.row) {
+            if let Some(a_plant) = board.get_top_plant_at_any(self.target_col, self.base.row) {
                 if a_plant.seed_type != SeedType::Cobcannon && a_plant.seed_type != SeedType::Gravebuster {
                     // mTargetPlantID = (PlantID)mBoard->mPlants.DataArrayGetID(aPlant)
                     // aPlant->mOnBungeeState = GETTING_GRABBED_BY_BUNGEE

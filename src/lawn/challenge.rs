@@ -4,6 +4,7 @@
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::rect::Rect;
 use crate::framework::color::Color;
+use crate::todlib::tod_common::TodWeightedArray;
 use crate::lawn::game_enums::*;
 use crate::lawn::board::HitResult;
 use crate::lawn::grid_item::GridItem;
@@ -445,7 +446,7 @@ impl Challenge {
         let mut cur_x = grid_x;
         while cur_x < 9 && board_state.seed_type[cur_x as usize][grid_y as usize] == seed_type {
             let board = self.get_board();
-            let _ = board.get_top_plant_at(cur_x, grid_y);
+            let _ = board.get_top_plant_at_any(cur_x, grid_y);
             cur_x += 1;
         }
     }
@@ -455,7 +456,7 @@ impl Challenge {
         let mut cur_y = grid_y;
         while cur_y < 6 && board_state.seed_type[grid_x as usize][cur_y as usize] == seed_type {
             let board = self.get_board();
-            let _ = board.get_top_plant_at(grid_x, cur_y);
+            let _ = board.get_top_plant_at_any(grid_x, cur_y);
             cur_y += 1;
         }
     }
@@ -575,7 +576,7 @@ impl Challenge {
         if self.beghouled_eated[grid_x as usize][grid_y as usize] != 0 { return; }
         let board = self.get_board();
         for a_grid_y in (0..grid_y).rev() {
-            if let Some(p) = board.get_top_plant_at(grid_x, a_grid_y) {
+            if let Some(p) = board.get_top_plant_at_any(grid_x, a_grid_y) {
                 board_state.seed_type[grid_x as usize][grid_y as usize] = p.seed_type;
                 board_state.seed_type[grid_x as usize][a_grid_y as usize] = SeedType::None;
                 self.beghouled_start_falling(ChallengeState::BeghouledFalling);
@@ -700,7 +701,7 @@ impl Challenge {
                         None => return,
                     };
                     let has_plant = unsafe {
-                        (*board_ptr).get_top_plant_at(a_col as i32, a_row as i32).is_some()
+                        (*board_ptr).get_top_plant_at_any(a_col as i32, a_row as i32).is_some()
                     };
                     if !has_plant {
                         let p_x = unsafe { (*board_ptr).grid_to_pixel_x(a_col as i32, a_row as i32) };
@@ -1283,11 +1284,209 @@ impl Challenge {
     }
 
     pub fn update_conveyor_belt(&mut self) {
-        if self.get_board().has_level_award_dropped() { return; }
-        self.conveyor_belt_counter -= 1;
-        if self.conveyor_belt_counter <= 0 {
-            self.conveyor_belt_counter = 400;
+        // C++ Challenge::UpdateConveyorBelt（Challenge.cpp:1629-1930）
+        if self.get_board().has_level_award_dropped() {
+            return;
         }
+
+        // C++: mBoard->mSeedBank->UpdateConveyorBelt()
+        self.get_board().update_seed_bank_conveyor_belt();
+        self.conveyor_belt_counter -= 1;
+        if self.conveyor_belt_counter > 0 {
+            return;
+        }
+
+        // C++: aConveyorSpeedMultiplier（FinalBoss 0.875 / Shovel、Portal 1.5 / Invisighoul 2.0 / Column 3.0）
+        // [TRANSLATION_NOTE]: 直接解引用 app 裸指针以回避 &self 借用（与 get_board 的 &mut 借用共存）
+        let app = unsafe { &*self.app.unwrap() };
+        let a_conveyor_speed_multiplier = if app.is_final_boss_level() {
+            0.875
+        } else if app.is_shovel_level() || app.game_mode == GameMode::ChallengePortalCombat {
+            1.5
+        } else if app.game_mode == GameMode::ChallengeInvisighoul {
+            2.0
+        } else if app.game_mode == GameMode::ChallengeColumns {
+            3.0
+        } else {
+            1.0
+        };
+        // C++: mConveyorBeltCounter = aConveyorSpeedMultiplier * (seeds > 8 ? 1000 : > 6 ? 500 : > 4 ? 425 : 400)
+        let a_num_seeds_on_conveyor = self.get_board().get_num_seeds_on_conveyor_belt();
+        let a_base_counter = if a_num_seeds_on_conveyor > 8 {
+            1000
+        } else if a_num_seeds_on_conveyor > 6 {
+            500
+        } else if a_num_seeds_on_conveyor > 4 {
+            425
+        } else {
+            400
+        };
+        self.conveyor_belt_counter = (a_conveyor_speed_multiplier * a_base_counter as f32) as i32;
+
+        // C++: PvzpWeightedArray aSeedPickArray[20] —— 按关卡/模式填种子选择表
+        let mut a_seed_pick_array: [TodWeightedArray; 20] = [TodWeightedArray { item: 0, weight: 0 }; 20];
+        let mut a_seed_pick_count: usize = 0;
+        let a_level = self.get_board().level;
+        if a_level == 10 {
+            a_seed_pick_count = 7;
+            a_seed_pick_array[0] = TodWeightedArray { item: SeedType::Peashooter as usize, weight: 20 };
+            a_seed_pick_array[1] = TodWeightedArray { item: SeedType::Cherrybomb as usize, weight: 20 };
+            a_seed_pick_array[2] = TodWeightedArray { item: SeedType::Wallnut as usize, weight: 15 };
+            a_seed_pick_array[3] = TodWeightedArray { item: SeedType::Repeater as usize, weight: 20 };
+            a_seed_pick_array[4] = TodWeightedArray { item: SeedType::Snowpea as usize, weight: 10 };
+            a_seed_pick_array[5] = TodWeightedArray { item: SeedType::Chomper as usize, weight: 5 };
+            a_seed_pick_array[6] = TodWeightedArray { item: SeedType::PotatoMine as usize, weight: 10 };
+        } else if a_level == 20 {
+            a_seed_pick_count = 7;
+            a_seed_pick_array[0] = TodWeightedArray { item: SeedType::Gravebuster as usize, weight: 20 };
+            a_seed_pick_array[1] = TodWeightedArray { item: SeedType::Iceshroom as usize, weight: 15 };
+            a_seed_pick_array[2] = TodWeightedArray { item: SeedType::Doomshroom as usize, weight: 15 };
+            a_seed_pick_array[3] = TodWeightedArray { item: SeedType::Hypnoshroom as usize, weight: 10 };
+            a_seed_pick_array[4] = TodWeightedArray { item: SeedType::Scaredyshroom as usize, weight: 15 };
+            a_seed_pick_array[5] = TodWeightedArray { item: SeedType::Fumeshroom as usize, weight: 15 };
+            a_seed_pick_array[6] = TodWeightedArray { item: SeedType::Puffshroom as usize, weight: 10 };
+        } else if a_level == 30 {
+            a_seed_pick_count = 8;
+            a_seed_pick_array[0] = TodWeightedArray { item: SeedType::Lilypad as usize, weight: 25 };
+            a_seed_pick_array[1] = TodWeightedArray { item: SeedType::Squash as usize, weight: 5 };
+            a_seed_pick_array[2] = TodWeightedArray { item: SeedType::Threepeater as usize, weight: 25 };
+            a_seed_pick_array[3] = TodWeightedArray { item: SeedType::Tanglekelp as usize, weight: 5 };
+            a_seed_pick_array[4] = TodWeightedArray { item: SeedType::Jalapeno as usize, weight: 10 };
+            a_seed_pick_array[5] = TodWeightedArray { item: SeedType::Spikeweed as usize, weight: 10 };
+            a_seed_pick_array[6] = TodWeightedArray { item: SeedType::Torchwood as usize, weight: 10 };
+            a_seed_pick_array[7] = TodWeightedArray { item: SeedType::Tallnut as usize, weight: 10 };
+        } else if a_level == 40 {
+            a_seed_pick_count = 8;
+            a_seed_pick_array[0] = TodWeightedArray { item: SeedType::Lilypad as usize, weight: 25 };
+            a_seed_pick_array[1] = TodWeightedArray { item: SeedType::Seashroom as usize, weight: 10 };
+            a_seed_pick_array[2] = TodWeightedArray { item: SeedType::Magnetshroom as usize, weight: 5 };
+            a_seed_pick_array[3] = TodWeightedArray { item: SeedType::Blover as usize, weight: 5 };
+            a_seed_pick_array[4] = TodWeightedArray { item: SeedType::Cactus as usize, weight: 15 };
+            a_seed_pick_array[5] = TodWeightedArray { item: SeedType::Starfruit as usize, weight: 25 };
+            a_seed_pick_array[6] = TodWeightedArray { item: SeedType::Splitpea as usize, weight: 5 };
+            a_seed_pick_array[7] = TodWeightedArray { item: SeedType::Pumpkinshell as usize, weight: 10 };
+        } else if app.is_final_boss_level() {
+            a_seed_pick_count = 6;
+            a_seed_pick_array[0] = TodWeightedArray { item: SeedType::Flowerpot as usize, weight: 55 };
+            a_seed_pick_array[1] = TodWeightedArray { item: SeedType::Melonpult as usize, weight: 10 };
+            a_seed_pick_array[2] = TodWeightedArray { item: SeedType::Jalapeno as usize, weight: 12 };
+            a_seed_pick_array[3] = TodWeightedArray { item: SeedType::Cabbagepult as usize, weight: 10 };
+            a_seed_pick_array[4] = TodWeightedArray { item: SeedType::Kernelpult as usize, weight: 5 };
+            a_seed_pick_array[5] = TodWeightedArray { item: SeedType::Iceshroom as usize, weight: 8 };
+        } else if app.is_shovel_level() {
+            a_seed_pick_count = 1;
+            a_seed_pick_array[0] = TodWeightedArray { item: SeedType::Peashooter as usize, weight: 100 };
+        } else if app.game_mode == GameMode::ChallengeWallnutBowling2 {
+            a_seed_pick_count = 3;
+            a_seed_pick_array[0] = TodWeightedArray { item: SeedType::Wallnut as usize, weight: 85 };
+            a_seed_pick_array[1] = TodWeightedArray { item: SeedType::ExplodeONut as usize, weight: 15 };
+            a_seed_pick_array[2] = TodWeightedArray { item: SeedType::GiantWallnut as usize, weight: 15 };
+        } else if app.is_wallnut_bowling_level() {
+            a_seed_pick_count = 2;
+            a_seed_pick_array[0] = TodWeightedArray { item: SeedType::Wallnut as usize, weight: 85 };
+            a_seed_pick_array[1] = TodWeightedArray { item: SeedType::ExplodeONut as usize, weight: 15 };
+        } else if app.is_little_trouble_level() {
+            a_seed_pick_count = 4;
+            a_seed_pick_array[0] = TodWeightedArray { item: SeedType::Lilypad as usize, weight: 25 };
+            a_seed_pick_array[1] = TodWeightedArray { item: SeedType::Wallnut as usize, weight: 15 };
+            a_seed_pick_array[2] = TodWeightedArray { item: SeedType::Peashooter as usize, weight: 25 };
+            a_seed_pick_array[3] = TodWeightedArray { item: SeedType::Cherrybomb as usize, weight: 35 };
+        } else if app.is_stormy_night_level() {
+            a_seed_pick_count = 5;
+            a_seed_pick_array[0] = TodWeightedArray { item: SeedType::Lilypad as usize, weight: 30 };
+            a_seed_pick_array[1] = TodWeightedArray { item: SeedType::Cactus as usize, weight: 10 };
+            a_seed_pick_array[2] = TodWeightedArray { item: SeedType::Peashooter as usize, weight: 20 };
+            a_seed_pick_array[3] = TodWeightedArray { item: SeedType::Puffshroom as usize, weight: 15 };
+            a_seed_pick_array[4] = TodWeightedArray { item: SeedType::Cherrybomb as usize, weight: 25 };
+        } else if app.is_bungee_blitz_level() {
+            a_seed_pick_count = 4;
+            a_seed_pick_array[0] = TodWeightedArray { item: SeedType::Flowerpot as usize, weight: 50 };
+            a_seed_pick_array[1] = TodWeightedArray { item: SeedType::Chomper as usize, weight: 25 };
+            a_seed_pick_array[2] = TodWeightedArray { item: SeedType::Pumpkinshell as usize, weight: 15 };
+            a_seed_pick_array[3] = TodWeightedArray { item: SeedType::Cherrybomb as usize, weight: 10 };
+        } else if app.game_mode == GameMode::ChallengePortalCombat {
+            a_seed_pick_count = 6;
+            a_seed_pick_array[0] = TodWeightedArray { item: SeedType::Peashooter as usize, weight: 25 };
+            a_seed_pick_array[1] = TodWeightedArray { item: SeedType::Repeater as usize, weight: 20 };
+            a_seed_pick_array[2] = TodWeightedArray { item: SeedType::Torchwood as usize, weight: 10 };
+            a_seed_pick_array[3] = TodWeightedArray { item: SeedType::Cactus as usize, weight: 15 };
+            a_seed_pick_array[4] = TodWeightedArray { item: SeedType::Wallnut as usize, weight: 15 };
+            a_seed_pick_array[5] = TodWeightedArray { item: SeedType::Cherrybomb as usize, weight: 15 };
+        } else if app.game_mode == GameMode::ChallengeColumns {
+            a_seed_pick_count = 6;
+            a_seed_pick_array[0] = TodWeightedArray { item: SeedType::Flowerpot as usize, weight: 155 };
+            a_seed_pick_array[1] = TodWeightedArray { item: SeedType::Melonpult as usize, weight: 5 };
+            a_seed_pick_array[2] = TodWeightedArray { item: SeedType::Chomper as usize, weight: 5 };
+            a_seed_pick_array[3] = TodWeightedArray { item: SeedType::Pumpkinshell as usize, weight: 15 };
+            a_seed_pick_array[4] = TodWeightedArray { item: SeedType::Jalapeno as usize, weight: 10 };
+            a_seed_pick_array[5] = TodWeightedArray { item: SeedType::Squash as usize, weight: 10 };
+        } else if app.game_mode == GameMode::ChallengeInvisighoul {
+            a_seed_pick_count = 6;
+            a_seed_pick_array[0] = TodWeightedArray { item: SeedType::Peashooter as usize, weight: 25 };
+            a_seed_pick_array[1] = TodWeightedArray { item: SeedType::Wallnut as usize, weight: 15 };
+            a_seed_pick_array[2] = TodWeightedArray { item: SeedType::Kernelpult as usize, weight: 5 };
+            a_seed_pick_array[3] = TodWeightedArray { item: SeedType::Squash as usize, weight: 15 };
+            a_seed_pick_array[4] = TodWeightedArray { item: SeedType::Lilypad as usize, weight: 30 };
+            a_seed_pick_array[5] = TodWeightedArray { item: SeedType::Iceshroom as usize, weight: 10 };
+        } else {
+            // C++: PVZP_ASSERT(false)
+        }
+
+        // C++: 权重调整循环（墓碑/荷叶/花盆/最终 Boss/同类上限/上次种子减半）
+        for i in 0..a_seed_pick_count {
+            let a_seed_type = unsafe { std::mem::transmute::<i32, SeedType>(a_seed_pick_array[i].item as i32) };
+            let a_count_in_bank = self.get_board().count_of_type_on_conveyor_belt(a_seed_type);
+            let a_total_count = self.get_board().count_plant_by_type(a_seed_type) + a_count_in_bank as i32;
+
+            if a_seed_type == SeedType::Gravebuster {
+                if self.get_board().get_grave_stones_count() <= a_total_count {
+                    a_seed_pick_array[i].weight = 0;
+                    continue;
+                }
+            } else if a_seed_type == SeedType::Lilypad {
+                a_seed_pick_array[i].weight = crate::todlib::tod_common::tod_animate_curve(
+                    0, 18, a_total_count, a_seed_pick_array[i].weight, 1, TodCurves::Linear,
+                );
+            } else if a_seed_type == SeedType::Flowerpot {
+                let a_pot_limit = if app.game_mode == GameMode::ChallengeColumns { 45 } else { 35 };
+                a_seed_pick_array[i].weight = crate::todlib::tod_common::tod_animate_curve(
+                    0, a_pot_limit, a_total_count, a_seed_pick_array[i].weight, 1, TodCurves::Linear,
+                );
+            }
+
+            if app.is_final_boss_level() {
+                if a_seed_type == SeedType::Melonpult
+                    || a_seed_type == SeedType::Kernelpult
+                    || a_seed_type == SeedType::Cabbagepult
+                {
+                    let a_empty_pots = self.get_board().count_empty_pots_or_lilies(SeedType::Flowerpot);
+                    if a_empty_pots <= 2 {
+                        a_seed_pick_array[i].weight /= 5;
+                    } else if a_empty_pots <= 5 {
+                        a_seed_pick_array[i].weight /= 3;
+                    }
+                }
+
+                // C++: Flowerpot 且 Boss 处于 PHASE_BOSS_DROP_RV 时权重 500
+                // [TRANSLATION_NOTE]: Rust 无 BossDropRv 阶段常量，暂略（依赖 zombie_phase 枚举）
+            }
+
+            if a_seed_pick_count > 2 {
+                if a_count_in_bank >= 4 {
+                    a_seed_pick_array[i].weight = 1;
+                } else if a_count_in_bank >= 3 {
+                    a_seed_pick_array[i].weight = 5;
+                } else if a_seed_type == self.last_conveyor_seed_type {
+                    a_seed_pick_array[i].weight /= 2;
+                }
+            }
+        }
+
+        // C++: aSeedType = PvzpPickFromWeightedArray(...)；mBoard->mSeedBank->AddSeed(aSeedType)；mLastConveyorSeedType = aSeedType
+        let a_picked = crate::todlib::tod_common::tod_pick_from_weighted_array(&a_seed_pick_array[0..a_seed_pick_count]);
+        let a_seed_type = unsafe { std::mem::transmute::<i32, SeedType>(a_picked as i32) };
+        self.get_board().add_seed(a_seed_type, false);
+        self.last_conveyor_seed_type = a_seed_type;
     }
 
     pub fn portal_start(&mut self) {
@@ -1733,7 +1932,7 @@ impl Challenge {
         {
             let board = self.get_board();
             if board.zombies.is_empty() && !board.has_level_award_dropped() {
-                board.zombies_won();
+                board.zombies_won_no_zombie();
                 return;
             }
         }
@@ -2104,7 +2303,7 @@ impl Challenge {
     pub fn i_zombie_update(&mut self) {
         let board = self.get_board();
         if board.zombies.len() == 0 && board.m_sun_money < 50 && !board.has_level_award_dropped() {
-            board.zombies_won();
+            board.zombies_won_no_zombie();
         }
     }
 

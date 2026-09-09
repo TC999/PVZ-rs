@@ -1119,7 +1119,7 @@ impl ZenGarden {
                     if let Some(p) = placements {
                         for i in 0..count {
                             let a_grid = unsafe { &*p.add(i as usize) };
-                            if (*board).get_top_plant_at(a_grid.grid_x, a_grid.grid_y).is_none() {
+                            if (*board).get_top_plant_at_any(a_grid.grid_x, a_grid.grid_y).is_none() {
                                 // [TRANSLATION_NOTE]: C++ 中 PvzpDrawImageCelScaled(
                                 // IMAGE_PLANTSHADOW, aGrid.mPixelX-35, aGrid.mPixelY+33, 0,0, 1.7,1.7)
                                 // 绘制植物阴影；Rust 侧图片资源未接入，暂略
@@ -1888,7 +1888,7 @@ impl ZenGarden {
     pub fn add_happy_effect(&self, plant: &mut Plant) {
         // 对应 C++ AddHappyEffect：在植物或花盆上附加开心发光粒子
         let a_flower_pot = self.board.and_then(|b| unsafe {
-            (*b).get_top_plant_at(plant.plant_col, plant.start_row)
+            (*b).get_top_plant_at_any(plant.plant_col, plant.start_row)
         });
 
         // 通过数组地址匹配获得花盆可变引用（避免 &T -> &mut T 的 UB 转换）
@@ -1937,7 +1937,7 @@ impl ZenGarden {
     pub fn remove_happy_effect(&self, plant: &mut Plant) {
         // 对应 C++ RemoveHappyEffect：销毁花盆或植物上的特效粒子
         let a_flower_pot = self.board.and_then(|b| unsafe {
-            (*b).get_top_plant_at(plant.plant_col, plant.start_row)
+            (*b).get_top_plant_at_any(plant.plant_col, plant.start_row)
         });
         let particle_id = if let Some(fp) = a_flower_pot {
             fp.particle_id
@@ -2063,9 +2063,9 @@ impl ZenGarden {
         }
     }
 
+    /// 是否可使用园艺工具（对应 C++ Board::CanUseGameObject，Board.cpp:9411；经 board 转发）
     pub fn can_use_game_object(&self, object_type: GameObjectType) -> bool {
-        // TODO: 从 ZenGarden.cpp 翻译
-        false
+        self.board.map_or(false, |b| unsafe { (*b).can_use_game_object(object_type) })
     }
 
     pub fn zen_tool_update(&mut self, zen_tool: &mut GridItem) {
@@ -2114,7 +2114,7 @@ impl ZenGarden {
 
         let a_grid_x = self.board.map_or(-1, |b| unsafe { (*b).pixel_to_grid_x(x, y) });
         let a_grid_y = self.board.map_or(-1, |b| unsafe { (*b).pixel_to_grid_y(x, y) });
-        let a_plant = self.board.and_then(|b| unsafe { (*b).get_top_plant_at(a_grid_x, a_grid_y) });
+        let a_plant = self.board.and_then(|b| unsafe { (*b).get_top_plant_at_any(a_grid_x, a_grid_y) });
         let Some(a_plant_ref) = a_plant else { return };
         if a_plant_ref.potted_plant_index == -1 {
             return;

@@ -67,9 +67,26 @@ impl LawnMower {
         if self.mower_state == LawnMowerState::Triggered {
             return;
         }
+
+        // 对应 C++: reanim 速率 + PlayFoley（Rust 音效系统）
+        if let Some(app) = self.base.get_app() {
+            if self.mower_type == LawnMowerType::Pool {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::PoolCleaner as i32);
+            } else {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::Lawnmower as i32);
+            }
+        }
+
+        // 对应 C++: mBoard->mWaveRowGotLawnMowered[mRow] = mBoard->mCurrentWave;
+        //           mBoard->mTriggeredLawnMowers++;
+        let the_row = self.base.row;
+        if let Some(board) = self.base.get_board_mut() {
+            board.m_wave_row_got_lawn_mowered[the_row as usize] = board.m_current_wave;
+            board.m_triggered_lawn_mowers += 1;
+        }
+
         self.mowing = true;
         self.mower_state = LawnMowerState::Triggered;
-        // [TRANSLATION_NOTE]: reanim 速率、FOLEY 音效、mWaveRowGotLawnMowered/mTriggeredLawnMowers 计数暂未接入
     }
 
     /// 启动割草机（与 start_mower 逻辑相同）
@@ -155,7 +172,7 @@ impl LawnMower {
 
     /// 获取割草机攻击碰撞矩形（对应 C++ GetLawnMowerAttackRect）
     pub fn get_lawn_mower_attack_rect(&self) -> Rect {
-        Rect::new(self.pos_x as i32, self.pos_y as i32, 80, 80)
+        Rect::new(self.pos_x as i32, self.pos_y as i32, 50, 80)
     }
 
     /// 获取割草机碰撞矩形
@@ -169,32 +186,228 @@ impl LawnMower {
         // [TRANSLATION_NOTE]: 完整实现需要移除 Reanimation + 检查 bonus mowers
     }
 
-    /// 粉碎割草机
+    /// 粉碎割草机（对应 C++ SquishMower：状态置为 Squished + 500 帧倒计时后 Die）
     pub fn squish_mower(&mut self) {
         self.mower_state = LawnMowerState::Squished;
-        self.dead = true;
+        self.squished_counter = 500;
+        // [TRANSLATION_NOTE]: reanim 缩放/位移 + FOLEY_SQUISH 音效依赖 reanim/Foley 系统
     }
 
-    /// 启用超级割草机
-    pub fn enable_super_mower(&mut self, _enable: bool) {}
+    /// 启用超级割草机（对应 C++ EnableSuperMower，LawnMower.cpp:422）
+    /// C++ 注释：Is theEnable being unused a bug?（theEnable 参数未使用，保留）
+    pub fn enable_super_mower(&mut self, _enable: bool) {
+        if self.mower_type == LawnMowerType::Lawn {
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(a_mower_reanim) = app.reanimation_get_mut(self.mower_anim_id) {
+                    a_mower_reanim.set_frames_for_layer("anim_tricked");
+                }
+            }
+        }
+    }
 
-    /// 水池高度更新（对应 C++ UpdatePool）
+    /// 水池高度更新（对应 C++ UpdatePool，LawnMower.cpp:87）
     /// 泳池割草机进入/离开水池时的高度动画和音效
     pub fn update_pool(&mut self) {
-        // [TRANSLATION_NOTE]: 完整实现依赖 Reanimation 系统
-        // 状态机：Land→DownToPool(altitude-2)→InPool→UpToLand(altitude+2)→Land
-        // 进入/离开水池时播放水花粒子+音效
+        let is_pool_range = self.pos_x > 26.0 && self.pos_x < 660.0;
+
+        if is_pool_range && self.mower_height == MowerHeight::Land {
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(a_splash_reanim) = app.add_reanimation(
+                    self.pos_x, self.pos_y + 25.0, self.render_order + 1,
+                    ReanimationType::Splash as i32,
+                ) {
+                    unsafe {
+                        (*a_splash_reanim).override_scale(1.2, 0.8);
+                    }
+                }
+                app.add_tod_particle(
+                    self.pos_x + 50.0, self.pos_y + 42.0, self.render_order + 1,
+                    ParticleEffect::PlantingPool as i32,
+                );
+                app.play_foley(crate::todlib::tod_foley::FoleyType::ZombieSplash as i32);
+            }
+            self.mower_height = MowerHeight::DownToPool;
+        } else if self.mower_height == MowerHeight::DownToPool {
+            self.altitude -= 2.0;
+            if self.altitude <= -28.0 {
+                self.altitude = 0.0;
+                self.mower_height = MowerHeight::InPool;
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_mower_reanim) = app.reanimation_get_mut(self.mower_anim_id) {
+                        a_mower_reanim.play_reanim("anim_water", crate::todlib::reanimator::ReanimLoopType::Loop, 0, 0.0);
+                    }
+                }
+            }
+        } else if self.mower_height == MowerHeight::InPool {
+            if !is_pool_range {
+                self.altitude = -28.0;
+                self.mower_height = MowerHeight::UpToLand;
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_splash_reanim) = app.add_reanimation(
+                        self.pos_x, self.pos_y + 25.0, self.render_order + 1,
+                        ReanimationType::Splash as i32,
+                    ) {
+                        unsafe {
+                            (*a_splash_reanim).override_scale(1.2, 0.8);
+                        }
+                    }
+                    app.add_tod_particle(
+                        self.pos_x + 50.0, self.pos_y + 42.0, self.render_order + 1,
+                        ParticleEffect::PlantingPool as i32,
+                    );
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::PlantWater as i32);
+                }
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_mower_reanim) = app.reanimation_get_mut(self.mower_anim_id) {
+                        a_mower_reanim.play_reanim("anim_land", crate::todlib::reanimator::ReanimLoopType::Loop, 0, 0.0);
+                    }
+                }
+            }
+        } else if self.mower_height == MowerHeight::UpToLand {
+            self.altitude += 2.0;
+            if self.altitude >= 0.0 {
+                self.altitude = 0.0;
+                self.mower_height = MowerHeight::Land;
+            }
+        }
+
+        if self.mower_height == MowerHeight::InPool {
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(a_mower_reanim) = app.reanimation_get_mut(self.mower_anim_id) {
+                    if a_mower_reanim.m_loop_type == crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold
+                        && a_mower_reanim.m_loop_count > 0
+                    {
+                        a_mower_reanim.play_reanim("anim_water", crate::todlib::reanimator::ReanimLoopType::Loop, 10, 35.0);
+                    }
+                }
+            }
+        }
     }
 
-    /// 绘制割草机阴影（对应 C++ Draw 中的阴影部分）
-    pub fn draw_shadow(&self, _g: &mut Graphics) {
-        // [TRANSLATION_NOTE]: 阴影绘制依赖 IMAGE_PLANTSHADOW 资源
+    /// 绘制割草机阴影（对应 C++ LawnMower::Draw 中的阴影部分，LawnMower.cpp:285-319）
+    pub fn draw_shadow(&self, g: &mut Graphics) {
+        if self.mower_height == MowerHeight::UpToLand
+            || self.mower_height == MowerHeight::DownToPool
+            || self.mower_height == MowerHeight::InPool
+            || self.mower_state == LawnMowerState::Squished
+        {
+            return;
+        }
+
+        let mut a_shadow_type = 0;
+        let mut a_scale_x = 1.0;
+        let mut a_scale_y = 1.0;
+        let mut is_night = false;
+        if let Some(board) = self.base.get_board() {
+            is_night = board.stage_is_night();
+        }
+        if is_night {
+            a_shadow_type = 1;
+        }
+
+        let mut a_shadow_x = self.pos_x - 7.0;
+        let mut a_shadow_y = self.pos_y - self.altitude + 47.0;
+        if self.mower_type == LawnMowerType::Pool {
+            a_shadow_x -= 17.0;
+            a_shadow_y -= 8.0;
+        }
+        if self.mower_type == LawnMowerType::Roof {
+            a_shadow_x -= 9.0;
+            a_shadow_y -= 36.0;
+            a_scale_y = 1.2;
+            if self.mower_state == LawnMowerState::Triggered {
+                a_shadow_y += 36.0;
+            }
+        }
+
+        let app = match self.base.get_app() {
+            Some(a) => a,
+            None => return,
+        };
+        let a_shadow_image = if a_shadow_type == 0 {
+            crate::lawn::board::get_overlay_image(app, "IMAGE_PLANTSHADOW")
+        } else {
+            crate::lawn::board::get_overlay_image(app, "IMAGE_PLANTSHADOW2")
+        };
+        if a_shadow_image.is_null() {
+            return;
+        }
+        let a_shadow_ref = unsafe { &*a_shadow_image };
+        // PvzpDrawImageCelCenterScaledF(g, image, aShadowX, aShadowY, 0, aScaleX, aScaleY)
+        // [TRANSLATION_NOTE]: Rust 无 cel 中心缩放 API，用 draw_image_stretch 按中心锚点近似
+        let a_cel_rect = a_shadow_ref.get_cel_rect(0, 0);
+        let a_dst_rect = Rect::new(
+            (a_shadow_x - (a_cel_rect.width as f32) * a_scale_x / 2.0) as i32,
+            (a_shadow_y - (a_cel_rect.height as f32) * a_scale_y / 2.0) as i32,
+            (a_cel_rect.width as f32 * a_scale_x) as i32,
+            (a_cel_rect.height as f32 * a_scale_y) as i32,
+        );
+        g.draw_image_stretch(a_shadow_ref, &a_dst_rect, &a_cel_rect);
     }
 
-    /// 绘制割草机（对应 C++ Draw）
-    pub fn draw(&self, _g: &mut Graphics) {
-        // [TRANSLATION_NOTE]: 完整绘制依赖 Reanimation 系统和 ReanimatorCache
-        // 泳池/屋顶/陆地割草机各有不同偏移和剪辑
+    /// 绘制割草机（对应 C++ LawnMower::Draw，LawnMower.cpp:275）
+    pub fn draw(&self, g: &mut Graphics) {
+        if !self.visible {
+            return;
+        }
+
+        self.draw_shadow(g);
+
+        // C++: Graphics aMowerGraphics(*g) —— Rust Graphics 无 Clone，
+        // 直接操作 g 的 trans/clip 并在末尾恢复，等价于副本生命周期
+        let a_saved_trans_x = g.trans_x;
+        let a_saved_trans_y = g.trans_y;
+        let a_saved_clip_rect = g.clip_rect;
+        g.trans_x += (self.pos_x + 6.0) as f64;
+        g.trans_y += (self.pos_y - self.altitude) as f64;
+        if self.mower_type == LawnMowerType::Pool {
+            if self.mower_state == LawnMowerState::Triggered {
+                g.trans_y -= 7.0;
+                g.trans_x -= 10.0;
+            } else {
+                g.trans_y -= 33.0;
+            }
+
+            if self.mower_height == MowerHeight::UpToLand || self.mower_height == MowerHeight::DownToPool {
+                g.set_clip_rect_xywh(-50, -50, 150, (132.0 + self.altitude) as i32);
+            }
+        } else if self.mower_type == LawnMowerType::Roof {
+            if self.mower_state == LawnMowerState::Triggered {
+                g.trans_y -= 4.0;
+                g.trans_x -= 10.0;
+            } else {
+                g.trans_y -= 40.0;
+            }
+        }
+
+        let app = match self.base.get_app() {
+            Some(a) => a,
+            None => return,
+        };
+        if self.mower_state == LawnMowerState::Triggered || self.mower_state == LawnMowerState::Squished {
+            // mApp->ReanimationGet(mReanimID)->Draw(&aMowerGraphics)
+            if let Some(a_mower_reanim) = app.reanimation_get(self.mower_anim_id) {
+                a_mower_reanim.draw(g);
+            }
+        } else {
+            // mApp->mReanimatorCache->DrawCachedMower(&aMowerGraphics, 0.0f, 19.0f, aMowerType)
+            let mut a_mower_type = self.mower_type;
+            if self.mower_type == LawnMowerType::Lawn
+                && self.base.get_board().map_or(false, |b| b.m_super_mower_mode)
+            {
+                a_mower_type = LawnMowerType::SuperMower;
+            }
+            if let Some(cache) = app.m_reanimator_cache {
+                unsafe {
+                    (*cache).draw_cached_mower(g, 0.0, 19.0, a_mower_type);
+                }
+            }
+        }
+
+        // 恢复 trans/clip（对应 C++ 副本 Graphics 析构丢弃）
+        g.trans_x = a_saved_trans_x;
+        g.trans_y = a_saved_trans_y;
+        g.set_clip_rect(&a_saved_clip_rect);
     }
 }
 

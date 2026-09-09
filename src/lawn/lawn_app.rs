@@ -74,6 +74,11 @@ pub struct LawnApp {
     pub store_screen: Option<*mut ()>,
     /// 商店 Widget 包装指针（Box 拥有；store_screen 字段拥有 StoreScreen 本体）
     pub store_screen_widget: Option<*mut Widget>,
+    /// 各屏幕的 Widget 包装指针（Box 拥有；对应字段拥有屏幕本体）
+    pub award_screen_widget: Option<*mut Widget>,
+    pub seed_chooser_screen_widget: Option<*mut Widget>,
+    pub challenge_screen_widget: Option<*mut Widget>,
+    pub credit_screen_widget: Option<*mut Widget>,
     pub zen_garden: Option<*mut ZenGarden>,
     // ---- 对话框持有（对应 C++ WidgetManager 中 AddDialog 的对话框实例；Rust 独立类以裸指针持有）----
     pub user_dialog: Option<*mut crate::lawn::widget::user_dialog::UserDialog>,
@@ -188,14 +193,24 @@ pub static mut G_SLOW_MO: bool = false;
 pub static mut G_FAST_MO: bool = false;
 pub static mut G_SLOW_MO_COUNTER: i32 = 0;
 
+/// 主循环帧钩子（对应 C++ 虚函数分派：LawnApp::UpdateFrames 覆写 SexyAppBase::UpdateFrames）。
+/// 由 SexyAppBase::DoUpdateFrames 每帧调用，经全局实例驱动游戏世界更新。
+fn drive_board_frame() {
+    if let Some(app) = LawnApp::instance() {
+        app.update_frames();
+    }
+}
+
 impl LawnApp {
     pub fn new() -> Self {
-        LawnApp {
+        let mut app = LawnApp {
             base: SexyAppBase::new(),
             board: None, title_screen: None, game_selector: None,
             seed_chooser_screen: None, award_screen: None, almanac_dialog: None,
             credit_screen: None, challenge_screen: None, zen_garden: None,
             store_screen: None, store_screen_widget: None,
+            award_screen_widget: None, seed_chooser_screen_widget: None,
+            challenge_screen_widget: None, credit_screen_widget: None,
             user_dialog: None, new_user_dialog: None, rename_user_dialog: None,
             cheat_dialog: None, new_options_dialog: None,
             sound_system: None, effect_system: None,
@@ -242,7 +257,11 @@ impl LawnApp {
             m_loading_thread_completed: false,
             m_loading_thread_tasks_completed: 0,
             m_loading_thread_tasks_total: 0,
-        }
+        };
+
+        // 挂载主循环帧钩子（对应 C++ 虚函数分派：LawnApp::UpdateFrames 覆写 SexyAppBase::UpdateFrames）
+        app.base.lawn_frame_hook = Some(drive_board_frame);
+        app
     }
 
     /// 全局单例访问
@@ -326,11 +345,60 @@ impl LawnApp {
         unsafe { G_LAWN_APP_INSTANCE = None; }
     }
 
-    /// 主更新循环（由 SexyAppBase 每帧调用）
+    /// 主更新循环（对应 C++ LawnApp::UpdateFrames，由 SexyAppBase 每帧经虚分派钩子调用）
     pub fn update_frames(&mut self) {
-        // 更新游戏世界
-        if let Some(board_ptr) = self.board {
-            unsafe { (*board_ptr).update(); }
+        // 对应 C++: if ((!mActive || mMinimized) && mBoard) mBoard->ResetFPSStats();
+        if (!self.base.active || self.base.minimized) && self.board.is_some() {
+            if let Some(board) = self.board {
+                unsafe { (*board).reset_fps_stats(); }
+            }
+        }
+
+        // 对应 C++: aUpdateCount 受 gSlowMo / gFastMo 控制
+        let mut update_count = 1;
+        unsafe {
+            if G_SLOW_MO {
+                G_SLOW_MO_COUNTER += 1;
+                if G_SLOW_MO_COUNTER < 4 {
+                    update_count = 0;
+                } else {
+                    G_SLOW_MO_COUNTER = 0;
+                }
+            } else if G_FAST_MO {
+                update_count = 20;
+            }
+        }
+
+        for _ in 0..update_count {
+            self.m_app_counter += 1;
+
+            // 对应 C++: if (mBoard) mBoard->ProcessDeleteQueue();
+            if let Some(board) = self.board {
+                unsafe { (*board).process_delete_queue(); }
+            }
+            // 对应 C++: if (mLoadingThreadCompleted && mEffectSystem) mEffectSystem->ProcessDeleteQueue();
+            if self.m_loading_thread_completed {
+                if let Some(effect_system) = self.effect_system.as_mut() {
+                    effect_system.process_delete_queue();
+                }
+            }
+
+            // 对应 C++: SexyApp::UpdateFrames() → mWidgetManager->UpdateFrame()，
+            // 该步已在 SexyAppBase::DoUpdateFrames 中先行完成（Board 不在 WidgetManager 中，
+            // 故在此直接驱动 Board::Update，与 C++ 中 Board 作为 Widget 参与 UpdateFrame 顺序等效）。
+
+            // 更新游戏世界（对应 C++ Board 作为 Widget 的 Board::Update）
+            if let Some(board_ptr) = self.board {
+                unsafe { (*board_ptr).update(); }
+            }
+
+            // 对应 C++: mMusic->MusicUpdate();
+            if let Some(music) = self.music.as_mut() {
+                music.music_update();
+            }
+
+            // 对应 C++: CheckForGameEnd();
+            self.check_for_game_end();
         }
     }
 
@@ -645,20 +713,39 @@ impl LawnApp {
         }
     }
 
-    /// 显示奖励屏幕（对应 C++ ShowAwardScreen）
+    /// 显示奖励屏幕（对应 C++ ShowAwardScreen；含 AddWidget/BringToBack/SetFocus）
     pub fn show_award_screen(&mut self, award: i32, show_achievements: bool) {
         self.game_scene = GameScenes::Award;
         let mut screen = Box::new(crate::lawn::widget::award_screen::AwardScreen::new());
         screen.app = Some(self as *mut LawnApp);
         screen.award_type = unsafe { std::mem::transmute::<i32, AwardType>(award) };
         screen.showing_achievements = show_achievements;
-        // [TRANSLATION_NOTE]: C++ 中随后执行 Resize/BringToBack/SetFocus 与
-        // AddWidget(mAwardScreen)，待 widget 层实现 WidgetImpl 后接入
-        self.award_screen = Some(Box::into_raw(screen) as *mut ());
+        let screen_ptr = Box::into_raw(screen);
+        // 对应 C++ AwardScreen : Widget + AddWidget + BringToBack + SetFocus
+        let mut widget = Box::new(Widget::new());
+        widget.impl_ = Some(Box::new(crate::lawn::widget::award_screen::AwardScreenImpl::new(screen_ptr)));
+        widget.resize(0, 0, self.base.width, self.base.height);
+        let widget_ptr = Box::into_raw(widget);
+        if let Some(wm) = self.base.widget_manager {
+            unsafe {
+                (*wm).add_widget(widget_ptr);
+                (*wm).set_focus(Some(widget_ptr));
+            }
+        }
+        self.award_screen = Some(screen_ptr as *mut ());
+        self.award_screen_widget = Some(widget_ptr);
     }
 
     /// 销毁奖励屏幕（对应 C++ KillAwardScreen）
     pub fn kill_award_screen(&mut self) {
+        if let Some(widget_ptr) = self.award_screen_widget.take() {
+            if let Some(wm) = self.base.widget_manager {
+                unsafe { (*wm).remove_widget(widget_ptr); }
+            }
+            unsafe {
+                let _ = Box::from_raw(widget_ptr);
+            }
+        }
         if let Some(screen) = self.award_screen.take() {
             unsafe {
                 let _ = Box::from_raw(screen as *mut crate::lawn::widget::award_screen::AwardScreen);
@@ -666,16 +753,35 @@ impl LawnApp {
         }
     }
 
-    /// 显示种子选择器（对应 C++ ShowSeedChooserScreen）
+    /// 显示种子选择器（对应 C++ ShowSeedChooserScreen；含 AddWidget/SetFocus）
     pub fn show_seed_chooser_screen(&mut self) {
-        // [TRANSLATION_NOTE]: C++ 中创建 SeedChooserScreen 并 Resize/AddWidget/BringToBack，
-        // 待 widget 层实现 WidgetImpl 后接入
         let mut screen = Box::new(crate::lawn::widget::seed_chooser_screen::SeedChooserScreen::new());
         screen.app = Some(self as *mut LawnApp);
-        self.seed_chooser_screen = Some(Box::into_raw(screen) as *mut ());
+        let screen_ptr = Box::into_raw(screen);
+        // 对应 C++ SeedChooserScreen : Widget + AddWidget + BringToBack + SetFocus
+        let mut widget = Box::new(Widget::new());
+        widget.impl_ = Some(Box::new(crate::lawn::widget::seed_chooser_screen::SeedChooserScreenImpl::new(screen_ptr)));
+        widget.resize(0, 0, self.base.width, self.base.height);
+        let widget_ptr = Box::into_raw(widget);
+        if let Some(wm) = self.base.widget_manager {
+            unsafe {
+                (*wm).add_widget(widget_ptr);
+                (*wm).set_focus(Some(widget_ptr));
+            }
+        }
+        self.seed_chooser_screen = Some(screen_ptr as *mut ());
+        self.seed_chooser_screen_widget = Some(widget_ptr);
     }
 
     pub fn kill_seed_chooser_screen(&mut self) {
+        if let Some(widget_ptr) = self.seed_chooser_screen_widget.take() {
+            if let Some(wm) = self.base.widget_manager {
+                unsafe { (*wm).remove_widget(widget_ptr); }
+            }
+            unsafe {
+                let _ = Box::from_raw(widget_ptr);
+            }
+        }
         if let Some(screen) = self.seed_chooser_screen.take() {
             unsafe {
                 let _ = Box::from_raw(screen as *mut crate::lawn::widget::seed_chooser_screen::SeedChooserScreen);
@@ -737,19 +843,38 @@ impl LawnApp {
         }
     }
 
-    /// 显示挑战选择（对应 C++ ShowChallengeScreen）
+    /// 显示挑战选择（对应 C++ ShowChallengeScreen；含 AddWidget/SetFocus）
     pub fn show_challenge_screen(&mut self, page: i32) {
         self.game_scene = GameScenes::Challenge;
         let mut screen = Box::new(crate::lawn::widget::challenge_screen::ChallengeScreen::new());
         screen.app = Some(self as *mut LawnApp);
         screen.page_index = unsafe { std::mem::transmute::<i32, ChallengePage>(page) };
-        // [TRANSLATION_NOTE]: C++ 中随后执行 Resize/AddWidget/BringToBack/SetFocus，
-        // 待 widget 层实现 WidgetImpl 后接入
-        self.challenge_screen = Some(Box::into_raw(screen) as *mut ());
+        let screen_ptr = Box::into_raw(screen);
+        // 对应 C++ ChallengeScreen : Widget + AddWidget + BringToBack + SetFocus
+        let mut widget = Box::new(Widget::new());
+        widget.impl_ = Some(Box::new(crate::lawn::widget::challenge_screen::ChallengeScreenImpl::new(screen_ptr)));
+        widget.resize(0, 0, self.base.width, self.base.height);
+        let widget_ptr = Box::into_raw(widget);
+        if let Some(wm) = self.base.widget_manager {
+            unsafe {
+                (*wm).add_widget(widget_ptr);
+                (*wm).set_focus(Some(widget_ptr));
+            }
+        }
+        self.challenge_screen = Some(screen_ptr as *mut ());
+        self.challenge_screen_widget = Some(widget_ptr);
     }
 
     /// 销毁挑战选择（对应 C++ KillChallengeScreen）
     pub fn kill_challenge_screen(&mut self) {
+        if let Some(widget_ptr) = self.challenge_screen_widget.take() {
+            if let Some(wm) = self.base.widget_manager {
+                unsafe { (*wm).remove_widget(widget_ptr); }
+            }
+            unsafe {
+                let _ = Box::from_raw(widget_ptr);
+            }
+        }
         if let Some(screen) = self.challenge_screen.take() {
             unsafe {
                 let _ = Box::from_raw(screen as *mut crate::lawn::widget::challenge_screen::ChallengeScreen);
@@ -757,17 +882,36 @@ impl LawnApp {
         }
     }
 
-    /// 显示制作人员（对应 C++ ShowCreditScreen）
+    /// 显示制作人员（对应 C++ ShowCreditScreen；含 AddWidget/SetFocus）
     pub fn show_credit_screen(&mut self) {
         let mut screen = Box::new(crate::lawn::widget::credit_screen::CreditScreen::new());
         screen.app = Some(self as *mut LawnApp);
-        // [TRANSLATION_NOTE]: C++ 中随后执行 Resize/AddWidget/BringToBack/SetFocus，
-        // 待 widget 层实现 WidgetImpl 后接入
-        self.credit_screen = Some(Box::into_raw(screen) as *mut ());
+        let screen_ptr = Box::into_raw(screen);
+        // 对应 C++ CreditScreen : Widget + AddWidget + BringToBack + SetFocus
+        let mut widget = Box::new(Widget::new());
+        widget.impl_ = Some(Box::new(crate::lawn::widget::credit_screen::CreditScreenImpl::new(screen_ptr)));
+        widget.resize(0, 0, self.base.width, self.base.height);
+        let widget_ptr = Box::into_raw(widget);
+        if let Some(wm) = self.base.widget_manager {
+            unsafe {
+                (*wm).add_widget(widget_ptr);
+                (*wm).set_focus(Some(widget_ptr));
+            }
+        }
+        self.credit_screen = Some(screen_ptr as *mut ());
+        self.credit_screen_widget = Some(widget_ptr);
     }
 
     /// 销毁制作人员（对应 C++ KillCreditScreen）
     pub fn kill_credit_screen(&mut self) {
+        if let Some(widget_ptr) = self.credit_screen_widget.take() {
+            if let Some(wm) = self.base.widget_manager {
+                unsafe { (*wm).remove_widget(widget_ptr); }
+            }
+            unsafe {
+                let _ = Box::from_raw(widget_ptr);
+            }
+        }
         if let Some(screen) = self.credit_screen.take() {
             unsafe {
                 let _ = Box::from_raw(screen as *mut crate::lawn::widget::credit_screen::CreditScreen);
@@ -2393,8 +2537,51 @@ impl LawnApp {
         }
         self.m_loading_thread_tasks_completed += 60;
 
-        // TODO: MusicInit, PoolEffect, ZenGarden, ReanimatorCache, Foley, Trails, Particles
-        // 这些系统需要后续 Phase 实现
+        // 对应 C++ LoadingThreadProc（LawnApp.cpp:1740-1772）：各子系统初始化
+
+        // mMusic->MusicInit()
+        if let Some(music) = self.music.as_mut() {
+            music.music_init();
+        }
+
+        // mPoolEffect = new PoolEffect(); PoolEffectInitialize()
+        if let Some(pool_effect) = self.pool_effect.as_mut() {
+            pool_effect.initialize();
+        }
+
+        // mZenGarden = new ZenGarden()
+        if self.zen_garden.is_none() {
+            let mut a_zen_garden = Box::new(ZenGarden::new());
+            a_zen_garden.app = Some(self as *mut LawnApp);
+            self.zen_garden = Some(Box::into_raw(a_zen_garden));
+        }
+
+        // mReanimatorCache = new ReanimatorCache(); ReanimatorCacheInitialize()
+        if self.m_reanimator_cache.is_none() {
+            self.m_reanimator_cache = Some(Box::into_raw(Box::new(ReanimatorCache::new())));
+        }
+        if let Some(cache) = self.m_reanimator_cache {
+            unsafe {
+                (*cache).reanimator_cache_initialize();
+            }
+        }
+
+        // PvzpFoleyInitialize(gLawnFoleyParamArray, ...) — [TRANSLATION_NOTE]: Rust 无 gLawnFoleyParamArray 表，传空
+        crate::todlib::tod_foley::foley_initialize(&[]);
+
+        // TrailLoadDefinitions(gLawnTrailArray, ...) — [TRANSLATION_NOTE]: Rust trail_load_definitions 为 TODO 空体
+        crate::todlib::trail::trail_load_definitions(&mut []);
+
+        // PvzpParticleLoadDefinitions(gLawnParticleArray, ...) — [TRANSLATION_NOTE]: Rust 无 gLawnParticleArray 表，传空
+        crate::todlib::tod_particle::tod_particle_load_definitions(&[]);
+
+        // LoadGroup("LoadingSounds", 54)
+        if let Some(rm) = self.base.resource_manager {
+            unsafe {
+                (*rm).load_resources("LoadingSounds");
+            }
+        }
+        self.m_loading_thread_tasks_completed += 54;
 
         self.m_loading_thread_tasks_completed = self.m_loading_thread_tasks_total;
         self.m_loading_thread_completed = true;

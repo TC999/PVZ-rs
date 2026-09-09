@@ -16,6 +16,7 @@ pub const LAWN_YMIN: i32 = 80;
 pub const SEEDBANK_MAX: i32 = 10;
 pub const SEED_PACKET_WIDTH: i32 = 50;
 pub const SEED_PACKET_HEIGHT: i32 = 70;
+pub const CONVEYOR_SPEED: i32 = 4; // 对应 C++ SeedPacket.cpp:35 CONVEYOR_SPEED
 pub const NUM_LEVELS: i32 = 50; // 5 areas * 10 levels
 pub const FLAG_RAISE_TIME: i32 = 100;
 pub const ZOMBIE_COUNTDOWN_FIRST_WAVE: i32 = 1800;
@@ -1247,7 +1248,7 @@ pub enum MowerHeight {
     Land = 0,
     DownToPool,
     InPool,
-    UpToPool,
+    UpToLand,
 }
 
 /// NotRecommend — 不推荐提示
@@ -1272,7 +1273,13 @@ pub enum PlantPriority {
     DiggingOrder,
     BungeeOrder,
     CatapultOrder,
+    /// 对应 C++ TOPPLANT_ANY（Bungee/Catapult/Any 同一分支）
+    Any,
     ZenToolOrder,
+    /// 对应 C++ TOPPLANT_ONLY_NORMAL_POSITION
+    OnlyNormalPosition,
+    /// 对应 C++ TOPPLANT_ONLY_FLYING
+    OnlyFlying,
     TopPlantOnly,
     OnlyPumpkin,
     OnlyUnderPlant,
@@ -1300,6 +1307,12 @@ pub enum PlantingReason {
     NotPassedLine,
     /// 对应 C++ PLANTING_NOT_ON_ART
     NotOnArt,
+    /// 对应 C++ PLANTING_NEEDS_SLEEPING
+    NeedsSleeping,
+    /// 对应 C++ PLANTING_NEEDS_UPGRADE
+    NeedsUpgrade,
+    /// 对应 C++ PLANTING_NEEDS_GROUND
+    NeedsGround,
 }
 
 /// PlantRowType — 植物行类型

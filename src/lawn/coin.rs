@@ -4,6 +4,17 @@
 use crate::lawn::game_object::GameObject;
 use crate::lawn::game_enums::*;
 use crate::framework::graphics::graphics::Graphics;
+use crate::framework::color::Color;
+use crate::framework::rect::Rect;
+use crate::framework::graphics::image::Image;
+
+/// 对应 C++ PURCHASE_COUNT_OFFSET（购买计数偏移基线）
+const PURCHASE_COUNT_OFFSET: i32 = 1000;
+/// [TRANSLATION_NOTE]: C++ SOUND_* 常量在 Rust game_enums 中未定义，用占位值
+const SOUND_DIAMOND: i32 = 0;
+const SOUND_SHOVEL: i32 = 0;
+const SOUND_TAP2: i32 = 0;
+const SOUND_SEEDLIFT: i32 = 0;
 
 /// 硬币/掉落物品
 pub struct Coin {
@@ -33,10 +44,17 @@ pub struct Coin {
     pub scale: f32,
     pub is_being_collected: bool,
     pub collection_distance: f32,
+    /// 对应 C++ mCollectX/mCollectY（收集起点坐标，用于 UpdateCollected 动画）
+    pub collect_x: f32,
+    pub collect_y: f32,
     pub attachment_id: AttachmentID,
     pub needs_bouncy_arrow: bool,
     pub has_bouncy_arrow: bool,
     pub times_dropped: i32,
+    /// 对应 C++ mPottedPlantSpec（盆栽礼物/植物礼物携带的盆栽规格）
+    pub potted_plant_spec: crate::lawn::system::player_info::PottedPlant,
+    /// 对应 C++ mUsableSeedType（可种种子包礼包的种子类型）
+    pub usable_seed_type: SeedType,
 }
 
 impl Coin {
@@ -67,10 +85,14 @@ impl Coin {
             scale: 1.0,
             is_being_collected: false,
             collection_distance: 0.0,
+            collect_x: 0.0,
+            collect_y: 0.0,
             attachment_id: ATTACHMENTID_NULL,
             needs_bouncy_arrow: false,
             has_bouncy_arrow: false,
             times_dropped: 0,
+            potted_plant_spec: crate::lawn::system::player_info::PottedPlant::new(),
+            usable_seed_type: SeedType::None,
         }
     }
 
@@ -96,10 +118,10 @@ impl Coin {
                 self.lifespan = 600;
             },
             CoinType::Silver => {
-                self.value = 10;
+                self.value = 1; // 对应 C++ GetCoinValue(COIN_SILVER) = 1
             },
             CoinType::Gold => {
-                self.value = 50;
+                self.value = 5; // 对应 C++ GetCoinValue(COIN_GOLD) = 5
             },
             CoinType::Diamond => {
                 self.value = 100;
@@ -156,37 +178,61 @@ impl Coin {
         SeedType::None
     }
 
-    /// 更新掉落物理（对应 C++ Coin::UpdateFall）
+    /// 更新掉落物理（对应 C++ Coin::UpdateFall, Coin.cpp:481）
     pub fn update_fall(&mut self) {
-        if self.coin_motion == CoinMotion::FromSky {
-            self.vel_y += 0.5;
+        // C++ 483-493: COIN_MOTION_FROM_PRESENT
+        if self.coin_motion == CoinMotion::FromPresent {
             self.pos_x += self.vel_x;
             self.pos_y += self.vel_y;
-            if self.pos_y >= self.destination_y && self.destination_y > 0.0 {
-                self.pos_y = self.destination_y;
-                self.vel_y = 0.0;
-                self.coin_motion = CoinMotion::Coin;
+            self.vel_x *= 0.95;
+            self.vel_y *= 0.95;
+            if self.coin_age >= 80 {
+                self.collect();
             }
-        } else if self.coin_motion == CoinMotion::FromPlant {
-            self.vel_y -= 1.5;
+        } else if self.pos_y + self.vel_y < self.ground_y {
+            // C++ 494-517: 下落中
             self.pos_y += self.vel_y;
-            if self.vel_y < 0.0 && self.vel_y > -3.0 {
-                self.coin_motion = CoinMotion::FromSky;
-                self.destination_y = self.pos_y + 100.0;
+            if self.coin_motion == CoinMotion::FromPlant {
+                // C++ 498-500
+                self.vel_y += 0.09;
+            } else if self.coin_motion == CoinMotion::Coin || self.coin_motion == CoinMotion::FromBoss {
+                // C++ 501-504
+                self.vel_y += 0.15;
+            }
+
+            self.pos_x += self.vel_x;
+            // C++ 507-516: X 边界反弹
+            if self.pos_x > BOARD_WIDTH as f32 - self.base.width as f32 && self.coin_motion != CoinMotion::FromBoss {
+                self.pos_x = BOARD_WIDTH as f32 - self.base.width as f32;
+                self.vel_x = -0.4 - crate::todlib::tod_common::rand_range_float(0.0, 0.4);
+            } else if self.pos_x < 0.0 {
+                self.pos_x = 0.0;
+                self.vel_x = 0.4 + crate::todlib::tod_common::rand_range_float(0.0, 0.4);
             }
         } else {
-            // 通用重力
-            if self.pos_y + self.vel_y < self.ground_y || self.ground_y == 0.0 {
-                self.pos_y += self.vel_y;
-                self.vel_y += 0.15;
-                self.pos_x += self.vel_x;
-            } else {
-                if !self.hit_ground {
-                    self.hit_ground = true;
-                    self.play_ground_sound();
-                }
-                self.pos_y = self.ground_y;
-                // 消失计时（对应 C++ UpdateFall：IsLevelAward/IsPresentWithAdvice 不消失）
+            // C++ 518-589: 落地
+            // C++ 520-565: 弹跳箭头粒子
+            if self.needs_bouncy_arrow && !self.has_bouncy_arrow {
+                // [TRANSLATION_NOTE]: AddPvzpParticle + AttachParticle 未实现
+                // C++ 548-560: 根据 mType 选择 ParticleEffect
+                self.has_bouncy_arrow = true;
+            }
+
+            if !self.hit_ground {
+                self.hit_ground = true;
+                self.play_ground_sound();
+            }
+
+            self.pos_y = self.ground_y;
+            self.pos_x = self.pos_x.round();
+
+            // C++ 577-588: LastStand 状态对消失的影响
+            let is_last_stand_onslaught = self.base.board.map_or(false, |board| unsafe {
+                let app_mode = (*board).app.map_or(GameMode::Adventure, |app| (*app).game_mode);
+                app_mode == GameMode::ChallengeLastStand
+                    && (*board).challenge.as_ref().map_or(false, |c| c.challenge_state == crate::lawn::game_enums::ChallengeState::LastStandOnslaught)
+            });
+            if !is_last_stand_onslaught {
                 if !self.is_level_award() && !self.is_present_with_advice() {
                     self.disappear_counter += 1;
                     if self.disappear_counter >= self.get_disappear_time() {
@@ -196,7 +242,17 @@ impl Coin {
             }
         }
 
-        // 帧动画
+        // C++ 591-602: COIN_MOTION_FROM_PLANT 的缩放渐变
+        if self.coin_motion == CoinMotion::FromPlant {
+            let a_final_scale = self.get_sun_scale();
+            if self.scale < a_final_scale {
+                self.scale += 0.02;
+            } else {
+                self.scale = a_final_scale;
+            }
+        }
+
+        // 帧动画（保留 Rust 原有逻辑）
         self.counter += 1;
         if self.counter >= 10 {
             self.frame = (self.frame + 1) % 12;
@@ -204,76 +260,648 @@ impl Coin {
         }
     }
 
-    /// 更新收集动画（对应 C++ Coin::UpdateCollected）
-    /// 硬币飞向目标位置（阳光→左上角、金钱→硬币银行、礼物→解锁提示位置）
+    /// 更新收集动画（对应 C++ Coin::UpdateCollected, Coin.cpp:605）
     pub fn update_collected(&mut self) {
-        // UpdateCollected — 硬币飞向目标位置
-        if self.is_sun {
-            // 阳光飞向左上角
-            let dest_x = 15.0;
-            let dest_y = 0.0;
-            let dx = (self.pos_x - dest_x).abs();
-            let dy = (self.pos_y - dest_y).abs();
-            if self.pos_x > dest_x { self.pos_x -= dx / 21.0; }
-            else if self.pos_x < dest_x { self.pos_x += dx / 21.0; }
-            if self.pos_y > dest_y { self.pos_y -= dy / 21.0; }
-            else if self.pos_y < dest_y { self.pos_y += dy / 21.0; }
-            self.collection_distance = (dy * dy + dx * dx).sqrt();
-            if self.collection_distance < 8.0 {
-                self.score_coin();
-            }
+        let app_ptr = self.base.app;
+        let board_ptr = self.base.board;
+
+        // C++ 607-657: 目标坐标确定
+        let mut a_dest_x;
+        let mut a_dest_y;
+        if self.is_sun_type() {
+            // C++ 608-612
+            a_dest_x = 15.0;
+            a_dest_y = 0.0;
         } else if self.is_money() {
-            // 金钱飞向硬币银行
-            let dest_x = 39.0;
-            let dest_y = 558.0;
-            let dx = (self.pos_x - dest_x).abs();
-            let dy = (self.pos_y - dest_y).abs();
-            if self.pos_x > dest_x { self.pos_x -= dx / 21.0; }
-            else if self.pos_x < dest_x { self.pos_x += dx / 21.0; }
-            if self.pos_y > dest_y { self.pos_y -= dy / 21.0; }
-            else if self.pos_y < dest_y { self.pos_y += dy / 21.0; }
-            self.collection_distance = (dy * dy + dx * dx).sqrt();
-            self.scale = (self.collection_distance * 0.05).clamp(0.5, 1.0);
-            if self.collection_distance < 12.0 {
-                self.score_coin();
+            // C++ 613-627
+            a_dest_x = 39.0;
+            a_dest_y = 558.0;
+            let dialog_open = false;
+            // [TRANSLATION_NOTE]: C++ 检查 DIALOG_STORE 是否打开；Rust 无 get_dialog，暂 false
+            let _ = app_ptr;
+            if dialog_open {
+                a_dest_x = 662.0;
+                a_dest_y = 546.0;
+            } else if app_ptr.map_or(false, |app| unsafe { (*app).game_mode == GameMode::ChallengeZenGarden })
+                || app_ptr.map_or(false, |app| unsafe { (*app).m_crazy_dave_state != crate::lawn::game_enums::CrazyDaveState::Off })
+            {
+                a_dest_x = 442.0;
+            }
+        } else if self.is_present_with_advice() {
+            // C++ 628-632
+            a_dest_x = 35.0;
+            a_dest_y = 487.0;
+        } else if self.coin_type == CoinType::AwardPresent || self.coin_type == CoinType::PresentPlant {
+            // C++ 633-642
+            self.disappear_counter += 1;
+            if self.disappear_counter >= 200 {
+                self.start_fade();
+            }
+            return;
+        } else if !self.is_level_award() {
+            // C++ 643-651
+            if self.coin_type == CoinType::UsableSeedPacket {
+                self.disappear_counter += 1;
+            }
+            return;
+        } else {
+            // C++ 652-657
+            a_dest_x = 400.0 - self.base.width as f32 / 2.0;
+            a_dest_y = 200.0 - self.base.height as f32 / 2.0;
+            self.disappear_counter += 1;
+        }
+
+        // C++ 659-665: IsLevelAward 动画曲线
+        if self.is_level_award() {
+            self.scale = crate::todlib::tod_common::tod_animate_curve_float(0, 400, self.disappear_counter, 1.01, 2.0, crate::lawn::game_enums::TodCurves::EaseInOut);
+            self.pos_x = crate::todlib::tod_common::tod_animate_curve_float(0, 350, self.disappear_counter, self.collect_x, a_dest_x, crate::lawn::game_enums::TodCurves::EaseOut);
+            self.pos_y = crate::todlib::tod_common::tod_animate_curve_float(0, 350, self.disappear_counter, self.collect_y, a_dest_y, crate::lawn::game_enums::TodCurves::EaseOut);
+            return;
+        }
+
+        // C++ 667-684: 逐帧移动
+        let a_delta_x = (self.pos_x - a_dest_x).abs();
+        let a_delta_y = (self.pos_y - a_dest_y).abs();
+        if self.pos_x > a_dest_x {
+            self.pos_x -= a_delta_x / 21.0;
+        } else if self.pos_x < a_dest_x {
+            self.pos_x += a_delta_x / 21.0;
+        }
+        if self.pos_y > a_dest_y {
+            self.pos_y -= a_delta_y / 21.0;
+        } else if self.pos_y < a_dest_y {
+            self.pos_y += a_delta_y / 21.0;
+        }
+        self.collection_distance = (a_delta_y * a_delta_y + a_delta_x * a_delta_x).sqrt();
+
+        // C++ 688-727: 到达后处理
+        if self.is_present_with_advice() {
+            // C++ 690-710
+            if self.collection_distance < 15.0 {
+                if let Some(board) = board_ptr {
+                    unsafe {
+                        let help_displayed = (*board).m_advice != crate::lawn::game_enums::AdviceType::UnlockedMode;
+                        if !help_displayed {
+                            if self.coin_type == CoinType::PresentMinigames {
+                                (*board).display_advice("[UNLOCKED_MINIGAMES]", MessageStyle::HintTallUnlockMessage as i32, AdviceType::UnlockedMode);
+                            } else if self.coin_type == CoinType::PresentPuzzleMode {
+                                (*board).display_advice("[UNLOCKED_PUZZLE_MODE]", MessageStyle::HintTallUnlockMessage as i32, AdviceType::UnlockedMode);
+                            } else {
+                                (*board).display_advice("[UNLOCKED_SURVIVAL_MODE]", MessageStyle::HintTallUnlockMessage as i32, AdviceType::UnlockedMode);
+                            }
+                        } else {
+                            // C++ 706: mHelpIndex != ADVICE_UNLOCKED_MODE || !mAdvice->IsBeingDisplayed()
+                            // [TRANSLATION_NOTE]: mAdvice->IsBeingDisplayed() 未实现
+                            self.die();
+                        }
+                    }
+                }
             }
         } else {
-            self.dead = true;
+            // C++ 714-727
+            let a_scoring_distance = if self.is_money() { 12.0 } else { 8.0 };
+            if self.collection_distance < a_scoring_distance {
+                self.score_coin();
+            }
+            self.scale = (self.collection_distance * 0.05).clamp(0.5, 1.0);
+            self.scale *= self.get_sun_scale();
         }
     }
 
-    /// 绘制（对应 C++ Coin::Draw）
-    /// 按硬币类型选择不同绘制方式：阳光/金钱/钻石/礼物/种子包
-    pub fn draw(&self, _g: &mut Graphics) {
-        // [TRANSLATION_NOTE]: 完整绘制依赖 IMAGE_REANIM_SUN/IMAGE_COIN_SILVER 等资源
-        // 阳光：使用 Reanimation 绘制，支持缩放和闪烁效果
-        // 金钱：使用 IMAGE_COIN_SILVER/GOLD/DIAMOND 精灵图
-        // 礼物：使用 IMAGE_PRESENT 精灵图
-        // 种子包：使用 IMAGE_PACKET_PLANTS 精灵图
+    /// 绘制（对应 C++ Coin::Draw，Coin.cpp:799）
+    pub fn draw(&self, g: &mut Graphics) {
+        let a_color = self.get_color();
+        g.set_color(&Color::new(a_color.0, a_color.1, a_color.2, a_color.3));
+        let coin_type = self.coin_type;
+
+        // 钻石发光
+        if coin_type == CoinType::Diamond {
+            g.set_colorize_images(true);
+            if let Some(app) = self.base.get_app() {
+                let a_glow = crate::lawn::board::get_overlay_image(app, "IMAGE_AWARDPICKUPGLOW");
+                if !a_glow.is_null() {
+                    unsafe { g.draw_image_f_xy(&*a_glow, self.pos_x - 56.0, self.pos_y - 66.0); }
+                }
+            }
+            g.set_colorize_images(false);
+        }
+        // 植物礼物发光
+        if coin_type == CoinType::PresentPlant {
+            g.set_colorize_images(true);
+            if let Some(app) = self.base.get_app() {
+                let a_glow = crate::lawn::board::get_overlay_image(app, "IMAGE_AWARDPICKUPGLOW");
+                if !a_glow.is_null() {
+                    unsafe { g.draw_image_f_xy(&*a_glow, self.pos_x - 50.0, self.pos_y - 64.0); }
+                }
+            }
+            g.set_colorize_images(false);
+        }
+        // 关卡奖励礼物（收集时）发光
+        if coin_type == CoinType::AwardPresent && self.is_being_collected {
+            g.set_colorize_images(true);
+            if let Some(app) = self.base.get_app() {
+                let a_glow = crate::lawn::board::get_overlay_image(app, "IMAGE_AWARDPICKUPGLOW");
+                if !a_glow.is_null() {
+                    unsafe { g.draw_image_f_xy(&*a_glow, self.pos_x - 50.0, self.pos_y - 64.0); }
+                }
+            }
+            g.set_colorize_images(false);
+        }
+        // 巧克力发光
+        if coin_type == CoinType::Chocolate || coin_type == CoinType::AwardChocolate {
+            g.set_colorize_images(true);
+            if let Some(app) = self.base.get_app() {
+                let a_glow = crate::lawn::board::get_overlay_image(app, "IMAGE_AWARDPICKUPGLOW");
+                if !a_glow.is_null() {
+                    unsafe { g.draw_image_f_xy(&*a_glow, self.pos_x - 56.0, self.pos_y - 50.0); }
+                }
+            }
+            g.set_colorize_images(false);
+        }
+
+        // C++: AttachmentDraw(mAttachmentID, &aAttachmentGraphics, false)
+        // [TRANSLATION_NOTE]: Rust 无按 ID 的附件绘制入口（AttachmentDraw），暂略
+
+        // C++: Silver/Gold 落地且未收集时不绘制本体
+        if (coin_type == CoinType::Silver || coin_type == CoinType::Gold)
+            && self.hit_ground && !self.is_being_collected
+        {
+            return;
+        }
+
+        if coin_type == CoinType::Diamond {
+            return;
+        }
+
+        if self.is_level_award() && !self.is_being_collected {
+            let a_flashing_color = crate::todlib::tod_common::get_flashing_color(self.coin_age as u32, 75);
+            g.set_color(&a_flashing_color);
+        }
+
+        // Silver/Gold 底光
+        if coin_type == CoinType::Silver || coin_type == CoinType::Gold {
+            g.set_colorize_images(true);
+            if let Some(app) = self.base.get_app() {
+                let a_glow = crate::lawn::board::get_overlay_image(app, "IMAGE_REANIM_COINGLOW");
+                if !a_glow.is_null() {
+                    let a_glow_ref = unsafe { &*a_glow };
+                    // C++: PvzpDrawImageCenterScaledF(g, IMAGE_REANIM_COINGLOW, mPosX-14, mPosY-12, mScale, mScale)
+                    let a_cel_rect = a_glow_ref.get_cel_rect(0, 0);
+                    let a_dst_rect = Rect::new(
+                        (self.pos_x - 14.0 - (a_cel_rect.width as f32) * self.scale / 2.0) as i32,
+                        (self.pos_y - 12.0 - (a_cel_rect.height as f32) * self.scale / 2.0) as i32,
+                        (a_cel_rect.width as f32 * self.scale) as i32,
+                        (a_cel_rect.height as f32 * self.scale) as i32,
+                    );
+                    g.draw_image_stretch(a_glow_ref, &a_dst_rect, &a_cel_rect);
+                }
+            }
+            g.set_colorize_images(false);
+        }
+
+        let mut a_image: Option<*mut Image> = None;
+        let mut a_image_cel_col = 0;
+        let mut a_draw_scale = self.scale;
+        let mut a_offset_x = 0.0;
+        let mut a_offset_y = 0.0;
+        if coin_type == CoinType::Silver {
+            a_image = self.overlay_image("IMAGE_REANIM_COIN_SILVER_DOLLAR");
+            a_offset_x = 8.0;
+            a_offset_y = 10.0;
+        } else if coin_type == CoinType::Gold {
+            a_image = self.overlay_image("IMAGE_REANIM_COIN_GOLD_DOLLAR");
+            a_offset_x = 8.0;
+            a_offset_y = 10.0;
+        } else if self.is_sun_type() {
+            return;
+        } else if coin_type == CoinType::FinalSeedPacket {
+            let a_seed_type = self.get_final_seed_packet_type();
+            g.set_scale(self.scale, self.scale, 0.0, 0.0);
+            crate::lawn::seed_packet::draw_seed_packet(
+                g,
+                0.5 * (self.base.width as f32 - self.scale * self.base.width as f32) + self.pos_x,
+                0.5 * (self.base.height as f32 - self.scale * self.base.height as f32) + self.pos_y,
+                a_seed_type, SeedType::None, 0.0, 255, true, false,
+            );
+            g.set_scale(1.0, 1.0, 0.0, 0.0);
+            return;
+        } else if coin_type == CoinType::PresentPlant || coin_type == CoinType::AwardPresent {
+            if self.is_being_collected {
+                if let Some(app) = self.base.get_app() {
+                    if let Some(zg) = app.zen_garden {
+                        unsafe {
+                            (*zg).draw_potted_plant_icon(g, self.pos_x + 10.0, self.pos_y - 20.0, &self.potted_plant_spec);
+                        }
+                    }
+                }
+                return;
+            }
+            a_image = self.overlay_image("IMAGE_PRESENT");
+            a_offset_y = -20.0;
+        } else if self.is_present_with_advice() {
+            a_offset_y = -20.0;
+            if self.is_being_collected {
+                a_offset_x = -10.0;
+                a_offset_y -= -10.0;
+                a_image = self.overlay_image("IMAGE_PRESENTOPEN");
+            } else {
+                a_image = self.overlay_image("IMAGE_PRESENT");
+            }
+        } else if coin_type == CoinType::AwardMoneyBag || coin_type == CoinType::AwardBagDiamond {
+            a_image = self.overlay_image("IMAGE_MONEYBAG_HI_RES");
+            a_offset_x -= self.base.width as f32 / 2.0;
+            a_offset_y -= self.base.height as f32 / 2.0;
+            a_draw_scale *= 0.5;
+        } else if coin_type == CoinType::Chocolate || coin_type == CoinType::AwardChocolate {
+            a_image = self.overlay_image("IMAGE_CHOCOLATE");
+        } else if coin_type == CoinType::Trophy {
+            a_image = self.overlay_image("IMAGE_TROPHY_HI_RES");
+            a_offset_x -= self.base.width as f32 / 2.0;
+            a_offset_y -= self.base.height as f32 / 2.0;
+            a_draw_scale *= 0.5;
+        } else if coin_type == CoinType::AwardSilverSunflower {
+            a_image = self.overlay_image("IMAGE_SUNFLOWER_TROPHY");
+            a_offset_x -= 5.0;
+            a_draw_scale *= 0.6;
+        } else if coin_type == CoinType::AwardGoldSunflower {
+            a_image = self.overlay_image("IMAGE_SUNFLOWER_TROPHY");
+            a_image_cel_col = 1;
+            a_offset_x -= 5.0;
+            a_draw_scale *= 0.6;
+        } else if coin_type == CoinType::Shovel {
+            a_image = self.overlay_image("IMAGE_SHOVEL_HI_RES");
+            a_offset_x -= 20.0;
+            a_offset_y -= 20.0;
+            a_draw_scale *= 0.5;
+        } else if coin_type == CoinType::Carkeys {
+            a_image = self.overlay_image("IMAGE_CARKEYS");
+        } else if coin_type == CoinType::Almanac {
+            a_image = self.overlay_image("IMAGE_ALMANAC");
+        } else if coin_type == CoinType::Taco {
+            a_image = self.overlay_image("IMAGE_TACO");
+        } else if coin_type == CoinType::Vase {
+            a_image = self.overlay_image("IMAGE_SCARY_POT");
+        } else if coin_type == CoinType::WateringCan {
+            a_image = self.overlay_image("IMAGE_WATERINGCAN");
+        } else if coin_type == CoinType::Note {
+            a_image = self.overlay_image("IMAGE_ZOMBIE_NOTE_SMALL");
+        } else if coin_type == CoinType::UsableSeedPacket {
+            let mut a_grayness = 255;
+            if self.is_being_collected {
+                a_grayness = 128;
+            } else {
+                let a_disappear_time = self.get_disappear_time();
+                if self.disappear_counter > a_disappear_time - 300 && self.disappear_counter % 60 < 30 {
+                    a_grayness = 192;
+                }
+            }
+            g.set_colorize_images(true);
+            crate::lawn::seed_packet::draw_seed_packet(
+                g, self.pos_x, self.pos_y, self.usable_seed_type, SeedType::None,
+                0.0, a_grayness, false, false,
+            );
+            g.set_colorize_images(false);
+            return;
+        } else {
+            // C++: PVZP_ASSERT(false)
+        }
+
+        g.set_colorize_images(true);
+        if let Some(a_image) = a_image {
+            if !a_image.is_null() {
+                let a_image_ref = unsafe { &*a_image };
+                // C++: PvzpDrawImageCelCenterScaledF(g, aImage, mPosX + aOffsetX, mPosY + aOffsetY, aImageCelCol, aDrawScale, aDrawScale)
+                let a_cel_rect = a_image_ref.get_cel_rect(a_image_cel_col, 0);
+                let a_dst_rect = Rect::new(
+                    (self.pos_x + a_offset_x - (a_cel_rect.width as f32) * a_draw_scale / 2.0) as i32,
+                    (self.pos_y + a_offset_y - (a_cel_rect.height as f32) * a_draw_scale / 2.0) as i32,
+                    (a_cel_rect.width as f32 * a_draw_scale) as i32,
+                    (a_cel_rect.height as f32 * a_draw_scale) as i32,
+                );
+                g.draw_image_stretch(a_image_ref, &a_dst_rect, &a_cel_rect);
+            }
+        }
+        g.set_colorize_images(false);
+    }
+
+    /// 取资源图片（辅助：不存在返回 null 指针，避免各分支重复代码）
+    fn overlay_image(&self, name: &str) -> Option<*mut Image> {
+        self.base.get_app().map(|app| crate::lawn::board::get_overlay_image(app, name))
     }
 
     /// 收集硬币（对应 C++ Coin::Collect 简化版）
     pub fn collect(&mut self) {
+        // 对应 C++ Coin::Collect (Coin.cpp:1044)
         if self.dead { return; }
 
+        self.collect_x = self.pos_x;
+        self.collect_y = self.pos_y;
         self.is_being_collected = true;
 
-        // 阳光/金钱计分
-        if self.is_sun {
-            if let Some(board) = self.base.get_board_mut() {
-                board.add_sun_money(self.value);
+        // 获取 app/board 引用用于大量分支
+        let app_ptr = self.base.app;
+        let board_ptr = self.base.board;
+
+        let a_is_endless_award = {
+            let mut flag = false;
+            if let Some(app) = app_ptr {
+                unsafe {
+                    let mode = (*app).game_mode;
+                    if ((*app).is_endless_izombie(mode) || (*app).is_endless_scary_potter(mode)) && self.is_level_award() {
+                        flag = true;
+                    }
+                }
             }
-        } else if self.is_money() {
-            if let Some(board) = self.base.get_board_mut() {
-                board.add_sun_money(self.value);
+            flag
+        };
+
+        // C++ 1059-1084: COIN_PRESENT_PLANT / COIN_AWARD_PRESENT
+        if self.coin_type == CoinType::PresentPlant || self.coin_type == CoinType::AwardPresent {
+            if let Some(app) = app_ptr {
+                unsafe {
+                    let zen_full = (*app).zen_garden.map_or(false, |zg| (*zg).is_zen_garden_full(false));
+                    if zen_full {
+                        if let Some(board) = board_ptr {
+                            (*board).display_advice("[DIALOG_ZEN_GARDEN_FULL]", MessageStyle::HintFast as i32, AdviceType::None);
+                        }
+                    } else {
+                        if let Some(board) = board_ptr {
+                            (*board).m_potted_plants_collected += 1;
+                            (*board).display_advice("[ADVICE_FOUND_PLANT]", MessageStyle::HintFast as i32, AdviceType::None);
+                        }
+                        // [TRANSLATION_NOTE]: AddPvzpParticle 未实现
+                        // (*app).add_pvzp_particle(self.pos_x + 30.0, self.pos_y + 30.0, self.base.render_order + 1, ParticleEffect::PresentPickup);
+                        if let Some(zg) = (*app).zen_garden {
+                            let mut spec = self.potted_plant_spec.clone();
+                            (*zg).add_potted_plant(&mut spec);
+                        }
+                    }
+                    self.disappear_counter = 0;
+                    self.fade_count = 0;
+                    if a_is_endless_award {
+                        // [TRANSLATION_NOTE]: AttachmentDetachCrossFadeParticleType 未实现
+                        if let Some(board) = board_ptr {
+                            (*board).fade_out_level();
+                        }
+                    }
+                }
+            }
+            return;
+        }
+
+        // C++ 1086-1099: COIN_PRESENT_MINIGAMES
+        if self.coin_type == CoinType::PresentMinigames {
+            // [TRANSLATION_NOTE]: AddPvzpParticle 未实现
+            self.disappear_counter = 0;
+            self.fade_count = 0;
+            // [TRANSLATION_NOTE]: AttachmentDetachCrossFadeParticleType 未实现
+            if let Some(app) = app_ptr {
+                unsafe {
+                    if let Some(pi) = (*app).player_info.as_mut() {
+                        pi.m_has_unlocked_minigames = true;
+                    }
+                }
+            }
+            return;
+        }
+        // C++ 1100-1113: COIN_PRESENT_PUZZLE_MODE
+        if self.coin_type == CoinType::PresentPuzzleMode {
+            // [TRANSLATION_NOTE]: AddPvzpParticle 未实现
+            self.disappear_counter = 0;
+            self.fade_count = 0;
+            // [TRANSLATION_NOTE]: AttachmentDetachCrossFadeParticleType 未实现
+            if let Some(app) = app_ptr {
+                unsafe {
+                    if let Some(pi) = (*app).player_info.as_mut() {
+                        pi.m_has_unlocked_puzzle_mode = true;
+                    }
+                }
+            }
+            return;
+        }
+        // C++ 1114-1127: COIN_PRESENT_SURVIVAL_MODE
+        if self.coin_type == CoinType::PresentSurvivalMode {
+            // [TRANSLATION_NOTE]: AddPvzpParticle 未实现
+            self.disappear_counter = 0;
+            self.fade_count = 0;
+            // [TRANSLATION_NOTE]: AttachmentDetachCrossFadeParticleType 未实现
+            if let Some(app) = app_ptr {
+                unsafe {
+                    if let Some(pi) = (*app).player_info.as_mut() {
+                        pi.m_has_unlocked_survival_mode = true;
+                    }
+                }
+            }
+            return;
+        }
+
+        // C++ 1129-1156: COIN_CHOCOLATE / COIN_AWARD_CHOCOLATE
+        if self.coin_type == CoinType::Chocolate || self.coin_type == CoinType::AwardChocolate {
+            if let Some(app) = app_ptr {
+                unsafe {
+                    if let Some(board) = board_ptr {
+                        (*board).m_chocolate_collected += 1;
+                    }
+                    // [TRANSLATION_NOTE]: AddPvzpParticle 未实现
+                    let chocolate_idx = crate::lawn::game_enums::StoreItem::Chocolate as usize;
+                    let cur = (*app).player_info.as_ref().map_or(0, |pi| pi.m_purchases.get(chocolate_idx).map_or(0, |v| *v));
+                    if cur < PURCHASE_COUNT_OFFSET {
+                        if let Some(board) = board_ptr {
+                            (*board).display_advice("[ADVICE_FOUND_CHOCOLATE]", MessageStyle::HintTallFast as i32, AdviceType::None);
+                        }
+                        if let Some(pi) = (*app).player_info.as_mut() {
+                            if chocolate_idx < pi.m_purchases.len() {
+                                pi.m_purchases[chocolate_idx] = PURCHASE_COUNT_OFFSET + 1;
+                            }
+                        }
+                    } else {
+                        if let Some(pi) = (*app).player_info.as_mut() {
+                            if chocolate_idx < pi.m_purchases.len() {
+                                pi.m_purchases[chocolate_idx] += 1;
+                            }
+                        }
+                    }
+                    self.disappear_counter = 0;
+                    self.start_fade();
+                    if a_is_endless_award {
+                        // [TRANSLATION_NOTE]: AttachmentDetachCrossFadeParticleType 未实现
+                        if let Some(board) = board_ptr {
+                            (*board).fade_out_level();
+                        }
+                    }
+                }
+            }
+            return;
+        }
+
+        // C++ 1158-1244: IsLevelAward() 分支
+        if self.is_level_award() {
+            if let Some(app) = app_ptr {
+                unsafe {
+                    let mode = (*app).game_mode;
+                    if a_is_endless_award {
+                        if self.coin_type == CoinType::AwardBagDiamond {
+                            (*app).play_sample(SOUND_DIAMOND);
+                            self.fan_out_coins(CoinType::Diamond, 1);
+                            self.start_fade();
+                        } else if self.coin_type == CoinType::AwardMoneyBag {
+                            (*app).play_foley(crate::todlib::tod_foley::FoleyType::Coin as i32);
+                            self.fan_out_coins(CoinType::Gold, 5);
+                            self.start_fade();
+                        }
+                    } else if (*app).is_scary_potter_level() {
+                        if self.coin_type == CoinType::Trophy {
+                            (*app).play_foley(crate::todlib::tod_foley::FoleyType::Coin as i32);
+                            self.fan_out_coins(CoinType::Gold, 5);
+                        } else if self.coin_type == CoinType::AwardMoneyBag {
+                            (*app).play_foley(crate::todlib::tod_foley::FoleyType::Coin as i32);
+                            self.fan_out_coins(CoinType::Gold, 2);
+                        }
+                    } else if (*app).is_adventure_mode() && board_ptr.map_or(0, |b| unsafe { (*b).level }) == 50 {
+                        self.fan_out_coins(CoinType::Diamond, 3);
+                    } else if self.coin_type == CoinType::AwardGoldSunflower {
+                        self.fan_out_coins(CoinType::Diamond, 5);
+                    } else if (*app).is_first_time_adventure_mode() && board_ptr.map_or(0, |b| unsafe { (*b).level }) == 4 {
+                        (*app).play_sample(SOUND_SHOVEL);
+                    } else if (*app).is_first_time_adventure_mode() {
+                        let lvl = board_ptr.map_or(0, |b| unsafe { (*b).level });
+                        if lvl == 24 || lvl == 34 || lvl == 44 {
+                            (*app).play_sample(SOUND_TAP2);
+                        }
+                    } else if self.coin_type == CoinType::Trophy {
+                        (*app).play_sample(SOUND_DIAMOND);
+                        self.fan_out_coins(CoinType::Diamond, 1);
+                    } else if self.coin_type == CoinType::AwardMoneyBag {
+                        (*app).play_foley(crate::todlib::tod_foley::FoleyType::Coin as i32);
+                        self.fan_out_coins(CoinType::Gold, 5);
+                    } else {
+                        (*app).play_sample(SOUND_SEEDLIFT);
+                        (*app).play_sample(SOUND_TAP2);
+                    }
+
+                    // [TRANSLATION_NOTE]: AddPvzpParticle(PARTICLE_STARBURST) 未实现
+                    if let Some(board) = board_ptr {
+                        (*board).fade_out_level();
+                    }
+                    // [TRANSLATION_NOTE]: AttachmentDetachCrossFadeParticleType x3 未实现
+
+                    if self.coin_type == CoinType::Note {
+                        // [TRANSLATION_NOTE]: AddPvzpParticle(PARTICLE_PRESENT_PICKUP) 未实现
+                        self.start_fade();
+                    } else if !a_is_endless_award {
+                        // [TRANSLATION_NOTE]: Is3DAccelerated 未实现；AttachParticle 未实现
+                        // C++ 1234-1240: 3D 加速时附加 PARTICLE_SEED_PACKET_PICKUP
+                    }
+
+                    self.disappear_counter = 0;
+                }
+            }
+            return;
+        }
+
+        // C++ 1246-1257: COIN_USABLE_SEED_PACKET
+        if self.coin_type == CoinType::UsableSeedPacket {
+            if let Some(board) = board_ptr {
+                unsafe {
+                    (*board).cursor_object.seed_type = self.usable_seed_type;
+                    (*board).cursor_object.cursor_type = CursorType::PlantFromUsableCoin;
+                    // [TRANSLATION_NOTE]: mCoinID = DataArrayGetID(this) 未实现
+                    self.ground_y = self.pos_y as i32 as f32;
+                    self.fade_count = 0;
+                }
+            }
+            return;
+        }
+
+        // C++ 1259-1262: IsMoney → ShowCoinBank
+        if self.is_money() {
+            if let Some(board) = board_ptr {
+                unsafe { (*board).show_coin_bank(0); }
             }
         }
 
-        // [TRANSLATION_NOTE]: 特殊硬币类型（礼物/巧克力/种子/关卡奖励）
-        // 的处理逻辑暂未实现
-
         self.fade_count = 0;
-        // [TRANSLATION_NOTE]: AttachmentDetachCrossFade 暂未实现
+
+        // C++ 1266-1283: IsSun → SeedBank 闪烁 + 雾层调整
+        if self.is_sun_type() {
+            if let Some(board) = board_ptr {
+                unsafe {
+                    let bref = &mut *board;
+                    if !bref.has_conveyor_belt_seed_bank() {
+                        let count = bref.count_sun_being_collected();
+                        for i in 0..bref.seed_bank.len() {
+                            let pkt_seed = bref.seed_bank[i].seed_type;
+                            let pkt_imit = bref.seed_bank[i].imitater_type;
+                            let cost = bref.get_current_plant_cost(pkt_seed, pkt_imit);
+                            let sun_profit = bref.m_sun_count + count - cost;
+                            if sun_profit >= 0 && sun_profit < self.get_sun_value() {
+                                bref.seed_bank[i].flash_if_ready();
+                            }
+                        }
+                        if bref.stage_has_fog() {
+                            self.base.render_order = crate::lawn::board::make_render_order(RENDER_LAYER_ABOVE_UI, 0, 2);
+                        }
+                    }
+                }
+            }
+        }
+
+        // [TRANSLATION_NOTE]: AttachmentDetachCrossFadeParticleType(PARTICLE_COIN_PICKUP_ARROW) 未实现
+
+        // C++ 1286-1289: 首次冒险模式 1-11 关点击金币提示
+        if let Some(app) = app_ptr {
+            unsafe {
+                if (*app).is_first_time_adventure_mode() {
+                    if let Some(board) = board_ptr {
+                        if (*board).level == 11 && (self.coin_type == CoinType::Gold || self.coin_type == CoinType::Silver) {
+                            (*board).display_advice("[ADVICE_CLICKED_ON_COIN]", MessageStyle::HintFast as i32, AdviceType::ClickedOnCoin);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// 鼠标按下（对应 C++ Coin::MouseDown，Coin.cpp:1383）
+    pub fn mouse_down(&mut self, _x: i32, _y: i32, the_click_count: i32) {
+        if self.dead {
+            return;
+        }
+
+        // 前置检查：mBoard == nullptr || mBoard->mPaused || mGameScene != SCENE_PLAYING || mDead
+        let (a_level, a_first_time_adventure) = {
+            let board = match self.base.get_board() {
+                Some(b) => b,
+                None => return,
+            };
+            if board.m_paused {
+                return;
+            }
+            let app = match self.base.get_app() {
+                Some(a) => a,
+                None => return,
+            };
+            if app.game_scene != crate::lawn::lawn_app::GameScenes::Playing {
+                return;
+            }
+            (board.level, app.is_first_time_adventure_mode())
+        };
+
+        if the_click_count >= 0 && !self.is_being_collected {
+            self.play_collect_sound();
+            self.collect();
+
+            // 对应 C++：首次冒险模式第 1 关点击阳光提示
+            if a_first_time_adventure && a_level == 1 {
+                if let Some(board) = self.base.get_board_mut() {
+                    board.display_advice(
+                        "[ADVICE_CLICKED_ON_SUN]",
+                        MessageStyle::TutorialLevel1Stay as i32,
+                        AdviceType::ClickedOnSun,
+                    );
+                }
+            }
+        }
     }
 
     /// 扇形散开硬币（对应 C++ FanOutCoins）
@@ -483,10 +1111,19 @@ impl Coin {
                 board.add_sun_money(self.value);
             }
         } else if self.is_money() {
-            // [TRANSLATION_NOTE]: PlayerInfo.AddCoins 暂未实现
-            if let Some(board) = self.base.get_board_mut() {
-                board.add_sun_money(self.value);
+            // 对应 C++: mApp->mPlayerInfo->AddCoins(GetCoinValue(mType));
+            let a_coin_value = Coin::get_coin_value(self.coin_type);
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(player) = app.player_info.as_mut() {
+                    player.add_coins(a_coin_value);
+                }
             }
+            // 对应 C++: mBoard->mCoinsCollected += aCoinValue;
+            if let Some(board) = self.base.get_board_mut() {
+                board.m_coins_collected += a_coin_value;
+            }
+            // [TRANSLATION_NOTE]: C++ Silver/Gold 的 mLevelCoinsCollected 计数（满 30 个
+            // PennyPincher 成就）与钻石的 mDiamondsCollected，Rust Board 字段暂无
         }
     }
 
@@ -522,8 +1159,9 @@ impl Coin {
     /// 获取硬币值（静态，对应 C++ GetCoinValue）
     pub fn get_coin_value(coin_type: CoinType) -> i32 {
         match coin_type {
-            CoinType::Silver => 10,
-            CoinType::Gold => 50,
+            // 对应 C++: Silver=1 / Gold=5 / Diamond=100
+            CoinType::Silver => 1,
+            CoinType::Gold => 5,
             CoinType::Diamond => 100,
             _ => 0,
         }

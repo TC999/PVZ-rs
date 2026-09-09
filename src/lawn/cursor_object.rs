@@ -115,30 +115,91 @@ impl CursorObject {
         self.reanim_cursor_id = REANIMATIONID_NULL;
     }
 
-    /// 绘制（对应 C++ CursorObject::Draw() L79-L224）
-    /// 根据光标类型绘制不同的工具/植物图标
-    pub fn draw(&self, _g: &mut Graphics) {
-        // 原始 C++ 实现根据 mCursorType 分支绘制不同图像：
-        //
-        // CURSOR_TYPE_SHOVEL         → DrawImage(IMAGE_SHOVEL)
-        // CURSOR_TYPE_WATERING_CAN   → DrawImage(IMAGE_WATERINGCAN / IMAGE_ZEN_GOLDTOOLRETICLE)
-        // CURSOR_TYPE_FERTILIZER     → DrawImage(IMAGE_FERTILIZER)
-        // CURSOR_TYPE_BUG_SPRAY      → DrawImage(IMAGE_BUG_SPRAY)
-        // CURSOR_TYPE_PHONOGRAPH     → DrawImage(IMAGE_PHONOGRAPH)
-        // CURSOR_TYPE_CHOCOLATE      → DrawImage(IMAGE_CHOCOLATE)
-        // CURSOR_TYPE_GLOVE          → DrawImage(IMAGE_ZEN_GARDENGLOVE)
-        // CURSOR_TYPE_MONEY_SIGN     → DrawImage(IMAGE_ZEN_MONEYSIGN)
-        // CURSOR_TYPE_TREE_FOOD      → DrawImage(IMAGE_TREEFOOD)
-        // CURSOR_TYPE_WHEEELBARROW   → DrawImage(IMAGE_ZEN_WHEELBARROW) + DrawPottedPlant
-        // CURSOR_TYPE_PLANT_FROM_GLOVE → DrawPottedPlant
-        // CURSOR_TYPE_PLANT_FROM_WHEEL_BARROW → DrawPottedPlant
-        // CURSOR_TYPE_PLANT_FROM_BANK/FROM_USABLE_COIN/FROM_DUPLICATOR → DrawSeedType
-        // CURSOR_TYPE_HAMMER         → ReanimationGet(mReanimCursorID)->Draw(g)
-        // CURSOR_TYPE_COBCANNON_TARGET → MouseHitTest → DrawImageCel(IMAGE_COBCANNON_TARGET)
-        // CURSOR_TYPE_NORMAL         → 不绘制
-        //
-        // 依赖：IMAGE_* 资源常量（Resources.h/Resources.cpp）和 ZenGarden::DrawPottedPlant
-        // 待资源管理和 ZenGarden 翻译完成后补充完整实现
+    /// 绘制（对应 C++ CursorObject::Draw，CursorObject.cpp:80）
+    /// 按光标类型在鼠标位置绘制对应工具/植物图标
+    pub fn draw(&self, g: &mut Graphics) {
+        // [TRANSLATION_NOTE]: C++ 借助 Graphics 变换绘制绝对坐标；Rust 以 CursorObject
+        // 的鼠标坐标（x/y）加 C++ 偏移常量近似，图像经 ResourceManager 按 key 查找。
+        let get_image = |a_key: &str| -> *mut crate::framework::graphics::image::Image {
+            crate::lawn::lawn_app::LawnApp::instance().map_or(std::ptr::null_mut(), |app| {
+                let a_rm = match app.base.resource_manager {
+                    Some(r) => r,
+                    None => return std::ptr::null_mut(),
+                };
+                unsafe { (*a_rm).get_image(a_key).as_image_ptr() }
+            })
+        };
+        let draw_at = |g: &mut Graphics, a_image: *mut crate::framework::graphics::image::Image, a_x: i32, a_y: i32| {
+            if !a_image.is_null() {
+                unsafe { g.draw_image_xy(&*a_image, a_x, a_y); }
+            }
+        };
+
+        match self.cursor_type {
+            CursorType::Shovel => {
+                // 对应 C++: g->DrawImage(IMAGE_SHOVEL, 10, -30)
+                draw_at(g, get_image("IMAGE_SHOVEL"), self.x + 10, self.y - 30);
+            }
+            CursorType::WateringCan => {
+                // [TRANSLATION_NOTE]: C++ 中 STORE_ITEM_GOLD_WATERINGCAN 购买判定 +
+                // IMAGE_ZEN_GOLDTOOLRETICLE 光环依赖 player_info 资源表，暂以普通水壶绘制
+                // 对应 C++: g->DrawImage(IMAGE_WATERINGCAN, -3, 12)
+                draw_at(g, get_image("IMAGE_WATERINGCAN"), self.x - 3, self.y + 12);
+            }
+            CursorType::Fertilizer => {
+                // 对应 C++: g->DrawImage(IMAGE_FERTILIZER, -15, 0)
+                draw_at(g, get_image("IMAGE_FERTILIZER"), self.x - 15, self.y);
+            }
+            CursorType::BugSpray => {
+                // 对应 C++: g->DrawImage(IMAGE_BUG_SPRAY, -9, -1)
+                draw_at(g, get_image("IMAGE_BUG_SPRAY"), self.x - 9, self.y - 1);
+            }
+            CursorType::Phonograph => {
+                // 对应 C++: g->DrawImage(IMAGE_PHONOGRAPH, -17, 10)
+                draw_at(g, get_image("IMAGE_PHONOGRAPH"), self.x - 17, self.y + 10);
+            }
+            CursorType::Chocolate => {
+                // 对应 C++: g->DrawImage(IMAGE_CHOCOLATE, -2, -8)
+                draw_at(g, get_image("IMAGE_CHOCOLATE"), self.x - 2, self.y - 8);
+            }
+            CursorType::Glove => {
+                // 对应 C++: g->DrawImage(IMAGE_ZEN_GARDENGLOVE, -17, 15)
+                draw_at(g, get_image("IMAGE_ZEN_GARDENGLOVE"), self.x - 17, self.y + 15);
+            }
+            CursorType::MoneySign => {
+                // 对应 C++: g->DrawImage(IMAGE_ZEN_MONEYSIGN, -17, -10)
+                draw_at(g, get_image("IMAGE_ZEN_MONEYSIGN"), self.x - 17, self.y - 10);
+            }
+            CursorType::TreeFood => {
+                // 对应 C++: g->DrawImage(IMAGE_TREEFOOD, -15, 0)
+                draw_at(g, get_image("IMAGE_TREEFOOD"), self.x - 15, self.y);
+            }
+            CursorType::Wheelbarrow => {
+                // [TRANSLATION_NOTE]: C++ 中按盆栽年龄调用 ZenGarden::DrawPottedPlant
+                //（依赖 ZenGarden/PlayerInfo 的 PottedPlant 结构，暂未接入）
+                // 对应 C++: g->DrawImage(IMAGE_ZEN_WHEELBARROW, -20, -30)
+                draw_at(g, get_image("IMAGE_ZEN_WHEELBARROW"), self.x - 20, self.y - 30);
+            }
+            CursorType::PlantFromGlove | CursorType::PlantFromWheelBarrow => {
+                // [TRANSLATION_NOTE]: C++ 中按背景类型调用 ZenGarden::DrawPottedPlant
+                //（依赖 PottedPlant 结构，暂未接入）
+            }
+            CursorType::PlantFromBank | CursorType::PlantFromUsableCoin | CursorType::PlantFromDuplicator => {
+                // 对应 C++: 植物种子绘制（偏移依赖 PlantDrawHeightOffset/飞行判定）
+                // [TRANSLATION_NOTE]: Plant::DrawSeedType 依赖植物图像资源族，暂未接入
+            }
+            CursorType::Hammer => {
+                // 对应 C++: mApp->ReanimationGet(mReanimCursorID)->Draw(g)
+                // [TRANSLATION_NOTE]: 光标锤子 reanim 实例绘制依赖 Reanimator 完整链，暂非翻译
+            }
+            CursorType::CobcannonTarget => {
+                // [TRANSLATION_NOTE]: C++ 中先经 MouseHitTest 判定无对象且 y >= 80 才绘制；
+                // Rust 简化直接绘制（依赖 Board::MouseHitTest）
+                // 对应 C++: g->DrawImageCel(IMAGE_COBCANNON_TARGET, -11, 7, 0)
+                draw_at(g, get_image("IMAGE_COBCANNON_TARGET"), self.x - 11, self.y + 7);
+            }
+            CursorType::Normal => {}
+        }
     }
 
     /// 是否需要更新光标（对应 C++ 中 mApp->SetCursor 调用）
@@ -366,16 +427,21 @@ impl Default for CursorPreview {
 /// 绘制种子类型预览（简化版，对应 C++ Plant::DrawSeedType）
 /// 完整实现在 Plant.cpp 中，此处仅做占位
 fn plant_draw_seed_type(
-    _g: &mut Graphics,
-    _seed_type: SeedType,
+    g: &mut Graphics,
+    seed_type: SeedType,
     _grid_x: i32,
     _grid_y: i32,
-    _offset_x: f32,
-    _offset_y: f32,
+    offset_x: f32,
+    offset_y: f32,
     _board: &Board,
 ) {
-    // 依赖 Plant::DrawSeedType 翻译
-    // 原始实现在 Plant.cpp 中根据种子类型从资源加载对应图像并绘制
-    // 待 Plant 模块完整翻译后替换
-    // 目前保留函数签名确保编译通过
+    // 对应 C++ CursorObject.cpp:203/326/336 的 Plant::DrawSeedType(g, mType, mImitaterType, VARIATION_NORMAL, ...)
+    crate::lawn::plant::Plant::draw_seed_type(
+        g,
+        seed_type,
+        SeedType::None,
+        crate::lawn::game_enums::DrawVariation::Normal,
+        offset_x,
+        offset_y,
+    );
 }

@@ -273,35 +273,69 @@ impl Projectile {
 
     /// 更新抛物线运动（对应 C++ Projectile::UpdateLobMotion）
     pub fn update_lob_motion(&mut self) {
-        // [TRANSLATION_NOTE]: 玉米加农炮 Cobbig 终点重定位暂未实现
-        // 重力加速度
+        // 对应 C++: Cobbig 俯冲到目标后重定位落点
+        if self.projectile_type == ProjectileType::Cobbig && self.pos_z < -700.0 {
+            self.vel_z = 8.0;
+            self.base.row = self.cob_target_row;
+            self.pos_x = self.cob_target_x;
+            if let Some(board) = self.base.get_board() {
+                let a_cob_target_col = board.pixel_to_grid_x_keep_on_board(self.cob_target_x as i32, 0);
+                self.pos_y = board.grid_to_pixel_y(a_cob_target_col, self.cob_target_row) as f32;
+                self.shadow_y = self.pos_y + 67.0;
+            }
+            self.rotation = -std::f32::consts::PI / 2.0;
+        }
+
+        // 对应 C++: mVelZ += mAccZ;（GAMEMODE_CHALLENGE_HIGH_GRAVITY 二次重力暂略）
         self.vel_z += self.acc_z;
-        // 位置更新
         self.pos_x += self.vel_x;
         self.pos_y += self.vel_y;
         self.pos_z += self.vel_z;
 
-        // 上升阶段不处理碰撞
+        // 对应 C++: Basketball/Cobbig 上升期不检测碰撞
         let is_rising = self.vel_z < 0.0;
-        if is_rising {
+        if is_rising
+            && (self.projectile_type == ProjectileType::Basketball
+                || self.projectile_type == ProjectileType::Cobbig)
+        {
             return;
         }
 
-        // 碰撞高度检测
+        // 对应 C++: 弹龄超过 20 后检查上升/落地高度
         if self.projectile_age > 20 {
+            if is_rising {
+                return;
+            }
+
+            // 对应 C++ 各弹种最小碰撞高度
             let mut a_min_collision_z = 0.0;
-            // [TRANSLATION_NOTE]: 各种 ProjectileType 的碰撞高度值暂简化
+            match self.projectile_type {
+                ProjectileType::Butter => a_min_collision_z = -32.0,
+                ProjectileType::Basketball => a_min_collision_z = 60.0,
+                ProjectileType::Melon | ProjectileType::Wintermelon => a_min_collision_z = -35.0,
+                ProjectileType::Cabbage | ProjectileType::Kernel => a_min_collision_z = -30.0,
+                ProjectileType::Cobbig => a_min_collision_z = -60.0,
+                _ => {}
+            }
+            // 对应 C++: 泳池行 +40
+            if let Some(board) = self.base.get_board() {
+                let a_grid_x = board.pixel_to_grid_x_keep_on_board(self.pos_x as i32, 0);
+                if board.is_pool_square(a_grid_x, self.base.row) {
+                    a_min_collision_z += 40.0;
+                }
+            }
             if self.pos_z <= a_min_collision_z {
                 return;
             }
         }
 
-        // 碰撞检测（简化版：检查僵尸）
+        // [TRANSLATION_NOTE]: 对应 C++ FindCollisionTargetPlant（Basketball/ZombiePea 打植物、
+        // 低矮植物豁免、伞叶反射）依赖 Plant::Die 链，本轮暂略。
+
+        // 僵尸碰撞检测
         let my_pos_x = self.pos_x as i32;
-        let my_pos_y = (self.pos_y + self.pos_z) as i32;
+        let my_pos_y = self.pos_y as i32;
         let my_row = self.base.row;
-        let a_damage = self.damage;
-        let a_damage_flags = self.damage_flags;
 
         let mut hit_zombie_idx: Option<usize> = None;
         if let Some(board) = self.base.get_board() {
@@ -319,13 +353,38 @@ impl Projectile {
             }
         }
 
-        if let Some(zombie_idx) = hit_zombie_idx {
+        // 对应 C++: PROJECTILE_COBBIG 落点：范围内全部僵尸爆炸伤害
+        if self.projectile_type == ProjectileType::Cobbig {
+            let a_damage_flags = self.damage_flags;
             if let Some(board) = self.base.get_board_mut() {
-                if let Some(zombie) = board.zombies.get_mut(zombie_idx) {
-                    zombie.take_damage(a_damage, a_damage_flags);
-                }
+                let a_before_gargantuar_count = board.get_live_gargantuar_count();
+                board.kill_all_zombies_in_radius(
+                    my_row,
+                    my_pos_x + 80,
+                    my_pos_y + 40,
+                    115,
+                    1,
+                    true,
+                    a_damage_flags,
+                );
+                let a_after_gargantuar_count = board.get_live_gargantuar_count();
+                // [TRANSLATION_NOTE]: C++ 中 mGargantuarsKillsByCornCob 累计与 PopcornParty 成就，Rust 字段暂无
+                let _gargantuars_killed = a_before_gargantuar_count - a_after_gargantuar_count;
+            }
+            // 对应 C++ DoImpact(nullptr) COBBIG 分支：BLASTMARK/POPCORNSPLASH 粒子（stub）
+            // + PlaySample(SOUND_DOOMSHROOM)（Rust 音效系统用 FoleyType::Explosion 近似）+ ShakeBoard(3, -4)
+            if let Some(app) = self.base.get_app() {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::Explosion as i32);
+            }
+            if let Some(board) = self.base.get_board_mut() {
+                board.shake_board(3, -4);
             }
             self.die();
+            return;
+        }
+
+        if let Some(zombie_idx) = hit_zombie_idx {
+            self.do_impact_by_index(zombie_idx);
         }
     }
 
@@ -343,7 +402,6 @@ impl Projectile {
         let proj_type = self.projectile_type;
         let motion = self.motion;
         let proj_age = self.projectile_age;
-        let my_row = self.base.row;
 
         // 生命周期检查：Puff 75帧
         if motion == ProjectileMotion::Floating && proj_age >= 75 {
@@ -363,27 +421,28 @@ impl Projectile {
             return;
         }
 
-        // 查找碰撞僵尸（在 board 借用中查找索引，退出借用后处理）
-        let hit_zombie_idx = {
-            if let Some(board) = self.base.get_board() {
-                let proj_rect = Rect::new(my_pos_x as i32 - 5, my_pos_y as i32 - 5, 10, 10);
-                let mut found = None;
-                for (idx, zombie) in board.zombies.iter().enumerate() {
-                    if zombie.dead { continue; }
-                    if zombie.zombie_type == ZombieType::Boss || zombie.base.row == my_row {
-                        if zombie.is_dead_or_dying() { continue; }
-                        let z_rect = zombie.get_zombie_rect();
-                        if crate::lawn::board::get_rect_overlap(&proj_rect, &z_rect) >= 0 {
-                            found = Some(idx);
-                            break;
-                        }
+        // 僵尸豌豆：专打植物（对应 C++ CheckForCollision 的 PROJECTILE_ZOMBIE_PEA 分支）
+        if proj_type == ProjectileType::ZombiePea {
+            let hit_plant_idx = self.find_collision_target_plant();
+            if let Some(plant_idx) = hit_plant_idx {
+                let a_damage = self.damage;
+                if let Some(board) = self.base.get_board_mut() {
+                    if let Some(plant) = board.plants.get_mut(plant_idx) {
+                        plant.plant_health -= a_damage;
+                        plant.eaten_flash_countdown = plant.eaten_flash_countdown.max(25);
                     }
                 }
-                found
-            } else {
-                None
+                // 对应 C++: PlayFoley(FOLEY_SPLAT) + PARTICLE_PEA_SPLAT 粒子（粒子系统 stub）
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Splat as i32);
+                }
+                self.die();
             }
-        };
+            return;
+        }
+
+        // 查找碰撞僵尸（对应 C++ FindCollisionTarget）
+        let hit_zombie_idx = self.find_collision_target();
 
         if let Some(zombie_idx) = hit_zombie_idx {
             self.do_impact_by_index(zombie_idx);
@@ -453,26 +512,148 @@ impl Projectile {
     }
 
     /// 通过索引对僵尸造成碰撞效果（对应 C++ DoImpact 主体）
+    /// 命中结算（对应 C++ Projectile::DoImpact，Projectile.cpp:823）
     pub fn do_impact_by_index(&mut self, zombie_idx: usize) {
         self.play_impact_sound(Some(zombie_idx));
+
         let proj_type = self.projectile_type;
-        let mut zombie_opt = None;
-        if let Some(board) = self.base.get_board_mut() {
-            if let Some(zombie) = board.zombies.get_mut(zombie_idx) {
-                let a_damage = self.damage;
-                let a_damage_flags = self.damage_flags;
-                // 黄油效果：玉米粒击中时施加黄油
-                if proj_type == ProjectileType::Kernel || proj_type == ProjectileType::Butter {
-                    /* apply_butter */ zombie.take_damage(0, 0);
-                }
-                zombie.take_damage(a_damage, a_damage_flags);
-                zombie_opt = Some(zombie_idx);
+        let a_last_pos_x = self.pos_x - self.vel_x;
+        let a_last_pos_y = self.pos_y + self.pos_z - self.vel_y - self.vel_z;
+        let mut a_splat_pos_x = self.pos_x + 12.0;
+        let mut a_splat_pos_y = self.pos_y + 12.0;
+        let a_render_order = self.base.render_order + 1;
+
+        // 对应 C++ IsSplashDamage(theZombie)：火球命中火抗僵尸不算溅射
+        let mut a_zombie_is_fire_resistant = false;
+        if let Some(board) = self.base.get_board() {
+            if let Some(zombie) = board.zombies.get(zombie_idx) {
+                a_zombie_is_fire_resistant = zombie.is_fire_resistant();
             }
         }
-        // 溅射伤害：西瓜/冰瓜/火球
-        if proj_type == ProjectileType::Melon || proj_type == ProjectileType::Wintermelon {
-            self.do_splash_damage(zombie_opt);
+        let is_splash = self.is_splash_damage()
+            && !(proj_type == ProjectileType::Fireball && a_zombie_is_fire_resistant);
+
+        if is_splash {
+            if proj_type == ProjectileType::Fireball {
+                if let Some(board) = self.base.get_board_mut() {
+                    if let Some(zombie) = board.zombies.get_mut(zombie_idx) {
+                        zombie.remove_cold_effects();
+                    }
+                }
+            }
+            self.do_splash_damage(Some(zombie_idx));
+        } else {
+            let a_damage = self.damage;
+            let a_damage_flags = self.damage_flags;
+            if let Some(board) = self.base.get_board_mut() {
+                if let Some(zombie) = board.zombies.get_mut(zombie_idx) {
+                    zombie.take_damage(a_damage, a_damage_flags);
+                }
+            }
         }
+
+        // 对应 C++ DoImpact 的 switch (mProjectileType)：粒子与附加效果
+        let mut a_effect = ParticleEffect::None;
+        match proj_type {
+            ProjectileType::Melon => {
+                if let Some(app) = self.base.get_app_mut() {
+                    app.add_tod_particle(
+                        a_last_pos_x + 30.0, a_last_pos_y + 30.0, a_render_order,
+                        ParticleEffect::Melonsplash as i32,
+                    );
+                }
+            }
+            ProjectileType::Wintermelon => {
+                if let Some(app) = self.base.get_app_mut() {
+                    app.add_tod_particle(
+                        a_last_pos_x + 30.0, a_last_pos_y + 30.0, a_render_order,
+                        ParticleEffect::Wintermelon as i32,
+                    );
+                }
+            }
+            ProjectileType::Pea => {
+                a_splat_pos_x -= 15.0;
+                a_effect = ParticleEffect::PeaSplat;
+            }
+            ProjectileType::Snowpea => {
+                a_splat_pos_x -= 15.0;
+                a_effect = ParticleEffect::SnowpeaSplat;
+            }
+            ProjectileType::Fireball => {
+                if is_splash {
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_fire_reanim) = app.add_reanimation(
+                            self.pos_x + 38.0, self.pos_y - 20.0, a_render_order,
+                            ReanimationType::JalapenoFire as i32,
+                        ) {
+                            // C++: mAnimTime = 0.25f; mAnimRate = 24.0f; OverrideScale(0.7f, 0.4f)
+                            unsafe {
+                                (*a_fire_reanim).m_anim_time = 0.25;
+                                (*a_fire_reanim).m_anim_rate = 24.0;
+                                (*a_fire_reanim).override_scale(0.7, 0.4);
+                            }
+                        }
+                    }
+                }
+            }
+            ProjectileType::Star => {
+                a_effect = ParticleEffect::StarSplat;
+            }
+            ProjectileType::Puff => {
+                a_splat_pos_x -= 20.0;
+                a_effect = ParticleEffect::PuffSplat;
+            }
+            ProjectileType::Cabbage => {
+                a_splat_pos_x = a_last_pos_x - 38.0;
+                a_splat_pos_y = a_last_pos_y + 23.0;
+                a_effect = ParticleEffect::CabbageSplat;
+            }
+            ProjectileType::Butter => {
+                a_splat_pos_x = a_last_pos_x - 20.0;
+                a_splat_pos_y = a_last_pos_y + 63.0;
+                a_effect = ParticleEffect::ButterSplat;
+                if let Some(board) = self.base.get_board_mut() {
+                    if let Some(zombie) = board.zombies.get_mut(zombie_idx) {
+                        zombie.apply_butter();
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        // 对应 C++：theZombie->AddAttachedParticle(aPosX, aPosY, aEffect)；僵尸不存在则 AddPvzpParticle
+        if a_effect != ParticleEffect::None {
+            let mut a_particle_applied = false;
+            if let Some(board) = self.base.get_board_mut() {
+                if let Some(zombie) = board.zombies.get_mut(zombie_idx) {
+                    let mut a_pos_x = a_splat_pos_x + 52.0 - zombie.base.x as f32;
+                    let mut a_pos_y = a_splat_pos_y - zombie.base.y as f32;
+                    if zombie.zombie_phase == ZombiePhase::SnorkelWalkingInPool
+                        || zombie.zombie_phase == ZombiePhase::DolphinWalkingInPool
+                    {
+                        a_pos_y += 60.0;
+                    }
+                    if self.motion == ProjectileMotion::Backwards {
+                        a_pos_x -= 80.0;
+                    } else if self.pos_x > zombie.base.x as f32 + 40.0
+                        && self.motion != ProjectileMotion::Lobbed
+                    {
+                        a_pos_x -= 60.0;
+                    }
+                    a_pos_y = a_pos_y.clamp(20.0, 100.0);
+                    zombie.add_attached_particle(a_pos_x as i32, a_pos_y as i32, a_effect);
+                    a_particle_applied = true;
+                }
+            }
+            if !a_particle_applied {
+                if let Some(app) = self.base.get_app_mut() {
+                    app.add_tod_particle(
+                        a_splat_pos_x, a_splat_pos_y, a_render_order, a_effect as i32,
+                    );
+                }
+            }
+        }
+
         self.die();
     }
 
@@ -486,10 +667,93 @@ impl Projectile {
         // 渲染逻辑：选择图片 → 计算源/目标矩形 → 应用旋转/缩放 → 绘制
     }
 
-    /// 绘制子弹阴影（对应 C++ Projectile::DrawShadow 简化版）
-    pub fn draw_shadow(&self, _g: &mut Graphics) {
-        // [TRANSLATION_NOTE]: 阴影绘制依赖 IMAGE_PEA_SHADOWS 图片资源
-        // 逻辑：选择偏移/缩放/拉伸 → 高台高度调整 → 夜间颜色 → 抛物线高度缩放 → 绘制
+    /// 绘制子弹阴影（对应 C++ Projectile::DrawShadow，Projectile.cpp:1073）
+    pub fn draw_shadow(&self, g: &mut Graphics) {
+        let mut a_cel_col = 0;
+        let mut a_scale = 1.0;
+        let mut a_stretch = 1.0;
+        let mut a_offset_x = self.pos_x - self.base.x as f32;
+        let mut a_offset_y = self.pos_y - self.base.y as f32;
+
+        let my_row = self.base.row;
+        let mut is_high_ground = false;
+        let mut is_night = false;
+        if let Some(board) = self.base.get_board() {
+            let a_grid_x = board.pixel_to_grid_x_keep_on_board(self.base.x, self.base.y);
+            if a_grid_x >= 0 && (a_grid_x as usize) < crate::lawn::board::MAX_GRID_SIZE_X as usize {
+                if board.grid_square_type[my_row as usize][a_grid_x as usize] == GridSquareType::HighGround {
+                    is_high_ground = true;
+                }
+            }
+            is_night = board.stage_is_night();
+        }
+        if self.on_high_ground && !is_high_ground {
+            a_offset_y += crate::lawn::zombie::HIGH_GROUND_HEIGHT;
+        } else if !self.on_high_ground && is_high_ground {
+            a_offset_y -= crate::lawn::zombie::HIGH_GROUND_HEIGHT;
+        }
+
+        if is_night {
+            a_cel_col = 1;
+        }
+
+        let proj_type = self.projectile_type;
+        match proj_type {
+            ProjectileType::Pea | ProjectileType::ZombiePea => {
+                a_offset_x += 3.0;
+            }
+            ProjectileType::Snowpea => {
+                a_offset_x += -1.0;
+                a_scale = 1.3;
+            }
+            ProjectileType::Star => {
+                a_offset_x += 7.0;
+            }
+            ProjectileType::Cabbage | ProjectileType::Kernel | ProjectileType::Butter
+            | ProjectileType::Melon | ProjectileType::Wintermelon => {
+                a_offset_x += 3.0;
+                a_offset_y += 10.0;
+                a_scale = 1.6;
+            }
+            ProjectileType::Puff => {
+                return;
+            }
+            ProjectileType::Cobbig => {
+                a_scale = 1.0;
+                a_stretch = 3.0;
+                a_offset_x += 57.0;
+            }
+            ProjectileType::Fireball => {
+                a_scale = 1.4;
+            }
+            _ => {}
+        }
+
+        if self.motion == ProjectileMotion::Lobbed {
+            let a_height = (-self.pos_z).clamp(0.0, 200.0);
+            a_scale *= 200.0 / (a_height + 200.0);
+        }
+
+        // PvzpDrawImageCelScaledF(g, IMAGE_PEA_SHADOWS, aOffsetX, mShadowY - mPosY + aOffsetY, aCelCol, 0, aScale*aStretch, aScale)
+        let app = match self.base.get_app() {
+            Some(a) => a,
+            None => return,
+        };
+        let a_shadow_image = crate::lawn::board::get_overlay_image(app, "IMAGE_PEA_SHADOWS");
+        if a_shadow_image.is_null() {
+            return;
+        }
+        let a_shadow_image_ref = unsafe { &*a_shadow_image };
+        let a_src_rect = a_shadow_image_ref.get_cel_rect(a_cel_col, 0);
+        let a_cel_width = a_src_rect.width;
+        let a_cel_height = a_src_rect.height;
+        let a_dst_rect = Rect::new(
+            a_offset_x as i32,
+            (self.shadow_y - self.pos_y + a_offset_y) as i32,
+            (a_cel_width as f32 * a_scale * a_stretch) as i32,
+            (a_cel_height as f32 * a_scale) as i32,
+        );
+        g.draw_image_stretch(a_shadow_image_ref, &a_dst_rect, &a_src_rect);
     }
 
     /// 查找碰撞植物（对应 C++ FindCollisionTargetPlant）
@@ -561,10 +825,14 @@ impl Projectile {
     /// 转换为火球（对应 C++ ConvertToFireball）
     pub fn convert_to_fireball(&mut self, grid_x: i32) {
         if self.hit_torchwood_grid_x == grid_x { return; }
-        self.projectile_type = ProjectileType::Pea;
+        self.projectile_type = ProjectileType::Fireball;
         self.hit_torchwood_grid_x = grid_x;
         self.damage = 40;
-        // [TRANSLATION_NOTE]: 火球粒子效果/音效依赖 Reanimation/Foley 系统
+        // 对应 C++: mApp->PlayFoley(FOLEY_FIREPEA)
+        if let Some(app) = self.base.get_app() {
+            app.play_foley(crate::todlib::tod_foley::FoleyType::FirePea as i32);
+        }
+        // [TRANSLATION_NOTE]: 火球 REANIM_FIRE_PEA 外观（含 MOTION_BACKWARDS 镜像）依赖 reanim stub
     }
 
     /// 转换为普通豌豆（对应 C++ ConvertToPea）
@@ -576,10 +844,12 @@ impl Projectile {
         // [TRANSLATION_NOTE]: 音效依赖 Foley 系统
     }
 
-    /// 是否是溅射伤害类型（对应 C++ IsSplashDamage）
+    /// 是否是溅射伤害类型（对应 C++ IsSplashDamage 的类型判定部分；
+    /// 火抗僵尸豁免在命中结算处按 C++ 语义处理）
     pub fn is_splash_damage(&self) -> bool {
-        // [TRANSLATION_NOTE]: Fireball 类型在 Rust 中尚不存在 PROJECTILE_FIREBALL
         self.projectile_type == ProjectileType::Melon
+            || self.projectile_type == ProjectileType::Wintermelon
+            || self.projectile_type == ProjectileType::Fireball
     }
 
     /// 僵尸是否被溅射击中（对应 C++ IsZombieHitBySplash）
@@ -604,10 +874,88 @@ impl Projectile {
         false
     }
 
-    /// 豌豆是否即将击中火炬树桩（对应 C++ PeaAboutToHitTorchwood 简化版）
+    /// 豌豆是否即将击中火炬树桩（对应 C++ PeaAboutToHitTorchwood）
     pub fn pea_about_to_hit_torchwood(&self) -> bool {
-        // [TRANSLATION_NOTE]: 火炬树桩碰撞检测依赖植物遍历，暂未实现
+        if self.motion != ProjectileMotion::Straight {
+            return false;
+        }
+
+        if self.projectile_type != ProjectileType::Pea && self.projectile_type != ProjectileType::Snowpea {
+            return false;
+        }
+
+        let board = match self.base.get_board() {
+            Some(b) => b,
+            None => return false,
+        };
+        for plant in &board.plants {
+            if plant.dead {
+                continue;
+            }
+            if plant.seed_type == SeedType::Torchwood && plant.base.row == self.base.row
+                && !plant.not_on_ground() && self.hit_torchwood_grid_x != plant.plant_col
+            {
+                let a_plant_attack_rect = plant.get_plant_attack_rect(PlantWeapon::Primary);
+                let mut a_projectile_rect = self.get_projectile_rect();
+                a_projectile_rect.x += 40;
+
+                if crate::lawn::board::get_rect_overlap(&a_plant_attack_rect, &a_projectile_rect) > 10 {
+                    return true;
+                }
+            }
+        }
+
         false
+    }
+
+    /// 查找碰撞僵尸（对应 C++ Projectile::FindCollisionTarget，Projectile.cpp:224）
+    pub fn find_collision_target(&self) -> Option<usize> {
+        // a pea about to hit a torchwood skips zombie collision ("torchwood clip" trick)
+        if self.pea_about_to_hit_torchwood() {
+            return None;
+        }
+
+        let a_projectile_rect = self.get_projectile_rect();
+        let my_row = self.base.row;
+        let proj_type = self.projectile_type;
+        let proj_age = self.projectile_age;
+        let vel_x = self.vel_x;
+        let pos_z = self.pos_z;
+        let damage_range_flags = self.damage_range_flags;
+
+        let board = match self.base.get_board() {
+            Some(b) => b,
+            None => return None,
+        };
+        let mut best_zombie: Option<usize> = None;
+        let mut a_min_x = 0;
+        for (idx, zombie) in board.zombies.iter().enumerate() {
+            if zombie.dead {
+                continue;
+            }
+            if (zombie.zombie_type == ZombieType::Boss || zombie.base.row == my_row)
+                && zombie.effected_by_damage(damage_range_flags)
+            {
+                if zombie.zombie_phase == ZombiePhase::SnorkelWalkingInPool && pos_z <= 45.0 {
+                    continue;
+                }
+
+                if proj_type == ProjectileType::Star && proj_age < 25 && vel_x >= 0.0
+                    && zombie.zombie_type == ZombieType::Digger
+                {
+                    continue;
+                }
+
+                let a_zombie_rect = zombie.get_zombie_rect();
+                if crate::lawn::board::get_rect_overlap(&a_projectile_rect, &a_zombie_rect) >= 0 {
+                    if best_zombie.is_none() || zombie.base.x < a_min_x {
+                        best_zombie = Some(idx);
+                        a_min_x = zombie.base.x;
+                    }
+                }
+            }
+        }
+        best_zombie
     }
 
     /// 获取子弹定义（对应 C++ GetProjectileDef）
