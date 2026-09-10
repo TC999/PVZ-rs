@@ -22,6 +22,11 @@ use crate::lawn::system::music::Music;
 use crate::lawn::system::player_info::PottedPlant;
 use crate::lawn::widget::message_widget::{MessageWidget, MAX_MESSAGE_LENGTH};
 use crate::lawn::zombie::{Zombie, MAX_ZOMBIE_FOLLOWERS};
+use crate::todlib::attachment::{Attachment, MAX_EFFECTS_PER_ATTACHMENT};
+use crate::todlib::definition::{ReanimatorTrackInstance, ReanimatorTransform};
+use crate::todlib::effect_system::EffectSystem;
+use crate::todlib::reanimator::Reanimation;
+use crate::todlib::tod_particle::TodParticleSystem;
 use crate::lawn::game_enums::*;
 use crate::lawn::game_object::GameObject;
 use crate::todlib::tod_common::TodSmoothArray;
@@ -770,6 +775,12 @@ fn read_chunk_v4(chunk_type: u32, data: &[u8], board: &mut Board) -> bool {
         SaveChunkTypeV4::SeedPackets => {}
         SaveChunkTypeV4::Challenge => {}
         SaveChunkTypeV4::Music => {}
+        SaveChunkTypeV4::ParticleEmitters => {}
+        SaveChunkTypeV4::ParticleParticles => {}
+        SaveChunkTypeV4::ParticleSystems => {}
+        SaveChunkTypeV4::Reanimations => {}
+        SaveChunkTypeV4::Trails => {}
+        SaveChunkTypeV4::Attachments => {}
         _ => return true,
     }
     if data.len() < 4 {
@@ -818,6 +829,12 @@ fn read_chunk_v4(chunk_type: u32, data: &[u8], board: &mut Board) -> bool {
                 SaveChunkTypeV4::SeedPackets => sync_seed_packets_portable(&mut a_context, board),
                 SaveChunkTypeV4::Challenge => sync_challenge_portable(&mut a_context, board),
                 SaveChunkTypeV4::Music => sync_music_portable(&mut a_context, board),
+                SaveChunkTypeV4::ParticleEmitters => sync_particle_emitters_portable(&mut a_context),
+                SaveChunkTypeV4::ParticleParticles => sync_particles_portable(&mut a_context),
+                SaveChunkTypeV4::ParticleSystems => sync_particle_systems_portable(&mut a_context, board),
+                SaveChunkTypeV4::Reanimations => sync_reanimations_portable(&mut a_context, board),
+                SaveChunkTypeV4::Trails => sync_trails_portable(&mut a_context),
+                SaveChunkTypeV4::Attachments => sync_attachments_portable(&mut a_context, board),
                 _ => {}
             }
             if a_context.failed {
@@ -1371,6 +1388,12 @@ fn write_chunk_v4(payload: &mut Vec<u8>, chunk_type: u32, board: &mut Board) -> 
         SaveChunkTypeV4::SeedPackets => {}
         SaveChunkTypeV4::Challenge => {}
         SaveChunkTypeV4::Music => {}
+        SaveChunkTypeV4::ParticleEmitters => {}
+        SaveChunkTypeV4::ParticleParticles => {}
+        SaveChunkTypeV4::ParticleSystems => {}
+        SaveChunkTypeV4::Reanimations => {}
+        SaveChunkTypeV4::Trails => {}
+        SaveChunkTypeV4::Attachments => {}
         _ => return true,
     }
 
@@ -1394,6 +1417,12 @@ fn write_chunk_v4(payload: &mut Vec<u8>, chunk_type: u32, board: &mut Board) -> 
             SaveChunkTypeV4::SeedPackets => sync_seed_packets_portable(&mut field_ctx, board),
             SaveChunkTypeV4::Challenge => sync_challenge_portable(&mut field_ctx, board),
             SaveChunkTypeV4::Music => sync_music_portable(&mut field_ctx, board),
+            SaveChunkTypeV4::ParticleEmitters => sync_particle_emitters_portable(&mut field_ctx),
+            SaveChunkTypeV4::ParticleParticles => sync_particles_portable(&mut field_ctx),
+            SaveChunkTypeV4::ParticleSystems => sync_particle_systems_portable(&mut field_ctx, board),
+            SaveChunkTypeV4::Reanimations => sync_reanimations_portable(&mut field_ctx, board),
+            SaveChunkTypeV4::Trails => sync_trails_portable(&mut field_ctx),
+            SaveChunkTypeV4::Attachments => sync_attachments_portable(&mut field_ctx, board),
             _ => return true,
         }
         if field_ctx.failed {
@@ -2364,6 +2393,239 @@ fn sync_music_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
         append_field_with_sync(&mut a_blob, PORTABLE_FIELD_TAIL, |c| sync_music_tail_portable(c, music));
         write_tlv_blob(ctx, &a_blob);
     }
+}
+
+/// 同步动画变换（对应 C++ SyncReanimTransformPortable，SaveGame.cpp:1104）
+fn sync_reanim_transform_portable(ctx: &mut PortableSaveContext, transform: &mut ReanimatorTransform) {
+    // C++ 顺序：mTransX/mTransY/mSkewX/mSkewY/mScaleX/mScaleY/mFrame/mAlpha（mFrame 在 mAlpha 前）
+    ctx.sync_f32(&mut transform.m_trans_x);
+    ctx.sync_f32(&mut transform.m_trans_y);
+    ctx.sync_f32(&mut transform.m_skew_x);
+    ctx.sync_f32(&mut transform.m_skew_y);
+    ctx.sync_f32(&mut transform.m_scale_x);
+    ctx.sync_f32(&mut transform.m_scale_y);
+    ctx.sync_f32(&mut transform.m_frame);
+    ctx.sync_f32(&mut transform.m_alpha);
+}
+
+/// 同步动画轨道实例（对应 C++ SyncReanimTrackInstancePortable，SaveGame.cpp:1122）
+/// [TRANSLATION_NOTE]: Rust m_blend_count 为 f32（C++ mBlendCounter 为 int32），以 i32 中转保位；
+/// m_image_override 为 *mut Image 无法反查资源 ID，以 0 占位写、读侧置空
+fn sync_reanim_track_instance_portable(ctx: &mut PortableSaveContext, track: &mut ReanimatorTrackInstance) {
+    let mut blend_counter = track.m_blend_count as i32;
+    ctx.sync_i32(&mut blend_counter);
+    if ctx.reading {
+        track.m_blend_count = blend_counter as f32;
+    }
+    ctx.sync_i32(&mut track.m_blend_time);
+    sync_reanim_transform_portable(ctx, &mut track.m_blend_transform);
+    ctx.sync_f32(&mut track.m_shake_override);
+    ctx.sync_f32(&mut track.m_shake_x);
+    ctx.sync_f32(&mut track.m_shake_y);
+    // C++ reinterpret_cast<int32_t&>(mAttachmentID)；Rust AttachmentID = i32
+    ctx.sync_i32(&mut track.m_attachment_id);
+    // C++ SyncImagePortable(mImageOverride)——Rust 无资源反查，占位
+    let mut image_override = 0i32;
+    ctx.sync_i32(&mut image_override);
+    if ctx.reading {
+        track.m_image_override = std::ptr::null_mut();
+    }
+    ctx.sync_i32(&mut track.m_render_group);
+    sync_color_portable(ctx, &mut track.m_track_color);
+    ctx.sync_bool(&mut track.m_ignore_clip_rect);
+    ctx.sync_bool(&mut track.m_truncate_disappearing_frames);
+    ctx.sync_bool(&mut track.m_ignore_color_override);
+    ctx.sync_bool(&mut track.m_ignore_extra_additive_color);
+}
+
+/// 同步动画实例（对应 C++ SyncReanimationPortable，SaveGame.cpp:1140）
+/// [TRANSLATION_NOTE]: Rust m_definition 为指针且无 gReanimatorDefArray 反查表，def 索引以
+/// reanim_type 写入并在读取时丢弃；m_overlay_matrix/m_filter_effect Rust 无字段，占位保持格式；
+/// 轨道实例数不显式入档（C++ 由 def->mTracks.count 决定，Rust 同进程内与 m_track_instances 一致）
+fn sync_reanimation_portable(ctx: &mut PortableSaveContext, reanimation: &mut Reanimation) {
+    // C++ SyncReanimationDefPortable（int32 定义索引）
+    let mut def_index = reanimation.reanim_type as i32;
+    ctx.sync_i32(&mut def_index);
+    if ctx.reading {
+        let _ = def_index;
+    }
+    ctx.sync_enum(&mut reanimation.reanim_type);
+    ctx.sync_f32(&mut reanimation.m_anim_time);
+    ctx.sync_f32(&mut reanimation.m_anim_rate);
+    ctx.sync_enum(&mut reanimation.m_loop_type);
+    ctx.sync_bool(&mut reanimation.m_dead);
+    ctx.sync_i32(&mut reanimation.m_frame_start);
+    ctx.sync_i32(&mut reanimation.m_frame_count);
+    ctx.sync_i32(&mut reanimation.m_frame_base_pose);
+    // C++ mOverlayMatrix——Rust 无字段，占位
+    let mut overlay_matrix = crate::framework::sexy_matrix::SexyMatrix3::identity();
+    sync_matrix_portable(ctx, &mut overlay_matrix);
+    sync_color_portable(ctx, &mut reanimation.m_color_override);
+    ctx.sync_i32(&mut reanimation.m_loop_count);
+    ctx.sync_bool(&mut reanimation.m_is_attachment);
+    ctx.sync_i32(&mut reanimation.m_render_order);
+    sync_color_portable(ctx, &mut reanimation.m_extra_additive_color);
+    ctx.sync_bool(&mut reanimation.m_enable_extra_additive_draw);
+    sync_color_portable(ctx, &mut reanimation.m_extra_overlay_color);
+    ctx.sync_bool(&mut reanimation.m_enable_extra_overlay_draw);
+    ctx.sync_f32(&mut reanimation.m_last_anim_time);
+    // C++ mFilterEffect——Rust 无字段（本地枚举），占位 i32
+    let mut filter_effect = 0i32;
+    ctx.sync_i32(&mut filter_effect);
+    if ctx.reading {
+        let _ = filter_effect;
+    }
+    // 轨道实例（C++: for aTrackIndex in 0..aDef->mTracks.count）
+    let track_count = reanimation.m_track_instances.len();
+    for i in 0..track_count {
+        sync_reanim_track_instance_portable(ctx, &mut reanimation.m_track_instances[i]);
+    }
+}
+
+/// 同步附着效果（对应 C++ SyncAttachEffectPortable，SaveGame.cpp:653）
+fn sync_attach_effect_portable(ctx: &mut PortableSaveContext, effect: &mut crate::todlib::attachment::AttachEffect) {
+    ctx.sync_u32(&mut effect.effect_id);
+    ctx.sync_enum(&mut effect.effect_type);
+    sync_matrix_portable(ctx, &mut effect.offset);
+    ctx.sync_bool(&mut effect.dont_draw_if_parent_hidden);
+    ctx.sync_bool(&mut effect.dont_propogate_color);
+}
+
+/// 同步附着物尾部字段（对应 C++ SyncAttachmentTailPortable，SaveGame.cpp:662）
+fn sync_attachment_tail_portable(ctx: &mut PortableSaveContext, attachment: &mut Attachment) {
+    for i in 0..MAX_EFFECTS_PER_ATTACHMENT {
+        sync_attach_effect_portable(ctx, &mut attachment.effect_array[i]);
+    }
+    ctx.sync_i32(&mut attachment.num_effects);
+    ctx.sync_bool(&mut attachment.dead);
+}
+
+/// 同步动画 chunk（对应 C++ SyncReanimationsPortable，SaveGame.cpp:1945）
+fn sync_reanimations_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
+    let app = match board.app {
+        Some(ptr) => ptr,
+        None => return,
+    };
+    let effect_system = match unsafe { &mut (*app).effect_system } {
+        Some(es) => es,
+        None => return,
+    };
+    sync_data_array_tlv(
+        ctx,
+        &mut effect_system.reanimations,
+        |out, reanimation| {
+            // C++ field 1U：SyncReanimationPortable
+            append_field_with_sync(out, 1, |c| sync_reanimation_portable(c, reanimation));
+        },
+        |field_id, data, reanimation| {
+            if field_id == 1 {
+                apply_field_with_sync(data, |c| sync_reanimation_portable(c, reanimation));
+            }
+        },
+    );
+}
+
+/// 同步附着物 chunk（对应 C++ SyncAttachmentsPortable，SaveGame.cpp:1989）
+fn sync_attachments_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
+    let app = match board.app {
+        Some(ptr) => ptr,
+        None => return,
+    };
+    let effect_system = match unsafe { &mut (*app).effect_system } {
+        Some(es) => es,
+        None => return,
+    };
+    sync_data_array_tlv(
+        ctx,
+        &mut effect_system.attachments,
+        |out, attachment| {
+            append_field_with_sync(out, PORTABLE_FIELD_TAIL, |c| sync_attachment_tail_portable(c, attachment));
+        },
+        |field_id, data, attachment| match field_id {
+            // C++: 1U 为旧版字段（legacy mEffectArray）
+            1 => {
+                let _ = data;
+            }
+            PORTABLE_FIELD_TAIL => {
+                apply_field_with_sync(data, |c| sync_attachment_tail_portable(c, attachment));
+            }
+            _ => {}
+        },
+    );
+}
+
+/// 同步轨迹 chunk（对应 C++ SyncTrailsPortable，SaveGame.cpp:1967）
+/// [TRANSLATION_NOTE]: Rust EffectSystem 无 Trail 存储（TrailHolder 未实例化），
+/// 仅写 DataArray 头部（全 0）并读取忽略，保持 chunk 流位置
+fn sync_trails_portable(ctx: &mut PortableSaveContext) {
+    sync_data_array_headers_only(ctx);
+}
+
+/// 同步数据数组头部（空数组：C++ DataArray 5 个 u32 头部全为 0）
+fn sync_data_array_headers_only(ctx: &mut PortableSaveContext) {
+    let mut zero = 0u32;
+    for _ in 0..5 {
+        ctx.sync_u32(&mut zero);
+    }
+}
+
+/// 同步粒子系统 chunk（对应 C++ SyncParticleSystemsPortable，SaveGame.cpp:1923）
+/// [TRANSLATION_NOTE]: Rust TodParticleSystem 为简化实现（无 emitter 链表数据、无 def 反查），
+/// 仅同步存在字段；def 索引以 effect_type 写入、读取时丢弃；emitter 数据流忽略
+fn sync_particle_systems_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
+    let app = match board.app {
+        Some(ptr) => ptr,
+        None => return,
+    };
+    let effect_system = match unsafe { &mut (*app).effect_system } {
+        Some(es) => es,
+        None => return,
+    };
+    sync_data_array_tlv(
+        ctx,
+        &mut effect_system.particle_systems,
+        |out, system| {
+            // C++ field 1U：SyncParticleSystemPortable
+            append_field_with_sync(out, 1, |c| sync_particle_system_portable(c, system));
+        },
+        |field_id, data, system| {
+            if field_id == 1 {
+                apply_field_with_sync(data, |c| sync_particle_system_portable(c, system));
+            }
+        },
+    );
+}
+
+/// 同步单个粒子系统（对应 C++ SyncParticleSystemPortable，SaveGame.cpp:1306）
+/// [TRANSLATION_NOTE]: C++ 先 SyncParticleDefPortable 再 SyncDataIDListPortable(mEmitterList)；
+/// Rust 无 def 反查与 emitter 存储，分别以 effect_type 索引占位与头部占位替代
+fn sync_particle_system_portable(ctx: &mut PortableSaveContext, system: &mut TodParticleSystem) {
+    // C++ SyncParticleDefPortable（int32 定义索引）——以 effect_type 占位
+    let mut def_index = system.effect_type as i32;
+    ctx.sync_i32(&mut def_index);
+    if ctx.reading {
+        let _ = def_index;
+    }
+    // C++ SyncDataIDListPortable(mEmitterList)——Rust 无 emitter 数据，写头部占位
+    sync_data_array_headers_only(ctx);
+    ctx.sync_enum(&mut system.effect_type);
+    ctx.sync_bool(&mut system.dead);
+    ctx.sync_bool(&mut system.is_attachment);
+    ctx.sync_i32(&mut system.render_order);
+    ctx.sync_bool(&mut system.dont_update);
+}
+
+/// 同步粒子发射器 chunk（对应 C++ SyncParticleEmittersPortable，SaveGame.cpp:1913）
+/// [TRANSLATION_NOTE]: Rust 运行时无 TodParticleHolder 实例（emitters 存储不存在），
+/// 按 SyncDataArrayIdsOnlyPortable 写头部 + 0 个活跃 ID，读取忽略
+fn sync_particle_emitters_portable(ctx: &mut PortableSaveContext) {
+    sync_data_array_headers_only(ctx);
+}
+
+/// 同步粒子 chunk（对应 C++ SyncParticlesPortable，SaveGame.cpp:1918）
+/// [TRANSLATION_NOTE]: 同 ParticleEmitters——Rust 无 particles 存储，头部 + 0 活跃 ID
+fn sync_particles_portable(ctx: &mut PortableSaveContext) {
+    sync_data_array_headers_only(ctx);
 }
 
 /// 同步子弹尾部字段（对应 C++ SyncProjectileTailPortable，SaveGame.cpp:918）
