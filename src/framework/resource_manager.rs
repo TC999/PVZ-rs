@@ -234,7 +234,7 @@ impl ResourceManager {
                 let volume: f64 = element.attributes.get("volume").and_then(|v| v.parse::<f64>().ok()).unwrap_or(1.0);
                 let mut res = Box::new(SoundRes {
                     base: BaseRes::new(ResType::Sound),
-                    sound_id: 0,
+                    sound_id: -1,
                     volume,
                     panning: 0,
                 });

@@ -2596,6 +2596,33 @@ impl LawnApp {
                 let count = (*rm).get_num_resources_image("LoadingSounds");
                 (*rm).load_resources("LoadingSounds");
                 self.m_loading_thread_tasks_completed += count * 54;
+
+                // C++ LoadGroup 逐资源加载（含声音）：Rust load_resources 仅图像，
+                // 声音经 SoundManager.load_sound 加载并写回 SoundRes.sound_id（C++ GetSoundThrow 语义，初始 -1）
+                let sound_keys: Vec<String> = (*rm).sound_map.keys()
+                    .filter(|k| {
+                        if let Some(ptr) = (*rm).sound_map.get(*k) {
+                            let res = &*(*ptr as *const crate::framework::resource_manager::SoundRes);
+                            string_to_lower(&res.base.res_group) == string_to_lower("LoadingSounds")
+                        } else { false }
+                    })
+                    .cloned()
+                    .collect();
+                for key in &sound_keys {
+                    if let Some(&ptr) = (*rm).sound_map.get(key) {
+                        let res = &mut *(ptr as *mut crate::framework::resource_manager::SoundRes);
+                        if res.base.path.is_empty() || res.sound_id != -1 {
+                            continue;
+                        }
+                        if let Some(sm) = self.base.sound_manager {
+                            let id = (*sm).load_sound(&res.base.path);
+                            if id >= 0 {
+                                res.sound_id = id as isize;
+                                self.m_loading_thread_tasks_completed += 54;
+                            }
+                        }
+                    }
+                }
             }
         }
 
