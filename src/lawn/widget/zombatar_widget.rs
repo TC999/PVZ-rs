@@ -359,8 +359,31 @@ impl ZombatarWidget {
 
     /// 对应 C++ ZombatarWidget::UpdateButtonState —— [TRANSLATION_NOTE]: 按钮未创建（图片未接入），占位
 
-    /// 对应 C++ ZombatarWidget::ShowMaxHeadsMessage —— [TRANSLATION_NOTE]: 弹窗占位
-    pub fn show_max_heads_message(&mut self) {}
+    /// 对应 C++ ZombatarWidget::ShowMaxHeadsMessage（ZombatarWidget.cpp）：
+    /// ```cpp
+    /// void ZombatarWidget::ShowMaxHeadsMessage()
+    /// {
+    ///     mApp->LawnMessageBox(DIALOG_MESSAGE, "Zombatar Limit Reached",
+    ///         "This profile already has the maximum number of saved Zombatars.",
+    ///         "[DIALOG_BUTTON_OK]", "", Dialog::BUTTONS_FOOTER);
+    /// }
+    /// ```
+    ///
+    /// [TRANSLATION_NOTE]: C++ LawnMessageBox 是 LawnDialog 快捷构造函数（创建模态对话框
+    /// 并等待返回）。Rust LawnApp 无 LawnMessageBox 方法，此处用 do_dialog 等价替代。
+    pub fn show_max_heads_message(&mut self) {
+        let Some(app) = self.app else { return };
+        unsafe {
+            (*app).do_dialog(
+                crate::lawn::game_enums::Dialogs::Message as i32,
+                true,
+                "Zombatar Limit Reached",
+                "This profile already has the maximum number of saved Zombatars.",
+                "",
+                crate::framework::widget::dialog::BUTTONS_FOOTER,
+            );
+        }
+    }
 
     /// 对应 C++ ZombatarWidget::KeyDown
     pub fn key_down(&mut self, the_key: KeyCode) {

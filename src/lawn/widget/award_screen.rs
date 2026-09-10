@@ -391,7 +391,42 @@ impl AwardScreen {
         }
     }
 
-    pub fn mouse_down(&mut self, _x: i32, _y: i32, _click_count: i32) {}
+    pub fn mouse_down(&mut self, x: i32, y: i32, click_count: i32) {
+        // 对应 C++ AwardScreen::MouseDown（AwardScreen.cpp:580-587）：
+        // ```cpp
+        // void AwardScreen::MouseDown(int x, int y, int theClickCount)
+        // {
+        //     (void)x;(void)y;
+        //     if (theClickCount == 1) {
+        //         if (mStartButton->IsMouseOver() || mMenuButton->IsMouseOver() || mContinueButton->IsMouseOver())
+        //             mApp->PlaySample(Sexy::SOUND_TAP);
+        //     }
+        // }
+        // ```
+        // [TRANSLATION_NOTE]: C++ Widget::IsMouseOver 使用 WidgetManager 当前鼠标坐标判定，此处
+        // 简化为直接以 mouse_down 传入的 (x, y) 与按钮矩形做包含测试，语义等价。
+        if click_count == 1 {
+            let buttons: [Option<&GameButton>; 3] = [
+                self.start_button.map(|p| unsafe { &*p }),
+                self.menu_button.map(|p| unsafe { &*p }),
+                self.continue_button.map(|p| unsafe { &*p }),
+            ];
+            let hit = buttons.iter().any(|slot| {
+                slot.map_or(false, |b| {
+                    x >= b.x && x < b.x + b.width && y >= b.y && y < b.y + b.height
+                })
+            });
+            if hit {
+                if let Some(app) = self.app {
+                    unsafe {
+                        (*app).play_sample(
+                            crate::framework::resources::ResourceId::SoundTap as i32,
+                        );
+                    }
+                }
+            }
+        }
+    }
 
     pub fn mouse_up(&mut self, _x: i32, _y: i32, _click_count: i32) {
         if let Some(app) = self.app { unsafe {
