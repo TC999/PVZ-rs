@@ -132,7 +132,13 @@ impl XMLParser {
         self.has_failed = false;
         self.error_text.clear();
         self.in_element = false;
-        self.buf = data.to_vec();
+        // 与 open_file 一致：跳过 UTF-8 BOM（EF BB BF）
+        let start = if data.len() >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF {
+            3
+        } else {
+            0
+        };
+        self.buf = data[start..].to_vec();
     }
 
     /// 读取下一个 XML 元素
@@ -159,8 +165,8 @@ impl XMLParser {
 
             let c = self.buf[self.pos] as char;
 
-            // 跳过空白字符
-            if c == ' ' || c == '\t' || c == '\r' || c == '\n' {
+            // 跳过空白字符（含 UTF-8 BOM：属性 xml 以 \uFEFF 开头）
+            if c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\u{FEFF}' {
                 if c == '\n' {
                     self.line_num += 1;
                 }

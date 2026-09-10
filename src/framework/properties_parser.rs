@@ -13,7 +13,7 @@ fn parse_single_element(parser: &mut XMLParser) -> Result<String, String> {
             return Err("unexpected end of properties".to_string());
         }
         if a_element.elem_type == XMLElement::TYPE_START {
-            return Err(format!("Unexpected Section: '{}'", a_element.value));
+            return Err(format!("Unexpected Section: '{}'", a_element.section));
         } else if a_element.elem_type == XMLElement::TYPE_ELEMENT {
             return Ok(a_element.value);
         } else if a_element.elem_type == XMLElement::TYPE_END {
@@ -31,10 +31,10 @@ fn parse_string_array(parser: &mut XMLParser) -> Result<Vec<String>, String> {
             return Err("unexpected end of properties".to_string());
         }
         if a_element.elem_type == XMLElement::TYPE_START {
-            if a_element.value == "String" {
+            if a_element.section == "String" {
                 a_string_vector.push(parse_single_element(parser)?);
             } else {
-                return Err(format!("Invalid Section '{}'", a_element.value));
+                return Err(format!("Invalid Section '{}'", a_element.section));
             }
         } else if a_element.elem_type == XMLElement::TYPE_END {
             return Ok(a_string_vector);
@@ -50,7 +50,7 @@ fn parse_properties(app: &mut SexyAppBase, parser: &mut XMLParser) -> Result<(),
             return Err("unexpected end of properties".to_string());
         }
         if a_element.elem_type == XMLElement::TYPE_START {
-            match a_element.value.as_str() {
+            match a_element.section.as_str() {
                 "String" => {
                     let a_def = parse_single_element(parser)?;
                     let an_id = a_element.attributes.get("id").cloned().unwrap_or_default();
@@ -94,7 +94,7 @@ fn parse_properties(app: &mut SexyAppBase, parser: &mut XMLParser) -> Result<(),
                     app.set_double(&an_id, a_double);
                 }
                 _ => {
-                    return Err(format!("Invalid Section '{}'", a_element.value));
+                    return Err(format!("Invalid Section '{}'", a_element.section));
                 }
             }
         } else if a_element.elem_type == XMLElement::TYPE_END {
@@ -115,12 +115,12 @@ pub fn parse_properties_buffer(app: &mut SexyAppBase, data: &[u8]) -> Result<(),
             break;
         }
         if a_element.elem_type == XMLElement::TYPE_START {
-            if a_element.value == "Properties" {
+            if a_element.section == "Properties" {
                 if parse_properties(app, &mut parser).is_err() {
                     break;
                 }
             } else {
-                return Err(format!("Invalid Section '{}'", a_element.value));
+                return Err(format!("Invalid Section '{}'", a_element.section));
             }
         } else if a_element.elem_type == XMLElement::TYPE_ELEMENT {
             return Err(format!("Element Not Expected '{}'", a_element.value));
