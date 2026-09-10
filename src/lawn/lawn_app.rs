@@ -2581,8 +2581,8 @@ impl LawnApp {
             }
         }
 
-        // PvzpFoleyInitialize(gLawnFoleyParamArray, ...) — [TRANSLATION_NOTE]: Rust 无 gLawnFoleyParamArray 表，传空
-        crate::todlib::tod_foley::foley_initialize(&[]);
+        // PvzpFoleyInitialize(gLawnFoleyParamArray, LENGTH(gLawnFoleyParamArray)) — Rust G_LAWN_FOLEY_PARAM_ARRAY（104 项）
+        crate::todlib::tod_foley::foley_initialize(&crate::todlib::tod_foley::G_LAWN_FOLEY_PARAM_ARRAY);
 
         // TrailLoadDefinitions(gLawnTrailArray, LENGTH(gLawnTrailArray)) — Rust G_LAWN_TRAIL_ARRAY 同 1 项（TRAIL_ICE）
         crate::todlib::trail::trail_load_definitions(unsafe { &mut crate::todlib::trail::G_LAWN_TRAIL_ARRAY });
@@ -2618,6 +2618,8 @@ impl LawnApp {
                             let id = (*sm).load_sound(&res.base.path);
                             if id >= 0 {
                                 res.sound_id = id as isize;
+                                // C++ GetSoundThrow：把 SoundManager 槽位 id 赋给对应 SOUND_XXX 变量
+                                crate::todlib::tod_foley::assign_sound_id(key, id);
                                 self.m_loading_thread_tasks_completed += 54;
                             }
                         }
