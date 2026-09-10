@@ -625,6 +625,9 @@ pub const RENDER_LAYER_LAWN_MOWER: i32 = 306000;
 pub const RENDER_LAYER_PARTICLE: i32 = 307000;
 pub const RENDER_LAYER_TOP: i32 = 400000;
 pub const RENDER_LAYER_FOG: i32 = 500000;
+pub const RENDER_LAYER_UI_BOTTOM: i32 = 100000;
+pub const RENDER_LAYER_COIN_BANK: i32 = 600000;
+pub const RENDER_LAYER_UI_TOP: i32 = 700000;
 pub const RENDER_LAYER_SCREEN_FADE: i32 = 900000;
 pub const RENDER_LAYER_ABOVE_UI: i32 = 800000;
 
@@ -1961,7 +1964,9 @@ pub enum ReanimationType {
 pub const NUM_SEEDS_IN_CHOOSER: i32 = 49; // 对应 C++ SEED_IMITATER + 1，可选种子数量
 
 /// 僵尸类型计数常量
-pub const NUM_ZOMBIE_TYPES: i32 = 34;
+pub const NUM_ZOMBIE_TYPES: i32 = 33;
+/// 提示类型计数常量（对应 C++ ConstEnums.h AdviceType 结束符 NUM_ADVICE_TYPES）
+pub const NUM_ADVICE_TYPES: i32 = 66;
 pub const NUM_SEED_TYPES: usize = 77;
 pub const NUM_MOWER_TYPES: usize = 4;
 pub const NUM_CACHED_ZOMBIE_TYPES: usize = 37;
