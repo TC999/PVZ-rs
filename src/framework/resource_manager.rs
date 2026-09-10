@@ -318,6 +318,25 @@ impl ResourceManager {
     pub fn start_load_resources(&mut self, _group: &str) {}
 
     /// 加载整个资源组（对应 C++ LoadResources）
+    /// 统计某资源组中的图像资源数（对应 C++ ResourceManager::GetNumResources 的图像重载）
+    pub fn get_num_resources_image(&self, group: &str) -> i32 {
+        let lower_group = string_to_lower(group);
+        self.image_map
+            .keys()
+            .filter(|k| {
+                if let Some(ptr) = self.image_map.get(*k) {
+                    unsafe {
+                        let res = &*(*ptr as *const ImageRes);
+                        string_to_lower(&res.base.res_group) == lower_group
+                    }
+                } else {
+                    false
+                }
+            })
+            .count() as i32
+    }
+
+    /// 加载资源组（对应 C++ ResourceManager::StartLoadResources + 逐资源加载）
     pub fn load_resources(&mut self, group: &str) -> bool {
         self.cur_res_group = group.to_string();
         let lower_group = string_to_lower(group);

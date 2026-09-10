@@ -2509,7 +2509,6 @@ impl LawnApp {
                             let res = &mut *(ptr as *mut crate::framework::resource_manager::ImageRes);
                             if !res.base.path.is_empty() {
                                 (*rm).load_single_image(res);
-                                self.m_loading_thread_tasks_completed += 1;
                             }
                         }
                     }
@@ -2518,24 +2517,40 @@ impl LawnApp {
         }
 
         // 标记 LoaderBar 已加载（让 TitleScreen 能绘制加载条）
-        self.m_loading_thread_tasks_total = 100;
+        // 对应 C++ LoadingThreadProc（LawnApp.cpp:1711-1722）：总任务数 = Σ(资源组资源数×权重) + 636 + 预加载任务数 + 音乐任务数
+        if let Some(rm) = self.base.resource_manager {
+            unsafe {
+                let groups = ["LoadingImages", "LoadingFonts", "LoadingSounds"];
+                let weights = [9, 54, 54];
+                for i in 0..3 {
+                    let count = (*rm).get_num_resources_image(groups[i]);
+                    self.m_loading_thread_tasks_total += count * weights[i];
+                }
+            }
+        }
+        self.m_loading_thread_tasks_total += 636; // C++ 字面量
+        self.m_loading_thread_tasks_total += self.get_num_preloading_tasks();
+        // Music::MUSIC_LOADING_TASKS = MUSIC_LOADING_TASK_WEIGHT(3500) × MUSIC_LOADING_FILES(2 项)
+        self.m_loading_thread_tasks_total += 3500 * 2;
         eprintln!("[LawnApp] LoaderBar 资源加载完成，继续加载更多资源");
 
-        // 加载 LoadingFonts 资源组
+        // 加载 LoadingImages 资源组（对应 C++ LoadGroup("LoadingImages", 9)：每资源 +9）
         if let Some(rm) = self.base.resource_manager {
             unsafe {
-                (*rm).load_resources("LoadingFonts");
-            }
-        }
-        self.m_loading_thread_tasks_completed += 20;
-
-        // 加载 LoadingImages 资源组
-        if let Some(rm) = self.base.resource_manager {
-            unsafe {
+                let count = (*rm).get_num_resources_image("LoadingImages");
                 (*rm).load_resources("LoadingImages");
+                self.m_loading_thread_tasks_completed += count * 9;
             }
         }
-        self.m_loading_thread_tasks_completed += 60;
+
+        // 加载 LoadingFonts 资源组（对应 C++ LoadGroup("LoadingFonts", 54)：每资源 +54）
+        if let Some(rm) = self.base.resource_manager {
+            unsafe {
+                let count = (*rm).get_num_resources_image("LoadingFonts");
+                (*rm).load_resources("LoadingFonts");
+                self.m_loading_thread_tasks_completed += count * 54;
+            }
+        }
 
         // 对应 C++ LoadingThreadProc（LawnApp.cpp:1740-1772）：各子系统初始化
 
@@ -2578,14 +2593,44 @@ impl LawnApp {
         // LoadGroup("LoadingSounds", 54)
         if let Some(rm) = self.base.resource_manager {
             unsafe {
+                let count = (*rm).get_num_resources_image("LoadingSounds");
                 (*rm).load_resources("LoadingSounds");
+                self.m_loading_thread_tasks_completed += count * 54;
             }
         }
-        self.m_loading_thread_tasks_completed += 54;
 
-        self.m_loading_thread_tasks_completed = self.m_loading_thread_tasks_total;
         self.m_loading_thread_completed = true;
         eprintln!("[LawnApp] 资源加载完成");
+    }
+
+    /// 预加载任务数（对应 C++ GetNumPreloadingTasks，LawnApp.cpp:3012；LOW_MEMORY 分支 Rust 无）
+    /// = (10 + 已解锁种子数 + 已解锁僵尸数) × 68
+    pub fn get_num_preloading_tasks(&self) -> i32 {
+        let mut a_task_count = 10;
+        if let Some(pi) = self.player_info.as_ref() {
+            for i in 0..NUM_SEED_TYPES as i32 {
+                let seed = unsafe { std::mem::transmute::<i32, SeedType>(i) };
+                if self.has_seed_type(seed) || self.has_finished_adventure() {
+                    a_task_count += 1;
+                }
+            }
+            for i in 0..NUM_ZOMBIE_TYPES {
+                let ztype = unsafe { std::mem::transmute::<i32, ZombieType>(i) };
+                if self.has_finished_adventure()
+                    || pi.m_level >= crate::lawn::zombie::get_zombie_definition(ztype).starting_level
+                {
+                    if ztype != ZombieType::Boss
+                        && ztype != ZombieType::Catapult
+                        && ztype != ZombieType::Gargantuar
+                        && ztype != ZombieType::Digger
+                        && ztype != ZombieType::Zamboni
+                    {
+                        a_task_count += 1;
+                    }
+                }
+            }
+        }
+        a_task_count * 68
     }
 
     /// 快速加载（对应 C++ FastLoad）

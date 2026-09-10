@@ -143,9 +143,15 @@ impl Music {
     // --- 方法存根（待从 Music.cpp 翻译具体实现） ---
 
     pub fn music_init(&mut self) {
-        // 对应 C++ MusicInit：预加载 drums 与 credits 音乐
+        // 对应 C++ MusicInit（Music.cpp:189）：逐曲 LoadSong + mApp->mCompletedLoadingThreadTasks += MUSIC_LOADING_TASK_WEIGHT(3500)
         self.load_song(MusicFile::Drums, "sounds/mainmusic.mo3");
+        if let Some(app) = self.app {
+            unsafe { (*app).m_loading_thread_tasks_completed += 3500; }
+        }
         self.load_song(MusicFile::CreditsZombiesOnYourLawn, "sounds/ZombiesOnYourLawn.ogg");
+        if let Some(app) = self.app {
+            unsafe { (*app).m_loading_thread_tasks_completed += 3500; }
+        }
     }
 
     pub fn music_dispose(&mut self) {
