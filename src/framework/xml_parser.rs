@@ -173,13 +173,19 @@ impl XMLParser {
                 break;
             }
 
-            // 遇到非空白非 '<' 字符：错误
-            self.error_text = format!(
-                "第 {} 行: 期望 '<'，但找到字符 '{}'",
-                self.line_num, c
-            );
-            self.has_failed = true;
-            return false;
+            // 非空白非 '<' 字符：文本节点（对应 C++ XMLParser 文本内容 → TYPE_ELEMENT + mValue）
+            // 收集到下一个 '<' 前（trim 空白；纯空白已在上面跳过）
+            let text_start = self.pos;
+            while self.pos < self.buf.len() && self.buf[self.pos] as char != '<' {
+                if self.buf[self.pos] as char == '\n' {
+                    self.line_num += 1;
+                }
+                self.pos += 1;
+            }
+            let text = String::from_utf8_lossy(&self.buf[text_start..self.pos]).trim().to_string();
+            element.elem_type = XMLElement::TYPE_ELEMENT;
+            element.value = text;
+            return true;
         }
 
         // 现在 pos 指向 '<'

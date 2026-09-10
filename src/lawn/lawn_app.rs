@@ -2534,6 +2534,11 @@ impl LawnApp {
         self.m_loading_thread_tasks_total += 3500 * 2;
         eprintln!("[LawnApp] LoaderBar 资源加载完成，继续加载更多资源");
 
+        // 对应 C++ LoadingThreadProc（LawnApp.cpp:1706-1707）：加载属性配置
+        // （C++ 中 PvzpStringListLoad/ReadFile 处理 LawnStrings/ZombatarTOS，Rust 字符串表未接入，跳过）
+        self.load_properties("properties/default.xml", false, false);
+        self.load_properties("properties/Layout.xml", false, false);
+
         // 加载 LoadingImages 资源组（对应 C++ LoadGroup("LoadingImages", 9)：每资源 +9）
         if let Some(rm) = self.base.resource_manager {
             unsafe {
@@ -2630,6 +2635,29 @@ impl LawnApp {
 
         self.m_loading_thread_completed = true;
         eprintln!("[LawnApp] 资源加载完成");
+    }
+
+    /// 加载属性配置文件（对应 C++ SexyAppBase::LoadProperties，SexyAppBase.cpp:3032）
+    /// 从 main.pak 读取 xml 并解析到属性表；required=false 时文件缺失返回 true
+    pub fn load_properties(&mut self, file_name: &str, required: bool, _check_sig: bool) -> bool {
+        let data = crate::framework::paklib::with_pak_interface(|pak| pak.load_file(file_name));
+        let data = match data {
+            Some(d) => d,
+            None => {
+                if required {
+                    eprintln!("Unable to open properties file {}", file_name);
+                    return false;
+                }
+                return true;
+            }
+        };
+        match crate::framework::properties_parser::parse_properties_buffer(&mut self.base, &data) {
+            Ok(()) => true,
+            Err(e) => {
+                eprintln!("Properties error: {}", e);
+                false
+            }
+        }
     }
 
     /// 预加载任务数（对应 C++ GetNumPreloadingTasks，LawnApp.cpp:3012；LOW_MEMORY 分支 Rust 无）

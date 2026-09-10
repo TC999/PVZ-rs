@@ -109,6 +109,13 @@ pub struct SexyAppBase {
     // 安全删除列表（对应 C++ mSafeDeleteList）
     pub safe_delete_list: Vec<*mut std::ffi::c_void>,
 
+    // ---- 属性系统（对应 C++ mStringProperties/mBoolProperties/mIntProperties/mDoubleProperties） ----
+    pub m_string_properties: std::collections::HashMap<String, String>,
+    pub m_bool_properties: std::collections::HashMap<String, bool>,
+    pub m_int_properties: std::collections::HashMap<String, i32>,
+    pub m_double_properties: std::collections::HashMap<String, f64>,
+    pub m_string_vector_properties: std::collections::HashMap<String, Vec<String>>,
+
     // 主循环控制（对应 C++ mRunning, mLastTime 等）
     pub running: bool,
     pub last_time: u32,
@@ -251,6 +258,11 @@ impl SexyAppBase {
             paused: false,
             lawn_frame_hook: None,
             safe_delete_list: Vec::new(),
+            m_string_properties: std::collections::HashMap::new(),
+            m_bool_properties: std::collections::HashMap::new(),
+            m_int_properties: std::collections::HashMap::new(),
+            m_double_properties: std::collections::HashMap::new(),
+            m_string_vector_properties: std::collections::HashMap::new(),
             running: false,
             last_time: 0,
             last_time_check: 0,
@@ -1017,6 +1029,67 @@ impl SexyAppBase {
         // 这里简化为从配置中读取标题
         eprintln!("[SexyApp] 初始化属性配置");
         // 实际实现需加载 XML 配置
+    }
+
+    // ---- 属性读取（对应 C++ SexyAppBase::GetBoolean/GetInteger/GetDouble/GetString，SexyAppBase.cpp:3105） ----
+
+    pub fn get_boolean(&self, the_id: &str) -> bool {
+        self.m_bool_properties.get(the_id).copied().unwrap_or(false)
+    }
+
+    pub fn get_boolean_default(&self, the_id: &str, the_default: bool) -> bool {
+        self.m_bool_properties.get(the_id).copied().unwrap_or(the_default)
+    }
+
+    pub fn get_integer(&self, the_id: &str) -> i32 {
+        self.m_int_properties.get(the_id).copied().unwrap_or(0)
+    }
+
+    pub fn get_integer_default(&self, the_id: &str, the_default: i32) -> i32 {
+        self.m_int_properties.get(the_id).copied().unwrap_or(the_default)
+    }
+
+    pub fn get_double(&self, the_id: &str) -> f64 {
+        self.m_double_properties.get(the_id).copied().unwrap_or(0.0)
+    }
+
+    pub fn get_double_default(&self, the_id: &str, the_default: f64) -> f64 {
+        self.m_double_properties.get(the_id).copied().unwrap_or(the_default)
+    }
+
+    pub fn get_string(&self, the_id: &str) -> String {
+        self.m_string_properties.get(the_id).cloned().unwrap_or_default()
+    }
+
+    pub fn get_string_default(&self, the_id: &str, the_default: &str) -> String {
+        self.m_string_properties.get(the_id).cloned().unwrap_or_else(|| the_default.to_string())
+    }
+
+    pub fn get_string_vector(&self, the_id: &str) -> Vec<String> {
+        self.m_string_vector_properties.get(the_id).cloned().unwrap_or_default()
+    }
+
+    // ---- 属性写入（对应 C++ SetBoolean/SetInteger/SetDouble/SetString，SexyAppBase.cpp:3208） ----
+
+    pub fn set_boolean(&mut self, the_id: &str, the_value: bool) {
+        self.m_bool_properties.insert(the_id.to_string(), the_value);
+    }
+
+    pub fn set_integer(&mut self, the_id: &str, the_value: i32) {
+        self.m_int_properties.insert(the_id.to_string(), the_value);
+    }
+
+    pub fn set_double(&mut self, the_id: &str, the_value: f64) {
+        self.m_double_properties.insert(the_id.to_string(), the_value);
+    }
+
+    pub fn set_string(&mut self, the_id: &str, the_value: &str) {
+        self.m_string_properties.insert(the_id.to_string(), the_value.to_string());
+    }
+
+    /// 设置字符串数组属性（对应 C++ mStringVectorProperties 写入）
+    pub fn set_string_vector(&mut self, the_id: &str, the_value: Vec<String>) {
+        self.m_string_vector_properties.insert(the_id.to_string(), the_value);
     }
 
     /// 终止前钩子（对应 C++ SexyApp::PreTerminate）
