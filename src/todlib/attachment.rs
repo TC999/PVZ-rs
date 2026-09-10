@@ -91,7 +91,19 @@ impl Attachment {
                         }
                     }
                 }
-                // [TRANSLATION_NOTE]: C++ 中 Trail 分支依赖 Trail 系统（Rust 暂无 Trail 存储）
+                // 对应 C++ Attachment::Update（Attachment.cpp:125）：Trail 分支 — 存活时更新轨迹
+                EffectType::Trail => {
+                    if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
+                        if let Some(es) = app.effect_system.as_mut() {
+                            if let Some(a_trail) = es.trails.get_mut(a_attach_effect.effect_id as usize) {
+                                if !a_trail.m_dead {
+                                    a_trail.update();
+                                    is_empty = false;
+                                }
+                            }
+                        }
+                    }
+                }
                 EffectType::Reanim => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
@@ -149,7 +161,16 @@ impl Attachment {
                         }
                     }
                 }
-                // [TRANSLATION_NOTE]: C++ 中 Trail 分支依赖 Trail 系统（Rust 暂无）
+                // 对应 C++ Attachment::SetPosition（Attachment.cpp:202）：Trail 分支 — 追加轨迹点
+                EffectType::Trail => {
+                    if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
+                        if let Some(es) = app.effect_system.as_mut() {
+                            if let Some(a_trail) = es.trails.get_mut(self.effect_array[i].effect_id as usize) {
+                                a_trail.add_point(a_new_pos.x, a_new_pos.y);
+                            }
+                        }
+                    }
+                }
                 EffectType::Reanim => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {

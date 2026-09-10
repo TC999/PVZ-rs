@@ -7,6 +7,7 @@ use crate::lawn::game_enums::{ParticleID, ReanimationID, CoinID, ATTACHMENTID_NU
 use crate::todlib::reanimator::Reanimation;
 use crate::todlib::tod_particle::ParticleSystem;
 use crate::todlib::attachment::Attachment;
+use crate::todlib::trail::Trail;
 use crate::framework::graphics::graphics::Graphics;
 
 /// 特效类型
@@ -25,6 +26,8 @@ pub struct EffectSystem {
     pub reanimations: Vec<Reanimation>,
     pub particle_systems: Vec<ParticleSystem>,
     pub attachments: Vec<Attachment>,
+    /// 对应 C++ mTrailHolder->mTrails（Rust 以 Vec 承载 Trail）
+    pub trails: Vec<Trail>,
 }
 
 impl EffectSystem {
@@ -33,6 +36,7 @@ impl EffectSystem {
             reanimations: Vec::new(),
             particle_systems: Vec::new(),
             attachments: Vec::new(),
+            trails: Vec::new(),
         }
     }
 
@@ -43,7 +47,12 @@ impl EffectSystem {
         for ps in &mut self.particle_systems {
             ps.update();
         }
-        // [TRANSLATION_NOTE]: C++ 中 Trail holder 的更新；Rust EffectSystem 尚无 Trail 存储
+        // 对应 C++ EffectSystem.cpp:104：for Trail 非 attachment → Update
+        for trail in &mut self.trails {
+            if !trail.m_is_attachment {
+                trail.update();
+            }
+        }
         for reanim in &mut self.reanimations {
             reanim.update();
         }
@@ -53,7 +62,8 @@ impl EffectSystem {
     pub fn process_delete_queue(&mut self) {
         // 对应 C++: 粒子 mDead → DataArrayFree
         self.particle_systems.retain(|ps| !ps.dead);
-        // [TRANSLATION_NOTE]: C++ 中 Trail holder 的回收；Rust EffectSystem 尚无 Trail 存储
+        // 对应 C++: 轨迹 mDead → DataArrayFree（EffectSystem.cpp:85）
+        self.trails.retain(|t| !t.m_dead);
         // 对应 C++: 动画 mDead → DataArrayFree（Rust 以 is_completely_done 近似，与既有判据一致）
         self.reanimations.retain(|r| !r.is_completely_done());
         // 对应 C++: 附着物 mDead → DataArrayFree
