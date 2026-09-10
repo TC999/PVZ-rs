@@ -1,52 +1,97 @@
-# PVZ-rs ↔ C++ 翻译差异核查报告（2026-09-05 七轮重核版）
+# PVZ-rs ↔ C++ 翻译差异核查报告
 
-> 基线：HEAD `aa828f5`（六轮版基线）+ **未提交工作区改动**：12 文件约 +2300 行（zombie/board/lawn_app/projectile/player_info/award_screen/cheat_dialog/new_options_dialog/store_screen/zombatar_tos/zombatar_widget）。
-> 方法：C++ 成员函数 ↔ Rust `fn` 词干匹配 + 缺失全文 grep 复核 + 行为级 stub/新实现逐段对照 C++ 源（附行号证据）。只读扫描，未改动源码。
-> 编译基线：`cargo check` 通过（仅 warnings，无 error）。
-> 本版核心：六轮版"三、遗留待办"几乎全部落地，逐项抽查通过；剩余缺口收敛为 title_screen 整块 + lawn_app 少量对话框 + widget 生命周期细节。
-
----
-
-## 一、六轮版待办已修复并抽查通过（勿再报缺失）
-
-1. **`Zombie::eat_plant`（zombie.rs 4056 起，现 ~90 行）实装**：dancer 入场短路、`mYuckyFace` 短路、**梯子判定**（Digger 忽略；否则 StopEating + `HEIGHT_UP_LADDER` 上梯）、致命植物判定（Jalapeno/Cherry/Doom/Ice/Hypno + Flowerpot/Lilypad/Squash 不可侵状态，asleep 例外）、PotatoMine 非 NotReady 不吃、Blover 触发等——与 Zombie.cpp 7026 EatPlant 逐行一致。
-2. **`Zombie::apply_chill`（zombie.rs 5519）实装**：`CanBeChilled` 守卫 → `FOLEY_FROZEN`（仅 chilled_counter==0 时）→ chill_time 1000/2000（冰道）→ `max` → `UpdateAnimSpeed`——与 Zombie.cpp 7519 ApplyChill 一致。
-3. **board.rs 绘制实装**（参数 `_g` 已启用）：`draw_debug_text`/`draw_debug_object_rects` 真输出；`draw_progress_meter`（1407 起）完整——IMAGE_FLAGMETER `DrawImageCel(600,575,0)` + `aSrcRect/aDstRect` 裁剪条（Board.cpp 6570-6620）+ Beghouled/Squirrel/SlotMachine/Zombiquarium/IZombie 模式文本，图片缺省时安全跳过。
-4. **projectile.rs**：补 `MOTION_BACKWARDS`（ZombiePea 向左直飞）——六轮版二.1.5 缺口已闭。
-5. **lawn_app.rs 对话框链（13 个实装，56 缺→43 缺）**：`do_new_options`/`do_user_dialog`/`finish_user_dialog`/`do_create_user_dialog`/`finish_create_user_dialog`/`do_confirm_delete_user_dialog`/`finish_confirm_delete_user_dialog`/`do_rename_user_dialog`/`finish_rename_user_dialog`/`finish_name_error`/`do_cheat_dialog`/`finish_cheat_dialog`/`finish_times_up_dialog` 与 LawnApp.cpp 对话框逻辑对应。另确认等价改名存在：`is_izombie_level`(1385)/`is_endless_izombie`(1370)/`get_crazy_dave_text`(1729)/`need_register`(2062 简化恒 false)/`update_app_step`(338)（C++ `UpdateApp`）——勿再按缺失报。
-6. **store_screen.rs 绘制实装**（+314）：`draw`/`draw_item`/`draw_item_icon`/`draw_overlay` 完整——item icon 按 StoreItem 分派图片（PacketUpgrade 等）+ 高亮 `DRAWMODE_ADDITIVE(255,255,255,96)` + 槽位文本、hatch/背景昼夜分支，与 StoreScreen.cpp Draw/DrawItemIcon 对应。
-7. **award_screen.rs（+207）/cheat_dialog/new_options_dialog/zombatar_tos（+47）**：`draw_bottom`/`draw_award_seed`/`draw` 等补齐，文本居中/右齐辅助函数齐备，与各 C++ 绘制对应。
-8. **zombatar_widget.rs（+995，44→63 fn，缺 2）**：绘制整块补齐——`draw`/`draw_avatar`（record 解码 + 9 页 part/color 读取 + subpage>16 偏移 + 背景/部件上色）/`draw_avatar_box`/`draw_color_swatches`/`draw_list`/`draw_create`/`draw_transition`/`draw_confirm`/`draw_main_background`/`draw_image_colorized`/`draw_part_image` + `create_preview_zombie`/`destroy_preview_zombie`，与 ZombatarWidget.cpp Draw* 系列对应（含 fit_icon_rect/zombatar_grid_align 工具）。
+> 基线：HEAD `3b573c0`，工作区源码无改动。
+> 对照源：`cpp/src/**`。
+> 性质：只读静态对照；未修改任何源码，未编译/运行游戏。
+> 方法：全局空体函数/`TRANSLATION_NOTE`/`TODO` 扫描 + 关键接入点（`Board::update`、`Challenge::update`、数值表、绘制链）抽样核对 + C++↔Rust 行数比。
 
 ---
 
-## 二、剩余差异与缺失
+## 结论速览
 
-### 2.1 函数级缺失
-- **title_screen.rs（未改动，仍 6 fn ↔ C++ 10）——头号缺口**：`Draw`、`Update`、`MouseDown`、`KeyDown`、`ButtonPress`、`ButtonDepress`、`DrawToPreload`、`AddedToManager`、`RemovedFromManager`、`Resize` 全缺（主菜单界面渲染/交互未翻译）。
-- **zombatar_widget.rs 仅余 2 个**：`AddedToManager`/`RemovedFromManager`（widget 生命周期挂接/清理）。
-- **lawn_app.rs 剩余 43 个候选，人工归类后真正 gameplay 相关**：`DoConfirmBackToMain`、`DoConfirmSellDialog`、`FinishRestartConfirmDialog`（确认框，疑未用或待接线）；其余多为平台/注册类（`DoRegister*`/`CanDoRegisterDialog`、`URLOpenFailed`、`InitHook`/`ShutdownHook`/`PreDisplayHook`/`LoadingThreadProc`、`GotFocus`/`LostFocus`、`HandleCmdLineParam`、`ModalOpen`/`NewDialog`、`ParticleGet*`/`ReanimationTryToGet` 数据访问器）——在 Rust 架构中多数无对应机制或已内联，建议逐个标注用途后关闭而非照搬。
-- 其余 board/plant/zombie/widget 的"缺失"均为已知改名/内联项（`AddACrater→add_crater`、`DrawUITop→draw_ui`、`StarFruitFire→launch_star_fruit`、`MagnetShroomAttactItem→magnet_shroom_attack_item`、`DrawZombie→draw()`、`IsImmobilizied→is_immobilized`、`IsButtonDown/IsMouseOver→is_down/is_over 字段`、`MouseDown(game_selector)→事件分派` 等），不再列入。
+旧基线 `053342b` 报告中的多项高危项已被后续提交修复（见下）。当前仍存在的差异集中在：
 
-### 2.2 行为级 stub / 注记
-- **zombie 特殊头部 reanim 轨道**：`update_zombie_pea_head` 的 `anim_shooting` 播放、`update_zombie_gatling_head`/`squash_head` 的头部 reanim 位置/轨道仍未接入（投射物与 MOTION_BACKWARDS 已补）。
-- `prune_dead_effects`（attachment.rs ~330）仍以 `effect_id != 0` 简化判活（C++ 按效果生命周期）。
-- `draw_stone_button`（game_button.rs）仍占位；`NeedRegister` 类注册功能 Rust 恒 false 简化。
-- widget 纯图片绘制（lawn_dialog/cheat 等背景）仍有依赖资源接入的空壳；本轮新增绘制均带 `get_resource_image` 缺省守卫（图缺失时安全跳过），资源表接入后即生效。
+1. **对话框族整套空体**——新用户/继续游戏/用户选择/新选项/作弊码/成就等界面完全无功能。
+2. **Board 运行链剩余未接入点**——PoolEffect 计数与泳池闪光粒子整段未接入。
+3. **渲染/附着层 stub**——粒子/Reanim 附着、Attachment 绘制等仍以注释占位。
 
 ---
 
-## 三、遗留待办（按影响排序）
+## 一、已修复项（旧报告结论已过时，勿再报为缺失）
 
-1. **title_screen.rs 全套翻译**（Draw/Update/MouseDown/KeyDown/Button*/生命周期/Resize/DrawToPreload）——主菜单目前无渲染。
-2. **zombatar_widget 生命周期 2 项**（AddedToManager/RemovedFromManager）+ lawn_app 确认框 3 项与数据访问器归类关闭。
-3. **reanim 头部轨道收尾**：pea/gatling/squash head 的 `anim_shooting`/头部 reanim 位置轨道接入。
-4. 资源接入后回填带守卫的绘制空壳；`prune_dead_effects` 生命周期语义。
+| 旧报告结论（基线 053342b） | 当前状态（HEAD 3b573c0） |
+|---|---|
+| `ZOMBIE_DEFS` 仅 26 项 → `ztype>=26` 索引越界 panic | ✅ 已修复：`zombie.rs:7983` 现为 **33 项**（`Normal=0 … RedeEyeGargantuar=32`），补齐 `PeaHead/WallnutHead/JalapenoHead/GatlingHead/SquashHead/TallnutHead/RedeEyeGargantuar` 7 项；`get_zombie_definition`（`zombie.rs:8020`）不再越界 |
+| `NUM_ZOMBIE_TYPES=34` 越界 | ✅ 已改为 `33`（`game_enums.rs:1967`） |
+| `Projectile::draw` 空体 → 所有子弹不可见 | ✅ 已实现：`projectile.rs:678-793` 按 `ProjectileType` 选图 + 缩放/旋转矩阵 + 镜像绘制 |
+| `Challenge::update` 全库无调用者 → 挑战状态机不推进 | ✅ 已接入：`board.rs:854-856`（正常路径）、`board.rs:775-777`（暂停路径）调用 `ch.update()` |
+| `Board::update` 缺 mCutScene/ZenGarden/CrazyDave/菜单商店按钮/EffectSystem/Advice/Tutorial/震动等 | ✅ 已接入：`board.rs:739-857` 逐一对应 C++ `Board::Update`（5724-5811），含 `mCutScene->Update`、`ZenGardenUpdate`、`UpdateCrazyDave`、菜单/商店按钮 `Update`、`EffectSystem->Update`、`Advice->Update`、`UpdateTutorial`、震动、`mCoinBankFadeCount`、`UpdateLayers`、`UpdateGridItems`、`UpdateFwoosh`、`UpdateGame`、`UpdateLevelEndSequence` |
+| todlib 粒子完全不绘制 | ✅ 已修复：粒子 `Draw→Emitter::Draw→DrawParticle→GetRenderParams` 链已实现（提交 `9f758b0`） |
+| framework `mouse_drag` 拖动链断裂 | ✅ 已修复：`WidgetManager::MouseMove` 按下转发 `MouseDrag`（提交 `1e5835a`） |
+| framework 属性系统缺失 | ✅ 已修复：`SexyAppBase` 属性表 + `Get/Set` API + `PropertiesParser`（提交 `43fc91f`） |
 
 ---
 
-## 四、版本记录
+## 二、仍存在的差异 / 缺失逻辑
 
-- 六轮版"三、遗留待办"1-4 项已全部落地并抽查通过（见一）；本轮新增缺口收敛为 title_screen 整块 + 少量生命周期/确认框 + reanim 头部轨道注记。
-- 编译基线：`cargo check` 通过（仅 warnings）。
-- 已知改名/内联项统一以 `→` 标注排除（见二.1 末）。
+### 2.1 对话框族整套空体（已完成 ✅ 2026-09-11）
+
+> **本轮翻译完成状态**：本段 8 个文件共 32 个真实空体函数已全部翻译，5 个 commit：
+> - `31a184e` NewUserDialog 空体全译（8 函数）
+> - `9ffbe45` ContinueDialog 空体全译（8 函数 + Drop 清理）
+> - `abe729f` UserDialog 空体全译（9 函数 + ListWidget 结构扩展 + Drop 清理）
+> - `6361df8` CheatDialog 空体全译（6 函数 + sscanf 解析工具 + Drop 清理）
+> - `f736338` AwardScreen::mouse_down + ZombatarWidget::show_max_heads_message
+>
+> 3 处"误报"（C++ 无对应虚函数或 C++ 也是空函数）已在下方勘误标注。
+> **真实剩余：0 项**。
+>
+> [TRANSLATION_NOTE]: `LawnApp::ButtonDepress` 未实现（SexyAppBase::button_depress 空体），
+> `NewUserDialog::EditWidgetText` / `UserDialog::EditWidgetText` / `CheatDialog::EditWidgetText`
+> 中的 `mApp->ButtonDepress(mId + 2000)` 语义保留为注释；待 `plan_step_11` 接入 `LawnApp::ButtonDepress`
+> 后统一补完 2000 偏移事件路由。
+
+C++ 有完整实现，Rust 对应函数全为空体（现已翻译完毕）：
+
+| Rust 文件 | 空体函数 | C++ 对照（行数） | 状态 |
+|---|---|---|---|
+| `widget/new_user_dialog.rs:51-56` | `draw` / `update` / `key_down` / `mouse_down` / `added_to_manager` / `removed_from_manager` | `NewUserDialog.cpp`（125） | ✅ commit `31a184e` |
+| `widget/continue_dialog.rs:49-67` | `draw` / `update` / `mouse_down` | `ContinueDialog.cpp`（219） | ✅ commit `9ffbe45` |
+| `widget/user_dialog.rs:107-115` | `draw` / `update` / `key_down` / `mouse_down` / `added_to_manager` / `removed_from_manager` / `list_clicked` / `button_depress` / `edit_widget_text` | `UserDialog.cpp`（203） | ✅ commit `abe729f` |
+| `widget/new_options_dialog.rs:93,106` | ~~`update` / `mouse_down`~~ **误报：C++ NewOptionsDialog.h/cpp 无 Update/MouseDown 虚函数覆写**（继承自 Sexy::Dialog 基类默认实现）；Rust 侧空体正确。已确认全 10 个 C++ 虚函数（`GetPreferredHeight/AddedToManager/RemovedFromManager/Resize/Draw/SliderVal/CheckboxChecked/ButtonPress/ButtonDepress/KeyDown`）在 Rust 侧全部实现。 | `NewOptionsDialog.cpp`（402） | ✅ 无需翻译 |
+| `widget/cheat_dialog.rs:75-83` | `update` / `key_down` / `mouse_down` / `added_to_manager` / `removed_from_manager` | `CheatDialog.cpp`（155） | ✅ commit `6361df8` |
+| `widget/award_screen.rs:394` | `mouse_down` | `AwardScreen.cpp`（663） | ✅ commit `f736338` |
+| `widget/zombatar_tos.rs:164` | ~~`button_press`~~ **误报：C++ ZombatarTOS::ButtonPress 也是空函数**（ZombatarTOS.cpp:175-178：`void ZombatarTOS::ButtonPress(int theId) { (void)theId; }`）；Rust 侧空体正确。 | `ZombatarTOS.cpp` | ✅ 无需翻译 |
+| `widget/zombatar_widget.rs:363` | `show_max_heads_message`（C++ ZombatarWidget::ShowMaxHeadsMessage 调用 LawnMessageBox，Rust 需接入） | `ZombatarWidget.cpp` | ✅ commit `f736338` |
+| `widget/zombatar_widget.rs:1072` | ~~`button_press`~~ **误报：C++ ZombatarWidget::ButtonPress 也是空函数**（`void ZombatarWidget::ButtonPress(int theId) { (void)theId; }`）；Rust 侧空体正确。 | `ZombatarWidget.cpp` | ✅ 无需翻译 |
+
+### 2.2 Board 运行链剩余未接入点
+
+- `board.rs:842-845`：PoolEffect 计数与泳池闪光粒子整段被注释（C++ `Board::Update` 中 `mPoolEffect->mPoolCounter++` + 闪光粒子逻辑未接入）。
+- `board.rs:829-831`：`m_coin_bank_fade_count` 递减缺少 C++ 的"`DIALOG_PURCHASE_PACKET_SLOT` 未打开才递减"过滤条件（Rust `LawnApp` 无对话框管理，自注暂不过滤）。
+
+### 2.3 渲染/附着层 stub（`TRANSLATION_NOTE` 自认）
+
+- `zombie.rs:7389`：`AttachReanim` 恒 `None`，附着效果待 `AttachEffect` 系统接入。
+- `zombie.rs:6248`：`AttachmentDraw` 为 stub，附着物不绘制。
+- `projectile.rs:790-792`：子弹附件绘制（`AttachmentDraw`）暂略。
+- `plant.rs` 多处：`StartBlend` / `SetFramesForLayer` / `SetTruncateDisappearingFrames` / `AssignRenderGroupToPrefix` 依赖 reanim 完整实现（当前 stub）。
+- `reanimation_lawn.rs:179,184`：两处显式 `TODO: 从 ReanimationLawn.cpp 翻译`。
+- `coin.rs:13`：`SOUND_*` 常量在 `game_enums` 未定义，用占位值。
+
+---
+
+## 三、未覆盖范围（未逐行核对，沿旧报告）
+
+- Zombie Boss 段逐行逻辑、Gargantuar 定时事件、Bungee 投递链细节。
+- Plant 各 `update_*` 状态机数值（potato/squash/chomper/magnet/cactus/cobcannon/cattail/torchwood）。
+- Challenge 各模式（Beghouled/ScaryPotter/WhackAZombie/IZombie/老虎机等）实现完整度。
+- 伤害/速度/冷却/掉落概率逐项对账。
+- framework/todlib 层渲染链逐行。
+- 运行期实测（未启动游戏；本次均为静态推断）。
+
+---
+
+## 版本记录
+
+- HEAD `3b573c0` 版：基于最新提交重核。纠正旧报告（`053342b`）已过时结论；确证仍存差异为对话框族空体、PoolEffect 未接入、渲染/附着 stub。未修改任何源码。
