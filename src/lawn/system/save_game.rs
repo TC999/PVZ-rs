@@ -9,7 +9,10 @@ use crate::framework::common::SexyVector2;
 use crate::framework::rect::Rect;
 use crate::framework::sexy_matrix::SexyMatrix3;
 use crate::lawn::board::Board;
+use crate::lawn::board::{MAX_GRID_SIZE_X, MAX_GRID_SIZE_Y, MAX_ZOMBIES_IN_WAVE, MAX_ZOMBIE_WAVES};
+use crate::lawn::game_enums::*;
 use crate::lawn::game_object::GameObject;
+use crate::todlib::tod_common::TodSmoothArray;
 
 // ── 常量 ──────────────────────────────────────────────
 
@@ -72,110 +75,110 @@ pub enum SaveChunkTypeV4 {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
 pub enum BoardBaseFieldId {
-    // 从 C++ 枚举 BoardBaseFieldId : uint32_t 翻译
-    Paused = 0,
-    GridSquareType = 1,
-    GridCelLook = 2,
-    GridCelOffset = 3,
-    GridCelFog = 4,
-    GameMode = 5,
-    Level = 6,
-    SunCount = 7,
-    SunCountdown = 8,
-    NumSunsFallen = 9,
-    CoinBank = 10,
-    WaveCount = 11,
-    CurrentWave = 12,
-    TotalWaves = 13,
-    NumWaves = 14,
-    ZombiesInWave = 15,
-    ZombieAllowed = 16,
-    WaveCountdown = 17,
-    ZombieCountdown = 18,
-    FlagCountdown = 19,
-    LevelComplete = 20,
-    GameOver = 21,
-    GameOverCountdown = 22,
-    BoardFadeOutCounter = 23,
-    NextSurvivalStageCounter = 24,
-    ScoreNextMowerCounter = 25,
-    LevelAwardSpawned = 26,
-    ProgressMeterWidth = 27,
-    FlagRaiseCounter = 28,
-    SodPosition = 29,
-    PlantRow = 30,
-    WaveRowGotLawnMowered = 31,
-    RowPickingArray = 32,
-    BackgroundType = 33,
-    PoolOccupied = 34,
-    Roof = 35,
-    Fog = 36,
-    FogOffset = 37,
-    FogBlownCountDown = 38,
-    EnableGraveStones = 39,
-    SpecialGraveStoneX = 40,
-    SpecialGraveStoneY = 41,
-    FinalBossKilled = 42,
-    ShowShovel = 43,
-    KilledYeti = 44,
-    Challenge = 45,
-    TutorialState = 46,
-    IceTimer = 47,
-    IceMinX = 48,
-    IceTrapCounter = 49,
-    FwooshCountDown = 50,
-    IceParticle = 51,
-    ShakeCounter = 52,
-    ShakeAmountX = 53,
-    ShakeAmountY = 54,
-    PrevMouseX = 55,
-    PrevMouseY = 56,
-    DebugTextMode = 57,
-    GravesCleared = 58,
-    PlantsEaten = 59,
-    PlantLawnMowerX = 60,
-    PoolLawnMowerX = 61,
-    RoofLawnMowerX = 62,
-    SuperMowerMode = 63,
-    StageHas6Rows = 64,
-    MainCounter = 65,
-    UpdateCount = 66,
-    DrawCount = 67,
-    EffectCounter = 68,
-    RiseFromGraveCounter = 69,
-    BoardRandSeed = 70,
-    TotalSpawnedWaves = 71,
-    Background = 72,
-    NeedSaveGame = 73,
-    OutOfMoneyCounter = 74,
-    LevelInt = 75,
-    NumLevels = 76,
-    PausedOld = 77,
-    SunCountOld = 78,
-    SunCountdownOld = 79,
-    NumSunsFallenOld = 80,
-    CoinBankOld = 81,
-    WaveCountOld = 82,
-    CurrentWaveOld = 83,
-    TotalWavesOld = 84,
-    NumWavesOld = 85,
-    ZombieAllowedOld = 86,
-    EnableBoosts = 87,
-    GridCelOffsetFile = 88,
-    GridCelLookFile = 89,
-    GridCelFogFile = 90,
-    PoolInfo = 91,
-    PoolCount = 92,
-    PoolRow = 93,
-    PoolCol = 94,
-    PoolType = 95,
-    PoolPos = 96,
-    PoolGoal = 97,
-    PoolTimer = 98,
-    PoolParticleID = 99,
-    PoolParticle = 100,
-    PoolParticleFile = 101,
-    PoolHasSplash = 102,
+    // 对应 C++ BoardBaseFieldId（SaveGame.cpp:1448），PAUSED=1 递增至 CHOCOLATE_COLLECTED=103
+    Paused = 1,
+    GridSquareType,
+    GridCelLook,
+    GridCelOffset,
+    GridCelFog,
+    EnableGravestones,
+    SpecialGravestoneX,
+    SpecialGravestoneY,
+    FogOffset,
+    FogBlownCountdown,
+    PlantRow,
+    WaveRowGotLawnMowered,
+    BonusLawnMowersRemaining,
+    IceMinX,
+    IceTimer,
+    IceParticleId,
+    RowPickingArray,
+    ZombiesInWave,
+    ZombieAllowed,
+    SunCountdown,
+    NumSunsFallen,
+    ShakeCounter,
+    ShakeAmountX,
+    ShakeAmountY,
+    BackgroundType,
+    Level,
+    SodPosition,
+    PrevMouseX,
+    PrevMouseY,
+    SunMoney,
+    NumWaves,
+    MainCounter,
+    EffectCounter,
+    DrawCount,
+    RiseFromGraveCounter,
+    OutOfMoneyCounter,
+    CurrentWave,
+    TotalSpawnedWaves,
+    TutorialState,
+    TutorialParticleId,
+    TutorialTimer,
+    LastBungeeWave,
+    ZombieHealthToNextWave,
+    ZombieHealthWaveStart,
+    ZombieCountdown,
+    ZombieCountdownStart,
+    HugeWaveCountdown,
+    HelpDisplayed,
+    HelpIndex,
+    FinalBossKilled,
+    ShowShovel,
+    CoinBankFadeCount,
+    DebugTextMode,
+    LevelComplete,
+    BoardFadeOutCounter,
+    NextSurvivalStageCounter,
+    ScoreNextMowerCounter,
+    LevelAwardSpawned,
+    ProgressMeterWidth,
+    FlagRaiseCounter,
+    IceTrapCounter,
+    BoardRandSeed,
+    PoolSparklyParticleId,
+    FwooshId,
+    FwooshCountdown,
+    TimeStopCounter,
+    DroppedFirstCoin,
+    FinalWaveSoundCounter,
+    CobCannonCursorDelayCounter,
+    CobCannonMouseX,
+    CobCannonMouseY,
+    KilledYeti,
+    MustacheMode,
+    SuperMowerMode,
+    FutureMode,
+    PinataMode,
+    DanceMode,
+    DaisyMode,
+    SukhbirMode,
+    PrevBoardResult,
+    TriggeredLawnMowers,
+    PlayTimeActiveLevel,
+    PlayTimeInactiveLevel,
+    MaxSunPlants,
+    StartDrawTime,
+    IntervalDrawTime,
+    IntervalDrawCountStart,
+    MinFps,
+    PreloadTime,
+    GameId,
+    GravesCleared,
+    PlantsEaten,
+    PlantsShoveled,
+    PeaShooterUsed,
+    CatapultPlantsUsed,
+    MushroomAndCoffeeBeansOnly,
+    MushroomsUsed,
+    LevelCoinsCollected,
+    GargantuarsKillsByCornCob,
+    CoinsCollected,
+    DiamondsCollected,
+    PottedPlantsCollected,
+    ChocolateCollected,
 }
 
 // ── 小端序列化辅助函数 ────────────────────────────────
@@ -365,11 +368,16 @@ impl PortableSaveContext {
     }
 
     /// 同步枚举值（对应 C++ 模板 SyncEnum<TEnum>）
-    pub fn sync_enum<T: Into<i32> + From<i32> + Copy>(&mut self, value: &mut T) {
-        let mut raw = (*value).into();
+    /// 仅支持 4 字节（#[repr(i32)]）枚举；经 i32 中转，读写方向均用 transmute_copy
+    pub fn sync_enum<T: Copy + 'static>(&mut self, value: &mut T) {
+        assert!(
+            std::mem::size_of::<T>() == std::mem::size_of::<i32>(),
+            "sync_enum 仅支持 4 字节（#[repr(i32)]）枚举"
+        );
+        let mut raw: i32 = unsafe { std::mem::transmute_copy(value) };
         self.sync_i32(&mut raw);
         if self.reading {
-            *value = T::from(raw);
+            *value = unsafe { std::mem::transmute_copy(&raw) };
         }
     }
 }
@@ -728,12 +736,52 @@ pub fn lawn_load_game(board: Option<*mut Board>, file_path: &str) -> bool {
     true
 }
 
-/// 内部：读取并处理一个 V4 chunk（对应 C++ ReadChunkV4）
-/// 由于 Board 内部字段尚未完整翻译，当前仅做格式解析占位
-fn read_chunk_v4(_chunk_type: u32, _data: &[u8], _board: &mut Board) -> bool {
-    // 待 Board 翻译完成后实现各 chunk 的同步
-    // 当前返回 true 以允许 V4 文件头验证通过
-    true
+/// 内部：读取并处理一个 V4 chunk（对应 C++ ReadChunkV4，SaveGame.cpp:2360）
+/// TLV 循环查找 fieldId==1 的字段，以读取上下文应用 Board 同步
+fn read_chunk_v4(chunk_type: u32, data: &[u8], board: &mut Board) -> bool {
+    if chunk_type != SaveChunkTypeV4::BoardBase as u32 {
+        return true; // C++ GetChunkSyncFn 无同步函数的 chunk 跳过
+    }
+    if data.len() < 4 {
+        return false;
+    }
+
+    let mut a_reader = TLVReader::new(data);
+    let a_chunk_version = match a_reader.read_u32() {
+        Some(v) => v,
+        None => return false,
+    };
+    if a_chunk_version != SAVE4_CHUNK_VERSION {
+        return false;
+    }
+
+    let mut a_applied = false;
+    while a_reader.is_ok() && a_reader.remaining() > 0 {
+        let field_id = match a_reader.read_u32() {
+            Some(v) => v,
+            None => break,
+        };
+        let field_size = match a_reader.read_u32() {
+            Some(v) => v,
+            None => break,
+        };
+        let field_data = match a_reader.read_bytes(field_size as usize) {
+            Some(d) => d,
+            None => break,
+        };
+
+        if field_id == 1 {
+            let buf = Buffer::from_bytes(field_data);
+            let mut a_context = PortableSaveContext::new_reader(buf);
+            sync_board_base_portable(&mut a_context, board);
+            if a_context.failed {
+                return false;
+            }
+            a_applied = true;
+        }
+    }
+
+    a_applied
 }
 
 /// 保存游戏存档（对应 C++ LawnSaveGame）
@@ -745,8 +793,66 @@ pub fn lawn_save_game(board: Option<*mut Board>, file_path: &str) -> bool {
     if let Some(b) = board {
         unsafe {
             let _board = &mut *b;
-            // 目前各 chunk 写入尚需 Board 类型翻译完成后实现
+            // 对应 C++ LawnSaveGame（SaveGame.cpp:3117-3136）：依次写入全部 chunk
+            // （当前仅 BoardBase 有同步实现，其余 chunk 经 GetChunkSyncFn 语义跳过）
             if !write_chunk_v4(&mut payload, SaveChunkTypeV4::BoardBase as u32, _board) {
+                return false;
+            }
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Zombies as u32, _board) {
+                return false;
+            }
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Plants as u32, _board) {
+                return false;
+            }
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Projectiles as u32, _board) {
+                return false;
+            }
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Coins as u32, _board) {
+                return false;
+            }
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Mowers as u32, _board) {
+                return false;
+            }
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::GridItems as u32, _board) {
+                return false;
+            }
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::ParticleEmitters as u32, _board) {
+                return false;
+            }
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::ParticleParticles as u32, _board) {
+                return false;
+            }
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::ParticleSystems as u32, _board) {
+                return false;
+            }
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Reanimations as u32, _board) {
+                return false;
+            }
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Trails as u32, _board) {
+                return false;
+            }
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Attachments as u32, _board) {
+                return false;
+            }
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Cursor as u32, _board) {
+                return false;
+            }
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::CursorPreview as u32, _board) {
+                return false;
+            }
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Advice as u32, _board) {
+                return false;
+            }
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::SeedBank as u32, _board) {
+                return false;
+            }
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::SeedPackets as u32, _board) {
+                return false;
+            }
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Challenge as u32, _board) {
+                return false;
+            }
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Music as u32, _board) {
                 return false;
             }
         }
@@ -771,9 +877,465 @@ pub fn lawn_save_game(board: Option<*mut Board>, file_path: &str) -> bool {
     std::fs::write(file_path, &out_data).is_ok()
 }
 
-/// 内部：写入一个 V4 chunk（对应 C++ WriteChunkV4）
-/// 由于 Board 内部字段尚未完整翻译，当前仅做占位
-fn write_chunk_v4(_payload: &mut Vec<u8>, _chunk_type: u32, _board: &mut Board) -> bool {
-    // 待 Board 翻译完成后实现各 chunk 的写入
+// ── 数组同步辅助（对应 C++ Sync*Array 模板，SaveGame.cpp:579-625） ──
+
+fn sync_i32_array(ctx: &mut PortableSaveContext, data: &mut [i32]) {
+    for v in data.iter_mut() {
+        ctx.sync_i32(v);
+    }
+}
+
+fn sync_bool_array(ctx: &mut PortableSaveContext, data: &mut [bool]) {
+    for v in data.iter_mut() {
+        ctx.sync_bool(v);
+    }
+}
+
+fn sync_enum_array<T: Copy + 'static>(ctx: &mut PortableSaveContext, data: &mut [T]) {
+    for v in data.iter_mut() {
+        ctx.sync_enum(v);
+    }
+}
+
+fn sync_u32_array(ctx: &mut PortableSaveContext, data: &mut [u32]) {
+    for v in data.iter_mut() {
+        ctx.sync_u32(v);
+    }
+}
+
+/// 同步 PvzpSmoothArray（对应 C++ SyncPvzpSmoothArray，SaveGame.cpp:612）
+fn sync_pvzp_smooth_array(ctx: &mut PortableSaveContext, arr: &mut TodSmoothArray) {
+    ctx.sync_i32(&mut arr.item);
+    ctx.sync_f32(&mut arr.weight);
+    ctx.sync_f32(&mut arr.last_picked);
+    ctx.sync_f32(&mut arr.second_last_picked);
+}
+
+/// 同步 PvzpSmoothArray 列表（对应 C++ SyncPvzpSmoothArrayList，SaveGame.cpp:618）
+fn sync_pvzp_smooth_array_list(ctx: &mut PortableSaveContext, data: &mut [TodSmoothArray]) {
+    for v in data.iter_mut() {
+        sync_pvzp_smooth_array(ctx, v);
+    }
+}
+
+// ── BoardBase chunk（对应 C++ SyncBoardBasePortable，SaveGame.cpp:1555） ──
+
+const ZOMBIE_ALLOWED_COUNT: usize = 100; // C++ SyncBoolArray(&mZombieAllowed[0], 100)
+
+/// 写入 BoardBase 字段 blob（对应 C++ SyncBoardBasePortable 写入分支的 AppendFieldWithSync 序列）
+fn append_board_base_fields(a_blob: &mut Vec<u8>, board: &mut Board) {
+    // 缺失字段占位变量（C++ 字段存在但 Rust Board 未翻译命名）：保持存档格式兼容
+    let mut tmp_i32 = 0i32;
+    let mut tmp_u32 = 0u32;
+    let mut tmp_f32 = 0.0f32;
+    let mut tmp_i64 = 0i64;
+
+    append_field_with_sync(a_blob, BoardBaseFieldId::Paused as u32, |c| c.sync_bool(&mut board.m_paused));
+    append_field_with_sync(a_blob, BoardBaseFieldId::GridSquareType as u32, |c| {
+        for row in 0..MAX_GRID_SIZE_Y {
+            for col in 0..MAX_GRID_SIZE_X {
+                c.sync_enum(&mut board.grid_square_type[row][col]);
+            }
+        }
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::GridCelLook as u32, |c| {
+        for row in 0..MAX_GRID_SIZE_Y {
+            for col in 0..MAX_GRID_SIZE_X {
+                c.sync_i32(&mut board.grid_cel_look[row][col]);
+            }
+        }
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::GridCelOffset as u32, |c| {
+        for row in 0..MAX_GRID_SIZE_Y {
+            for col in 0..MAX_GRID_SIZE_X {
+                for sub in 0..2 {
+                    c.sync_i32(&mut board.grid_cel_offset[row][col][sub]);
+                }
+            }
+        }
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::GridCelFog as u32, |c| {
+        for col in 0..MAX_GRID_SIZE_X {
+            for row in 0..(MAX_GRID_SIZE_Y + 1) {
+                c.sync_i32(&mut board.grid_cel_fog[col][row]);
+            }
+        }
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::EnableGravestones as u32, |c| c.sync_bool(&mut board.m_enable_grave_stones));
+    append_field_with_sync(a_blob, BoardBaseFieldId::SpecialGravestoneX as u32, |c| c.sync_i32(&mut board.m_special_grave_stone_x));
+    append_field_with_sync(a_blob, BoardBaseFieldId::SpecialGravestoneY as u32, |c| c.sync_i32(&mut board.m_special_grave_stone_y));
+    append_field_with_sync(a_blob, BoardBaseFieldId::FogOffset as u32, |c| c.sync_f32(&mut board.m_fog_offset));
+    append_field_with_sync(a_blob, BoardBaseFieldId::FogBlownCountdown as u32, |c| c.sync_i32(&mut board.m_fog_blown_count_down));
+    append_field_with_sync(a_blob, BoardBaseFieldId::PlantRow as u32, |c| {
+        for row in 0..MAX_GRID_SIZE_Y {
+            c.sync_enum(&mut board.m_plant_row[row]);
+        }
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::WaveRowGotLawnMowered as u32, |c| {
+        sync_i32_array(c, &mut board.m_wave_row_got_lawn_mowered)
+    });
+    // [TRANSLATION_NOTE]: mBonusLawnMowersRemaining 未翻译为 Board 字段，占位保持格式
+    append_field_with_sync(a_blob, BoardBaseFieldId::BonusLawnMowersRemaining as u32, |c| c.sync_i32(&mut tmp_i32));
+    append_field_with_sync(a_blob, BoardBaseFieldId::IceMinX as u32, |c| sync_i32_array(c, &mut board.m_ice_min_x));
+    append_field_with_sync(a_blob, BoardBaseFieldId::IceTimer as u32, |c| sync_i32_array(c, &mut board.m_ice_timer));
+    // [TRANSLATION_NOTE]: mIceParticleID[6] 未翻译（Rust 仅 m_ice_particle 单值），循环占位
+    append_field_with_sync(a_blob, BoardBaseFieldId::IceParticleId as u32, |c| {
+        for _ in 0..MAX_GRID_SIZE_Y {
+            c.sync_u32(&mut tmp_u32);
+        }
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::RowPickingArray as u32, |c| {
+        sync_pvzp_smooth_array_list(c, &mut board.m_row_picking_array)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::ZombiesInWave as u32, |c| {
+        for wave in 0..MAX_ZOMBIE_WAVES {
+            for slot in 0..MAX_ZOMBIES_IN_WAVE {
+                c.sync_enum(&mut board.m_zombies_in_wave[wave][slot]);
+            }
+        }
+    });
+    // C++: SyncBoolArray(&mZombieAllowed[0], 100)；Rust 数组为 NUM_ZOMBIE_TYPES(33)，超出部分占位
+    append_field_with_sync(a_blob, BoardBaseFieldId::ZombieAllowed as u32, |c| {
+        for i in 0..ZOMBIE_ALLOWED_COUNT {
+            let mut v = if i < board.m_zombie_allowed.len() { board.m_zombie_allowed[i] } else { false };
+            c.sync_bool(&mut v);
+            if i < board.m_zombie_allowed.len() {
+                board.m_zombie_allowed[i] = v;
+            }
+        }
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::SunCountdown as u32, |c| c.sync_i32(&mut board.m_sun_countdown));
+    append_field_with_sync(a_blob, BoardBaseFieldId::NumSunsFallen as u32, |c| c.sync_i32(&mut board.m_num_suns_fallen));
+    append_field_with_sync(a_blob, BoardBaseFieldId::ShakeCounter as u32, |c| c.sync_i32(&mut board.m_shake_counter));
+    append_field_with_sync(a_blob, BoardBaseFieldId::ShakeAmountX as u32, |c| c.sync_i32(&mut board.m_shake_amount_x));
+    append_field_with_sync(a_blob, BoardBaseFieldId::ShakeAmountY as u32, |c| c.sync_i32(&mut board.m_shake_amount_y));
+    append_field_with_sync(a_blob, BoardBaseFieldId::BackgroundType as u32, |c| c.sync_enum(&mut board.m_background_type));
+    append_field_with_sync(a_blob, BoardBaseFieldId::Level as u32, |c| c.sync_i32(&mut board.level));
+    append_field_with_sync(a_blob, BoardBaseFieldId::SodPosition as u32, |c| c.sync_i32(&mut board.m_sod_position));
+    append_field_with_sync(a_blob, BoardBaseFieldId::PrevMouseX as u32, |c| c.sync_i32(&mut board.m_prev_mouse_x));
+    append_field_with_sync(a_blob, BoardBaseFieldId::PrevMouseY as u32, |c| c.sync_i32(&mut board.m_prev_mouse_y));
+    append_field_with_sync(a_blob, BoardBaseFieldId::SunMoney as u32, |c| c.sync_i32(&mut board.m_sun_money));
+    append_field_with_sync(a_blob, BoardBaseFieldId::NumWaves as u32, |c| c.sync_i32(&mut board.m_num_waves));
+    append_field_with_sync(a_blob, BoardBaseFieldId::MainCounter as u32, |c| c.sync_u32(&mut board.m_main_counter));
+    append_field_with_sync(a_blob, BoardBaseFieldId::EffectCounter as u32, |c| c.sync_u32(&mut board.m_effect_counter));
+    append_field_with_sync(a_blob, BoardBaseFieldId::DrawCount as u32, |c| c.sync_u32(&mut board.m_draw_count));
+    append_field_with_sync(a_blob, BoardBaseFieldId::RiseFromGraveCounter as u32, |c| c.sync_i32(&mut board.m_rise_from_grave_counter));
+    append_field_with_sync(a_blob, BoardBaseFieldId::OutOfMoneyCounter as u32, |c| c.sync_i32(&mut board.m_out_of_money_counter));
+    append_field_with_sync(a_blob, BoardBaseFieldId::CurrentWave as u32, |c| c.sync_i32(&mut board.m_current_wave));
+    append_field_with_sync(a_blob, BoardBaseFieldId::TotalSpawnedWaves as u32, |c| c.sync_i32(&mut board.m_total_spawned_waves));
+    append_field_with_sync(a_blob, BoardBaseFieldId::TutorialState as u32, |c| c.sync_enum(&mut board.m_tutorial_state));
+    append_field_with_sync(a_blob, BoardBaseFieldId::TutorialParticleId as u32, |c| c.sync_u32(&mut board.m_tutorial_particle_id));
+    append_field_with_sync(a_blob, BoardBaseFieldId::TutorialTimer as u32, |c| c.sync_i32(&mut board.m_tutorial_timer));
+    // [TRANSLATION_NOTE]: mLastBungeeWave 未翻译为 Board 字段，占位保持格式
+    append_field_with_sync(a_blob, BoardBaseFieldId::LastBungeeWave as u32, |c| c.sync_i32(&mut tmp_i32));
+    append_field_with_sync(a_blob, BoardBaseFieldId::ZombieHealthToNextWave as u32, |c| c.sync_i32(&mut board.m_zombie_health_to_next_wave));
+    append_field_with_sync(a_blob, BoardBaseFieldId::ZombieHealthWaveStart as u32, |c| c.sync_i32(&mut board.m_zombie_health_wave_start));
+    append_field_with_sync(a_blob, BoardBaseFieldId::ZombieCountdown as u32, |c| c.sync_i32(&mut board.m_zombie_count_down));
+    append_field_with_sync(a_blob, BoardBaseFieldId::ZombieCountdownStart as u32, |c| c.sync_i32(&mut board.m_zombie_count_down_start));
+    append_field_with_sync(a_blob, BoardBaseFieldId::HugeWaveCountdown as u32, |c| c.sync_i32(&mut board.m_huge_wave_count_down));
+    append_field_with_sync(a_blob, BoardBaseFieldId::HelpDisplayed as u32, |c| {
+        sync_bool_array(c, &mut board.m_help_displayed)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::HelpIndex as u32, |c| c.sync_enum(&mut board.m_advice));
+    append_field_with_sync(a_blob, BoardBaseFieldId::FinalBossKilled as u32, |c| c.sync_bool(&mut board.m_final_boss_killed));
+    append_field_with_sync(a_blob, BoardBaseFieldId::ShowShovel as u32, |c| c.sync_bool(&mut board.m_show_shovel));
+    append_field_with_sync(a_blob, BoardBaseFieldId::CoinBankFadeCount as u32, |c| c.sync_i32(&mut board.m_coin_bank_fade_count));
+    append_field_with_sync(a_blob, BoardBaseFieldId::DebugTextMode as u32, |c| c.sync_enum(&mut board.m_debug_text_mode));
+    append_field_with_sync(a_blob, BoardBaseFieldId::LevelComplete as u32, |c| c.sync_bool(&mut board.m_level_complete));
+    append_field_with_sync(a_blob, BoardBaseFieldId::BoardFadeOutCounter as u32, |c| c.sync_i32(&mut board.m_board_fade_out_counter));
+    append_field_with_sync(a_blob, BoardBaseFieldId::NextSurvivalStageCounter as u32, |c| c.sync_i32(&mut board.m_next_survival_stage_counter));
+    append_field_with_sync(a_blob, BoardBaseFieldId::ScoreNextMowerCounter as u32, |c| c.sync_i32(&mut board.m_score_next_mower_counter));
+    append_field_with_sync(a_blob, BoardBaseFieldId::LevelAwardSpawned as u32, |c| c.sync_bool(&mut board.m_level_award_spawned));
+    append_field_with_sync(a_blob, BoardBaseFieldId::ProgressMeterWidth as u32, |c| c.sync_i32(&mut board.m_progress_meter_width));
+    append_field_with_sync(a_blob, BoardBaseFieldId::FlagRaiseCounter as u32, |c| c.sync_i32(&mut board.m_flag_raise_counter));
+    append_field_with_sync(a_blob, BoardBaseFieldId::IceTrapCounter as u32, |c| c.sync_i32(&mut board.m_ice_trap_counter));
+    append_field_with_sync(a_blob, BoardBaseFieldId::BoardRandSeed as u32, |c| {
+        let mut raw = board.m_board_rand_seed as i32;
+        c.sync_i32(&mut raw);
+        board.m_board_rand_seed = raw as u32;
+    });
+    // [TRANSLATION_NOTE]: mPoolSparklyParticleID 未翻译为 Board 字段，占位保持格式
+    append_field_with_sync(a_blob, BoardBaseFieldId::PoolSparklyParticleId as u32, |c| c.sync_u32(&mut tmp_u32));
+    append_field_with_sync(a_blob, BoardBaseFieldId::FwooshId as u32, |c| {
+        for row in 0..MAX_GRID_SIZE_Y {
+            for slot in 0..12 {
+                c.sync_u32(&mut board.m_fwoosh_id[row][slot]);
+            }
+        }
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::FwooshCountdown as u32, |c| c.sync_i32(&mut board.m_fwoosh_count_down));
+    append_field_with_sync(a_blob, BoardBaseFieldId::TimeStopCounter as u32, |c| c.sync_i32(&mut board.m_time_stop_counter));
+    append_field_with_sync(a_blob, BoardBaseFieldId::DroppedFirstCoin as u32, |c| c.sync_bool(&mut board.m_dropped_first_coin));
+    append_field_with_sync(a_blob, BoardBaseFieldId::FinalWaveSoundCounter as u32, |c| c.sync_i32(&mut board.m_final_wave_sound_counter));
+    append_field_with_sync(a_blob, BoardBaseFieldId::CobCannonCursorDelayCounter as u32, |c| c.sync_i32(&mut board.m_cob_cannon_cursor_delay_counter));
+    append_field_with_sync(a_blob, BoardBaseFieldId::CobCannonMouseX as u32, |c| c.sync_i32(&mut board.m_cob_cannon_mouse_x));
+    append_field_with_sync(a_blob, BoardBaseFieldId::CobCannonMouseY as u32, |c| c.sync_i32(&mut board.m_cob_cannon_mouse_y));
+    append_field_with_sync(a_blob, BoardBaseFieldId::KilledYeti as u32, |c| c.sync_bool(&mut board.m_killed_yeti));
+    append_field_with_sync(a_blob, BoardBaseFieldId::MustacheMode as u32, |c| c.sync_bool(&mut board.m_mustache_mode));
+    append_field_with_sync(a_blob, BoardBaseFieldId::SuperMowerMode as u32, |c| c.sync_bool(&mut board.m_super_mower_mode));
+    append_field_with_sync(a_blob, BoardBaseFieldId::FutureMode as u32, |c| c.sync_bool(&mut board.m_future_mode));
+    append_field_with_sync(a_blob, BoardBaseFieldId::PinataMode as u32, |c| c.sync_bool(&mut board.m_pinata_mode));
+    append_field_with_sync(a_blob, BoardBaseFieldId::DanceMode as u32, |c| c.sync_bool(&mut board.m_dance_mode));
+    append_field_with_sync(a_blob, BoardBaseFieldId::DaisyMode as u32, |c| c.sync_bool(&mut board.m_daisy_mode));
+    append_field_with_sync(a_blob, BoardBaseFieldId::SukhbirMode as u32, |c| c.sync_bool(&mut board.m_sukhbir_mode));
+    // [TRANSLATION_NOTE]: mPrevBoardResult 未翻译为 Board 字段（Rust 有 m_board_result），占位保持格式
+    append_field_with_sync(a_blob, BoardBaseFieldId::PrevBoardResult as u32, |c| c.sync_i32(&mut tmp_i32));
+    append_field_with_sync(a_blob, BoardBaseFieldId::TriggeredLawnMowers as u32, |c| c.sync_i32(&mut board.m_triggered_lawn_mowers));
+    // [TRANSLATION_NOTE]: mPlayTimeActiveLevel/mPlayTimeInactiveLevel/mMaxSunPlants 未翻译，占位保持格式
+    append_field_with_sync(a_blob, BoardBaseFieldId::PlayTimeActiveLevel as u32, |c| c.sync_u32(&mut tmp_u32));
+    append_field_with_sync(a_blob, BoardBaseFieldId::PlayTimeInactiveLevel as u32, |c| c.sync_u32(&mut tmp_u32));
+    append_field_with_sync(a_blob, BoardBaseFieldId::MaxSunPlants as u32, |c| c.sync_i32(&mut tmp_i32));
+    append_field_with_sync(a_blob, BoardBaseFieldId::StartDrawTime as u32, |c| c.sync_i64(&mut board.m_start_draw_time));
+    append_field_with_sync(a_blob, BoardBaseFieldId::IntervalDrawTime as u32, |c| c.sync_i64(&mut board.m_interval_draw_time));
+    append_field_with_sync(a_blob, BoardBaseFieldId::IntervalDrawCountStart as u32, |c| c.sync_u32(&mut board.m_interval_draw_count_start));
+    // [TRANSLATION_NOTE]: mMinFPS/mPreloadTime/mGameID（intptr_t）未翻译，占位保持格式
+    append_field_with_sync(a_blob, BoardBaseFieldId::MinFps as u32, |c| c.sync_f32(&mut tmp_f32));
+    append_field_with_sync(a_blob, BoardBaseFieldId::PreloadTime as u32, |c| c.sync_i32(&mut tmp_i32));
+    append_field_with_sync(a_blob, BoardBaseFieldId::GameId as u32, |c| c.sync_i64(&mut tmp_i64));
+    append_field_with_sync(a_blob, BoardBaseFieldId::GravesCleared as u32, |c| c.sync_u32(&mut board.m_graves_cleared));
+    append_field_with_sync(a_blob, BoardBaseFieldId::PlantsEaten as u32, |c| c.sync_u32(&mut board.m_plants_eaten));
+    append_field_with_sync(a_blob, BoardBaseFieldId::PlantsShoveled as u32, |c| c.sync_u32(&mut board.m_plants_shoveled));
+    append_field_with_sync(a_blob, BoardBaseFieldId::PeaShooterUsed as u32, |c| c.sync_bool(&mut board.m_pea_shooter_used));
+    append_field_with_sync(a_blob, BoardBaseFieldId::CatapultPlantsUsed as u32, |c| c.sync_bool(&mut board.m_catapult_plants_used));
+    append_field_with_sync(a_blob, BoardBaseFieldId::MushroomAndCoffeeBeansOnly as u32, |c| c.sync_bool(&mut board.m_mushroom_and_coffee_beans_only));
+    append_field_with_sync(a_blob, BoardBaseFieldId::MushroomsUsed as u32, |c| c.sync_bool(&mut board.m_mushrooms_used));
+    append_field_with_sync(a_blob, BoardBaseFieldId::LevelCoinsCollected as u32, |c| c.sync_i32(&mut board.m_level_coins_collected));
+    // [TRANSLATION_NOTE]: mGargantuarsKillsByCornCob 未翻译为 Board 字段，占位保持格式
+    append_field_with_sync(a_blob, BoardBaseFieldId::GargantuarsKillsByCornCob as u32, |c| c.sync_u32(&mut tmp_u32));
+    append_field_with_sync(a_blob, BoardBaseFieldId::CoinsCollected as u32, |c| c.sync_i32(&mut board.m_coins_collected));
+    append_field_with_sync(a_blob, BoardBaseFieldId::DiamondsCollected as u32, |c| c.sync_i32(&mut board.m_diamonds_collected));
+    append_field_with_sync(a_blob, BoardBaseFieldId::PottedPlantsCollected as u32, |c| c.sync_i32(&mut board.m_potted_plants_collected));
+    append_field_with_sync(a_blob, BoardBaseFieldId::ChocolateCollected as u32, |c| c.sync_i32(&mut board.m_chocolate_collected));
+    let _ = tmp_i64;
+}
+
+/// 应用一个 BoardBase 字段（读取侧，对应 C++ SyncBoardBasePortable 读取分支的 switch case）
+/// 将存档 field_id 映射为 BoardBaseFieldId（判别式连续 1..=103，范围内 transmute 合法）
+fn board_base_field_from_id(id: u32) -> Option<BoardBaseFieldId> {
+    if id >= 1 && id <= 103 {
+        Some(unsafe { std::mem::transmute::<u32, BoardBaseFieldId>(id) })
+    } else {
+        None
+    }
+}
+
+fn apply_board_base_field(field_id: u32, data: &[u8], board: &mut Board) {
+    // 缺失字段占位变量（读取后丢弃，保持存档格式兼容）
+    let mut tmp_i32 = 0i32;
+    let mut tmp_u32 = 0u32;
+    let mut tmp_f32 = 0.0f32;
+    let mut tmp_i64 = 0i64;
+    let field = match board_base_field_from_id(field_id) {
+        Some(f) => f,
+        None => return, // C++ default break
+    };
+    match field {
+        BoardBaseFieldId::Paused => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_paused)); }
+        BoardBaseFieldId::GridSquareType => {
+            apply_field_with_sync(data, |c| for row in 0..MAX_GRID_SIZE_Y { for col in 0..MAX_GRID_SIZE_X { c.sync_enum(&mut board.grid_square_type[row][col]); } });
+        }
+        BoardBaseFieldId::GridCelLook => {
+            apply_field_with_sync(data, |c| for row in 0..MAX_GRID_SIZE_Y { for col in 0..MAX_GRID_SIZE_X { c.sync_i32(&mut board.grid_cel_look[row][col]); } });
+        }
+        BoardBaseFieldId::GridCelOffset => {
+            apply_field_with_sync(data, |c| for row in 0..MAX_GRID_SIZE_Y { for col in 0..MAX_GRID_SIZE_X { for sub in 0..2 { c.sync_i32(&mut board.grid_cel_offset[row][col][sub]); } } });
+        }
+        BoardBaseFieldId::GridCelFog => {
+            apply_field_with_sync(data, |c| for col in 0..MAX_GRID_SIZE_X { for row in 0..(MAX_GRID_SIZE_Y + 1) { c.sync_i32(&mut board.grid_cel_fog[col][row]); } });
+        }
+        BoardBaseFieldId::EnableGravestones => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_enable_grave_stones)); }
+        BoardBaseFieldId::SpecialGravestoneX => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_special_grave_stone_x)); }
+        BoardBaseFieldId::SpecialGravestoneY => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_special_grave_stone_y)); }
+        BoardBaseFieldId::FogOffset => { apply_field_with_sync(data, |c| c.sync_f32(&mut board.m_fog_offset)); }
+        BoardBaseFieldId::FogBlownCountdown => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_fog_blown_count_down)); }
+        BoardBaseFieldId::PlantRow => {
+            apply_field_with_sync(data, |c| for row in 0..MAX_GRID_SIZE_Y { c.sync_enum(&mut board.m_plant_row[row]); });
+        }
+        BoardBaseFieldId::WaveRowGotLawnMowered => { apply_field_with_sync(data, |c| sync_i32_array(c, &mut board.m_wave_row_got_lawn_mowered)); }
+        // [TRANSLATION_NOTE]: mBonusLawnMowersRemaining 未翻译，读取后丢弃
+        BoardBaseFieldId::BonusLawnMowersRemaining => { apply_field_with_sync(data, |c| c.sync_i32(&mut tmp_i32)); }
+        BoardBaseFieldId::IceMinX => { apply_field_with_sync(data, |c| sync_i32_array(c, &mut board.m_ice_min_x)); }
+        BoardBaseFieldId::IceTimer => { apply_field_with_sync(data, |c| sync_i32_array(c, &mut board.m_ice_timer)); }
+        // [TRANSLATION_NOTE]: mIceParticleID[6] 未翻译，读取后丢弃
+        BoardBaseFieldId::IceParticleId => { apply_field_with_sync(data, |c| for _ in 0..MAX_GRID_SIZE_Y { c.sync_u32(&mut tmp_u32); }); }
+        BoardBaseFieldId::RowPickingArray => { apply_field_with_sync(data, |c| sync_pvzp_smooth_array_list(c, &mut board.m_row_picking_array)); }
+        BoardBaseFieldId::ZombiesInWave => {
+            apply_field_with_sync(data, |c| for wave in 0..MAX_ZOMBIE_WAVES { for slot in 0..MAX_ZOMBIES_IN_WAVE { c.sync_enum(&mut board.m_zombies_in_wave[wave][slot]); } });
+        }
+        BoardBaseFieldId::ZombieAllowed => {
+            apply_field_with_sync(data, |c| for i in 0..ZOMBIE_ALLOWED_COUNT {
+                let mut v = if i < board.m_zombie_allowed.len() { board.m_zombie_allowed[i] } else { false };
+                c.sync_bool(&mut v);
+                if i < board.m_zombie_allowed.len() { board.m_zombie_allowed[i] = v; }
+            });
+        }
+        BoardBaseFieldId::SunCountdown => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_sun_countdown)); }
+        BoardBaseFieldId::NumSunsFallen => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_num_suns_fallen)); }
+        BoardBaseFieldId::ShakeCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_shake_counter)); }
+        BoardBaseFieldId::ShakeAmountX => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_shake_amount_x)); }
+        BoardBaseFieldId::ShakeAmountY => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_shake_amount_y)); }
+        BoardBaseFieldId::BackgroundType => { apply_field_with_sync(data, |c| c.sync_enum(&mut board.m_background_type)); }
+        BoardBaseFieldId::Level => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.level)); }
+        BoardBaseFieldId::SodPosition => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_sod_position)); }
+        BoardBaseFieldId::PrevMouseX => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_prev_mouse_x)); }
+        BoardBaseFieldId::PrevMouseY => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_prev_mouse_y)); }
+        BoardBaseFieldId::SunMoney => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_sun_money)); }
+        BoardBaseFieldId::NumWaves => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_num_waves)); }
+        BoardBaseFieldId::MainCounter => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_main_counter)); }
+        BoardBaseFieldId::EffectCounter => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_effect_counter)); }
+        BoardBaseFieldId::DrawCount => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_draw_count)); }
+        BoardBaseFieldId::RiseFromGraveCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_rise_from_grave_counter)); }
+        BoardBaseFieldId::OutOfMoneyCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_out_of_money_counter)); }
+        BoardBaseFieldId::CurrentWave => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_current_wave)); }
+        BoardBaseFieldId::TotalSpawnedWaves => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_total_spawned_waves)); }
+        BoardBaseFieldId::TutorialState => { apply_field_with_sync(data, |c| c.sync_enum(&mut board.m_tutorial_state)); }
+        BoardBaseFieldId::TutorialParticleId => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_tutorial_particle_id)); }
+        BoardBaseFieldId::TutorialTimer => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_tutorial_timer)); }
+        // [TRANSLATION_NOTE]: mLastBungeeWave 未翻译，读取后丢弃
+        BoardBaseFieldId::LastBungeeWave => { apply_field_with_sync(data, |c| c.sync_i32(&mut tmp_i32)); }
+        BoardBaseFieldId::ZombieHealthToNextWave => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_zombie_health_to_next_wave)); }
+        BoardBaseFieldId::ZombieHealthWaveStart => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_zombie_health_wave_start)); }
+        BoardBaseFieldId::ZombieCountdown => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_zombie_count_down)); }
+        BoardBaseFieldId::ZombieCountdownStart => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_zombie_count_down_start)); }
+        BoardBaseFieldId::HugeWaveCountdown => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_huge_wave_count_down)); }
+        BoardBaseFieldId::HelpDisplayed => {
+            apply_field_with_sync(data, |c| sync_bool_array(c, &mut board.m_help_displayed));
+        }
+        BoardBaseFieldId::HelpIndex => { apply_field_with_sync(data, |c| c.sync_enum(&mut board.m_advice)); }
+        BoardBaseFieldId::FinalBossKilled => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_final_boss_killed)); }
+        BoardBaseFieldId::ShowShovel => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_show_shovel)); }
+        BoardBaseFieldId::CoinBankFadeCount => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_coin_bank_fade_count)); }
+        BoardBaseFieldId::DebugTextMode => { apply_field_with_sync(data, |c| c.sync_enum(&mut board.m_debug_text_mode)); }
+        BoardBaseFieldId::LevelComplete => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_level_complete)); }
+        BoardBaseFieldId::BoardFadeOutCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_board_fade_out_counter)); }
+        BoardBaseFieldId::NextSurvivalStageCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_next_survival_stage_counter)); }
+        BoardBaseFieldId::ScoreNextMowerCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_score_next_mower_counter)); }
+        BoardBaseFieldId::LevelAwardSpawned => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_level_award_spawned)); }
+        BoardBaseFieldId::ProgressMeterWidth => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_progress_meter_width)); }
+        BoardBaseFieldId::FlagRaiseCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_flag_raise_counter)); }
+        BoardBaseFieldId::IceTrapCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_ice_trap_counter)); }
+        BoardBaseFieldId::BoardRandSeed => { apply_field_with_sync(data, |c| {
+            let mut raw = board.m_board_rand_seed as i32;
+            c.sync_i32(&mut raw);
+            board.m_board_rand_seed = raw as u32;
+        }); }
+        // [TRANSLATION_NOTE]: mPoolSparklyParticleID 未翻译，读取后丢弃
+        BoardBaseFieldId::PoolSparklyParticleId => { apply_field_with_sync(data, |c| c.sync_u32(&mut tmp_u32)); }
+        BoardBaseFieldId::FwooshId => {
+            apply_field_with_sync(data, |c| for row in 0..MAX_GRID_SIZE_Y { for slot in 0..12 { c.sync_u32(&mut board.m_fwoosh_id[row][slot]); } });
+        }
+        BoardBaseFieldId::FwooshCountdown => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_fwoosh_count_down)); }
+        BoardBaseFieldId::TimeStopCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_time_stop_counter)); }
+        BoardBaseFieldId::DroppedFirstCoin => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_dropped_first_coin)); }
+        BoardBaseFieldId::FinalWaveSoundCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_final_wave_sound_counter)); }
+        BoardBaseFieldId::CobCannonCursorDelayCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_cob_cannon_cursor_delay_counter)); }
+        BoardBaseFieldId::CobCannonMouseX => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_cob_cannon_mouse_x)); }
+        BoardBaseFieldId::CobCannonMouseY => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_cob_cannon_mouse_y)); }
+        BoardBaseFieldId::KilledYeti => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_killed_yeti)); }
+        BoardBaseFieldId::MustacheMode => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_mustache_mode)); }
+        BoardBaseFieldId::SuperMowerMode => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_super_mower_mode)); }
+        BoardBaseFieldId::FutureMode => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_future_mode)); }
+        BoardBaseFieldId::PinataMode => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_pinata_mode)); }
+        BoardBaseFieldId::DanceMode => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_dance_mode)); }
+        BoardBaseFieldId::DaisyMode => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_daisy_mode)); }
+        BoardBaseFieldId::SukhbirMode => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_sukhbir_mode)); }
+        // [TRANSLATION_NOTE]: mPrevBoardResult 未翻译，读取后丢弃
+        BoardBaseFieldId::PrevBoardResult => { apply_field_with_sync(data, |c| c.sync_i32(&mut tmp_i32)); }
+        BoardBaseFieldId::TriggeredLawnMowers => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_triggered_lawn_mowers)); }
+        // [TRANSLATION_NOTE]: mPlayTimeActiveLevel/mPlayTimeInactiveLevel/mMaxSunPlants 未翻译，读取后丢弃
+        BoardBaseFieldId::PlayTimeActiveLevel => { apply_field_with_sync(data, |c| c.sync_u32(&mut tmp_u32)); }
+        BoardBaseFieldId::PlayTimeInactiveLevel => { apply_field_with_sync(data, |c| c.sync_u32(&mut tmp_u32)); }
+        BoardBaseFieldId::MaxSunPlants => { apply_field_with_sync(data, |c| c.sync_i32(&mut tmp_i32)); }
+        BoardBaseFieldId::StartDrawTime => { apply_field_with_sync(data, |c| c.sync_i64(&mut board.m_start_draw_time)); }
+        BoardBaseFieldId::IntervalDrawTime => { apply_field_with_sync(data, |c| c.sync_i64(&mut board.m_interval_draw_time)); }
+        BoardBaseFieldId::IntervalDrawCountStart => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_interval_draw_count_start)); }
+        // [TRANSLATION_NOTE]: mMinFPS/mPreloadTime/mGameID 未翻译，读取后丢弃
+        BoardBaseFieldId::MinFps => { apply_field_with_sync(data, |c| c.sync_f32(&mut tmp_f32)); }
+        BoardBaseFieldId::PreloadTime => { apply_field_with_sync(data, |c| c.sync_i32(&mut tmp_i32)); }
+        BoardBaseFieldId::GameId => { apply_field_with_sync(data, |c| c.sync_i64(&mut tmp_i64)); }
+        BoardBaseFieldId::GravesCleared => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_graves_cleared)); }
+        BoardBaseFieldId::PlantsEaten => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_plants_eaten)); }
+        BoardBaseFieldId::PlantsShoveled => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_plants_shoveled)); }
+        BoardBaseFieldId::PeaShooterUsed => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_pea_shooter_used)); }
+        BoardBaseFieldId::CatapultPlantsUsed => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_catapult_plants_used)); }
+        BoardBaseFieldId::MushroomAndCoffeeBeansOnly => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_mushroom_and_coffee_beans_only)); }
+        BoardBaseFieldId::MushroomsUsed => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_mushrooms_used)); }
+        BoardBaseFieldId::LevelCoinsCollected => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_level_coins_collected)); }
+        // [TRANSLATION_NOTE]: mGargantuarsKillsByCornCob 未翻译，读取后丢弃
+        BoardBaseFieldId::GargantuarsKillsByCornCob => { apply_field_with_sync(data, |c| c.sync_u32(&mut tmp_u32)); }
+        BoardBaseFieldId::CoinsCollected => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_coins_collected)); }
+        BoardBaseFieldId::DiamondsCollected => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_diamonds_collected)); }
+        BoardBaseFieldId::PottedPlantsCollected => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_potted_plants_collected)); }
+        BoardBaseFieldId::ChocolateCollected => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_chocolate_collected)); }
+        _ => { /* C++: default break */ }
+    }
+}
+
+/// 同步棋盘基础 chunk（对应 C++ SyncBoardBasePortable，SaveGame.cpp:1555）
+/// 读取分支：TLV blob 循环应用各字段；写入分支：AppendFieldWithSync 序列 + WriteTLVBlob
+fn sync_board_base_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
+    if ctx.reading {
+        let a_blob = match read_tlv_blob(ctx) {
+            Some(b) => b,
+            None => return,
+        };
+        let mut a_reader = TLVReader::new(&a_blob);
+        while a_reader.is_ok() && a_reader.remaining() > 0 {
+            let field_id = match a_reader.read_u32() {
+                Some(v) => v,
+                None => break,
+            };
+            let field_size = match a_reader.read_u32() {
+                Some(v) => v,
+                None => break,
+            };
+            let field_data = match a_reader.read_bytes(field_size as usize) {
+                Some(d) => d,
+                None => break,
+            };
+            apply_board_base_field(field_id, field_data, board);
+        }
+    } else {
+        let mut a_blob: Vec<u8> = Vec::new();
+        append_board_base_fields(&mut a_blob, board);
+        write_tlv_blob(ctx, &a_blob);
+    }
+}
+
+/// 写入一个 V4 chunk（对应 C++ WriteChunkV4，SaveGame.cpp:2335）
+/// 结构：字段 blob → chunk 包装（version + TLV(fieldId=1, size, data)）→ AppendChunk(type, size, data)
+fn write_chunk_v4(payload: &mut Vec<u8>, chunk_type: u32, board: &mut Board) -> bool {
+    // C++ GetChunkSyncFn：无同步函数的 chunk 返回 true 跳过（当前仅 BoardBase 已实现）
+    if chunk_type != SaveChunkTypeV4::BoardBase as u32 {
+        return true;
+    }
+
+    // C++ aFieldWriter：字段上下文
+    let mut field_data: Vec<u8> = Vec::new();
+    {
+        let buf = Buffer::new();
+        let mut field_ctx = PortableSaveContext::new_writer(buf);
+        sync_board_base_portable(&mut field_ctx, board);
+        if field_ctx.failed {
+            return false;
+        }
+        field_data = field_ctx
+            .buffer
+            .as_ref()
+            .map(|b| b.data().to_vec())
+            .unwrap_or_default();
+    }
+
+    // C++ aChunkWriter：SAVE4_CHUNK_VERSION + fieldId=1 + 长度 + 字段数据
+    let mut chunk_data: Vec<u8> = Vec::new();
+    append_u32_le(&mut chunk_data, SAVE4_CHUNK_VERSION);
+    append_u32_le(&mut chunk_data, 1u32);
+    append_u32_le(&mut chunk_data, field_data.len() as u32);
+    append_bytes(&mut chunk_data, &field_data);
+
+    // C++ AppendChunk：chunkType + size + data
+    append_u32_le(payload, chunk_type);
+    append_u32_le(payload, chunk_data.len() as u32);
+    append_bytes(payload, &chunk_data);
     true
 }
