@@ -10,12 +10,17 @@ use crate::framework::rect::Rect;
 use crate::framework::sexy_matrix::SexyMatrix3;
 use crate::lawn::board::Board;
 use crate::lawn::board::{MAX_GRID_SIZE_X, MAX_GRID_SIZE_Y, MAX_ZOMBIES_IN_WAVE, MAX_ZOMBIE_WAVES};
+use crate::lawn::challenge::Challenge;
 use crate::lawn::coin::Coin;
+use crate::lawn::cursor_object::{CursorObject, CursorPreview};
 use crate::lawn::grid_item::{GridItem, NUM_MOTION_TRAIL_FRAMES};
 use crate::lawn::lawn_mower::LawnMower;
 use crate::lawn::plant::{Plant, MAX_MAGNET_ITEMS};
 use crate::lawn::projectile::Projectile;
+use crate::lawn::seed_packet::SeedPacket;
+use crate::lawn::system::music::Music;
 use crate::lawn::system::player_info::PottedPlant;
+use crate::lawn::widget::message_widget::{MessageWidget, MAX_MESSAGE_LENGTH};
 use crate::lawn::zombie::{Zombie, MAX_ZOMBIE_FOLLOWERS};
 use crate::lawn::game_enums::*;
 use crate::lawn::game_object::GameObject;
@@ -758,6 +763,13 @@ fn read_chunk_v4(chunk_type: u32, data: &[u8], board: &mut Board) -> bool {
         SaveChunkTypeV4::GridItems => {}
         SaveChunkTypeV4::Plants => {}
         SaveChunkTypeV4::Zombies => {}
+        SaveChunkTypeV4::Cursor => {}
+        SaveChunkTypeV4::CursorPreview => {}
+        SaveChunkTypeV4::Advice => {}
+        SaveChunkTypeV4::SeedBank => {}
+        SaveChunkTypeV4::SeedPackets => {}
+        SaveChunkTypeV4::Challenge => {}
+        SaveChunkTypeV4::Music => {}
         _ => return true,
     }
     if data.len() < 4 {
@@ -799,6 +811,13 @@ fn read_chunk_v4(chunk_type: u32, data: &[u8], board: &mut Board) -> bool {
                 SaveChunkTypeV4::GridItems => sync_grid_items_portable(&mut a_context, board),
                 SaveChunkTypeV4::Plants => sync_plants_portable(&mut a_context, board),
                 SaveChunkTypeV4::Zombies => sync_zombies_portable(&mut a_context, board),
+                SaveChunkTypeV4::Cursor => sync_cursor_portable(&mut a_context, board),
+                SaveChunkTypeV4::CursorPreview => sync_cursor_preview_portable(&mut a_context),
+                SaveChunkTypeV4::Advice => sync_advice_portable(&mut a_context, board),
+                SaveChunkTypeV4::SeedBank => sync_seed_bank_portable(&mut a_context, board),
+                SaveChunkTypeV4::SeedPackets => sync_seed_packets_portable(&mut a_context, board),
+                SaveChunkTypeV4::Challenge => sync_challenge_portable(&mut a_context, board),
+                SaveChunkTypeV4::Music => sync_music_portable(&mut a_context, board),
                 _ => {}
             }
             if a_context.failed {
@@ -1345,6 +1364,13 @@ fn write_chunk_v4(payload: &mut Vec<u8>, chunk_type: u32, board: &mut Board) -> 
         SaveChunkTypeV4::GridItems => {}
         SaveChunkTypeV4::Plants => {}
         SaveChunkTypeV4::Zombies => {}
+        SaveChunkTypeV4::Cursor => {}
+        SaveChunkTypeV4::CursorPreview => {}
+        SaveChunkTypeV4::Advice => {}
+        SaveChunkTypeV4::SeedBank => {}
+        SaveChunkTypeV4::SeedPackets => {}
+        SaveChunkTypeV4::Challenge => {}
+        SaveChunkTypeV4::Music => {}
         _ => return true,
     }
 
@@ -1361,6 +1387,13 @@ fn write_chunk_v4(payload: &mut Vec<u8>, chunk_type: u32, board: &mut Board) -> 
             SaveChunkTypeV4::GridItems => sync_grid_items_portable(&mut field_ctx, board),
             SaveChunkTypeV4::Plants => sync_plants_portable(&mut field_ctx, board),
             SaveChunkTypeV4::Zombies => sync_zombies_portable(&mut field_ctx, board),
+            SaveChunkTypeV4::Cursor => sync_cursor_portable(&mut field_ctx, board),
+            SaveChunkTypeV4::CursorPreview => sync_cursor_preview_portable(&mut field_ctx),
+            SaveChunkTypeV4::Advice => sync_advice_portable(&mut field_ctx, board),
+            SaveChunkTypeV4::SeedBank => sync_seed_bank_portable(&mut field_ctx, board),
+            SaveChunkTypeV4::SeedPackets => sync_seed_packets_portable(&mut field_ctx, board),
+            SaveChunkTypeV4::Challenge => sync_challenge_portable(&mut field_ctx, board),
+            SaveChunkTypeV4::Music => sync_music_portable(&mut field_ctx, board),
             _ => return true,
         }
         if field_ctx.failed {
@@ -1870,6 +1903,467 @@ fn sync_zombies_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
             _ => {}
         },
     );
+}
+
+/// 同步光标尾部字段（对应 C++ SyncCursorObjectTailPortable，SaveGame.cpp:670）
+fn sync_cursor_object_tail_portable(ctx: &mut PortableSaveContext, object: &mut CursorObject) {
+    // C++ 顺序：mSeedBankIndex → mType(SeedType) → mImitaterType → mCursorType
+    ctx.sync_i32(&mut object.seed_bank_index);
+    ctx.sync_enum(&mut object.seed_type);
+    ctx.sync_enum(&mut object.imitater_type);
+    ctx.sync_enum(&mut object.cursor_type);
+    // C++ SyncEnumU32；Rust CoinID/PlantID/ReanimationID = u32
+    ctx.sync_u32(&mut object.coin_id);
+    ctx.sync_u32(&mut object.glove_plant_id);
+    ctx.sync_u32(&mut object.duplicator_plant_id);
+    ctx.sync_u32(&mut object.cob_cannon_plant_id);
+    ctx.sync_i32(&mut object.hammer_down_counter);
+    ctx.sync_u32(&mut object.reanim_cursor_id);
+}
+
+/// 同步光标预览尾部字段（对应 C++ SyncCursorPreviewTailPortable，SaveGame.cpp:684）
+fn sync_cursor_preview_tail_portable(ctx: &mut PortableSaveContext, preview: &mut CursorPreview) {
+    ctx.sync_i32(&mut preview.grid_x);
+    ctx.sync_i32(&mut preview.grid_y);
+}
+
+/// 同步消息控件尾部字段（对应 C++ SyncMessageWidgetTailPortable，SaveGame.cpp:690）
+fn sync_message_widget_tail_portable(ctx: &mut PortableSaveContext, widget: &mut MessageWidget) {
+    ctx.sync_bytes(&mut widget.label);
+    ctx.sync_i32(&mut widget.display_time);
+    ctx.sync_i32(&mut widget.duration);
+    ctx.sync_enum(&mut widget.message_style);
+    // C++ SyncEnumU32Array(mTextReanimID, MAX_MESSAGE_LENGTH)
+    sync_u32_array(ctx, &mut widget.text_reanim_id);
+    ctx.sync_enum(&mut widget.reanim_type);
+    ctx.sync_i32(&mut widget.slide_off_time);
+    ctx.sync_bytes(&mut widget.label_next);
+    ctx.sync_enum(&mut widget.message_style_next);
+}
+
+/// 同步种子银行尾部字段（对应 C++ SyncSeedBankTailPortable，SaveGame.cpp:703）
+/// [TRANSLATION_NOTE]: C++ mSeedBank 是对象含 mNumPackets/mCutSceneDarken/mConveyorBeltCounter；
+/// Rust 拆为 seed_bank Vec + m_seed_bank_darken + m_conveyor_belt_counter，mNumPackets 以 len 中转
+fn sync_seed_bank_tail_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
+    let mut num_packets = board.seed_bank.len() as i32;
+    ctx.sync_i32(&mut num_packets);
+    if ctx.reading {
+        let _ = num_packets; // 读取时忽略：Vec 由 SeedPackets chunk 重建
+    }
+    ctx.sync_i32(&mut board.m_seed_bank_darken);
+    ctx.sync_i32(&mut board.m_conveyor_belt_counter);
+}
+
+/// 同步种子槽尾部字段（对应 C++ SyncSeedPacketTailPortable，SaveGame.cpp:710）
+fn sync_seed_packet_tail_portable(ctx: &mut PortableSaveContext, packet: &mut SeedPacket) {
+    ctx.sync_i32(&mut packet.countdown);
+    ctx.sync_i32(&mut packet.refresh_time);
+    ctx.sync_i32(&mut packet.packet_index);
+    ctx.sync_i32(&mut packet.offset_x);
+    ctx.sync_enum(&mut packet.seed_type);
+    ctx.sync_enum(&mut packet.imitater_type);
+    ctx.sync_i32(&mut packet.slot_machine_countdown);
+    ctx.sync_enum(&mut packet.slot_machine_next_seed);
+    ctx.sync_f32(&mut packet.slot_machine_position);
+    ctx.sync_bool(&mut packet.active);
+    ctx.sync_bool(&mut packet.refreshing);
+    ctx.sync_i32(&mut packet.times_used);
+}
+
+/// 同步挑战尾部字段（对应 C++ SyncChallengeTailPortable，SaveGame.cpp:726）
+fn sync_challenge_tail_portable(ctx: &mut PortableSaveContext, challenge: &mut Challenge) {
+    ctx.sync_i32(&mut challenge.beghouled_mouse_capture);
+    ctx.sync_i32(&mut challenge.beghouled_mouse_down_x);
+    ctx.sync_i32(&mut challenge.beghouled_mouse_down_y);
+    // C++ SyncInt32Array(&mBeghouledEated[0][0], 9 * 6)；Rust [[i32;6];9] 逐元素同步
+    for row in challenge.beghouled_eated.iter_mut() {
+        sync_i32_array(ctx, row);
+    }
+    // C++ SyncInt32Array(mBeghouledPurcasedUpgrade, NUM_BEGHOULED_UPGRADES)（Rust 数组 [i32;4] 对齐）
+    sync_i32_array(ctx, &mut challenge.beghouled_purchased_upgrade);
+    ctx.sync_i32(&mut challenge.beghouled_matches_this_move);
+    ctx.sync_enum(&mut challenge.challenge_state);
+    ctx.sync_i32(&mut challenge.challenge_state_counter);
+    ctx.sync_i32(&mut challenge.conveyor_belt_counter);
+    ctx.sync_i32(&mut challenge.challenge_score);
+    ctx.sync_i32(&mut challenge.show_bowling_line);
+    ctx.sync_enum(&mut challenge.last_conveyor_seed_type);
+    ctx.sync_i32(&mut challenge.survival_stage);
+    ctx.sync_i32(&mut challenge.slot_machine_roll_count);
+    // C++ SyncEnumU32(mReanimChallenge)；Rust ReanimationID = u32
+    ctx.sync_u32(&mut challenge.reanim_challenge);
+    sync_u32_array(ctx, &mut challenge.reanim_clouds);
+    sync_i32_array(ctx, &mut challenge.clouds_counter);
+    ctx.sync_i32(&mut challenge.challenge_grid_x);
+    ctx.sync_i32(&mut challenge.challenge_grid_y);
+    ctx.sync_i32(&mut challenge.scary_potter_pots);
+    ctx.sync_i32(&mut challenge.rain_counter);
+    ctx.sync_i32(&mut challenge.tree_of_wisdom_talk_index);
+}
+
+/// 同步音乐尾部字段（对应 C++ SyncMusicTailPortable，SaveGame.cpp:752）
+fn sync_music_tail_portable(ctx: &mut PortableSaveContext, music: &mut Music) {
+    ctx.sync_enum(&mut music.cur_music_tune);
+    ctx.sync_enum(&mut music.cur_music_file_main);
+    ctx.sync_enum(&mut music.cur_music_file_drums);
+    ctx.sync_enum(&mut music.cur_music_file_hihats);
+    ctx.sync_i32(&mut music.burst_override);
+    ctx.sync_f32(&mut music.base_bpm);
+    ctx.sync_f32(&mut music.base_mod_speed);
+    ctx.sync_enum(&mut music.music_burst_state);
+    ctx.sync_i32(&mut music.burst_state_counter);
+    ctx.sync_enum(&mut music.music_drums_state);
+    ctx.sync_i32(&mut music.queued_drum_track_packed_order);
+    ctx.sync_i32(&mut music.drums_state_counter);
+    ctx.sync_i32(&mut music.pause_offset);
+    ctx.sync_i32(&mut music.pause_offset_drums);
+    ctx.sync_bool(&mut music.paused);
+    // C++ 读取时丢弃存档中的 mMusicDisabled（运行时能力标志），写侧才写
+    if ctx.reading {
+        let mut saved_music_disabled = false;
+        ctx.sync_bool(&mut saved_music_disabled);
+    } else {
+        ctx.sync_bool(&mut music.music_disabled);
+    }
+    ctx.sync_i32(&mut music.fade_out_counter);
+    ctx.sync_i32(&mut music.fade_out_duration);
+}
+
+/// 同步光标 chunk（对应 C++ SyncCursorPortable，SaveGame.cpp:2007）
+/// [TRANSLATION_NOTE]: C++ CursorObject 继承 GameObject；Rust CursorObject 无基类字段，占位读写
+fn sync_cursor_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
+    let mut tmp_base = GameObject::new();
+    if ctx.reading {
+        let a_blob = match read_tlv_blob(ctx) {
+            Some(b) => b,
+            None => return,
+        };
+        let mut a_reader = TLVReader::new(&a_blob);
+        while a_reader.is_ok() && a_reader.remaining() > 0 {
+            let field_id = match a_reader.read_u32() {
+                Some(v) => v,
+                None => break,
+            };
+            let field_size = match a_reader.read_u32() {
+                Some(v) => v,
+                None => break,
+            };
+            let field_data = match a_reader.read_bytes(field_size as usize) {
+                Some(d) => d,
+                None => break,
+            };
+            match field_id {
+                1 => {
+                    let _ = read_game_object_field(field_data, &mut tmp_base);
+                }
+                // C++: 2U 为旧版字段（legacy）
+                2 => {
+                    let _ = field_data;
+                }
+                PORTABLE_FIELD_TAIL => {
+                    apply_field_with_sync(field_data, |c| sync_cursor_object_tail_portable(c, &mut board.cursor_object));
+                }
+                _ => {}
+            }
+        }
+    } else {
+        let mut a_blob: Vec<u8> = Vec::new();
+        write_game_object_field(&mut a_blob, 1, &mut tmp_base);
+        append_field_with_sync(&mut a_blob, PORTABLE_FIELD_TAIL, |c| sync_cursor_object_tail_portable(c, &mut board.cursor_object));
+        write_tlv_blob(ctx, &a_blob);
+    }
+}
+
+/// 同步光标预览 chunk（对应 C++ SyncCursorPreviewPortable，SaveGame.cpp:2042）
+/// [TRANSLATION_NOTE]: Rust Board 无 mCursorPreview 成员，C++ 侧字段读入丢弃（不改变 Board 结构）
+fn sync_cursor_preview_portable(ctx: &mut PortableSaveContext) {
+    let mut tmp_preview = CursorPreview::new();
+    if ctx.reading {
+        let a_blob = match read_tlv_blob(ctx) {
+            Some(b) => b,
+            None => return,
+        };
+        let mut a_reader = TLVReader::new(&a_blob);
+        while a_reader.is_ok() && a_reader.remaining() > 0 {
+            let field_id = match a_reader.read_u32() {
+                Some(v) => v,
+                None => break,
+            };
+            let field_size = match a_reader.read_u32() {
+                Some(v) => v,
+                None => break,
+            };
+            let field_data = match a_reader.read_bytes(field_size as usize) {
+                Some(d) => d,
+                None => break,
+            };
+            match field_id {
+                1 => {
+                    let _ = read_game_object_field(field_data, &mut tmp_preview.base);
+                }
+                // C++: 2U 为旧版字段（legacy）
+                2 => {
+                    let _ = field_data;
+                }
+                PORTABLE_FIELD_TAIL => {
+                    apply_field_with_sync(field_data, |c| sync_cursor_preview_tail_portable(c, &mut tmp_preview));
+                }
+                _ => {}
+            }
+        }
+    } else {
+        let mut a_blob: Vec<u8> = Vec::new();
+        write_game_object_field(&mut a_blob, 1, &mut tmp_preview.base);
+        append_field_with_sync(&mut a_blob, PORTABLE_FIELD_TAIL, |c| sync_cursor_preview_tail_portable(c, &mut tmp_preview));
+        write_tlv_blob(ctx, &a_blob);
+    }
+}
+
+/// 同步提示 chunk（对应 C++ SyncAdvicePortable，SaveGame.cpp:2077）
+fn sync_advice_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
+    if ctx.reading {
+        let a_blob = match read_tlv_blob(ctx) {
+            Some(b) => b,
+            None => return,
+        };
+        let mut a_reader = TLVReader::new(&a_blob);
+        while a_reader.is_ok() && a_reader.remaining() > 0 {
+            let field_id = match a_reader.read_u32() {
+                Some(v) => v,
+                None => break,
+            };
+            let field_size = match a_reader.read_u32() {
+                Some(v) => v,
+                None => break,
+            };
+            let field_data = match a_reader.read_bytes(field_size as usize) {
+                Some(d) => d,
+                None => break,
+            };
+            match field_id {
+                // C++: 1U 为旧版字段（legacy）
+                1 => {
+                    let _ = field_data;
+                }
+                PORTABLE_FIELD_TAIL => {
+                    apply_field_with_sync(field_data, |c| sync_message_widget_tail_portable(c, &mut board.m_advice_widget));
+                }
+                _ => {}
+            }
+        }
+    } else {
+        let mut a_blob: Vec<u8> = Vec::new();
+        append_field_with_sync(&mut a_blob, PORTABLE_FIELD_TAIL, |c| sync_message_widget_tail_portable(c, &mut board.m_advice_widget));
+        write_tlv_blob(ctx, &a_blob);
+    }
+}
+
+/// 同步种子银行 chunk（对应 C++ SyncSeedBankPortable，SaveGame.cpp:2110）
+/// [TRANSLATION_NOTE]: C++ mSeedBank 为 GameObject 派生对象；Rust 无对应对象，
+/// field 1U 的 GameObject 基类以占位写入/读出丢弃
+fn sync_seed_bank_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
+    let mut tmp_base = GameObject::new();
+    if ctx.reading {
+        let a_blob = match read_tlv_blob(ctx) {
+            Some(b) => b,
+            None => return,
+        };
+        let mut a_reader = TLVReader::new(&a_blob);
+        while a_reader.is_ok() && a_reader.remaining() > 0 {
+            let field_id = match a_reader.read_u32() {
+                Some(v) => v,
+                None => break,
+            };
+            let field_size = match a_reader.read_u32() {
+                Some(v) => v,
+                None => break,
+            };
+            let field_data = match a_reader.read_bytes(field_size as usize) {
+                Some(d) => d,
+                None => break,
+            };
+            match field_id {
+                1 => {
+                    let _ = read_game_object_field(field_data, &mut tmp_base);
+                }
+                // C++: 2U-4U 为旧版字段（legacy）
+                2 | 3 | 4 => {
+                    let _ = field_data;
+                }
+                PORTABLE_FIELD_TAIL => {
+                    apply_field_with_sync(field_data, |c| sync_seed_bank_tail_portable(c, board));
+                }
+                _ => {}
+            }
+        }
+    } else {
+        let mut a_blob: Vec<u8> = Vec::new();
+        write_game_object_field(&mut a_blob, 1, &mut tmp_base);
+        append_field_with_sync(&mut a_blob, PORTABLE_FIELD_TAIL, |c| sync_seed_bank_tail_portable(c, board));
+        write_tlv_blob(ctx, &a_blob);
+    }
+}
+
+/// 同步种子槽数组 chunk（对应 C++ SyncSeedPacketsPortable，SaveGame.cpp:2147）
+/// 注意：非 TLV blob，格式为 SyncInt32(aCount=SEEDBANK_MAX) + 逐包 (size + bytes)
+/// [TRANSLATION_NOTE]: C++ mSeedPackets 固定 SEEDBANK_MAX 个；Rust 为 Vec，写入前 min 个、读取重建 Vec
+fn sync_seed_packets_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
+    let mut a_count = SEEDBANK_MAX;
+    ctx.sync_i32(&mut a_count);
+    let n = a_count.min(SEEDBANK_MAX) as usize;
+    if ctx.reading {
+        board.seed_bank.clear();
+        for i in 0..n {
+            if i >= SEEDBANK_MAX as usize {
+                break;
+            }
+            let mut item_size = 0u32;
+            ctx.sync_u32(&mut item_size);
+            let mut item_data: Vec<u8> = vec![0; item_size as usize];
+            if item_size > 0 {
+                ctx.sync_bytes(&mut item_data);
+            }
+            let mut a_reader = TLVReader::new(&item_data);
+            let mut packet = SeedPacket::new();
+            let mut tmp_base = GameObject::new();
+            while a_reader.is_ok() && a_reader.remaining() > 0 {
+                let field_id = match a_reader.read_u32() {
+                    Some(v) => v,
+                    None => break,
+                };
+                let field_size = match a_reader.read_u32() {
+                    Some(v) => v,
+                    None => break,
+                };
+                let field_data = match a_reader.read_bytes(field_size as usize) {
+                    Some(d) => d,
+                    None => break,
+                };
+                match field_id {
+                    1 => {
+                        let _ = read_game_object_field(field_data, &mut tmp_base);
+                    }
+                    // C++: 2U 为旧版字段（legacy）
+                    2 => {
+                        let _ = field_data;
+                    }
+                    PORTABLE_FIELD_TAIL => {
+                        apply_field_with_sync(field_data, |c| sync_seed_packet_tail_portable(c, &mut packet));
+                    }
+                    _ => {}
+                }
+            }
+            board.seed_bank.push(packet);
+        }
+    } else {
+        let write_n = board.seed_bank.len().min(SEEDBANK_MAX as usize);
+        for i in 0..write_n {
+            let mut item_data: Vec<u8> = Vec::new();
+            {
+                let packet = &mut board.seed_bank[i];
+                let mut tmp_base = GameObject::new();
+                write_game_object_field(&mut item_data, 1, &mut tmp_base);
+                append_field_with_sync(&mut item_data, PORTABLE_FIELD_TAIL, |c| sync_seed_packet_tail_portable(c, packet));
+            }
+            let mut item_size = item_data.len() as u32;
+            ctx.sync_u32(&mut item_size);
+            if item_size > 0 {
+                ctx.sync_bytes_const(&item_data);
+            }
+        }
+    }
+}
+
+/// 同步挑战 chunk（对应 C++ SyncChallengePortable，SaveGame.cpp:2193）
+fn sync_challenge_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
+    let challenge = match board.challenge.as_mut() {
+        Some(c) => c,
+        None => return,
+    };
+    if ctx.reading {
+        let a_blob = match read_tlv_blob(ctx) {
+            Some(b) => b,
+            None => return,
+        };
+        let mut a_reader = TLVReader::new(&a_blob);
+        while a_reader.is_ok() && a_reader.remaining() > 0 {
+            let field_id = match a_reader.read_u32() {
+                Some(v) => v,
+                None => break,
+            };
+            let field_size = match a_reader.read_u32() {
+                Some(v) => v,
+                None => break,
+            };
+            let field_data = match a_reader.read_bytes(field_size as usize) {
+                Some(d) => d,
+                None => break,
+            };
+            match field_id {
+                // C++: 1U 为旧版字段（legacy）
+                1 => {
+                    let _ = field_data;
+                }
+                PORTABLE_FIELD_TAIL => {
+                    apply_field_with_sync(field_data, |c| sync_challenge_tail_portable(c, challenge));
+                }
+                _ => {}
+            }
+        }
+    } else {
+        let mut a_blob: Vec<u8> = Vec::new();
+        append_field_with_sync(&mut a_blob, PORTABLE_FIELD_TAIL, |c| sync_challenge_tail_portable(c, challenge));
+        write_tlv_blob(ctx, &a_blob);
+    }
+}
+
+/// 同步音乐 chunk（对应 C++ SyncMusicPortable，SaveGame.cpp:2226）
+fn sync_music_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
+    let app = match board.app {
+        Some(ptr) => ptr,
+        None => return,
+    };
+    // 注意：mMusic 属 LawnApp（C++ theBoard->mApp->mMusic），Rust 同路径
+    let music = unsafe { &mut (*app).music };
+    let music = match music.as_mut() {
+        Some(m) => m,
+        None => return,
+    };
+    if ctx.reading {
+        let a_blob = match read_tlv_blob(ctx) {
+            Some(b) => b,
+            None => return,
+        };
+        let mut a_reader = TLVReader::new(&a_blob);
+        while a_reader.is_ok() && a_reader.remaining() > 0 {
+            let field_id = match a_reader.read_u32() {
+                Some(v) => v,
+                None => break,
+            };
+            let field_size = match a_reader.read_u32() {
+                Some(v) => v,
+                None => break,
+            };
+            let field_data = match a_reader.read_bytes(field_size as usize) {
+                Some(d) => d,
+                None => break,
+            };
+            match field_id {
+                // C++: 1U 为旧版字段（legacy）
+                1 => {
+                    let _ = field_data;
+                }
+                PORTABLE_FIELD_TAIL => {
+                    apply_field_with_sync(field_data, |c| sync_music_tail_portable(c, music));
+                }
+                _ => {}
+            }
+        }
+    } else {
+        let mut a_blob: Vec<u8> = Vec::new();
+        append_field_with_sync(&mut a_blob, PORTABLE_FIELD_TAIL, |c| sync_music_tail_portable(c, music));
+        write_tlv_blob(ctx, &a_blob);
+    }
 }
 
 /// 同步子弹尾部字段（对应 C++ SyncProjectileTailPortable，SaveGame.cpp:918）
