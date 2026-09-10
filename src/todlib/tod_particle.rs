@@ -139,6 +139,19 @@ pub enum EmitterType {
     CircleEvenSpacing = 4,  // EMITTER_CIRCLE_EVEN_SPACING
 }
 
+/// 缩放旋转矩阵（对应 C++ PvzpLib/PvzpCommon.cpp PvzpScaleRotateTransformMatrix，同 zombie.rs/projectile.rs 副本）
+fn pvzp_scale_rotate_transform_matrix(m: &mut crate::framework::sexy_matrix::SexyMatrix3, x: f32, y: f32, rad: f32, the_scale_x: f32, the_scale_y: f32) {
+    m.m[0][0] = rad.cos() * the_scale_x;
+    m.m[1][0] = -rad.sin() * the_scale_x;
+    m.m[2][0] = 0.0;
+    m.m[0][1] = rad.sin() * the_scale_y;
+    m.m[1][1] = rad.cos() * the_scale_y;
+    m.m[2][1] = 0.0;
+    m.m[0][2] = x;
+    m.m[1][2] = y;
+    m.m[2][2] = 1.0;
+}
+
 /// 粒子效果枚举（对应 C++ ParticleEffect，定义在 Lawn 层）
 /// 实际在 LawnApp 中定义，此处列出基础类型
 pub type ParticleEffect = i32;
@@ -742,7 +755,147 @@ impl TodParticleEmitter {
         }
         self.system_last_time_value = self.system_time_value;
     }
-    pub fn draw(&self, _g: &mut Graphics) {}
+    /// 绘制粒子（对应 C++ PvzpParticleEmitter::Draw，PvzpParticle.cpp:1060）
+    /// [TRANSLATION_NOTE]: C++ 按 mEmitterDef 的 SOFTWARE_ONLY/HARDWARE_ONLY 位做 3D 加速过滤；
+    /// Rust 无 3D 加速检测，过滤跳过（TRANSLATION_NOTE）
+    pub fn draw(&self, g: &mut Graphics) {
+        let mut node = self.particle_list.head;
+        while !node.is_null() {
+            unsafe {
+                let a_particle_id = (*node).value;
+                let holder = (*self.particle_system).particle_holder;
+                let a_particle_ptr = if holder.is_null() {
+                    std::ptr::null_mut()
+                } else {
+                    match (*holder).particles.try_to_get_mut(a_particle_id) {
+                        Some(p) => p as *mut TodParticle,
+                        None => std::ptr::null_mut(),
+                    }
+                };
+                if !a_particle_ptr.is_null() {
+                    self.draw_particle(g, &mut *a_particle_ptr);
+                }
+                node = (*node).next;
+            }
+        }
+    }
+
+    /// 绘制单个粒子（对应 C++ PvzpParticleEmitter::DrawParticle，PvzpParticle.cpp:1024）
+    /// [TRANSLATION_NOTE]: C++ 经 PvzpTriangleGroup 批处理（AddTriangle + DrawGroup）；
+    /// Rust 逐粒子直接绘制（绘制顺序一致，无批处理）
+    fn draw_particle(&self, g: &mut Graphics, the_particle: &mut TodParticle) {
+        if the_particle.cross_fade_duration > 0 {
+            return; // C++: cross-fade 源粒子不绘制
+        }
+
+        let mut a_params = ParticleRenderParams::new();
+        if self.get_render_params(the_particle, &mut a_params) {
+            let a_color = Color::new(
+                (a_params.red.round() as i32).clamp(0, 255) as u8,
+                (a_params.green.round() as i32).clamp(0, 255) as u8,
+                (a_params.blue.round() as i32).clamp(0, 255) as u8,
+                (a_params.alpha.round() as i32).clamp(0, 255) as u8,
+            );
+            if a_color.a > 0 {
+                a_params.pos_x += g.trans_x as f32;
+                a_params.pos_y += g.trans_y as f32;
+                // [TRANSLATION_NOTE]: C++ 无图时尝试 cross-fade 源粒子渲染；
+                // Rust 渲染以 emitter_def.image/image_override 为准，render_particle 内无图即返回
+                self.render_particle(g, the_particle, a_color, &a_params);
+            }
+        }
+    }
+
+        /// 渲染单个粒子（对应 C++ RenderParticle，PvzpParticle.cpp:945）
+    /// [TRANSLATION_NOTE]: C++ 经 PvzpTriangleGroup::AddTriangle 批处理；Rust 直接经
+    /// Graphics 矩阵绘制（旋转/缩放一致），FULLSCREEN 全屏填充保留
+    fn render_particle(&self, g: &mut Graphics, the_particle: &TodParticle, the_color: Color, the_params: &ParticleRenderParams) {
+        let a_emitter_def = unsafe { &*self.emitter_def };
+        let a_image = if !self.image_override.is_null() { self.image_override } else { a_emitter_def.image };
+        if a_image.is_null() {
+            return;
+        }
+        let a_image_ref = unsafe { &*a_image };
+
+        let a_cel_width = a_image_ref.get_cel_width();
+        let a_cel_height = a_image_ref.get_cel_height();
+        let mut a_frame = self.frame_override;
+        if a_frame == -1 {
+            if !a_emitter_def.animation_rate.nodes.is_empty() {
+                a_frame = ((the_particle.animation_time_value * a_emitter_def.image_frames as f32) as i32)
+                    .clamp(0, a_emitter_def.image_frames - 1);
+            } else if a_emitter_def.animated != 0 {
+                a_frame = ((the_particle.particle_time_value * a_emitter_def.image_frames as f32) as i32)
+                    .clamp(0, a_emitter_def.image_frames - 1);
+            } else {
+                a_frame = the_particle.image_frame;
+            }
+        }
+        a_frame += a_emitter_def.image_col;
+        if a_frame >= a_image_ref.num_cols {
+            a_frame = a_image_ref.num_cols - 1;
+        }
+
+        let a_clip_top = self.particle_track_evaluate(&a_emitter_def.clip_top, the_particle, ParticleTracks::ClipTop);
+        let a_clip_bottom = self.particle_track_evaluate(&a_emitter_def.clip_bottom, the_particle, ParticleTracks::ClipBottom);
+        let a_clip_left = self.particle_track_evaluate(&a_emitter_def.clip_left, the_particle, ParticleTracks::ClipLeft);
+        let a_clip_right = self.particle_track_evaluate(&a_emitter_def.clip_right, the_particle, ParticleTracks::ClipRight);
+
+        let mut a_pos_x = the_params.pos_x + a_clip_left * a_cel_width as f32;
+        let mut a_pos_y = the_params.pos_y + a_clip_top * a_cel_height as f32;
+        let mut a_src_rect = Rect::new(
+            (a_frame * a_cel_width + (a_clip_left * a_cel_width as f32).round() as i32)
+                .max(0),
+            (a_emitter_def.image_row.min(a_image_ref.num_rows - 1) * a_cel_height + (a_clip_top * a_cel_height as f32).round() as i32)
+                .max(0),
+            a_cel_width - (a_cel_width as f32 * (a_clip_left + a_clip_right)).round() as i32,
+            a_cel_height - (a_cel_height as f32 * (a_clip_bottom + a_clip_top)).round() as i32,
+        );
+        if a_src_rect.width <= 0 || a_src_rect.height <= 0 {
+            return;
+        }
+
+        // C++: PARTICLE_ALIGN_TO_PIXELS
+        if crate::lawn::zombie::test_bit(a_emitter_def.particle_flags as u32, ParticleFlags::AlignToPixels as u32) {
+            a_pos_x = a_pos_x.round();
+            a_pos_y = a_pos_y.round();
+        }
+        let mut a_draw_mode = g.draw_mode;
+        if crate::lawn::zombie::test_bit(a_emitter_def.particle_flags as u32, ParticleFlags::Additive as u32) {
+            a_draw_mode = crate::framework::graphics::graphics::DrawMode::Additive as i32;
+        }
+        if crate::lawn::zombie::test_bit(a_emitter_def.particle_flags as u32, ParticleFlags::Fullscreen as u32) {
+            // C++: FULLSCREEN 粒子以纯色填满屏幕
+            let an_old_color = g.color;
+            let an_old_draw_mode = g.draw_mode;
+            g.set_color(&the_color);
+            g.fill_rect_xywh(-g.trans_x as i32, -g.trans_y as i32, crate::lawn::game_enums::BOARD_WIDTH, crate::lawn::game_enums::BOARD_HEIGHT);
+            g.set_color(&an_old_color);
+            g.set_draw_mode(an_old_draw_mode);
+        } else {
+            // C++: PvzpScaleRotateTransformMatrix + AddTriangle（矩阵旋转缩放）
+            let mut a_transform = crate::framework::sexy_matrix::SexyMatrix3::identity();
+            pvzp_scale_rotate_transform_matrix(
+                &mut a_transform,
+                a_pos_x,
+                a_pos_y,
+                the_params.spin_position,
+                the_params.particle_scale,
+                the_params.particle_stretch * the_params.particle_scale,
+            );
+            g.set_colorize_images(true);
+            g.set_color(&the_color);
+            g.set_draw_mode(a_draw_mode);
+            g.draw_image_matrix_src(a_image_ref, &a_transform, &a_src_rect, 0.0, 0.0);
+            // C++: mExtraAdditiveDrawOverride 时以 ADDITIVE 再画一次
+            if self.extra_additive_draw_override {
+                g.set_draw_mode(crate::framework::graphics::graphics::DrawMode::Additive as i32);
+                g.draw_image_matrix_src(a_image_ref, &a_transform, &a_src_rect, 0.0, 0.0);
+            }
+            g.set_draw_mode(crate::framework::graphics::graphics::DrawMode::Normal as i32);
+            g.set_colorize_images(false);
+        }
+    }
 
     /// 移动发射器系统中心（对应 C++ PvzpParticleEmitter::SystemMove，:1079）
     pub fn system_move(&mut self, x: f32, y: f32) {
@@ -1680,9 +1833,23 @@ impl TodParticleSystem {
         }
     }
 
-    /// 绘制粒子系统（简化：完整渲染依赖 emitter 定义求值，当前保留系统生命周期骨架）
-    pub fn draw(&self, _g: &mut Graphics) {
-        // [TRANSLATION_NOTE]: 完整粒子渲染依赖 emitter 定义求值，当前保留系统生命周期骨架
+    /// 绘制粒子系统（对应 C++ PvzpParticleSystem::Draw，PvzpParticle.cpp:1054）
+    /// 遍历发射器列表，逐个绘制（C++ 经 mParticleHolder->mEmitters.DataArrayGet(id)->Draw）
+    pub fn draw(&self, g: &mut Graphics) {
+        let mut node = self.emitter_list.head;
+        while !node.is_null() {
+            unsafe {
+                let a_emitter_id = (*node).value;
+                let holder = self.particle_holder;
+                if !holder.is_null() {
+                    let a_emitter = (*holder).emitters.get(a_emitter_id);
+                    if !a_emitter.dead {
+                        a_emitter.draw(g);
+                    }
+                }
+                node = (*node).next;
+            }
+        }
     }
 
     /// 移动系统中心（对应 C++ PvzpParticleSystem::SystemMove，:1073）
