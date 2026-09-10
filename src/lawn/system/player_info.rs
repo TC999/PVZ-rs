@@ -11,6 +11,7 @@ pub const MAX_POTTED_PLANTS: usize = 48;
 
 /// 盆栽植物面朝方向
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
 pub enum FacingDirection {
     Right = 0,
     Left = 1,

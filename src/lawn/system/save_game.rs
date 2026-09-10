@@ -10,6 +10,9 @@ use crate::framework::rect::Rect;
 use crate::framework::sexy_matrix::SexyMatrix3;
 use crate::lawn::board::Board;
 use crate::lawn::board::{MAX_GRID_SIZE_X, MAX_GRID_SIZE_Y, MAX_ZOMBIES_IN_WAVE, MAX_ZOMBIE_WAVES};
+use crate::lawn::coin::Coin;
+use crate::lawn::lawn_mower::LawnMower;
+use crate::lawn::system::player_info::PottedPlant;
 use crate::lawn::game_enums::*;
 use crate::lawn::game_object::GameObject;
 use crate::todlib::tod_common::TodSmoothArray;
@@ -739,8 +742,15 @@ pub fn lawn_load_game(board: Option<*mut Board>, file_path: &str) -> bool {
 /// 内部：读取并处理一个 V4 chunk（对应 C++ ReadChunkV4，SaveGame.cpp:2360）
 /// TLV 循环查找 fieldId==1 的字段，以读取上下文应用 Board 同步
 fn read_chunk_v4(chunk_type: u32, data: &[u8], board: &mut Board) -> bool {
-    if chunk_type != SaveChunkTypeV4::BoardBase as u32 {
-        return true; // C++ GetChunkSyncFn 无同步函数的 chunk 跳过
+    let chunk = match save_chunk_from_id(chunk_type) {
+        Some(c) => c,
+        None => return true, // C++ GetChunkSyncFn 无同步函数的 chunk 跳过
+    };
+    match chunk {
+        SaveChunkTypeV4::BoardBase => {}
+        SaveChunkTypeV4::Coins => {}
+        SaveChunkTypeV4::Mowers => {}
+        _ => return true,
     }
     if data.len() < 4 {
         return false;
@@ -773,7 +783,12 @@ fn read_chunk_v4(chunk_type: u32, data: &[u8], board: &mut Board) -> bool {
         if field_id == 1 {
             let buf = Buffer::from_bytes(field_data);
             let mut a_context = PortableSaveContext::new_reader(buf);
-            sync_board_base_portable(&mut a_context, board);
+            match chunk {
+                SaveChunkTypeV4::BoardBase => sync_board_base_portable(&mut a_context, board),
+                SaveChunkTypeV4::Coins => sync_coins_portable(&mut a_context, board),
+                SaveChunkTypeV4::Mowers => sync_mowers_portable(&mut a_context, board),
+                _ => {}
+            }
             if a_context.failed {
                 return false;
             }
@@ -1305,9 +1320,16 @@ fn sync_board_base_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
 /// 写入一个 V4 chunk（对应 C++ WriteChunkV4，SaveGame.cpp:2335）
 /// 结构：字段 blob → chunk 包装（version + TLV(fieldId=1, size, data)）→ AppendChunk(type, size, data)
 fn write_chunk_v4(payload: &mut Vec<u8>, chunk_type: u32, board: &mut Board) -> bool {
-    // C++ GetChunkSyncFn：无同步函数的 chunk 返回 true 跳过（当前仅 BoardBase 已实现）
-    if chunk_type != SaveChunkTypeV4::BoardBase as u32 {
-        return true;
+    // C++ GetChunkSyncFn：无同步函数的 chunk 返回 true 跳过
+    let chunk = match save_chunk_from_id(chunk_type) {
+        Some(c) => c,
+        None => return true,
+    };
+    match chunk {
+        SaveChunkTypeV4::BoardBase => {}
+        SaveChunkTypeV4::Coins => {}
+        SaveChunkTypeV4::Mowers => {}
+        _ => return true,
     }
 
     // C++ aFieldWriter：字段上下文
@@ -1315,7 +1337,12 @@ fn write_chunk_v4(payload: &mut Vec<u8>, chunk_type: u32, board: &mut Board) -> 
     {
         let buf = Buffer::new();
         let mut field_ctx = PortableSaveContext::new_writer(buf);
-        sync_board_base_portable(&mut field_ctx, board);
+        match chunk {
+            SaveChunkTypeV4::BoardBase => sync_board_base_portable(&mut field_ctx, board),
+            SaveChunkTypeV4::Coins => sync_coins_portable(&mut field_ctx, board),
+            SaveChunkTypeV4::Mowers => sync_mowers_portable(&mut field_ctx, board),
+            _ => return true,
+        }
         if field_ctx.failed {
             return false;
         }
@@ -1338,4 +1365,232 @@ fn write_chunk_v4(payload: &mut Vec<u8>, chunk_type: u32, board: &mut Board) -> 
     append_u32_le(payload, chunk_data.len() as u32);
     append_bytes(payload, &chunk_data);
     true
+}
+
+// ── 实体 chunk（对应 C++ SyncDataArrayPortableTLV 系列，SaveGame.cpp:1392 起） ──
+
+/// 将存档 chunk 类型 id 映射为 SaveChunkTypeV4（判别式连续 1..=20，范围内 transmute 合法）
+fn save_chunk_from_id(id: u32) -> Option<SaveChunkTypeV4> {
+    if id >= 1 && id <= 20 {
+        Some(unsafe { std::mem::transmute::<u32, SaveChunkTypeV4>(id) })
+    } else {
+        None
+    }
+}
+
+/// C++ DataArray 的活跃 key 掩码（DataArray.h:34，DATA_ARRAY_KEY_MASK = -65536）
+const DATA_ARRAY_KEY_MASK: u32 = 0xFFFF_0000;
+
+/// 同步盆栽植物规格（对应 C++ SyncPottedPlantPortable，SaveGame.cpp:625）
+fn sync_potted_plant_portable(ctx: &mut PortableSaveContext, plant: &mut PottedPlant) {
+    ctx.sync_enum(&mut plant.seed_type);
+    ctx.sync_enum(&mut plant.which_zen_garden);
+    ctx.sync_i32(&mut plant.x);
+    ctx.sync_i32(&mut plant.y);
+    ctx.sync_enum(&mut plant.facing);
+    ctx.sync_i64(&mut plant.last_watered_time);
+    ctx.sync_enum(&mut plant.draw_variation);
+    ctx.sync_enum(&mut plant.plant_age);
+    ctx.sync_i32(&mut plant.times_fed);
+    ctx.sync_i32(&mut plant.feedings_per_grow);
+    ctx.sync_enum(&mut plant.plant_need);
+    ctx.sync_i64(&mut plant.last_need_fulfilled_time);
+    ctx.sync_i64(&mut plant.last_fertilized_time);
+    ctx.sync_i64(&mut plant.last_chocolate_time);
+    // [TRANSLATION_NOTE]: C++ mFutureAttribute[3] 仅同步 [0]，Rust PottedPlant 未翻译该字段，占位保持格式
+    let mut tmp_i64 = 0i64;
+    ctx.sync_i64(&mut tmp_i64);
+}
+
+/// 同步硬币尾部字段（对应 C++ SyncCoinTailPortable，SaveGame.cpp:949）
+fn sync_coin_tail_portable(ctx: &mut PortableSaveContext, coin: &mut Coin) {
+    ctx.sync_f32(&mut coin.pos_x);
+    ctx.sync_f32(&mut coin.pos_y);
+    ctx.sync_f32(&mut coin.vel_x);
+    ctx.sync_f32(&mut coin.vel_y);
+    ctx.sync_f32(&mut coin.scale);
+    ctx.sync_bool(&mut coin.dead);
+    ctx.sync_i32(&mut coin.fade_count);
+    ctx.sync_f32(&mut coin.collect_x);
+    ctx.sync_f32(&mut coin.collect_y);
+    // [TRANSLATION_NOTE]: C++ mGroundY 为 int32，Rust Coin.ground_y 为 f32，经 i32 中转保持存档格式
+    let mut ground_y = coin.ground_y as i32;
+    ctx.sync_i32(&mut ground_y);
+    coin.ground_y = ground_y as f32;
+    ctx.sync_i32(&mut coin.coin_age);
+    ctx.sync_bool(&mut coin.is_being_collected);
+    ctx.sync_i32(&mut coin.disappear_counter);
+    ctx.sync_enum(&mut coin.coin_type);
+    ctx.sync_enum(&mut coin.coin_motion);
+    // C++ SyncEnum32(mAttachmentID)；Rust AttachmentID = i32
+    ctx.sync_i32(&mut coin.attachment_id);
+    ctx.sync_f32(&mut coin.collection_distance);
+    ctx.sync_enum(&mut coin.usable_seed_type);
+    sync_potted_plant_portable(ctx, &mut coin.potted_plant_spec);
+    ctx.sync_bool(&mut coin.needs_bouncy_arrow);
+    ctx.sync_bool(&mut coin.has_bouncy_arrow);
+    ctx.sync_bool(&mut coin.hit_ground);
+    ctx.sync_i32(&mut coin.times_dropped);
+}
+
+/// 同步割草机尾部字段（对应 C++ SyncLawnMowerTailPortable，SaveGame.cpp:972）
+fn sync_lawn_mower_tail_portable(ctx: &mut PortableSaveContext, mower: &mut LawnMower) {
+    ctx.sync_f32(&mut mower.pos_x);
+    ctx.sync_f32(&mut mower.pos_y);
+    ctx.sync_i32(&mut mower.render_order);
+    // C++ SyncInt32(mRow)：Rust 存于 base.row
+    ctx.sync_i32(&mut mower.base.row);
+    ctx.sync_i32(&mut mower.anim_ticks_per_frame);
+    ctx.sync_u32(&mut mower.mower_anim_id);
+    ctx.sync_i32(&mut mower.chomp_counter);
+    ctx.sync_i32(&mut mower.rolling_in_counter);
+    ctx.sync_i32(&mut mower.squished_counter);
+    ctx.sync_enum(&mut mower.mower_state);
+    ctx.sync_bool(&mut mower.dead);
+    ctx.sync_bool(&mut mower.visible);
+    ctx.sync_enum(&mut mower.mower_type);
+    ctx.sync_f32(&mut mower.altitude);
+    ctx.sync_enum(&mut mower.mower_height);
+    ctx.sync_i32(&mut mower.last_portal_x);
+}
+
+/// 同步实体数据数组（对应 C++ SyncDataArrayPortableTLV，SaveGame.cpp:1392）
+/// Rust 以 Vec 承载实体；写侧模拟 C++ DataArray 头部元数据与活跃 key，读侧按槽重建
+fn sync_data_array_tlv<T: Default, W, R>(
+    ctx: &mut PortableSaveContext,
+    items: &mut Vec<T>,
+    write_fn: W,
+    read_fn: R,
+) -> bool
+where
+    W: Fn(&mut Vec<u8>, &mut T),
+    R: Fn(u32, &[u8], &mut T),
+{
+    if ctx.reading {
+        // C++: SyncUInt32(mFreeListHead / mMaxUsedCount / mSize / mNextKey / mMaxSize)
+        let mut free_list_head = 0u32;
+        let mut max_used_count = 0u32;
+        let mut size = 0u32;
+        let mut next_key = 0u32;
+        let mut max_size = 0u32;
+        ctx.sync_u32(&mut free_list_head);
+        ctx.sync_u32(&mut max_used_count);
+        ctx.sync_u32(&mut size);
+        ctx.sync_u32(&mut next_key);
+        ctx.sync_u32(&mut max_size);
+        if ctx.failed {
+            return false;
+        }
+        items.clear();
+        items.reserve(max_used_count as usize);
+        for _ in 0..max_used_count {
+            let mut item_id = 0u32;
+            let mut item_size = 0u32;
+            ctx.sync_u32(&mut item_id);
+            ctx.sync_u32(&mut item_size);
+            if ctx.failed {
+                return false;
+            }
+            let mut item = T::default();
+            if item_size > 0 {
+                let mut item_data = vec![0u8; item_size as usize];
+                ctx.sync_bytes(&mut item_data);
+                if ctx.failed {
+                    return false;
+                }
+                let mut a_reader = TLVReader::new(&item_data);
+                while a_reader.is_ok() && a_reader.remaining() > 0 {
+                    let field_id = match a_reader.read_u32() {
+                        Some(v) => v,
+                        None => break,
+                    };
+                    let field_size = match a_reader.read_u32() {
+                        Some(v) => v,
+                        None => break,
+                    };
+                    let field_data = match a_reader.read_bytes(field_size as usize) {
+                        Some(d) => d,
+                        None => break,
+                    };
+                    read_fn(field_id, field_data, &mut item);
+                }
+            }
+            items.push(item);
+            let _ = item_id;
+        }
+    } else {
+        // C++: 头部元数据（Rust Vec 无自由列表，均以当前长度表示）
+        let mut free_list_head = 0u32;
+        let mut max_used_count = items.len() as u32;
+        let mut size = items.len() as u32;
+        let mut next_key = items.len() as u32;
+        let mut max_size = items.len() as u32;
+        ctx.sync_u32(&mut free_list_head);
+        ctx.sync_u32(&mut max_used_count);
+        ctx.sync_u32(&mut size);
+        ctx.sync_u32(&mut next_key);
+        ctx.sync_u32(&mut max_size);
+        if ctx.failed {
+            return false;
+        }
+        for (i, item) in items.iter_mut().enumerate() {
+            // C++ DataArrayGetIDAt(i)：活跃 key = 0xFFFF0000 | 索引
+            let mut item_id = DATA_ARRAY_KEY_MASK | (i as u32);
+            ctx.sync_u32(&mut item_id);
+            let mut item_data: Vec<u8> = Vec::new();
+            write_fn(&mut item_data, item);
+            let mut item_size = item_data.len() as u32;
+            ctx.sync_u32(&mut item_size);
+            if item_size > 0 {
+                ctx.sync_bytes_const(&item_data);
+            }
+        }
+    }
+    !ctx.failed
+}
+
+/// 同步硬币 chunk（对应 C++ SyncCoinsPortable，SaveGame.cpp:1856）
+fn sync_coins_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
+    sync_data_array_tlv(
+        ctx,
+        &mut board.coins,
+        |out, coin| {
+            write_game_object_field(out, 1, &mut coin.base);
+            append_field_with_sync(out, PORTABLE_FIELD_TAIL, |c| sync_coin_tail_portable(c, coin));
+        },
+        |field_id, data, coin| match field_id {
+            1 => {
+                read_game_object_field(data, &mut coin.base);
+            }
+            // C++: 2U/3U 为旧版字段（legacy），读侧直接应用
+            2 | 3 => {
+                let _ = data;
+            }
+            PORTABLE_FIELD_TAIL => {
+                apply_field_with_sync(data, |c| sync_coin_tail_portable(c, coin));
+            }
+            _ => {}
+        },
+    );
+}
+
+/// 同步割草机 chunk（对应 C++ SyncMowersPortable，SaveGame.cpp:1873）
+fn sync_mowers_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
+    sync_data_array_tlv(
+        ctx,
+        &mut board.lawn_mowers,
+        |out, mower| {
+            write_game_object_field(out, 1, &mut mower.base);
+            append_field_with_sync(out, PORTABLE_FIELD_TAIL, |c| sync_lawn_mower_tail_portable(c, mower));
+        },
+        |field_id, data, mower| match field_id {
+            1 => {
+                read_game_object_field(data, &mut mower.base);
+            }
+            PORTABLE_FIELD_TAIL => {
+                apply_field_with_sync(data, |c| sync_lawn_mower_tail_portable(c, mower));
+            }
+            _ => {}
+        },
+    );
 }
