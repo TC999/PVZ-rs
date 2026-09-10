@@ -8007,6 +8007,13 @@ pub const ZOMBIE_DEFS: &[ZombieDefinition] = &[
     ZombieDefinition { zombie_type: ZombieType::Gargantuar, reanimation_type: ReanimationType::Gargantuar, zombie_value: 10, starting_level: 48, first_allowed_wave: 15, pick_weight: 1500, zombie_name: "GARGANTUAR" },
     ZombieDefinition { zombie_type: ZombieType::Imp, reanimation_type: ReanimationType::Imp, zombie_value: 10, starting_level: 48, first_allowed_wave: 1, pick_weight: 0, zombie_name: "IMP" },
     ZombieDefinition { zombie_type: ZombieType::Boss, reanimation_type: ReanimationType::Boss, zombie_value: 10, starting_level: 50, first_allowed_wave: 1, pick_weight: 0, zombie_name: "BOSS" },
+    ZombieDefinition { zombie_type: ZombieType::PeaHead, reanimation_type: ReanimationType::Zombie, zombie_value: 1, starting_level: 99, first_allowed_wave: 1, pick_weight: 4000, zombie_name: "ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::WallnutHead, reanimation_type: ReanimationType::Zombie, zombie_value: 4, starting_level: 99, first_allowed_wave: 1, pick_weight: 3000, zombie_name: "ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::JalapenoHead, reanimation_type: ReanimationType::Zombie, zombie_value: 3, starting_level: 99, first_allowed_wave: 10, pick_weight: 1000, zombie_name: "ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::GatlingHead, reanimation_type: ReanimationType::Zombie, zombie_value: 3, starting_level: 99, first_allowed_wave: 10, pick_weight: 2000, zombie_name: "ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::SquashHead, reanimation_type: ReanimationType::Zombie, zombie_value: 3, starting_level: 99, first_allowed_wave: 10, pick_weight: 2000, zombie_name: "ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::TallnutHead, reanimation_type: ReanimationType::Zombie, zombie_value: 4, starting_level: 99, first_allowed_wave: 10, pick_weight: 2000, zombie_name: "ZOMBIE" },
+    ZombieDefinition { zombie_type: ZombieType::RedeEyeGargantuar, reanimation_type: ReanimationType::Gargantuar, zombie_value: 10, starting_level: 48, first_allowed_wave: 15, pick_weight: 6000, zombie_name: "REDEYED_GARGANTUAR" },
 ];
 
 /// 获取僵尸定义（对应 C++ GetZombieDefinition）
