@@ -114,6 +114,17 @@ impl WidgetManager {
     pub fn remove_widget(&mut self, widget: *mut Widget) {
         self.widget_list.retain(|w| *w != widget);
         self.disable_widget(widget);
+        // 对应 C++ WidgetManager::RemoveWidget（WidgetManager.cpp:98-103）：
+        // 移除的 widget 若是 base modal / over / focus 则清空对应状态
+        if self.base_modal_widget == Some(widget) {
+            self.base_modal_widget = None;
+        }
+        if self.over_widget == Some(widget) {
+            self.over_widget = None;
+        }
+        if self.last_down_widget == Some(widget) {
+            self.last_down_widget = None;
+        }
     }
 
     /// 禁用控件
@@ -296,8 +307,13 @@ impl WidgetManager {
         true
     }
 
-    /// 鼠标移动
+    /// 鼠标移动（对应 C++ WidgetManager::MouseMove，WidgetManager.cpp:665）
+    /// 按钮按下时移动转发给 MouseDrag（Rust 拖动链入口）
     pub fn mouse_move(&mut self, x: i32, y: i32) -> bool {
+        if self.m_down_buttons != 0 {
+            return self.mouse_drag(x, y);
+        }
+        self.mouse_in = true;
         self.last_mouse_x = self.mouse_x;
         self.last_mouse_y = self.mouse_y;
         self.mouse_x = x; self.mouse_y = y;
