@@ -11,7 +11,10 @@ use crate::framework::sexy_matrix::SexyMatrix3;
 use crate::lawn::board::Board;
 use crate::lawn::board::{MAX_GRID_SIZE_X, MAX_GRID_SIZE_Y, MAX_ZOMBIES_IN_WAVE, MAX_ZOMBIE_WAVES};
 use crate::lawn::coin::Coin;
+use crate::lawn::grid_item::{GridItem, NUM_MOTION_TRAIL_FRAMES};
 use crate::lawn::lawn_mower::LawnMower;
+use crate::lawn::plant::{Plant, MAX_MAGNET_ITEMS};
+use crate::lawn::projectile::Projectile;
 use crate::lawn::system::player_info::PottedPlant;
 use crate::lawn::game_enums::*;
 use crate::lawn::game_object::GameObject;
@@ -750,6 +753,9 @@ fn read_chunk_v4(chunk_type: u32, data: &[u8], board: &mut Board) -> bool {
         SaveChunkTypeV4::BoardBase => {}
         SaveChunkTypeV4::Coins => {}
         SaveChunkTypeV4::Mowers => {}
+        SaveChunkTypeV4::Projectiles => {}
+        SaveChunkTypeV4::GridItems => {}
+        SaveChunkTypeV4::Plants => {}
         _ => return true,
     }
     if data.len() < 4 {
@@ -787,6 +793,9 @@ fn read_chunk_v4(chunk_type: u32, data: &[u8], board: &mut Board) -> bool {
                 SaveChunkTypeV4::BoardBase => sync_board_base_portable(&mut a_context, board),
                 SaveChunkTypeV4::Coins => sync_coins_portable(&mut a_context, board),
                 SaveChunkTypeV4::Mowers => sync_mowers_portable(&mut a_context, board),
+                SaveChunkTypeV4::Projectiles => sync_projectiles_portable(&mut a_context, board),
+                SaveChunkTypeV4::GridItems => sync_grid_items_portable(&mut a_context, board),
+                SaveChunkTypeV4::Plants => sync_plants_portable(&mut a_context, board),
                 _ => {}
             }
             if a_context.failed {
@@ -1329,6 +1338,9 @@ fn write_chunk_v4(payload: &mut Vec<u8>, chunk_type: u32, board: &mut Board) -> 
         SaveChunkTypeV4::BoardBase => {}
         SaveChunkTypeV4::Coins => {}
         SaveChunkTypeV4::Mowers => {}
+        SaveChunkTypeV4::Projectiles => {}
+        SaveChunkTypeV4::GridItems => {}
+        SaveChunkTypeV4::Plants => {}
         _ => return true,
     }
 
@@ -1341,6 +1353,9 @@ fn write_chunk_v4(payload: &mut Vec<u8>, chunk_type: u32, board: &mut Board) -> 
             SaveChunkTypeV4::BoardBase => sync_board_base_portable(&mut field_ctx, board),
             SaveChunkTypeV4::Coins => sync_coins_portable(&mut field_ctx, board),
             SaveChunkTypeV4::Mowers => sync_mowers_portable(&mut field_ctx, board),
+            SaveChunkTypeV4::Projectiles => sync_projectiles_portable(&mut field_ctx, board),
+            SaveChunkTypeV4::GridItems => sync_grid_items_portable(&mut field_ctx, board),
+            SaveChunkTypeV4::Plants => sync_plants_portable(&mut field_ctx, board),
             _ => return true,
         }
         if field_ctx.failed {
@@ -1589,6 +1604,215 @@ fn sync_mowers_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
             }
             PORTABLE_FIELD_TAIL => {
                 apply_field_with_sync(data, |c| sync_lawn_mower_tail_portable(c, mower));
+            }
+            _ => {}
+        },
+    );
+}
+
+/// 同步运动轨迹帧（对应 C++ SyncMotionTrailFramePortable，SaveGame.cpp:637）
+fn sync_motion_trail_frame_portable(ctx: &mut PortableSaveContext, frame: &mut crate::lawn::grid_item::MotionTrailFrame) {
+    ctx.sync_f32(&mut frame.pos_x);
+    ctx.sync_f32(&mut frame.pos_y);
+    ctx.sync_f32(&mut frame.anim_time);
+}
+
+/// 同步网格物品尾部字段（对应 C++ SyncGridItemTailPortable，SaveGame.cpp:996）
+fn sync_grid_item_tail_portable(ctx: &mut PortableSaveContext, item: &mut GridItem) {
+    ctx.sync_enum(&mut item.grid_item_type);
+    ctx.sync_enum(&mut item.grid_item_state);
+    ctx.sync_i32(&mut item.grid_x);
+    ctx.sync_i32(&mut item.grid_y);
+    ctx.sync_i32(&mut item.counter);
+    ctx.sync_i32(&mut item.render_order);
+    ctx.sync_bool(&mut item.dead);
+    ctx.sync_f32(&mut item.pos_x);
+    ctx.sync_f32(&mut item.pos_y);
+    ctx.sync_f32(&mut item.goal_x);
+    ctx.sync_f32(&mut item.goal_y);
+    // C++ SyncEnumU32(mGridItemReanimID/mGridItemParticleID)；Rust ReanimationID/ParticleSystemID = u32
+    ctx.sync_u32(&mut item.grid_item_reanim_id);
+    ctx.sync_u32(&mut item.grid_item_particle_id);
+    ctx.sync_enum(&mut item.zombie_type);
+    ctx.sync_enum(&mut item.seed_type);
+    ctx.sync_enum(&mut item.scary_pot_type);
+    ctx.sync_bool(&mut item.highlighted);
+    ctx.sync_i32(&mut item.transparent_counter);
+    ctx.sync_i32(&mut item.sun_count);
+    for i in 0..NUM_MOTION_TRAIL_FRAMES {
+        sync_motion_trail_frame_portable(ctx, &mut item.motion_trail_frames[i]);
+    }
+    ctx.sync_i32(&mut item.motion_trail_count);
+}
+
+/// 同步网格物品 chunk（对应 C++ SyncGridItemsPortable，SaveGame.cpp:1879）
+/// 注意：GridItem 非 GameObject，无基类字段（C++ 仅写 PORTABLE_FIELD_TAIL 尾部）
+fn sync_grid_items_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
+    sync_data_array_tlv(
+        ctx,
+        &mut board.grid_items,
+        |out, item| {
+            append_field_with_sync(out, PORTABLE_FIELD_TAIL, |c| sync_grid_item_tail_portable(c, item));
+        },
+        |field_id, data, item| match field_id {
+            // C++: 1U 为旧版字段（legacy）
+            1 => {
+                let _ = data;
+            }
+            PORTABLE_FIELD_TAIL => {
+                apply_field_with_sync(data, |c| sync_grid_item_tail_portable(c, item));
+            }
+            _ => {}
+        },
+    );
+}
+
+/// 同步磁铁吸附物（对应 C++ SyncMagnetItemPortable，SaveGame.cpp:643）
+/// C++ 仅同步 4 个 f32（mItemType 不入档）
+fn sync_magnet_item_portable(ctx: &mut PortableSaveContext, item: &mut crate::lawn::plant::MagnetItem) {
+    ctx.sync_f32(&mut item.pos_x);
+    ctx.sync_f32(&mut item.pos_y);
+    ctx.sync_f32(&mut item.dest_offset_x);
+    ctx.sync_f32(&mut item.dest_offset_y);
+}
+
+/// 同步植物尾部字段（对应 C++ SyncPlantTailPortable，SaveGame.cpp:866）
+fn sync_plant_tail_portable(ctx: &mut PortableSaveContext, plant: &mut Plant) {
+    ctx.sync_enum(&mut plant.seed_type);
+    ctx.sync_i32(&mut plant.plant_col);
+    ctx.sync_i32(&mut plant.anim_counter);
+    ctx.sync_i32(&mut plant.frame);
+    ctx.sync_i32(&mut plant.frame_length);
+    ctx.sync_i32(&mut plant.num_frames);
+    ctx.sync_enum(&mut plant.state);
+    ctx.sync_i32(&mut plant.plant_health);
+    ctx.sync_i32(&mut plant.plant_max_health);
+    ctx.sync_i32(&mut plant.subclass);
+    ctx.sync_i32(&mut plant.disappear_countdown);
+    ctx.sync_i32(&mut plant.do_special_countdown);
+    ctx.sync_i32(&mut plant.state_countdown);
+    ctx.sync_i32(&mut plant.launch_counter);
+    ctx.sync_i32(&mut plant.launch_rate);
+    sync_rect_portable(ctx, &mut plant.plant_rect);
+    sync_rect_portable(ctx, &mut plant.plant_attack_rect);
+    ctx.sync_i32(&mut plant.target_x);
+    ctx.sync_i32(&mut plant.target_y);
+    ctx.sync_i32(&mut plant.start_row);
+    // C++ SyncEnumU32(mParticleID)；Rust ParticleSystemID = u32
+    ctx.sync_u32(&mut plant.particle_id);
+    ctx.sync_i32(&mut plant.shooting_counter);
+    ctx.sync_u32(&mut plant.body_reanim_id);
+    ctx.sync_u32(&mut plant.head_reanim_id);
+    // [TRANSLATION_NOTE]: C++ mHeadReanimID2/mHeadReanimID3 未翻译为 Plant 字段，占位保持格式
+    let mut tmp_reanim = 0u32;
+    ctx.sync_u32(&mut tmp_reanim);
+    ctx.sync_u32(&mut tmp_reanim);
+    ctx.sync_u32(&mut plant.blink_reanim_id);
+    ctx.sync_u32(&mut plant.light_reanim_id);
+    ctx.sync_u32(&mut plant.sleeping_reanim_id);
+    ctx.sync_i32(&mut plant.blink_countdown);
+    ctx.sync_i32(&mut plant.recently_eaten_countdown);
+    ctx.sync_i32(&mut plant.eaten_flash_countdown);
+    ctx.sync_i32(&mut plant.beghouled_flash_countdown);
+    ctx.sync_f32(&mut plant.shake_offset_x);
+    ctx.sync_f32(&mut plant.shake_offset_y);
+    for i in 0..MAX_MAGNET_ITEMS {
+        sync_magnet_item_portable(ctx, &mut plant.magnet_items[i]);
+    }
+    // C++ SyncEnumU32(mTargetZombieID)；Rust ZombieID = u32
+    ctx.sync_u32(&mut plant.target_zombie_id);
+    ctx.sync_i32(&mut plant.wake_up_counter);
+    ctx.sync_enum(&mut plant.on_bungee_state);
+    ctx.sync_enum(&mut plant.imitater_type);
+    ctx.sync_i32(&mut plant.potted_plant_index);
+    ctx.sync_bool(&mut plant.anim_ping);
+    ctx.sync_bool(&mut plant.dead);
+    ctx.sync_bool(&mut plant.squished);
+    ctx.sync_bool(&mut plant.is_asleep);
+    ctx.sync_bool(&mut plant.is_on_board);
+    ctx.sync_bool(&mut plant.highlighted);
+}
+
+/// 同步植物 chunk（对应 C++ SyncPlantsPortable，SaveGame.cpp:1812）
+fn sync_plants_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
+    sync_data_array_tlv(
+        ctx,
+        &mut board.plants,
+        |out, plant| {
+            write_game_object_field(out, 1, &mut plant.base);
+            append_field_with_sync(out, PORTABLE_FIELD_TAIL, |c| sync_plant_tail_portable(c, plant));
+        },
+        |field_id, data, plant| match field_id {
+            1 => {
+                read_game_object_field(data, &mut plant.base);
+            }
+            // C++: 2U-5U 为旧版字段（legacy）
+            2 | 3 | 4 | 5 => {
+                let _ = data;
+            }
+            PORTABLE_FIELD_TAIL => {
+                apply_field_with_sync(data, |c| sync_plant_tail_portable(c, plant));
+            }
+            _ => {}
+        },
+    );
+}
+
+/// 同步子弹尾部字段（对应 C++ SyncProjectileTailPortable，SaveGame.cpp:918）
+fn sync_projectile_tail_portable(ctx: &mut PortableSaveContext, projectile: &mut Projectile) {
+    ctx.sync_i32(&mut projectile.frame);
+    ctx.sync_i32(&mut projectile.num_frames);
+    ctx.sync_i32(&mut projectile.anim_counter);
+    ctx.sync_f32(&mut projectile.pos_x);
+    ctx.sync_f32(&mut projectile.pos_y);
+    ctx.sync_f32(&mut projectile.pos_z);
+    ctx.sync_f32(&mut projectile.vel_x);
+    ctx.sync_f32(&mut projectile.vel_y);
+    ctx.sync_f32(&mut projectile.vel_z);
+    ctx.sync_f32(&mut projectile.acc_z);
+    ctx.sync_f32(&mut projectile.shadow_y);
+    ctx.sync_bool(&mut projectile.dead);
+    ctx.sync_i32(&mut projectile.anim_ticks_per_frame);
+    ctx.sync_enum(&mut projectile.motion);
+    ctx.sync_enum(&mut projectile.projectile_type);
+    ctx.sync_i32(&mut projectile.projectile_age);
+    ctx.sync_i32(&mut projectile.click_backoff_counter);
+    ctx.sync_f32(&mut projectile.rotation);
+    ctx.sync_f32(&mut projectile.rotation_speed);
+    ctx.sync_bool(&mut projectile.on_high_ground);
+    // [TRANSLATION_NOTE]: C++ SyncInt32(mDamageRangeFlags)，Rust 为 u32，经 i32 中转
+    let mut damage_range_flags = projectile.damage_range_flags as i32;
+    ctx.sync_i32(&mut damage_range_flags);
+    projectile.damage_range_flags = damage_range_flags as u32;
+    ctx.sync_i32(&mut projectile.hit_torchwood_grid_x);
+    // C++ SyncEnum32(mAttachmentID)；Rust AttachmentID = i32
+    ctx.sync_i32(&mut projectile.attachment_id);
+    ctx.sync_f32(&mut projectile.cob_target_x);
+    ctx.sync_i32(&mut projectile.cob_target_row);
+    // C++ SyncEnumU32(mTargetZombieID)；Rust ZombieID = u32
+    ctx.sync_u32(&mut projectile.target_zombie_id);
+    ctx.sync_i32(&mut projectile.last_portal_x);
+}
+
+/// 同步子弹 chunk（对应 C++ SyncProjectilesPortable，SaveGame.cpp:1835）
+fn sync_projectiles_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
+    sync_data_array_tlv(
+        ctx,
+        &mut board.projectiles,
+        |out, projectile| {
+            write_game_object_field(out, 1, &mut projectile.base);
+            append_field_with_sync(out, PORTABLE_FIELD_TAIL, |c| sync_projectile_tail_portable(c, projectile));
+        },
+        |field_id, data, projectile| match field_id {
+            1 => {
+                read_game_object_field(data, &mut projectile.base);
+            }
+            // C++: 2U/3U 为旧版字段（legacy）
+            2 | 3 => {
+                let _ = data;
+            }
+            PORTABLE_FIELD_TAIL => {
+                apply_field_with_sync(data, |c| sync_projectile_tail_portable(c, projectile));
             }
             _ => {}
         },
