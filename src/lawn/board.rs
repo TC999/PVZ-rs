@@ -6,8 +6,9 @@
 
 use crate::framework::key_codes::KeyCode;
 use crate::lawn::game_enums::*;
+use crate::framework::graphics::graphics::DrawMode;
 use crate::todlib::tod_foley::FoleyType;
-use crate::lawn::lawn_app::LawnApp;
+use crate::lawn::lawn_app::{GameScenes, LawnApp};
 use crate::lawn::plant::Plant;
 use crate::lawn::zombie::{Zombie, get_zombie_definition, MAX_ZOMBIE_FOLLOWERS};
 use crate::lawn::projectile::Projectile;
@@ -62,7 +63,8 @@ pub struct HitResult {
 pub struct RenderItem {
     pub render_object_type: RenderObjectType,
     pub z_pos: i32,
-    pub object_index: usize,  // 对应实体列表中的索引
+    pub object_index: usize,  // 对应实体列表中的索引（Ice 项存 grid_y）
+    pub boss_part: Option<BossPart>,  // 对应 C++ union mBossPart（仅 RENDER_ITEM_BOSS_PART 使用）
 }
 
 /// 僵尸生成选择器（对应 C++ ZombiePicker）
@@ -233,6 +235,10 @@ pub struct Board {
     pub m_height: i32,
     pub m_board_result: BoardResult,
     pub m_advice: AdviceType,
+    /// 对应 C++ mHelpDisplayed[NUM_ADVICE_TYPES]（每个提示只显示一次）
+    pub m_help_displayed: [bool; NUM_ADVICE_TYPES as usize],
+    /// 对应 C++ mAdvice（MessageWidget*）提示消息控件
+    pub m_advice_widget: crate::lawn::widget::message_widget::MessageWidget,
 
     // 网格
     pub grid_plants: [[Option<PlantID>; MAX_GRID_SIZE_X]; MAX_GRID_SIZE_Y],
@@ -411,6 +417,32 @@ pub struct Board {
     pub m_cut_scene: Option<*mut crate::lawn::cutscene::CutScene>,
 }
 
+/// i32 → MessageStyle 安全映射（对应 C++ MessageStyle 枚举 0..18，非法值回落 Off）
+fn i32_to_message_style(style: i32) -> MessageStyle {
+    match style {
+        0 => MessageStyle::Off,
+        1 => MessageStyle::TutorialLevel1,
+        2 => MessageStyle::TutorialLevel1Stay,
+        3 => MessageStyle::TutorialLevel2,
+        4 => MessageStyle::TutorialLater,
+        5 => MessageStyle::TutorialLaterStay,
+        6 => MessageStyle::HintLong,
+        7 => MessageStyle::HintFast,
+        8 => MessageStyle::HintStay,
+        9 => MessageStyle::HintTallFast,
+        10 => MessageStyle::HintTallUnlockMessage,
+        11 => MessageStyle::HintTallLong,
+        12 => MessageStyle::BigMiddle,
+        13 => MessageStyle::BigMiddleFast,
+        14 => MessageStyle::HouseName,
+        15 => MessageStyle::HugeWave,
+        16 => MessageStyle::SlotMachine,
+        17 => MessageStyle::ZenGardenLong,
+        18 => MessageStyle::Achievement,
+        _ => MessageStyle::Off,
+    }
+}
+
 /// 从资源管理器按资源 ID 取图（对应 C++ Sexy::IMAGE_* 全局图片），找不到返回空指针
 pub(crate) fn get_overlay_image(app: &LawnApp, name: &str) -> *mut crate::framework::graphics::image::Image {
     let Some(rm_ptr) = app.base.resource_manager else {
@@ -444,6 +476,8 @@ impl Board {
             m_height: 600,
             m_board_result: BoardResult::None,
             m_advice: AdviceType::None,
+            m_help_displayed: [false; NUM_ADVICE_TYPES as usize],
+            m_advice_widget: crate::lawn::widget::message_widget::MessageWidget::new(None),
             grid_plants: [[None; MAX_GRID_SIZE_X]; MAX_GRID_SIZE_Y],
             grid_square_type: [[GridSquareType::Grass; MAX_GRID_SIZE_X]; MAX_GRID_SIZE_Y],
             grid_cel_look: [[0; MAX_GRID_SIZE_X]; MAX_GRID_SIZE_Y],
@@ -702,8 +736,10 @@ impl Board {
         self.m_update_count += 1;
         self.m_board_update_counter = self.m_board_update_counter.wrapping_add(1);
 
-        // [TRANSLATION_NOTE]: mCutScene->Update() 尚未接入；CutScene::update 已实现但 Board 未持有调用
-        // mCutScene->Update();
+        // 对应 C++ Board.cpp:5724 mCutScene->Update()
+        if let Some(cut_scene) = self.m_cut_scene {
+            unsafe { (*cut_scene).update(); }
+        }
         // UpdateMousePosition()：Rust 侧签名带坐标，由 WidgetManager 调用时传入；
         // 此处用 app->mWidgetManager->mLastMouseX/Y 驱动，与 C++ UpdateCursor 一致
         let cur_mouse_x;
@@ -720,9 +756,19 @@ impl Board {
         self.update_mouse_position(cur_mouse_x, cur_mouse_y);
 
         let app_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
-        // [TRANSLATION_NOTE]: ZenGardenUpdate / UpdateCrazyDave 未接入（ZenGarden/CutScene 子系统尚未挂到 Board::update）
-        // if app_mode == GameMode::ChallengeZenGarden { app.m_zen_garden.zen_garden_update(); }
-        // if is_scary_potter_dave_talking() { app.update_crazy_dave(); }
+        // 对应 C++ Board.cpp:5728-5732：禅园模式下推进 ZenGardenUpdate
+        if app_mode == GameMode::ChallengeZenGarden {
+            let zen_garden = self.app.and_then(|app| unsafe { (*app).zen_garden });
+            if let Some(zen_garden) = zen_garden {
+                unsafe { (*zen_garden).zen_garden_update(); }
+            }
+        }
+        // 对应 C++ Board.cpp:5734-5735：ScaryPotter 教学时 CrazyDave 每帧推进
+        if self.is_scary_potter_dave_talking() {
+            if let Some(app) = self.app {
+                unsafe { (*app).update_crazy_dave(); }
+            }
+        }
 
         if self.m_paused {
             // C++ Board.cpp:5738：暂停时仍推进挑战状态机（菜单/胜利演出），随后早退
@@ -732,11 +778,32 @@ impl Board {
             return;
         }
 
-        // 菜单/商店按钮更新（C++ 5744-5754）：Rust 侧按钮 Update 链尚未挂入 Board
-        // [TRANSLATION_NOTE]: mMenuButton->Update() / mStoreButton->Update() 未接入
+        // 对应 C++ Board.cpp:5744-5754：菜单/商店按钮更新
+        let a_disabled = !self.can_interact_with_board_buttons() || self.ignore_mouse_up;
+        if let Some(menu_button) = self.menu_button {
+            unsafe {
+                if !(*menu_button).btn_no_draw {
+                    (*menu_button).disabled = a_disabled;
+                }
+                (*menu_button).update();
+            }
+        }
+        if let Some(store_button) = self.store_button {
+            unsafe {
+                (*store_button).disabled = a_disabled;
+                (*store_button).update();
+            }
+        }
 
-        // [TRANSLATION_NOTE]: app.m_effect_system.update() 未接入（EffectSystem::update 已实现）
-        // [TRANSLATION_NOTE]: mAdvice->Update() 未接入
+        // 对应 C++ Board.cpp:5756-5757：粒子效果系统与提示控件每帧更新
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(effect_system) = (*app).effect_system.as_mut() {
+                    effect_system.update();
+                }
+            }
+        }
+        self.m_advice_widget.update();
         self.update_tutorial();
 
         if self.m_cob_cannon_cursor_delay_counter > 0 {
@@ -1645,6 +1712,192 @@ Spawn: {}
         }
     }
 
+    /// 绘制铲子按钮（对应 C++ Board::DrawShovel，Board.cpp:6884）
+    pub fn draw_shovel(&self, g: &mut Graphics) {
+        let app_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+        if app_mode != GameMode::ChallengeZenGarden && app_mode != GameMode::ChallengeTreeOfWisdom {
+            if self.m_show_shovel {
+                let a_shovel_rect = self.get_shovel_button_rect();
+                // C++: g->DrawImage(Sexy::IMAGE_SHOVELBANK, aShovelRect.mX, aShovelRect.mY)
+                if let Some(app) = self.app {
+                    let app_ref = unsafe { &*app };
+                    let a_shovel_bank = crate::lawn::board::get_overlay_image(app_ref, "IMAGE_SHOVELBANK");
+                    if !a_shovel_bank.is_null() {
+                        g.draw_image_xy(unsafe { &*a_shovel_bank }, a_shovel_rect.x, a_shovel_rect.y);
+                    }
+                }
+
+                if self.cursor_object.cursor_type != CursorType::Shovel {
+                    // C++: mChallenge->mChallengeState == (ChallengeState)15（魔法数字，C++ 原样保留）
+                    if self.challenge.as_ref().map_or(false, |c| c.challenge_state as i32 == 15) {
+                        g.set_colorize_images(true);
+                        g.set_color(&crate::todlib::tod_common::get_flashing_color(self.m_main_counter, 75));
+                    }
+                    // C++: g->DrawImage(Sexy::IMAGE_SHOVEL, aShovelRect.mX - 7, aShovelRect.mY - 3)
+                    if let Some(app) = self.app {
+                        let app_ref = unsafe { &*app };
+                        let a_shovel = crate::lawn::board::get_overlay_image(app_ref, "IMAGE_SHOVEL");
+                        if !a_shovel.is_null() {
+                            g.draw_image_xy(unsafe { &*a_shovel }, a_shovel_rect.x - 7, a_shovel_rect.y - 3);
+                        }
+                    }
+                    g.set_colorize_images(false);
+                }
+            }
+        }
+
+        // C++: 禅园/智慧树模式下绘制禅境工具按钮
+        if app_mode == GameMode::ChallengeZenGarden || app_mode == GameMode::ChallengeTreeOfWisdom {
+            self.draw_zen_buttons(g);
+        }
+    }
+
+    /// 绘制种子槽（对应 C++ SeedBank::Draw，SeedPacket.cpp:929）
+    fn draw_seed_bank(&self, g: &mut Graphics) {
+        let app = match self.app {
+            Some(a) => a,
+            None => return,
+        };
+        let app_ref = unsafe { &*app };
+
+        // C++: mCutScene->IsBeforePreloading()
+        if self.m_cut_scene.map_or(false, |c| unsafe { (*c).m_preloaded == false }) {
+            return;
+        }
+
+        // C++: 非 SCENE_PLAYING 场景平移 g->mTransX -= mBoard->mX
+        let a_translate = app_ref.game_scene != GameScenes::Playing;
+        if a_translate {
+            g.translate(-self.m_x, -self.m_y);
+        }
+
+        if app_ref.is_slot_machine_level() {
+            let a_sun_bank = crate::lawn::board::get_overlay_image(app_ref, "IMAGE_SUNBANK");
+            if !a_sun_bank.is_null() {
+                g.draw_image_xy(unsafe { &*a_sun_bank }, 0, 0);
+            }
+        } else if self.has_conveyor_belt_seed_bank() {
+            let a_backdrop = crate::lawn::board::get_overlay_image(app_ref, "IMAGE_CONVEYORBELT_BACKDROP");
+            if !a_backdrop.is_null() {
+                g.draw_image_xy(unsafe { &*a_backdrop }, 83, 0);
+            }
+            let a_conveyor = crate::lawn::board::get_overlay_image(app_ref, "IMAGE_CONVEYORBELT");
+            if !a_conveyor.is_null() {
+                g.draw_image_cel(unsafe { &*a_conveyor }, 90, 63, self.m_conveyor_belt_counter / 4 % 6);
+            }
+            g.set_clip_rect_xywh(90, 0, 501, BOARD_HEIGHT);
+        } else {
+            let a_seed_bank = crate::lawn::board::get_overlay_image(app_ref, "IMAGE_SEEDBANK");
+            if !a_seed_bank.is_null() {
+                let a_seed_bank_ref = unsafe { &*a_seed_bank };
+                let a_extra_width = self.get_seed_bank_extra_width();
+                let the_src_rect = Rect::new(
+                    a_seed_bank_ref.width - a_extra_width - 12,
+                    0,
+                    a_extra_width + 12,
+                    a_seed_bank_ref.height,
+                );
+                g.draw_image_xy(a_seed_bank_ref, 0, 0);
+                g.draw_image_src(a_seed_bank_ref, a_seed_bank_ref.width - 12, 0, &the_src_rect);
+            }
+        }
+
+        // C++: 逐包绘制（BeginDraw/Draw/EndDraw）
+        for packet in &self.seed_bank {
+            if packet.seed_type != SeedType::None {
+                packet.draw(g);
+            }
+        }
+
+        g.clear_clip_rect();
+        if app_ref.is_slot_machine_level() {
+            if let Some(a_slot_overlay) = Some(crate::lawn::board::get_overlay_image(app_ref, "IMAGE_SLOTMACHINE_OVERLAY")) {
+                // C++: mY > -IMAGE_SEEDBANK->GetHeight() 时绘制（mY 为 SeedBank 控件 Y，Rust 以 Board.m_y 近似）
+                let a_seed_bank = crate::lawn::board::get_overlay_image(app_ref, "IMAGE_SEEDBANK");
+                let a_height = if a_seed_bank.is_null() { 0 } else { unsafe { (*a_seed_bank).get_height() } };
+                if self.m_y > -a_height {
+                    g.draw_image_xy(unsafe { &*a_slot_overlay }, 189, -2);
+                }
+            }
+        }
+
+        if !self.has_conveyor_belt_seed_bank() {
+            // C++: PvzpDrawString(g, aMoneyLabel, 34, 78, FONT_CONTINUUMBOLD14, aMoneyColor, DS_ALIGN_CENTER)
+            let a_money_label = format!("{}", self.m_sun_money.max(0));
+            let mut a_money_color = Color::new(0, 0, 0, 255);
+            if self.m_out_of_money_counter > 0 && self.m_out_of_money_counter % 20 < 10 {
+                a_money_color = Color::new(255, 0, 0, 255);
+            }
+            if !self.draw_ui_text(g, &a_money_label, 34, 78, &a_money_color) {
+                g.set_color(&a_money_color);
+                g.draw_string(&a_money_label, 34, 78);
+            }
+        }
+
+        if a_translate {
+            g.translate(self.m_x, self.m_y);
+        }
+    }
+
+    /// 绘制底部 UI（对应 C++ Board::DrawUIBottom，Board.cpp:7173）
+    pub fn draw_ui_bottom(&self, g: &mut Graphics) {
+        let app = match self.app {
+            Some(a) => a,
+            None => return,
+        };
+        let app_ref = unsafe { &*app };
+
+        // C++: Zombiquarium 波浪动画（ADDITIVE 模式）
+        if self.m_background_type == BackgroundType::Zombiquarium {
+            let a_wave_time = (((self.m_main_counter as i32 / 8) % 22) - 11).abs();
+            g.set_draw_mode(DrawMode::Additive as i32);
+            let a_wave_side = crate::lawn::board::get_overlay_image(app_ref, "IMAGE_WAVESIDE");
+            let a_wave_center = crate::lawn::board::get_overlay_image(app_ref, "IMAGE_WAVECENTER");
+            if !a_wave_side.is_null() {
+                g.draw_image_cel(unsafe { &*a_wave_side }, 0, 40, a_wave_time);
+            }
+            if !a_wave_center.is_null() {
+                g.draw_image_cel(unsafe { &*a_wave_center }, 160, 40, a_wave_time);
+                g.draw_image_cel(unsafe { &*a_wave_center }, 320, 40, a_wave_time);
+                g.draw_image_cel(unsafe { &*a_wave_center }, 480, 40, a_wave_time);
+            }
+            // C++: PvzpDrawImageCelScaled(g, IMAGE_WAVESIDE, 800, 40, celCol, celRow, -1.0f, 1.0f)
+            // [TRANSLATION_NOTE]: Rust 无 PvzpDrawImageCelScaled 入口，右端波浪镜像绘制暂略
+            g.set_draw_mode(DrawMode::Normal as i32);
+        }
+
+        // C++: 温室/水族馆前景覆盖（ADDITIVE 模式）
+        if self.m_background_type == BackgroundType::Greenhouse
+            || self.m_background_type == BackgroundType::Zombiquarium
+        {
+            g.set_draw_mode(DrawMode::Additive as i32);
+            let a_overlay = crate::lawn::board::get_overlay_image(app_ref, "IMAGE_BACKGROUND_GREENHOUSE_OVERLAY");
+            if !a_overlay.is_null() {
+                let a_overlay_ref = unsafe { &*a_overlay };
+                let a_dest_rect = Rect::new(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
+                let a_src_rect = Rect::new(0, 0, a_overlay_ref.width, a_overlay_ref.height);
+                g.draw_image_stretch(a_overlay_ref, &a_dest_rect, &a_src_rect);
+            }
+            g.set_draw_mode(DrawMode::Normal as i32);
+        }
+
+        // C++: 非 SCENE_ZOMBIES_WON 场景绘制种子槽
+        if app_ref.game_scene != GameScenes::ZombiesWon {
+            // C++: mSeedBank->BeginDraw/Draw/EndDraw（Rust 以 draw_seed_bank 等价，控件坐标近似 0,0）
+            self.draw_seed_bank(g);
+
+            // C++: mAdvice->mMessageStyle == MESSAGE_STYLE_SLOT_MACHINE 时绘制
+            if self.m_advice_widget.message_style == MessageStyle::SlotMachine {
+                self.m_advice_widget.draw(g);
+            }
+        }
+
+        self.draw_shovel(g);
+        if !self.stage_has_fog() {
+            self.draw_top_right_ui(g);
+        }
+    }
+
     /// 绘制右上角 UI（对应 C++ Board::DrawTopRightUI，Board.cpp:7137）
     pub fn draw_top_right_ui(&self, g: &mut Graphics) {
         let app = match self.app {
@@ -2502,121 +2755,425 @@ Spawn: {}
     }
 
     /// 主绘制函数
-    pub fn draw(&self, g: &mut Graphics) {
-        // 绘制背景
-        self.draw_background(g);
+    /// 绘制全部游戏对象（对应 C++ Board::DrawGameObjects，Board.cpp:6098）
+    /// 构建渲染列表 → 按 zPos 排序 → 分发绘制（对应 C++ RenderItem 渲染层排序系统）
+    pub fn draw_game_objects(&self, g: &mut Graphics) {
+        let mut a_render_list: Vec<RenderItem> = Vec::with_capacity(MAX_RENDER_ITEMS);
 
-        // 绘制格子物品
-        for item in &self.grid_items {
-            item.draw(g);
-        }
-        // C++: Board 通过独立渲染项调用 DrawGridItemOverlay（臭鼬+巧克力提示）
-        for item in &self.grid_items {
-            item.draw_grid_item_overlay(g);
-        }
+        let app = self.app;
+        let app_mode = app.map_or(GameMode::Adventure, |a| unsafe { (*a).game_mode });
+        let game_scene = app.map_or(GameScenes::Playing, |a| unsafe { (*a).game_scene });
 
-        // 绘制植物
-        for plant in &self.plants {
-            plant.draw(g);
-        }
+        // 植物（C++ 6105-6128）
+        for (idx, plant) in self.plants.iter().enumerate() {
+            if plant.dead {
+                continue;
+            }
+            if plant.on_bungee_state == PlantOnBungeeState::NotOnBungee {
+                // AddGameObjectRenderItemPlant
+                a_render_list.push(RenderItem {
+                    render_object_type: RenderObjectType::Plant,
+                    z_pos: plant.base.render_order,
+                    object_index: idx,
+                    boss_part: None,
+                });
 
-        // C++ DrawGameObjects RENDER_ITEM_MAGNET_ITEMS：磁铁吸附物（非顶层）在植物之后绘制
-        for plant in &self.plants {
-            if !plant.draw_magnet_items_on_top() {
-                plant.draw_magnet_items(g);
+                // C++: 禅园盆植物 → RENDER_ITEM_PLANT_OVERLAY
+                if app_mode == GameMode::ChallengeZenGarden && plant.potted_plant_index != -1 {
+                    a_render_list.push(RenderItem {
+                        render_object_type: RenderObjectType::PlantOverlay,
+                        z_pos: make_render_order(RENDER_LAYER_PARTICLE, 0, self.m_y),
+                        object_index: idx,
+                        boss_part: None,
+                    });
+                }
+
+                // C++: 磁铁吸附物（顶层）→ RENDER_ITEM_PLANT_MAGNET_ITEMS
+                if (plant.seed_type == SeedType::Magnetshroom || plant.seed_type == SeedType::GoldMagnet)
+                    && plant.draw_magnet_items_on_top()
+                {
+                    a_render_list.push(RenderItem {
+                        render_object_type: RenderObjectType::PlantMagnetItems,
+                        z_pos: make_render_order(RENDER_LAYER_TOP, 0, -1),
+                        object_index: idx,
+                        boss_part: None,
+                    });
+                }
             }
         }
 
-        // 绘制僵尸（C++ RENDER_ITEM_ZOMBIE_SHADOW 在僵尸之前）
-        for zombie in &self.zombies {
-            if zombie.has_shadow() {
-                zombie.draw_shadow(g);
+        // 硬币（C++ 6130）
+        for (idx, coin) in self.coins.iter().enumerate() {
+            if coin.dead {
+                continue;
+            }
+            a_render_list.push(RenderItem {
+                render_object_type: RenderObjectType::Coin,
+                z_pos: coin.base.render_order,
+                object_index: idx,
+                boss_part: None,
+            });
+        }
+
+        // 僵尸（C++ 6138-6178）
+        for (idx, zombie) in self.zombies.iter().enumerate() {
+            if zombie.dead {
+                continue;
+            }
+            if zombie.zombie_type == ZombieType::Boss {
+                // C++ AddBossRenderItem
+                let a_boss_items = self.add_boss_render_item(zombie);
+                for (a_boss_part, a_z_pos) in a_boss_items {
+                    a_render_list.push(RenderItem {
+                        render_object_type: RenderObjectType::BossPart,
+                        z_pos: a_z_pos,
+                        object_index: idx,
+                        boss_part: Some(a_boss_part),
+                    });
+                }
+            } else {
+                a_render_list.push(RenderItem {
+                    render_object_type: RenderObjectType::Zombie,
+                    z_pos: zombie.base.render_order,
+                    object_index: idx,
+                    boss_part: None,
+                });
+
+                if zombie.has_shadow() {
+                    a_render_list.push(RenderItem {
+                        render_object_type: RenderObjectType::ZombieShadow,
+                        z_pos: make_render_order(RENDER_LAYER_GROUND, zombie.base.row, 3),
+                        object_index: idx,
+                        boss_part: None,
+                    });
+                }
+
+                if zombie.zombie_type == ZombieType::Bungee {
+                    a_render_list.push(RenderItem {
+                        render_object_type: RenderObjectType::ZombieBungeeTarget,
+                        z_pos: make_render_order(RENDER_LAYER_PROJECTILE, zombie.base.row, 1),
+                        object_index: idx,
+                        boss_part: None,
+                    });
+                }
             }
         }
-        for zombie in &self.zombies {
-            zombie.draw(g);
+
+        // 子弹（C++ 6182-6189）：本体 + 阴影
+        for (idx, projectile) in self.projectiles.iter().enumerate() {
+            if projectile.dead {
+                continue;
+            }
+            a_render_list.push(RenderItem {
+                render_object_type: RenderObjectType::Projectile,
+                z_pos: projectile.base.render_order,
+                object_index: idx,
+                boss_part: None,
+            });
+            a_render_list.push(RenderItem {
+                render_object_type: RenderObjectType::ProjectileShadow,
+                z_pos: make_render_order(RENDER_LAYER_GROUND, projectile.base.row, 3),
+                object_index: idx,
+                boss_part: None,
+            });
         }
-        // C++ RENDER_ITEM_ZOMBIE_BUNGEE_TARGET 在僵尸之后
-        for zombie in &self.zombies {
-            if zombie.zombie_type == ZombieType::Bungee {
-                zombie.draw_bungee_target(g);
+
+        // 割草机（C++ 6190-6196）
+        for (idx, mower) in self.lawn_mowers.iter().enumerate() {
+            if mower.dead {
+                continue;
+            }
+            a_render_list.push(RenderItem {
+                render_object_type: RenderObjectType::Mower,
+                z_pos: mower.render_order,
+                object_index: idx,
+                boss_part: None,
+            });
+        }
+
+        // 粒子系统（C++ 6198-6205）：跳过死亡与附着粒子
+        if let Some(a) = app {
+            unsafe {
+                if let Some(es) = (*a).effect_system.as_ref() {
+                    for (ps_idx, ps) in es.particle_systems.iter().enumerate() {
+                        if ps.dead || ps.is_attachment {
+                            continue;
+                        }
+                        a_render_list.push(RenderItem {
+                            render_object_type: RenderObjectType::Particle,
+                            z_pos: ps.render_order,
+                            object_index: ps_idx,
+                            boss_part: None,
+                        });
+                    }
+                }
             }
         }
 
-        // C++ DrawGameObjects RENDER_ITEM_MAGNET_ITEMS_ON_TOP：顶层磁铁吸附物在僵尸之后绘制
-        for plant in &self.plants {
-            if plant.draw_magnet_items_on_top() {
-                plant.draw_magnet_items(g);
+        // 重动画（C++ 6207-6216）：跳过死亡与附着动画
+        if let Some(a) = app {
+            unsafe {
+                if let Some(es) = (*a).effect_system.as_ref() {
+                    for (reanim_idx, reanim) in es.reanimations.iter().enumerate() {
+                        if reanim.m_dead || reanim.m_is_attachment {
+                            continue;
+                        }
+                        a_render_list.push(RenderItem {
+                            render_object_type: RenderObjectType::Reanimation,
+                            z_pos: reanim.m_render_order,
+                            object_index: reanim_idx,
+                            boss_part: None,
+                        });
+                    }
+                }
             }
         }
 
-        // 绘制子弹
-        for projectile in &self.projectiles {
-            projectile.draw(g);
+        // 网格物品（C++ 6217-6228）
+        for (idx, grid_item) in self.grid_items.iter().enumerate() {
+            if grid_item.dead {
+                continue;
+            }
+            a_render_list.push(RenderItem {
+                render_object_type: RenderObjectType::GridItem,
+                z_pos: grid_item.render_order,
+                object_index: idx,
+                boss_part: None,
+            });
+
+            // C++: 禅园臭鼬 → RENDER_ITEM_GRID_ITEM_OVERLAY
+            if app_mode == GameMode::ChallengeZenGarden && grid_item.grid_item_type == GridItemType::PlantStinky {
+                a_render_list.push(RenderItem {
+                    render_object_type: RenderObjectType::GridItemOverlay,
+                    z_pos: make_render_order(RENDER_LAYER_PARTICLE, 0, (grid_item.pos_y - 30.0) as i32),
+                    object_index: idx,
+                    boss_part: None,
+                });
+            }
         }
 
-        // 绘制硬币
-        for coin in &self.coins {
-            coin.draw(g);
-        }
-
-        // 绘制割草机
-        for mower in &self.lawn_mowers {
-            mower.draw(g);
-        }
-
-        // C++: 冰面覆盖在实体之上（每行若有冰）
+        // 冰面（C++ 6229-6238）
         for row in 0..MAX_GRID_SIZE_Y as i32 {
-            if self.m_ice_timer[row as usize] > 0 {
-                self.draw_ice(g, row);
+            if self.m_ice_timer[row as usize] != 0 {
+                a_render_list.push(RenderItem {
+                    render_object_type: RenderObjectType::Ice,
+                    z_pos: self.get_ice_z_pos(row),
+                    object_index: row as usize,
+                    boss_part: None,
+                });
             }
         }
 
-        // C++ DrawGameObjects RENDER_ITEM_PARTICLE：粒子系统绘制
-        if let Some(app) = self.app {
-            unsafe {
-                if let Some(es) = (*app).effect_system.as_ref() {
-                    for ps in es.particle_systems.iter() {
-                        if ps.dead {
-                            continue;
-                        }
-                        ps.draw(g);
-                    }
-                }
-            }
+        // UI 渲染项（C++ 6239-6303）
+        let mut a_z_pos;
+        if self.m_time_stop_counter > 0 {
+            a_z_pos = make_render_order(RENDER_LAYER_ABOVE_UI, 0, 0);
+        } else if game_scene == GameScenes::Playing || game_scene == GameScenes::ZombiesWon {
+            a_z_pos = make_render_order(RENDER_LAYER_UI_BOTTOM, 0, 1);
+        } else if self.m_cut_scene.map_or(false, |c| unsafe {
+            (*c).is_after_seed_chooser() || (*c).is_in_shovel_tutorial()
+        }) || self.m_advice == AdviceType::ClickToContinue
+        {
+            a_z_pos = make_render_order(RENDER_LAYER_UI_BOTTOM, 0, 1);
+        } else {
+            a_z_pos = make_render_order(RENDER_LAYER_ABOVE_UI, 0, 0);
         }
-        // C++ DrawGameObjects RENDER_ITEM_REANIMATION：重动画绘制
-        if let Some(app) = self.app {
-            unsafe {
-                if let Some(es) = (*app).effect_system.as_ref() {
-                    for reanim in es.reanimations.iter() {
-                        if reanim.m_dead {
-                            continue;
-                        }
-                        reanim.draw(g);
-                    }
-                }
-            }
+        a_render_list.push(RenderItem { render_object_type: RenderObjectType::Backdrop, z_pos: make_render_order(RENDER_LAYER_UI_BOTTOM, 0, 0), object_index: 0, boss_part: None });
+        a_render_list.push(RenderItem { render_object_type: RenderObjectType::BottomUi, z_pos: a_z_pos, object_index: 0, boss_part: None });
+        a_render_list.push(RenderItem { render_object_type: RenderObjectType::CoinBank, z_pos: make_render_order(RENDER_LAYER_COIN_BANK, 0, 0), object_index: 0, boss_part: None });
+        a_render_list.push(RenderItem { render_object_type: RenderObjectType::TopUi, z_pos: make_render_order(RENDER_LAYER_UI_TOP, 0, 0), object_index: 0, boss_part: None });
+        a_render_list.push(RenderItem { render_object_type: RenderObjectType::ScreenFade, z_pos: make_render_order(RENDER_LAYER_SCREEN_FADE, 0, 0), object_index: 0, boss_part: None });
+
+        if game_scene == GameScenes::ZombiesWon {
+            let a_door_z_pos = if self.stage_has_roof() {
+                make_render_order(RENDER_LAYER_GRAVE_STONE, 0, 4)
+            } else {
+                make_render_order(RENDER_LAYER_GRAVE_STONE, 3, 2)
+            };
+            a_render_list.push(RenderItem { render_object_type: RenderObjectType::DoorMask, z_pos: a_door_z_pos, object_index: 0, boss_part: None });
         }
-
-        // C++: 关卡名（DrawLevel）在 UI 底部区域
-        self.draw_level(g);
-
-        // C++ DrawGameObjects RENDER_ITEM_DOOR_MASK：僵尸获胜场景绘制房门顶部（DrawHouseDoorTop）
-        if self.app.map_or(false, |app| unsafe { (*app).game_scene == crate::lawn::lawn_app::GameScenes::ZombiesWon }) {
-            self.draw_house_door_top(g);
-        }
-
-        // 绘制 UI（阳光计数、种子槽等）
-        self.draw_ui(g);
-
-        // C++: 迷雾（DrawFog）覆盖在 UI 之下、场景之上
         if self.stage_has_fog() {
-            self.draw_fog(g);
+            a_render_list.push(RenderItem { render_object_type: RenderObjectType::Fog, z_pos: make_render_order(RENDER_LAYER_FOG, 0, 0), object_index: 0, boss_part: None });
         }
+        if app.map_or(false, |a| unsafe { (*a).is_stormy_night_level() })
+            || app_mode == GameMode::ChallengeRainingSeeds
+        {
+            a_render_list.push(RenderItem { render_object_type: RenderObjectType::Storm, z_pos: make_render_order(RENDER_LAYER_FOG, 0, 3), object_index: 0, boss_part: None });
+        }
+        // [TRANSLATION_NOTE]: C++ AddGameObjectRenderItemCursorPreview 需要 Board::mCursorPreview 字段（Rust 未翻译），暂不添加 CURSOR_PREVIEW 渲染项
 
-        // 淡出效果（覆盖在最上层）
-        self.draw_fade_out(g);
+        // C++ 6313: 按 zPos 排序
+        a_render_list.sort_by(render_item_sort_func);
+
+        // C++ 6317-6520: 分发绘制
+        for a_render_item in &a_render_list {
+            match a_render_item.render_object_type {
+                RenderObjectType::Plant => {
+                    if let Some(plant) = self.plants.get(a_render_item.object_index) {
+                        if plant.base.begin_draw(g) {
+                            plant.draw(g);
+                            plant.base.end_draw(g);
+                        }
+                    }
+                }
+                RenderObjectType::PlantOverlay => {
+                    if let Some(plant) = self.plants.get(a_render_item.object_index) {
+                        if plant.base.begin_draw(g) {
+                            if let Some(a) = app {
+                                unsafe {
+                                    if let Some(zg) = (*a).zen_garden {
+                                        (*zg).draw_plant_overlay(g, plant);
+                                    }
+                                }
+                            }
+                            plant.base.end_draw(g);
+                        }
+                    }
+                }
+                RenderObjectType::PlantMagnetItems => {
+                    if let Some(plant) = self.plants.get(a_render_item.object_index) {
+                        if plant.base.begin_draw(g) {
+                            plant.draw_magnet_items(g);
+                            plant.base.end_draw(g);
+                        }
+                    }
+                }
+                RenderObjectType::Mower => {
+                    if let Some(mower) = self.lawn_mowers.get(a_render_item.object_index) {
+                        mower.draw(g);
+                    }
+                }
+                RenderObjectType::Zombie => {
+                    if let Some(zombie) = self.zombies.get(a_render_item.object_index) {
+                        if zombie.base.begin_draw(g) {
+                            zombie.draw(g);
+                            zombie.base.end_draw(g);
+                        }
+                    }
+                }
+                RenderObjectType::ZombieShadow => {
+                    if let Some(zombie) = self.zombies.get(a_render_item.object_index) {
+                        if zombie.base.begin_draw(g) {
+                            zombie.draw_shadow(g);
+                            zombie.base.end_draw(g);
+                        }
+                    }
+                }
+                RenderObjectType::ZombieBungeeTarget => {
+                    if let Some(zombie) = self.zombies.get(a_render_item.object_index) {
+                        zombie.draw_bungee_target(g);
+                    }
+                }
+                RenderObjectType::BossPart => {
+                    // C++ RENDER_ITEM_BOSS_PART: GetBossZombie + BeginDraw + DrawBossPart + EndDraw
+                    if let Some(a_boss_zombie) = self.get_boss_zombie() {
+                        if a_boss_zombie.base.begin_draw(g) {
+                            if let Some(a_boss_part) = a_render_item.boss_part {
+                                a_boss_zombie.draw_boss_part(g, a_boss_part);
+                            }
+                            a_boss_zombie.base.end_draw(g);
+                        }
+                    }
+                }
+                RenderObjectType::Coin => {
+                    if let Some(coin) = self.coins.get(a_render_item.object_index) {
+                        if coin.base.begin_draw(g) {
+                            coin.draw(g);
+                            coin.base.end_draw(g);
+                        }
+                    }
+                }
+                RenderObjectType::Projectile => {
+                    if let Some(projectile) = self.projectiles.get(a_render_item.object_index) {
+                        if projectile.base.begin_draw(g) {
+                            projectile.draw(g);
+                            projectile.base.end_draw(g);
+                        }
+                    }
+                }
+                RenderObjectType::ProjectileShadow => {
+                    if let Some(projectile) = self.projectiles.get(a_render_item.object_index) {
+                        if projectile.base.begin_draw(g) {
+                            projectile.draw_shadow(g);
+                            projectile.base.end_draw(g);
+                        }
+                    }
+                }
+                RenderObjectType::GridItem => {
+                    if let Some(grid_item) = self.grid_items.get(a_render_item.object_index) {
+                        grid_item.draw(g);
+                    }
+                }
+                RenderObjectType::GridItemOverlay => {
+                    if let Some(grid_item) = self.grid_items.get(a_render_item.object_index) {
+                        grid_item.draw_grid_item_overlay(g);
+                    }
+                }
+                RenderObjectType::Ice => {
+                    self.draw_ice(g, a_render_item.object_index as i32);
+                }
+                RenderObjectType::Particle => {
+                    if let Some(a) = app {
+                        unsafe {
+                            if let Some(es) = (*a).effect_system.as_ref() {
+                                if let Some(ps) = es.particle_systems.get(a_render_item.object_index) {
+                                    ps.draw(g);
+                                }
+                            }
+                        }
+                    }
+                }
+                RenderObjectType::Reanimation => {
+                    if let Some(a) = app {
+                        unsafe {
+                            if let Some(es) = (*a).effect_system.as_ref() {
+                                if let Some(reanim) = es.reanimations.get(a_render_item.object_index) {
+                                    reanim.draw(g);
+                                }
+                            }
+                        }
+                    }
+                }
+                RenderObjectType::CoinBank => {
+                    self.draw_ui_coin_bank(g);
+                }
+                RenderObjectType::Backdrop => {
+                    self.draw_background(g);
+                }
+                RenderObjectType::DoorMask => {
+                    self.draw_house_door_top(g);
+                }
+                RenderObjectType::BottomUi => {
+                    self.draw_ui_bottom(g);
+                }
+                RenderObjectType::TopUi => {
+                    self.draw_ui_top(g);
+                }
+                RenderObjectType::Fog => {
+                    self.draw_fog(g);
+                }
+                RenderObjectType::Storm => {
+                    if let Some(ch) = self.challenge.as_ref() {
+                        ch.draw_weather(g);
+                    }
+                }
+                RenderObjectType::ScreenFade => {
+                    self.draw_fade_out(g);
+                }
+                _ => {
+                    // C++: PVZP_ASSERT(false)
+                }
+            }
+        }
+    }
+
+    /// 主绘制入口（对应 C++ Board::Draw，Board.cpp:7463）
+    pub fn draw(&self, g: &mut Graphics) {
+        // [TRANSLATION_NOTE]: C++ 开头检查 DIALOG_STORE / DIALOG_ALMANAC 对话框；Rust 无对话框栈，跳过
+        g.set_linear_blend(true);
+        // [TRANSLATION_NOTE]: C++ 中 mDrawCount++ 及 FPS 统计（mMinFPS/mIntervalDrawTime 等）依赖 SDL_GetTicks，
+        // Rust 侧 draw 为 &self 且 m_draw_count 无消费方，暂不推进
+        self.draw_game_objects(g);
     }
 
     /// 绘制背景
@@ -2672,64 +3229,6 @@ Spawn: {}
     }
 
     /// 绘制 UI（对应 C++ Board::DrawUIBottom + DrawShovel + 阳光计数）
-    fn draw_ui(&self, g: &mut Graphics) {
-        // 种子槽背景
-        if let Some(img_ptr) = crate::todlib::reanim_loader::load_image_by_path("images/seedbank.png") {
-            let img = unsafe { &*img_ptr };
-            if img.width > 0 {
-                g.draw_image_f_xy(img, 0.0, 490.0);
-            }
-        }
-
-        // 每个种子槽（x 按 get_seed_packet_position_x：80 + index*70）
-        for packet in &self.seed_bank {
-            if packet.seed_type == SeedType::None {
-                continue;
-            }
-            let x = self.get_seed_packet_position_x(packet.packet_index);
-            let y = packet.y;
-            // 包背景
-            g.set_color(&Color::new(48, 74, 38, 255));
-            g.fill_rect_xywh(x, y, packet.width, packet.height);
-            // 成本数字（位图字体，失败回退 draw_string）
-            let cost = self.get_current_plant_cost(packet.seed_type, packet.imitater_type);
-            let cost_text = format!("{}", cost);
-            if !self.draw_ui_text(g, &cost_text, x + 8, y + packet.height - 8, &Color::new(255, 255, 255, 255)) {
-                g.draw_string(&cost_text, x + 8, y + packet.height - 8);
-            }
-        }
-
-        // 阳光计数（sunbank 图 + 数字）
-        if let Some(img_ptr) = crate::todlib::reanim_loader::load_image_by_path("images/sunbank.png") {
-            let img = unsafe { &*img_ptr };
-            if img.width > 0 {
-                g.draw_image_f_xy(img, 0.0, 500.0);
-            }
-        }
-        let sun_text = format!("{}", self.m_sun_money);
-        if !self.draw_ui_text(g, &sun_text, 34, 540, &Color::new(0, 0, 0, 255)) {
-            g.draw_string(&sun_text, 34, 540);
-        }
-
-        // 铲子按钮（对应 C++ DrawShovel）
-        if self.m_show_shovel {
-            // C++ GetShovelButtonRect: x = GetSeedBankExtraWidth() + 456, y = 0
-            let bx = self.get_seed_bank_extra_width() + 456;
-            if let Some(img_ptr) = crate::todlib::reanim_loader::load_image_by_path("images/shovelbank.png") {
-                let img = unsafe { &*img_ptr };
-                if img.width > 0 {
-                    g.draw_image_f_xy(img, bx as f32, 0.0);
-                }
-            }
-            if let Some(img_ptr) = crate::todlib::reanim_loader::load_image_by_path("images/shovel.png") {
-                let img = unsafe { &*img_ptr };
-                if img.width > 0 {
-                    g.draw_image_f_xy(img, (bx - 7) as f32, -3.0);
-                }
-            }
-        }
-    }
-
     /// 用位图字体绘制 UI 文本（成功返回 true；字体未加载返回 false）
     fn draw_ui_text(&self, g: &mut Graphics, text: &str, x: i32, y: i32, color: &Color) -> bool {
         if let Some(font_ptr) = crate::framework::graphics::bitmap_font::load_bitmap_font("continuumbold14") {
@@ -3904,10 +4403,26 @@ Spawn: {}
 
     // ========== UI 交互 ==========
 
-    /// 清除提示信息（对应 C++ ClearAdvice）
-    pub fn clear_advice(&mut self, _help_index: AdviceType) {
-        // TODO: 实现清除消息控件上的提示文字
-        self.m_advice = AdviceType::None;
+    /// 清除提示信息（对应 C++ ClearAdvice，Board.cpp:1984）
+    pub fn clear_advice(&mut self, help_index: AdviceType) {
+        if help_index == AdviceType::None || help_index == self.m_advice {
+            self.m_advice_widget.clear_label();
+            self.m_advice = AdviceType::None;
+        }
+    }
+
+    /// 统计产阳光植物数量（对应 C++ Board::CountSunFlowers，Board.cpp:2278）
+    pub fn count_sun_flowers(&self) -> i32 {
+        let mut a_count = 0;
+        for plant in &self.plants {
+            if plant.dead {
+                continue;
+            }
+            if plant.makes_sun() {
+                a_count += 1;
+            }
+        }
+        a_count
     }
 
     /// 是否可与界面按钮交互（对应 C++ CanInteractWithBoardButtons L4680）
@@ -4357,19 +4872,38 @@ Spawn: {}
 
     // ========== 显示/提示 ==========
 
-    /// 立即清除提示（对应 C++ ClearAdviceImmediately）
+    /// 立即清除提示（对应 C++ ClearAdviceImmediately，Board.cpp:1975）
     pub fn clear_advice_immediately(&mut self) {
-        self.m_advice = AdviceType::None;
+        self.clear_advice(AdviceType::None);
+        self.m_advice_widget.duration = 0;
     }
 
-    /// 显示提示（对应 C++ DisplayAdvice）
-    pub fn display_advice(&mut self, _advice: &str, _style: i32, help_index: AdviceType) {
+    /// 显示提示（对应 C++ DisplayAdvice，Board.cpp:1947）
+    pub fn display_advice(&mut self, advice: &str, style: i32, help_index: AdviceType) {
+        if help_index != AdviceType::None {
+            let help_idx = help_index as i32 as usize;
+            if help_idx >= NUM_ADVICE_TYPES as usize {
+                return;
+            }
+            if self.m_help_displayed[help_idx] {
+                return;
+            }
+            self.m_help_displayed[help_idx] = true;
+        }
+        // C++: mAdvice->SetLabel(theAdvice, theMessageStyle)
+        self.m_advice_widget.set_label(advice, i32_to_message_style(style));
         self.m_advice = help_index;
     }
 
-    /// 再次显示提示（对应 C++ DisplayAdviceAgain）
-    pub fn display_advice_again(&mut self, _advice: &str, _style: i32, help_index: AdviceType) {
-        self.m_advice = help_index;
+    /// 再次显示提示（对应 C++ DisplayAdviceAgain，Board.cpp:1961）
+    pub fn display_advice_again(&mut self, advice: &str, style: i32, help_index: AdviceType) {
+        if help_index != AdviceType::None {
+            let help_idx = help_index as i32 as usize;
+            if help_idx < NUM_ADVICE_TYPES as usize {
+                self.m_help_displayed[help_idx] = false;
+            }
+        }
+        self.display_advice(advice, style, help_index);
     }
 
     /// 显示教程箭头（对应 C++ TutorialArrowShow）
@@ -7529,7 +8063,21 @@ Spawn: {}
 
     /// 获取铁锹按钮矩形（对应 C++ GetShovelButtonRect 简化版）
     pub fn get_shovel_button_rect(&self) -> Rect {
-        Rect::new(0, 0, 0, 0)
+        // 对应 C++ Board::GetShovelButtonRect（Board.cpp:1307）
+        let mut a_rect = Rect::new(self.get_seed_bank_extra_width() + 456, 0, 0, 0);
+        if let Some(app) = self.app {
+            let app_ref = unsafe { &*app };
+            let a_shovel_bank = crate::lawn::board::get_overlay_image(app_ref, "IMAGE_SHOVELBANK");
+            if !a_shovel_bank.is_null() {
+                let a_shovel_bank_ref = unsafe { &*a_shovel_bank };
+                a_rect.width = a_shovel_bank_ref.width;
+                a_rect.height = a_shovel_bank_ref.height;
+            }
+            if app_ref.is_slot_machine_level() || app_ref.is_squirrel_level() {
+                a_rect.x = 600;
+            }
+        }
+        a_rect
     }
 
     /// 获取禅境工具按钮矩形（对应 C++ GetZenButtonRect）
