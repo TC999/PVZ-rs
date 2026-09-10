@@ -2266,10 +2266,10 @@ impl LawnApp {
     pub fn read_from_registry(&self, _key: &str, _default: &str) -> String { _default.to_string() }
     /// 写入当前用户配置（对应 C++ WriteCurrentUserConfig）
     pub fn write_current_user_config(&mut self) -> bool {
+        // 对应 C++ LawnApp::WriteCurrentUserConfig：mPlayerInfo->SaveDetails() 持久化用户档案
+        // （Rust 侧 PlayerInfo::save_details 已实现：序列化并写入 userdata/user{id}.dat）
         if let Some(player_info) = &self.player_info {
-            // [TRANSLATION_NOTE]: C++ 中 mPlayerInfo->SaveDetails()；
-            // Rust 侧 PlayerInfo 持久化未实现
-            let _ = player_info;
+            player_info.save_details();
         }
         true
     }
