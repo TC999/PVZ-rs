@@ -40,11 +40,21 @@ impl ReanimatorCache {
     }
 
     pub fn reanimator_cache_initialize(&mut self) {
-        // TODO: 从 ReanimationLawn.cpp 翻译
+        // 对应 C++ ReanimatorCacheInitialize（ReanimationLawn.cpp:340）：mApp = gSexyAppBase + 清零三个图像数组
+        self.app = crate::lawn::lawn_app::LawnApp::instance().map(|app| app as *mut _);
+        self.plant_images = [None; 77];
+        self.lawn_mowers = [None; 4];
+        self.zombie_images = [None; 37];
     }
 
     pub fn reanimator_cache_dispose(&mut self) {
-        // TODO: 从 ReanimationLawn.cpp 翻译
+        // [TRANSLATION_NOTE]: C++ 中 delete 各图像并置 nullptr（图像由缓存独占）且
+        // while 循环 RemoveHead 释放变体列表节点；Rust 图像对象由 resource_manager
+        // 统一管理，此处仅清引用（对应置空语义），列表以新空列表替换（无已加节点）
+        self.plant_images = [None; 77];
+        self.image_variation_list = TodList::new();
+        self.lawn_mowers = [None; 4];
+        self.zombie_images = [None; 37];
     }
 
     pub fn update_reanimation_for_variation(&self, reanim: &mut Reanimation, draw_variation: DrawVariation) {

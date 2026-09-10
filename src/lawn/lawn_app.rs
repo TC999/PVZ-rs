@@ -2569,8 +2569,8 @@ impl LawnApp {
         // PvzpFoleyInitialize(gLawnFoleyParamArray, ...) — [TRANSLATION_NOTE]: Rust 无 gLawnFoleyParamArray 表，传空
         crate::todlib::tod_foley::foley_initialize(&[]);
 
-        // TrailLoadDefinitions(gLawnTrailArray, ...) — [TRANSLATION_NOTE]: Rust trail_load_definitions 为 TODO 空体
-        crate::todlib::trail::trail_load_definitions(&mut []);
+        // TrailLoadDefinitions(gLawnTrailArray, LENGTH(gLawnTrailArray)) — Rust G_LAWN_TRAIL_ARRAY 同 1 项（TRAIL_ICE）
+        crate::todlib::trail::trail_load_definitions(unsafe { &mut crate::todlib::trail::G_LAWN_TRAIL_ARRAY });
 
         // PvzpParticleLoadDefinitions(gLawnParticleArray, ...) — [TRANSLATION_NOTE]: Rust 无 gLawnParticleArray 表，传空
         crate::todlib::tod_particle::tod_particle_load_definitions(&[]);

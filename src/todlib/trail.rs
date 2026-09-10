@@ -381,27 +381,66 @@ pub static mut G_TRAIL_PARAM_ARRAY_SIZE: i32 = 0;
 pub static mut G_TRAIL_PARAM_ARRAY: *mut TrailParams = std::ptr::null_mut();
 
 /// 草坪轨迹参数数组
-pub static G_LAWN_TRAIL_ARRAY: [TrailParams; 1] = [TrailParams::new(TRAIL_ICE, "particles/IceTrail.trail")];
+pub static mut G_LAWN_TRAIL_ARRAY: [TrailParams; 1] = [TrailParams::new(TRAIL_ICE, "particles/IceTrail.trail")];
 
 // ======== 自由函数 ========
 
-/// 加载单条轨迹定义
+/// 加载单条轨迹定义（对应 C++ TrailLoadADef，Trail.cpp:45）
 pub fn trail_load_a_def(
-    _trail_def: &mut TrailDefinition,
+    trail_def: &mut TrailDefinition,
     _trail_file_name: &str,
 ) -> bool {
-    // TODO: 使用 Definition 模块加载 XML
+    // [TRANSLATION_NOTE]: C++ 的 DefinitionLoadXML（XML 解析）在 Rust 端暂未实现，
+    // 定义由后续轮次的解析器填充；此处完成 C++ 的 FloatTrackSetDefault 默认值阶段。
+    trail_def.m_width_over_length.set_default(1.0);
+    trail_def.m_width_over_time.set_default(1.0);
+    trail_def.m_trail_duration.set_default(100.0);
+    trail_def.m_alpha_over_length.set_default(1.0);
+    trail_def.m_alpha_over_time.set_default(1.0);
     true
 }
 
-/// 批量加载轨迹定义
-pub fn trail_load_definitions(_params: &mut [TrailParams]) {
-    // TODO: 实现全局数组的加载逻辑
+/// 批量加载轨迹定义（对应 C++ TrailLoadDefinitions，Trail.cpp:56）
+pub fn trail_load_definitions(params: &mut [TrailParams]) {
+    unsafe {
+        // C++: PVZP_ASSERT(!gTrailParamArray && !gTrailDefArray)
+        if !G_TRAIL_PARAM_ARRAY.is_null() || !G_TRAIL_DEF_ARRAY.is_null() {
+            return;
+        }
+        G_TRAIL_PARAM_ARRAY_SIZE = params.len() as i32;
+        G_TRAIL_PARAM_ARRAY = params.as_mut_ptr();
+        G_TRAIL_DEF_COUNT = params.len() as i32;
+        let mut a_def_array: Vec<TrailDefinition> = Vec::with_capacity(params.len());
+        for _ in 0..params.len() {
+            a_def_array.push(TrailDefinition::new());
+        }
+        for (i, a_param) in params.iter().enumerate() {
+            // C++: PVZP_ASSERT(aTrailParams->mTrailType == static_cast<TrailType>(i))
+            debug_assert_eq!(a_param.m_trail_type as i32, i as i32);
+            if !trail_load_a_def(&mut a_def_array[i], a_param.m_trail_file_name) {
+                // C++: PvzpErrorMessageBox——Rust 以 eprintln 近似
+                eprintln!("Failed to load trail '{}'", a_param.m_trail_file_name);
+            }
+        }
+        G_TRAIL_DEF_ARRAY = a_def_array.as_mut_ptr();
+        // 防析构：所有权移交全局指针，由 trail_free_definitions 重建回收
+        std::mem::forget(a_def_array);
+    }
 }
 
-/// 释放轨迹定义
+/// 释放轨迹定义（对应 C++ TrailFreeDefinitions，Trail.cpp:70）
 pub fn trail_free_definitions() {
-    // TODO: 释放全局轨迹定义数组
+    unsafe {
+        // [TRANSLATION_NOTE]: C++ 中 DefinitionFreeMap 释放 XML map；Rust 无 XML 解析，仅回收数组
+        if !G_TRAIL_DEF_ARRAY.is_null() {
+            let count = G_TRAIL_DEF_COUNT as usize;
+            let _ = Vec::from_raw_parts(G_TRAIL_DEF_ARRAY, count, count);
+        }
+        G_TRAIL_DEF_ARRAY = std::ptr::null_mut();
+        G_TRAIL_DEF_COUNT = 0;
+        G_TRAIL_PARAM_ARRAY = std::ptr::null_mut();
+        G_TRAIL_PARAM_ARRAY_SIZE = 0;
+    }
 }
 
 // ======== 内部辅助函数 ========
