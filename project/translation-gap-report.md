@@ -67,8 +67,14 @@ C++ 有完整实现，Rust 对应函数全为空体（现已翻译完毕）：
 
 ### 2.2 Board 运行链剩余未接入点
 
-- `board.rs:842-845`：PoolEffect 计数与泳池闪光粒子整段被注释（C++ `Board::Update` 中 `mPoolEffect->mPoolCounter++` + 闪光粒子逻辑未接入）。
-- `board.rs:829-831`：`m_coin_bank_fade_count` 递减缺少 C++ 的"`DIALOG_PURCHASE_PACKET_SLOT` 未打开才递减"过滤条件（Rust `LawnApp` 无对话框管理，自注暂不过滤）。
+- ✅ `board.rs:842-845`：PoolEffect 计数（第一段）已接入——commit 见下方 Board::Update 段；
+  C++ `if (StageHasPool() && !mIceTrapCounter && mApp->mGameScene != SCENE_ZOMBIES_WON
+  && !mCutScene->IsSurvivalRepick()) mApp->mPoolEffect->mPoolCounter++;` 已 1:1 翻译。
+  **第二段闪光粒子（BACKGROUND_3_POOL + mPoolSparklyParticleID == PARTICLESYSTEMID_NULL
+  → AddPvzpParticle(450, 295, ..., PARTICLE_POOL_SPARKLY) + ParticleGetID）保留 TODO**，
+  依赖 `LawnApp::AddPvzpParticle` / `ParticleGetID` / `Board.m_pool_sparkly_particle_id`
+  等基础设施，属 plan_step_10 附着层 stub 范围。
+- `board.rs:829-831`：`m_coin_bank_fade_count` 递减缺少 C++ 的"`DIALOG_PURCHASE_PACKET_SLOT` 未打开才递减"过滤条件（Rust `LawnApp` 无对话框管理，自注暂不过滤）；待 plan_step_11 接入 `LawnApp::ButtonDepress` 与对话框管理后统一处理。
 
 ### 2.3 渲染/附着层 stub（`TRANSLATION_NOTE` 自认）
 

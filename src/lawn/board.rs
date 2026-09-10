@@ -838,11 +838,35 @@ impl Board {
             return;
         }
 
-        self.m_effect_counter = self.m_effect_counter.wrapping_add(1);
-        // [TRANSLATION_NOTE]: PoolEffect 计数与泳池闪光粒子未接入
-        // if stage_has_pool() && !m_ice_trap_counter && game_scene != SCENE_ZOMBIES_WON && !cut_scene.is_surival_repick() {
-        //     app.m_pool_effect.m_pool_counter += 1;
+                self.m_effect_counter = self.m_effect_counter.wrapping_add(1);
+        // C++ Board.cpp:5796-5801：mEffectCounter++ 之后按阶段/场景/过场条件推进 PoolEffect 计数器
+        // ```cpp
+        // if (StageHasPool() && !mIceTrapCounter && mApp->mGameScene != GameScenes::SCENE_ZOMBIES_WON
+        //     && !mCutScene->IsSurvivalRepick())
+        // {
+        //     mApp->mPoolEffect->mPoolCounter++;
         // }
+        // ```
+        // [TRANSLATION_NOTE]: 第二段闪光粒子（BACKGROUND_3_POOL + mPoolSparklyParticleID == PARTICLESYSTEMID_NULL
+        // → AddPvzpParticle(450, 295, ..., PARTICLE_POOL_SPARKLY) + ParticleGetID）依赖
+        // LawnApp::AddPvzpParticle / ParticleGetID / Board.m_pool_sparkly_particle_id 等基础设施，
+        // 属 plan_step_10 附着层 stub 范围，此处保留 TODO。
+        if let Some(app) = self.app {
+            unsafe {
+                let app_ref = &mut *app;
+                // C++: mCutScene->IsSurvivalRepick()（mCutScene 非空时调用）
+                let cut_scene_ok = self.m_cut_scene.map_or(true, |cs| unsafe { !(*cs).is_survival_repick() });
+                if self.stage_has_pool()
+                    && self.m_ice_trap_counter == 0
+                    && app_ref.game_scene != GameScenes::ZombiesWon
+                    && cut_scene_ok
+                {
+                    if let Some(ef) = app_ref.pool_effect.as_mut() {
+                        ef.pool_counter = ef.pool_counter.wrapping_add(1);
+                    }
+                }
+            }
+        }
 
         self.update_grid_items();
         self.update_fwoosh();
