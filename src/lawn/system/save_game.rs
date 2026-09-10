@@ -16,6 +16,7 @@ use crate::lawn::lawn_mower::LawnMower;
 use crate::lawn::plant::{Plant, MAX_MAGNET_ITEMS};
 use crate::lawn::projectile::Projectile;
 use crate::lawn::system::player_info::PottedPlant;
+use crate::lawn::zombie::{Zombie, MAX_ZOMBIE_FOLLOWERS};
 use crate::lawn::game_enums::*;
 use crate::lawn::game_object::GameObject;
 use crate::todlib::tod_common::TodSmoothArray;
@@ -756,6 +757,7 @@ fn read_chunk_v4(chunk_type: u32, data: &[u8], board: &mut Board) -> bool {
         SaveChunkTypeV4::Projectiles => {}
         SaveChunkTypeV4::GridItems => {}
         SaveChunkTypeV4::Plants => {}
+        SaveChunkTypeV4::Zombies => {}
         _ => return true,
     }
     if data.len() < 4 {
@@ -796,6 +798,7 @@ fn read_chunk_v4(chunk_type: u32, data: &[u8], board: &mut Board) -> bool {
                 SaveChunkTypeV4::Projectiles => sync_projectiles_portable(&mut a_context, board),
                 SaveChunkTypeV4::GridItems => sync_grid_items_portable(&mut a_context, board),
                 SaveChunkTypeV4::Plants => sync_plants_portable(&mut a_context, board),
+                SaveChunkTypeV4::Zombies => sync_zombies_portable(&mut a_context, board),
                 _ => {}
             }
             if a_context.failed {
@@ -1341,6 +1344,7 @@ fn write_chunk_v4(payload: &mut Vec<u8>, chunk_type: u32, board: &mut Board) -> 
         SaveChunkTypeV4::Projectiles => {}
         SaveChunkTypeV4::GridItems => {}
         SaveChunkTypeV4::Plants => {}
+        SaveChunkTypeV4::Zombies => {}
         _ => return true,
     }
 
@@ -1356,6 +1360,7 @@ fn write_chunk_v4(payload: &mut Vec<u8>, chunk_type: u32, board: &mut Board) -> 
             SaveChunkTypeV4::Projectiles => sync_projectiles_portable(&mut field_ctx, board),
             SaveChunkTypeV4::GridItems => sync_grid_items_portable(&mut field_ctx, board),
             SaveChunkTypeV4::Plants => sync_plants_portable(&mut field_ctx, board),
+            SaveChunkTypeV4::Zombies => sync_zombies_portable(&mut field_ctx, board),
             _ => return true,
         }
         if field_ctx.failed {
@@ -1752,6 +1757,115 @@ fn sync_plants_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
             }
             PORTABLE_FIELD_TAIL => {
                 apply_field_with_sync(data, |c| sync_plant_tail_portable(c, plant));
+            }
+            _ => {}
+        },
+    );
+}
+
+/// 同步僵尸尾部字段（对应 C++ SyncZombieTailPortable，SaveGame.cpp:786）
+fn sync_zombie_tail_portable(ctx: &mut PortableSaveContext, zombie: &mut Zombie) {
+    ctx.sync_enum(&mut zombie.zombie_type);
+    ctx.sync_enum(&mut zombie.zombie_phase);
+    ctx.sync_f32(&mut zombie.pos_x);
+    ctx.sync_f32(&mut zombie.pos_y);
+    ctx.sync_f32(&mut zombie.vel_x);
+    ctx.sync_i32(&mut zombie.anim_counter);
+    ctx.sync_i32(&mut zombie.groan_counter);
+    ctx.sync_i32(&mut zombie.anim_ticks_per_frame);
+    ctx.sync_i32(&mut zombie.anim_frames);
+    ctx.sync_i32(&mut zombie.frame);
+    ctx.sync_i32(&mut zombie.prev_frame);
+    ctx.sync_bool(&mut zombie.variant);
+    ctx.sync_bool(&mut zombie.is_eating);
+    ctx.sync_i32(&mut zombie.just_got_shot_counter);
+    ctx.sync_i32(&mut zombie.shield_just_got_shot_counter);
+    ctx.sync_i32(&mut zombie.shield_recoil_counter);
+    ctx.sync_i32(&mut zombie.zombie_age);
+    ctx.sync_enum(&mut zombie.zombie_height);
+    ctx.sync_i32(&mut zombie.phase_counter);
+    ctx.sync_i32(&mut zombie.from_wave);
+    ctx.sync_bool(&mut zombie.dropped_loot);
+    ctx.sync_i32(&mut zombie.zombie_fade);
+    ctx.sync_bool(&mut zombie.flat_tires);
+    ctx.sync_i32(&mut zombie.use_ladder_col);
+    ctx.sync_i32(&mut zombie.target_col);
+    ctx.sync_f32(&mut zombie.altitude);
+    ctx.sync_bool(&mut zombie.hit_umbrella);
+    sync_rect_portable(ctx, &mut zombie.zombie_rect);
+    sync_rect_portable(ctx, &mut zombie.zombie_attack_rect);
+    ctx.sync_i32(&mut zombie.chilled_counter);
+    ctx.sync_i32(&mut zombie.buttered_counter);
+    ctx.sync_i32(&mut zombie.ice_trap_counter);
+    ctx.sync_bool(&mut zombie.mind_controlled);
+    ctx.sync_bool(&mut zombie.blowing_away);
+    ctx.sync_bool(&mut zombie.has_head);
+    ctx.sync_bool(&mut zombie.has_arm);
+    ctx.sync_bool(&mut zombie.has_object);
+    ctx.sync_bool(&mut zombie.in_pool);
+    ctx.sync_bool(&mut zombie.on_high_ground);
+    ctx.sync_bool(&mut zombie.yucky_face);
+    ctx.sync_i32(&mut zombie.yucky_face_counter);
+    ctx.sync_enum(&mut zombie.helm_type);
+    ctx.sync_i32(&mut zombie.body_health);
+    ctx.sync_i32(&mut zombie.body_max_health);
+    ctx.sync_i32(&mut zombie.helm_health);
+    ctx.sync_i32(&mut zombie.helm_max_health);
+    ctx.sync_enum(&mut zombie.shield_type);
+    ctx.sync_i32(&mut zombie.shield_health);
+    ctx.sync_i32(&mut zombie.shield_max_health);
+    ctx.sync_i32(&mut zombie.flying_health);
+    ctx.sync_i32(&mut zombie.flying_max_health);
+    ctx.sync_bool(&mut zombie.dead);
+    // C++ SyncEnumU32(mRelatedZombieID)；Rust ZombieID = u32
+    ctx.sync_u32(&mut zombie.related_zombie_id);
+    // C++ SyncEnumU32Array(mFollowerZombieID, MAX_ZOMBIE_FOLLOWERS)
+    sync_u32_array(ctx, &mut zombie.follower_zombie_ids);
+    ctx.sync_bool(&mut zombie.playing_song);
+    ctx.sync_i32(&mut zombie.particle_offset_x);
+    ctx.sync_i32(&mut zombie.particle_offset_y);
+    // C++ SyncEnum32(mAttachmentID)；Rust AttachmentID = i32
+    ctx.sync_i32(&mut zombie.attachment_id);
+    ctx.sync_i32(&mut zombie.summon_counter);
+    ctx.sync_u32(&mut zombie.body_reanim_id);
+    ctx.sync_f32(&mut zombie.scale_zombie);
+    ctx.sync_f32(&mut zombie.vel_z);
+    ctx.sync_f32(&mut zombie.original_anim_rate);
+    // C++ SyncEnumU32(mTargetPlantID)；Rust PlantID = u32
+    ctx.sync_u32(&mut zombie.target_plant_id);
+    ctx.sync_i32(&mut zombie.boss_mode);
+    ctx.sync_i32(&mut zombie.target_row);
+    ctx.sync_i32(&mut zombie.boss_bungee_counter);
+    ctx.sync_i32(&mut zombie.boss_stomp_counter);
+    ctx.sync_i32(&mut zombie.boss_head_counter);
+    ctx.sync_u32(&mut zombie.boss_fire_ball_reanim_id);
+    ctx.sync_u32(&mut zombie.special_head_reanim_id);
+    ctx.sync_i32(&mut zombie.fireball_row);
+    ctx.sync_bool(&mut zombie.is_fire_ball);
+    ctx.sync_u32(&mut zombie.mowered_reanim_id);
+    ctx.sync_i32(&mut zombie.last_portal_x);
+    ctx.sync_u32(&mut zombie.zombatar_head_reanim_id);
+}
+
+/// 同步僵尸 chunk（对应 C++ SyncZombiesPortable，SaveGame.cpp:1792）
+fn sync_zombies_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
+    sync_data_array_tlv(
+        ctx,
+        &mut board.zombies,
+        |out, zombie| {
+            write_game_object_field(out, 1, &mut zombie.base);
+            append_field_with_sync(out, PORTABLE_FIELD_TAIL, |c| sync_zombie_tail_portable(c, zombie));
+        },
+        |field_id, data, zombie| match field_id {
+            1 => {
+                read_game_object_field(data, &mut zombie.base);
+            }
+            // C++: 2U 为旧版字段（legacy）
+            2 => {
+                let _ = data;
+            }
+            PORTABLE_FIELD_TAIL => {
+                apply_field_with_sync(data, |c| sync_zombie_tail_portable(c, zombie));
             }
             _ => {}
         },
