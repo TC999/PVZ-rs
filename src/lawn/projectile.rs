@@ -6,6 +6,20 @@ use crate::lawn::game_enums::*;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::rect::Rect;
 use crate::framework::common::{Rand, RandRange, RandFloat};
+use crate::framework::sexy_matrix::SexyMatrix3;
+
+/// 缩放旋转矩阵（对应 C++ PvzpLib/PvzpCommon.cpp PvzpScaleRotateTransformMatrix，同 zombie.rs 副本）
+fn pvzp_scale_rotate_transform_matrix(m: &mut SexyMatrix3, x: f32, y: f32, rad: f32, the_scale_x: f32, the_scale_y: f32) {
+    m.m[0][0] = rad.cos() * the_scale_x;
+    m.m[1][0] = -rad.sin() * the_scale_x;
+    m.m[2][0] = 0.0;
+    m.m[0][1] = rad.sin() * the_scale_y;
+    m.m[1][1] = rad.cos() * the_scale_y;
+    m.m[2][1] = 0.0;
+    m.m[0][2] = x;
+    m.m[1][2] = y;
+    m.m[2][2] = 1.0;
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
@@ -17,6 +31,8 @@ pub enum ProjectileMotion {
     Star,
     /// 对应 C++ MOTION_BACKWARDS（ZombiePea 向左直飞）
     Backwards,
+    /// 对应 C++ MOTION_BEE_BACKWARDS（蜜蜂向后飞，绘制时需镜像）
+    BeeBackwards,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -657,14 +673,123 @@ impl Projectile {
         self.die();
     }
 
-    /// 绘制子弹（对应 C++ Projectile::Draw 简化版）
-    pub fn draw(&self, _g: &mut Graphics) {
-        // [TRANSLATION_NOTE]: 图片资源引用在 Rust 中暂未实现，简化选择逻辑
-        // C++ 中根据 mProjectileType 选择不同图片 (IMAGE_PROJECTILEPEA 等)
-        // 并处理缩放、旋转、镜像和 Attachment 渲染
-        let _projectile_def = self.get_projectile_def();
-        let _mirror = false; // 对应 MOTION_BEE_BACKWARDS
-        // 渲染逻辑：选择图片 → 计算源/目标矩形 → 应用旋转/缩放 → 绘制
+    /// 绘制子弹（对应 C++ Projectile::Draw，Projectile.cpp:975）
+    /// 根据 mProjectileType 选择不同图片并处理旋转/缩放/镜像与 Attachment 渲染
+    pub fn draw(&self, g: &mut Graphics) {
+        let a_projectile_def = self.get_projectile_def();
+
+        let app = self.base.get_app();
+        // C++ 中 IMAGE_* 为全局资源宏；Rust 侧经资源管理器按名称取图
+        let mut get_projectile_image =
+            |name: &str| -> *mut crate::framework::graphics::image::Image {
+                match app {
+                    Some(a) => crate::lawn::board::get_overlay_image(a, name),
+                    None => std::ptr::null_mut(),
+                }
+            };
+
+        let mut a_image: *mut crate::framework::graphics::image::Image = std::ptr::null_mut();
+        let mut a_scale = 1.0f32;
+        match self.projectile_type {
+            ProjectileType::Cobbig => {
+                a_image = get_projectile_image("IMAGE_REANIM_COBCANNON_COB");
+                a_scale = 0.9;
+            }
+            ProjectileType::Pea | ProjectileType::ZombiePea => {
+                a_image = get_projectile_image("IMAGE_PROJECTILEPEA");
+            }
+            ProjectileType::Snowpea => {
+                a_image = get_projectile_image("IMAGE_PROJECTILESNOWPEA");
+            }
+            ProjectileType::Fireball => {
+                a_image = std::ptr::null_mut();
+            }
+            ProjectileType::Spike => {
+                a_image = get_projectile_image("IMAGE_PROJECTILECACTUS");
+            }
+            ProjectileType::Star => {
+                a_image = get_projectile_image("IMAGE_PROJECTILE_STAR");
+            }
+            ProjectileType::Puff => {
+                a_image = get_projectile_image("IMAGE_PUFFSHROOM_PUFF1");
+                a_scale = crate::todlib::tod_common::tod_animate_curve_float(
+                    0, 30, self.projectile_age, 0.3, 1.0, crate::lawn::game_enums::TodCurves::Linear,
+                );
+            }
+            ProjectileType::Basketball => {
+                a_image = get_projectile_image("IMAGE_REANIM_ZOMBIE_CATAPULT_BASKETBALL");
+                a_scale = 1.1;
+            }
+            ProjectileType::Cabbage => {
+                a_image = get_projectile_image("IMAGE_REANIM_CABBAGEPULT_CABBAGE");
+                a_scale = 1.0;
+            }
+            ProjectileType::Kernel => {
+                a_image = get_projectile_image("IMAGE_REANIM_CORNPULT_KERNAL");
+                a_scale = 0.95;
+            }
+            ProjectileType::Butter => {
+                a_image = get_projectile_image("IMAGE_REANIM_CORNPULT_BUTTER");
+                a_scale = 0.8;
+            }
+            ProjectileType::Melon => {
+                a_image = get_projectile_image("IMAGE_REANIM_MELONPULT_MELON");
+                a_scale = 1.0;
+            }
+            ProjectileType::Wintermelon => {
+                a_image = get_projectile_image("IMAGE_REANIM_WINTERMELON_PROJECTILE");
+                a_scale = 1.0;
+            }
+            _ => {
+                // C++: PVZP_ASSERT(false)
+            }
+        }
+
+        let mut a_mirror = false;
+        if self.motion == ProjectileMotion::BeeBackwards {
+            a_mirror = true;
+        }
+
+        if !a_image.is_null() {
+            // C++: PVZP_ASSERT(aProjectileDef.mImageRow < aImage->mNumRows)
+            // C++: PVZP_ASSERT(mFrame < aImage->mNumCols)
+            let a_image_ref = unsafe { &*a_image };
+            let a_cel_width = a_image_ref.get_cel_width();
+            let a_cel_height = a_image_ref.get_cel_height();
+            let a_src_rect = Rect::new(
+                a_cel_width * self.frame,
+                a_cel_height * a_projectile_def.image_row,
+                a_cel_width,
+                a_cel_height,
+            );
+            if crate::todlib::tod_common::float_nearly_equal(self.rotation, 0.0, std::f32::EPSILON)
+                && crate::todlib::tod_common::float_nearly_equal(a_scale, 1.0, std::f32::EPSILON)
+            {
+                let a_dest_rect = Rect::new(0, 0, a_cel_width, a_cel_height);
+                g.draw_image_mirror_stretch(a_image_ref, &a_dest_rect, &a_src_rect, a_mirror);
+            } else {
+                let a_offset_x = self.pos_x + a_cel_width as f32 * 0.5;
+                let a_offset_y = self.pos_z + self.pos_y + a_cel_height as f32 * 0.5;
+                let mut a_transform = SexyMatrix3::identity();
+                let board = self.base.get_board();
+                let a_board_m_x = board.map_or(0, |b| b.m_x) as f32;
+                let a_board_m_y = board.map_or(0, |b| b.m_y) as f32;
+                pvzp_scale_rotate_transform_matrix(
+                    &mut a_transform,
+                    a_offset_x + a_board_m_x,
+                    a_offset_y + a_board_m_y,
+                    self.rotation,
+                    a_scale,
+                    a_scale,
+                );
+                g.draw_image_matrix_src(a_image_ref, &a_transform, &a_src_rect, 0.0, 0.0);
+            }
+        }
+
+        // C++: Graphics theParticleGraphics(*g); MakeParentGraphicsFrame(&theParticleGraphics); AttachmentDraw(mAttachmentID, &theParticleGraphics, false)
+        if self.attachment_id != crate::lawn::game_enums::ATTACHMENTID_NULL {
+            // [TRANSLATION_NOTE]: Rust 无按 ID 的附件绘制入口（AttachmentDraw），且 Graphics 不可复制，暂略（同 coin.rs/zombie.rs）
+        }
     }
 
     /// 绘制子弹阴影（对应 C++ Projectile::DrawShadow，Projectile.cpp:1073）
