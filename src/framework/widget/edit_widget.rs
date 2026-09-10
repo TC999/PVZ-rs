@@ -35,6 +35,16 @@ pub(crate) struct WidthCheck {
     max_width: i32,
 }
 
+impl WidthCheck {
+    /// 构造宽度检查项（对应 C++ EditWidget::AddWidthCheckFont）
+    pub(crate) fn new(the_font: Font, the_max_width: i32) -> Self {
+        WidthCheck {
+            font: the_font,
+            max_width: the_max_width,
+        }
+    }
+}
+
 /// 编辑框控件（对应 C++ EditWidget）
 /// 文本输入框（对应 C++ EditWidget : Widget）
 /// [TRANSLATION_NOTE]: C++ EditWidget 继承 Widget；Rust 组合：首字段内嵌 `Widget`
