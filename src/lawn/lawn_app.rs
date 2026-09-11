@@ -87,6 +87,7 @@ pub struct LawnApp {
     pub cheat_dialog: Option<*mut crate::lawn::widget::cheat_dialog::CheatDialog>,
     pub new_options_dialog: Option<*mut crate::lawn::widget::new_options_dialog::NewOptionsDialog>,
     pub game_over_dialog: Option<*mut crate::lawn::widget::game_over_dialog::GameOverDialog>,
+    pub continue_dialog: Option<*mut crate::lawn::widget::continue_dialog::ContinueDialog>,
 
     // ---- 系统/管理器 ----
     pub sound_system: Option<Box<FoleyManager>>,
@@ -213,7 +214,7 @@ impl LawnApp {
             award_screen_widget: None, seed_chooser_screen_widget: None,
             challenge_screen_widget: None, credit_screen_widget: None,
             user_dialog: None, new_user_dialog: None, rename_user_dialog: None,
-            cheat_dialog: None, new_options_dialog: None, game_over_dialog: None,
+            cheat_dialog: None, new_options_dialog: None, game_over_dialog: None, continue_dialog: None,
             sound_system: None, effect_system: None,
             profile_mgr: None, player_info: None, music: None, pool_effect: None,
             control_button_list: LinkedList::new(),
@@ -525,9 +526,10 @@ impl LawnApp {
     // ContinueDialog 尚未继承 Dialog/Widget 接口，暂以对象创建替代 widget 接入
     //（CenterDialog/AddDialog/SetFocus 待 widget 层翻译后接入）。
     pub fn do_continue_dialog(&mut self) {
-        let _dialog = Box::new(
-            crate::lawn::widget::continue_dialog::ContinueDialog::new(Some(self as *mut LawnApp)),
-        );
+        // C++ LawnApp::DoContinueDialog（LawnApp.cpp:747-752）: new ContinueDialog(this) + AddDialog(DIALOG_CONTINUE) + SetFocus
+        // [TRANSLATION_NOTE]: Rust 无 WidgetManager 对话框栈，以 LawnApp 字段持有（get_dialog_count 统计）
+        let a_dialog = crate::lawn::widget::continue_dialog::ContinueDialog::new(Some(self as *mut LawnApp));
+        self.continue_dialog = Some(Box::into_raw(Box::new(a_dialog)));
     }
 
     /// 尝试加载游戏（对应 C++ TryLoadGame）
@@ -1485,6 +1487,7 @@ impl LawnApp {
         if self.cheat_dialog.is_some() { a_count += 1; }
         if self.new_options_dialog.is_some() { a_count += 1; }
         if self.game_over_dialog.is_some() { a_count += 1; }
+        if self.continue_dialog.is_some() { a_count += 1; }
         if self.store_screen.is_some() { a_count += 1; }
         if self.almanac_dialog.is_some() { a_count += 1; }
         a_count
