@@ -87,11 +87,37 @@ impl EffectSystem {
         id
     }
 
-    /// 添加粒子系统
+    /// 添加粒子系统（id 从 1 开始，0 保留给 PARTICLESYSTEMID_NULL）
     pub fn add_particle_system(&mut self, ps: ParticleSystem) -> ParticleID {
-        let id = self.particle_systems.len() as ParticleID;
+        let id = (self.particle_systems.len() as ParticleID) + 1;
         self.particle_systems.push(ps);
+        if let Some(p) = self.particle_systems.last_mut() {
+            p.self_id = id;
+        }
         id
+    }
+
+    /// 按 ID 获取粒子系统（对应 C++ EffectSystem::ParticleTryToGet 语义）
+    /// id=0（NULL）或粒子已回收（dead/self_id 不匹配，含 Vec retain 后索引漂移）时返回 None
+    pub fn particle_try_to_get(&mut self, id: u32) -> Option<&mut ParticleSystem> {
+        if id == 0 {
+            return None;
+        }
+        self.particle_systems.get_mut((id - 1) as usize)
+            .filter(|ps| ps.self_id == id && !ps.dead)
+    }
+
+    /// 由指针获取粒子系统 ID（对应 C++ EffectSystem::ParticleGetID 语义）
+    pub fn particle_get_id(&self, ptr: *mut ParticleSystem) -> u32 {
+        if ptr.is_null() {
+            return 0;
+        }
+        for ps in &self.particle_systems {
+            if std::ptr::eq(ps as *const ParticleSystem as *mut ParticleSystem, ptr) {
+                return ps.self_id;
+            }
+        }
+        0
     }
 
     /// 移除动画

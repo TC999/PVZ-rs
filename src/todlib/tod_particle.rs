@@ -1708,6 +1708,8 @@ pub struct TodParticleSystem {
     pub dont_update: bool,
     // 简化生命周期：系统年龄（帧），达到默认时长后消亡
     pub system_age: i32,
+    /// 粒子系统在 EffectSystem 池中的稳定 ID（1-based；C++ DataArray key 语义）
+    pub self_id: u32,
 }
 
 impl TodParticleSystem {
@@ -1722,6 +1724,7 @@ impl TodParticleSystem {
             render_order: 0,
             dont_update: false,
             system_age: 0,
+            self_id: 0,
         }
     }
 
