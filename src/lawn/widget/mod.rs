@@ -12,6 +12,7 @@ pub mod challenge_screen;
 pub mod achievements_screen;
 pub mod cheat_dialog;
 pub mod continue_dialog;
+pub mod game_over_dialog;
 pub mod imitater_dialog;
 pub mod lawn_dialog;
 pub mod new_options_dialog;

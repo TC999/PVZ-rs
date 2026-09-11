@@ -86,6 +86,7 @@ pub struct LawnApp {
     pub rename_user_dialog: Option<*mut crate::lawn::widget::new_user_dialog::NewUserDialog>,
     pub cheat_dialog: Option<*mut crate::lawn::widget::cheat_dialog::CheatDialog>,
     pub new_options_dialog: Option<*mut crate::lawn::widget::new_options_dialog::NewOptionsDialog>,
+    pub game_over_dialog: Option<*mut crate::lawn::widget::game_over_dialog::GameOverDialog>,
 
     // ---- 系统/管理器 ----
     pub sound_system: Option<Box<FoleyManager>>,
@@ -212,7 +213,7 @@ impl LawnApp {
             award_screen_widget: None, seed_chooser_screen_widget: None,
             challenge_screen_widget: None, credit_screen_widget: None,
             user_dialog: None, new_user_dialog: None, rename_user_dialog: None,
-            cheat_dialog: None, new_options_dialog: None,
+            cheat_dialog: None, new_options_dialog: None, game_over_dialog: None,
             sound_system: None, effect_system: None,
             profile_mgr: None, player_info: None, music: None, pool_effect: None,
             control_button_list: LinkedList::new(),
@@ -1483,6 +1484,7 @@ impl LawnApp {
         if self.rename_user_dialog.is_some() { a_count += 1; }
         if self.cheat_dialog.is_some() { a_count += 1; }
         if self.new_options_dialog.is_some() { a_count += 1; }
+        if self.game_over_dialog.is_some() { a_count += 1; }
         if self.store_screen.is_some() { a_count += 1; }
         if self.almanac_dialog.is_some() { a_count += 1; }
         a_count

@@ -7541,10 +7541,15 @@ Spawn: {}
             None
         };
 
-        if let Some(_a_game_over_msg) = a_game_over_msg {
-            // [TRANSLATION_NOTE]: C++ 5134-5135 弹 GameOverDialog(aGameOverMsg) + AddDialog(DIALOG_GAME_OVER) +
-            // mWidgetManager->SetFocus；Rust 无 GameOverDialog 组件与对话框栈，仅执行音乐/音效/Reanimation 演出，
-            // 文案 _a_game_over_msg 留待 GameOverDialog 接入轮使用。
+        if let Some(a_game_over_msg) = a_game_over_msg {
+            // C++ 5134-5135: GameOverDialog(aGameOverMsg, true) + mApp->AddDialog(DIALOG_GAME_OVER) + mWidgetManager->SetFocus
+            // [TRANSLATION_NOTE]: Rust 无 WidgetManager 对话框栈，以 LawnApp 字段持有（get_dialog_count 统计近似）
+            if let Some(app) = self.app {
+                unsafe {
+                    let a_dialog = crate::lawn::widget::game_over_dialog::GameOverDialog::new(Some(app), &a_game_over_msg, true);
+                    (*app).game_over_dialog = Some(Box::into_raw(Box::new(a_dialog)));
+                }
+            }
             // C++ 5138-5141: StopAllMusic / StopAllZombieSounds / PlaySample(SOUND_LOSEMUSIC)
             if let Some(app) = self.app {
                 unsafe {
