@@ -1086,13 +1086,13 @@ impl Projectile {
     /// 获取子弹定义（对应 C++ GetProjectileDef）
     pub fn get_projectile_def(&self) -> ProjectileDefinition {
         match self.projectile_type {
-            ProjectileType::Pea | ProjectileType::Snowpea | ProjectileType::Star | ProjectileType::Spike => {
+            ProjectileType::Pea | ProjectileType::Snowpea | ProjectileType::Star | ProjectileType::Spike | ProjectileType::Puff => {
                 ProjectileDefinition { projectile_type: self.projectile_type, image_row: 0, damage: 20 }
             }
-            ProjectileType::Cabbage | ProjectileType::Butter => {
+            ProjectileType::Cabbage | ProjectileType::Butter | ProjectileType::Fireball => {
                 ProjectileDefinition { projectile_type: self.projectile_type, image_row: 0, damage: 40 }
             }
-            ProjectileType::Melon => {
+            ProjectileType::Melon | ProjectileType::Wintermelon => {
                 ProjectileDefinition { projectile_type: self.projectile_type, image_row: 0, damage: 80 }
             }
             ProjectileType::Kernel => {
@@ -1100,6 +1100,9 @@ impl Projectile {
             }
             ProjectileType::Cobcannon => {
                 ProjectileDefinition { projectile_type: self.projectile_type, image_row: 0, damage: 300 }
+            }
+            ProjectileType::Basketball => {
+                ProjectileDefinition { projectile_type: self.projectile_type, image_row: 0, damage: 75 }
             }
             _ => {
                 ProjectileDefinition { projectile_type: self.projectile_type, image_row: 0, damage: 20 }
