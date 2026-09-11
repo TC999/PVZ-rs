@@ -698,6 +698,17 @@ pub static mut SOUND_DANCER: i32 = -1;
 pub static mut SOUND_FINALFANFARE: i32 = -1;
 pub static mut SOUND_CRAZYDAVESCREAM: i32 = -1;
 pub static mut SOUND_CRAZYDAVESCREAM2: i32 = -1;
+pub static mut SOUND_BUZZER: i32 = -1;
+pub static mut SOUND_TAP: i32 = -1;
+pub static mut SOUND_FINALWAVE: i32 = -1;
+pub static mut SOUND_HUGE_WAVE: i32 = -1;
+pub static mut SOUND_LIGHTFILL: i32 = -1;
+pub static mut SOUND_PAUSE: i32 = -1;
+pub static mut SOUND_GRAVEBUTTON: i32 = -1;
+pub static mut SOUND_BOING: i32 = -1;
+pub static mut SOUND_SEEDLIFT: i32 = -1;
+pub static mut SOUND_SIREN: i32 = -1;
+pub static mut SOUND_TAPGLASS: i32 = -1;
 
 /// 草坪拟音参数表（对应 C++ gLawnFoleyParamArray，PvzpFoley.cpp:30，104 项）
 /// [TRANSLATION_NOTE]: 指针指向上方 SOUND_XXX 变量（C++ &Sexy::SOUND_XXX 地址语义），
@@ -945,6 +956,17 @@ pub fn assign_sound_id(name: &str, id: i32) {
             "sound_finalfanfare" => SOUND_FINALFANFARE = id,
             "sound_crazydavescream" => SOUND_CRAZYDAVESCREAM = id,
             "sound_crazydavescream2" => SOUND_CRAZYDAVESCREAM2 = id,
+            "sound_buzzer" => SOUND_BUZZER = id,
+            "sound_tap" => SOUND_TAP = id,
+            "sound_finalwave" => SOUND_FINALWAVE = id,
+            "sound_huge_wave" => SOUND_HUGE_WAVE = id,
+            "sound_lightfill" => SOUND_LIGHTFILL = id,
+            "sound_pause" => SOUND_PAUSE = id,
+            "sound_gravebutton" => SOUND_GRAVEBUTTON = id,
+            "sound_boing" => SOUND_BOING = id,
+            "sound_seedlift" => SOUND_SEEDLIFT = id,
+            "sound_siren" => SOUND_SIREN = id,
+            "sound_tapglass" => SOUND_TAPGLASS = id,
             _ => {}
         }
     }
