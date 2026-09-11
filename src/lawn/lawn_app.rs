@@ -1405,12 +1405,25 @@ impl LawnApp {
             ps.render_order = render_order;            // [TRANSLATION_NOTE]: 粒子系统位置以 render_order 近似存储（完整版使用 emitter 偏移）
             let _ = (x, y);
             let id = es.add_particle_system(ps);
-            let idx = id as usize;
-            if idx < es.particle_systems.len() {
-                return Some(&mut es.particle_systems[idx] as *mut TodParticleSystem);
+            // id 为 1-based（0 保留给 PARTICLESYSTEMID_NULL）
+            if id != 0 {
+                let idx = (id - 1) as usize;
+                if idx < es.particle_systems.len() {
+                    return Some(&mut es.particle_systems[idx] as *mut TodParticleSystem);
+                }
             }
         }
         None
+    }
+
+    /// 按 ID 获取粒子系统（对应 C++ ParticleTryToGet）
+    pub fn particle_try_to_get(&mut self, id: crate::lawn::game_enums::ParticleSystemID) -> Option<&mut TodParticleSystem> {
+        self.effect_system.as_mut().and_then(|es| es.particle_try_to_get(id))
+    }
+
+    /// 获取粒子系统 ID（对应 C++ ParticleGetID；找不到或空指针返回 PARTICLESYSTEMID_NULL）
+    pub fn particle_get_id(&self, ptr: *mut TodParticleSystem) -> crate::lawn::game_enums::ParticleSystemID {
+        self.effect_system.as_ref().map_or(0, |es| es.particle_get_id(ptr))
     }
 
     /// 移除动画（对应 C++ RemoveReanimation）
@@ -1456,6 +1469,20 @@ impl LawnApp {
                 }
             }
         }
+    }
+
+    /// 打开的对话框数量（对应 C++ WidgetManager::GetDialogCount）
+    /// Rust 以已知对话框字段统计（user/new_user/rename/cheat/new_options + store/almanac 对话框）
+    pub fn get_dialog_count(&self) -> i32 {
+        let mut a_count = 0;
+        if self.user_dialog.is_some() { a_count += 1; }
+        if self.new_user_dialog.is_some() { a_count += 1; }
+        if self.rename_user_dialog.is_some() { a_count += 1; }
+        if self.cheat_dialog.is_some() { a_count += 1; }
+        if self.new_options_dialog.is_some() { a_count += 1; }
+        if self.store_screen.is_some() { a_count += 1; }
+        if self.almanac_dialog.is_some() { a_count += 1; }
+        a_count
     }
 
     // ==================== 状态查询 ====================
@@ -1753,6 +1780,13 @@ impl LawnApp {
     pub fn get_current_level_name(&self) -> String { format!("Level {}", self.m_level) }
     pub fn get_stage_string(level: i32) -> String { format!("Stage {}", level) }
     pub fn get_num_trophies(_page: i32) -> i32 { 0 }
+    /// 距离金色向日葵奖杯还差多少奖杯（对应 C++ TrophiesNeedForGoldSunflower）
+    /// 注意：get_num_trophies 目前为 stub（返回 0），此值为 48 直到奖杯系统接入。
+    pub fn trophies_need_for_gold_sunflower(&self) -> i32 {
+        48 - Self::get_num_trophies(ChallengePage::Survival as i32)
+            - Self::get_num_trophies(ChallengePage::Challenge as i32)
+            - Self::get_num_trophies(ChallengePage::Puzzle as i32)
+    }
     /// 获取当前时间戳（秒，对应 C++ GetNowTime）
     pub fn get_now_time(&self) -> i64 {
         crate::framework::common::now_time()
