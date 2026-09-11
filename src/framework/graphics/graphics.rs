@@ -919,6 +919,22 @@ impl Graphics {
         }
     }
 
+    /// 纯色三角形绘制（无纹理；对应 C++ PvzpTriangleGroup 软件路径）
+    pub fn draw_triangles_flat(
+        &mut self,
+        vertices: &[[crate::framework::graphics::gl_interface::TriVertex; 3]],
+        num_triangles: i32,
+    ) {
+        unsafe {
+            let dest = &mut *self.dest_image;
+            let draw_color = self.get_image_color();
+            dest.blt_triangles_flat(
+                vertices, num_triangles, &self.clip_rect, &draw_color,
+                self.draw_mode, self.trans_x as f32, self.trans_y as f32,
+            );
+        }
+    }
+
     // ====================================================================
     // 精灵图动画帧绘制
     // ====================================================================

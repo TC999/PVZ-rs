@@ -299,14 +299,29 @@ impl Trail {
             let x3 = self.m_trail_center.x + p_next.a_pos.x - normal_next.x * w_next;
             let y3 = self.m_trail_center.y + p_next.a_pos.y - normal_next.y * w_next;
 
-            // 使用 Graphics 绘制两个三角形
-            g.set_color(&color_cur);
-            g.fill_rect_xywh(
-                (x0.min(x1).min(x2).min(x3)) as i32,
-                (y0.min(y1).min(y2).min(y3)) as i32,
-                (x0.max(x1).max(x2).max(x3) - x0.min(x1).min(x2).min(x3)) as i32,
-                (y0.max(y1).max(y2).max(y3) - y0.min(y1).min(y2).min(y3)) as i32,
-            );
+            // C++ Trail::Draw 的三角形带（Trail.cpp:216-262）：每段两个三角形，顶点色 alpha 渐变
+            g.set_color(&Color::WHITE); // 顶点色已含 alpha，避免 Graphics 调制色叠加
+            let color_cur_argb = ((color_cur.a as u32) << 24)
+                | ((color_cur.r as u32) << 16)
+                | ((color_cur.g as u32) << 8)
+                | (color_cur.b as u32);
+            let color_next_argb = ((color_next.a as u32) << 24)
+                | ((color_next.r as u32) << 16)
+                | ((color_next.g as u32) << 8)
+                | (color_next.b as u32);
+            let a_verts = [
+                [
+                    crate::framework::graphics::gl_interface::TriVertex { x: x0, y: y0, u: 0.0, v: 1.0, color: color_cur_argb },
+                    crate::framework::graphics::gl_interface::TriVertex { x: x1, y: y1, u: 0.0, v: 0.0, color: color_cur_argb },
+                    crate::framework::graphics::gl_interface::TriVertex { x: x2, y: y2, u: 0.0, v: 1.0, color: color_next_argb },
+                ],
+                [
+                    crate::framework::graphics::gl_interface::TriVertex { x: x2, y: y2, u: 0.0, v: 1.0, color: color_next_argb },
+                    crate::framework::graphics::gl_interface::TriVertex { x: x1, y: y1, u: 0.0, v: 0.0, color: color_cur_argb },
+                    crate::framework::graphics::gl_interface::TriVertex { x: x3, y: y3, u: 0.0, v: 0.0, color: color_next_argb },
+                ],
+            ];
+            g.draw_triangles_flat(&a_verts, 2);
         }
     }
 }

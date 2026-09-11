@@ -565,16 +565,111 @@ impl Image {
     pub fn blt_triangles_tex(
         &mut self,
         _texture: &Image,
-        _vertices: &[[crate::framework::graphics::gl_interface::TriVertex; 3]],
-        _num_triangles: i32,
-        _clip_rect: &Rect,
-        _color: &Color,
-        _draw_mode: i32,
-        _tx: f32,
-        _ty: f32,
+        vertices: &[[crate::framework::graphics::gl_interface::TriVertex; 3]],
+        num_triangles: i32,
+        clip_rect: &Rect,
+        color: &Color,
+        draw_mode: i32,
+        tx: f32,
+        ty: f32,
         _blend: bool,
     ) {
-        // 完整实现在 GLImage 中
+        // 软件光栅化（GLImage 子类覆写为 GL 路径）
+        self.blt_triangles_flat(vertices, num_triangles, clip_rect, color, draw_mode, tx, ty);
+    }
+
+    /// 纯色三角形绘制（无纹理，扫描线光栅化）
+    /// 对应 C++ PvzpTriangleGroup 的软件路径；顶点色为 ARGB
+    pub fn blt_triangles_flat(
+        &mut self,
+        vertices: &[[crate::framework::graphics::gl_interface::TriVertex; 3]],
+        num_triangles: i32,
+        clip_rect: &Rect,
+        color: &Color,
+        draw_mode: i32,
+        tx: f32,
+        ty: f32,
+    ) {
+        if self.pixels.is_empty() {
+            return;
+        }
+        for tri in vertices.iter().take(num_triangles.max(0) as usize) {
+            self.blt_triangle_scanline(&tri[0], &tri[1], &tri[2], clip_rect, color, draw_mode, tx, ty);
+        }
+    }
+
+    /// 单个三角形扫描线光栅化（顶点色线性插值）
+    fn blt_triangle_scanline(
+        &mut self,
+        a: &crate::framework::graphics::gl_interface::TriVertex,
+        b: &crate::framework::graphics::gl_interface::TriVertex,
+        c: &crate::framework::graphics::gl_interface::TriVertex,
+        clip: &Rect,
+        tint: &Color,
+        draw_mode: i32,
+        tx: f32,
+        ty: f32,
+    ) {
+        let mut v = [
+            (a.x + tx, a.y + ty, a.color),
+            (b.x + tx, b.y + ty, b.color),
+            (c.x + tx, c.y + ty, c.color),
+        ];
+        v.sort_by(|p, q| p.1.partial_cmp(&q.1).unwrap_or(std::cmp::Ordering::Equal));
+        let (x0, y0, c0) = v[0];
+        let (x1, y1, c1) = v[1];
+        let (x2, y2, c2) = v[2];
+        if (y2 - y0).abs() < 0.001 {
+            return; // 零高退化三角形
+        }
+        let y_min = y0.ceil() as i32;
+        let y_max = y2.floor() as i32;
+        let sy_lo = clip.y.max(y_min);
+        let sy_hi = (clip.y + clip.height).min(y_max + 1);
+        for sy in sy_lo..sy_hi {
+            let y = sy as f32;
+            // 长边（v0→v2）与短边（v0→v1 / v1→v2）
+            let t02 = ((y - y0) / (y2 - y0)).clamp(0.0, 1.0);
+            let x_long = x0 + (x2 - x0) * t02;
+            let c_long = Self::lerp_color(c0, c2, t02);
+            let (x_short, c_short) = if y < y1 {
+                let t01 = if (y1 - y0).abs() < 0.001 { 0.0 } else { ((y - y0) / (y1 - y0)).clamp(0.0, 1.0) };
+                (x0 + (x1 - x0) * t01, Self::lerp_color(c0, c1, t01))
+            } else {
+                let t12 = if (y2 - y1).abs() < 0.001 { 0.0 } else { ((y - y1) / (y2 - y1)).clamp(0.0, 1.0) };
+                (x1 + (x2 - x1) * t12, Self::lerp_color(c1, c2, t12))
+            };
+            let (x_l, x_r, c_l, c_r) = if x_long < x_short {
+                (x_long, x_short, c_long, c_short)
+            } else {
+                (x_short, x_long, c_short, c_long)
+            };
+            let sx_lo = clip.x.max(x_l.ceil() as i32);
+            let sx_hi = (clip.x + clip.width).min(x_r.floor() as i32 + 1);
+            let span = (x_r - x_l).max(0.001);
+            for sx in sx_lo..sx_hi {
+                let t = ((sx as f32 - x_l) / span).clamp(0.0, 1.0);
+                let px = Self::lerp_color(c_l, c_r, t);
+                let src_color = Color::new(
+                    ((px >> 16) & 0xFF) as u8,
+                    ((px >> 8) & 0xFF) as u8,
+                    (px & 0xFF) as u8,
+                    ((px >> 24) & 0xFF) as u8,
+                );
+                let final_color = self.blend_color(&src_color, tint, draw_mode);
+                self.set_pixel(sx, sy, &final_color, draw_mode);
+            }
+        }
+    }
+
+    /// 顶点色线性插值（ARGB u32）
+    fn lerp_color(c0: u32, c1: u32, t: f32) -> u32 {
+        let t = t.clamp(0.0, 1.0);
+        let lerp_ch = |a: u32, b: u32| (a as f32 + (b as f32 - a as f32) * t) as u32;
+        (lerp_ch((c0 >> 24) & 0xFF, (c1 >> 24) & 0xFF) << 24)
+            | (lerp_ch((c0 >> 16) & 0xFF, (c1 >> 16) & 0xFF) << 16)
+            | (lerp_ch((c0 >> 8) & 0xFF, (c1 >> 8) & 0xFF) << 8)
+            | lerp_ch(c0 & 0xFF, c1 & 0xFF)
     }
 
     /// 镜像 Blt
