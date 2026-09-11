@@ -210,8 +210,48 @@ impl Coin {
             // C++ 518-589: 落地
             // C++ 520-565: 弹跳箭头粒子
             if self.needs_bouncy_arrow && !self.has_bouncy_arrow {
-                // [TRANSLATION_NOTE]: AddPvzpParticle + AttachParticle 未实现
-                // C++ 548-560: 根据 mType 选择 ParticleEffect
+                // C++ 522-544: 按 mType 计算粒子偏移
+                let mut a_particle_offset_x = (self.base.width / 2) as f32;
+                let mut a_particle_offset_y = (self.base.height / 2 - 60) as f32;
+                if self.coin_type == CoinType::Trophy {
+                    a_particle_offset_x += 2.0;
+                } else if self.coin_type == CoinType::AwardMoneyBag || self.coin_type == CoinType::AwardBagDiamond {
+                    a_particle_offset_x += 2.0;
+                    a_particle_offset_y -= 2.0;
+                } else if self.coin_type == CoinType::AwardPresent || self.is_present_with_advice() {
+                    a_particle_offset_y -= 20.0;
+                } else if self.coin_type == CoinType::AwardSilverSunflower || self.coin_type == CoinType::AwardGoldSunflower {
+                    a_particle_offset_x -= 6.0;
+                    a_particle_offset_y -= 40.0;
+                } else if self.is_money() {
+                    a_particle_offset_x += 12.0;
+                    a_particle_offset_y += 21.0;
+                }
+                // C++ 548-557: 按 mType 选择 ParticleEffect
+                let a_effect = if self.coin_type == CoinType::FinalSeedPacket {
+                    ParticleEffect::SeedPacket
+                } else if self.is_money() {
+                    ParticleEffect::CoinPickupArrow
+                } else {
+                    ParticleEffect::AwardPickupArrow
+                };
+                // C++ 559-561: aParticle = mApp->AddPvzpParticle(mPosX + offsetX, mPosY + offsetY, 0, aEffect);
+                //              AttachParticle(mAttachmentID, aParticle, aParticleOffsetX, aParticleOffsetY);
+                if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
+                    if let Some(a_particle) = app.add_tod_particle(
+                        self.pos_x + a_particle_offset_x,
+                        self.pos_y + a_particle_offset_y,
+                        0,
+                        a_effect as i32,
+                    ) {
+                        crate::todlib::attachment::attach_particle(
+                            &mut self.attachment_id,
+                            a_particle as *mut std::ffi::c_void,
+                            a_particle_offset_x,
+                            a_particle_offset_y,
+                        );
+                    }
+                }
                 self.has_bouncy_arrow = true;
             }
 
@@ -626,8 +666,14 @@ impl Coin {
                             (*board).m_potted_plants_collected += 1;
                             (*board).display_advice("[ADVICE_FOUND_PLANT]", MessageStyle::HintFast as i32, AdviceType::None);
                         }
-                        // [TRANSLATION_NOTE]: AddPvzpParticle 未实现
-                        // (*app).add_pvzp_particle(self.pos_x + 30.0, self.pos_y + 30.0, self.base.render_order + 1, ParticleEffect::PresentPickup);
+                        // C++: aParticle = mApp->AddPvzpParticle(mPosX + 30, mPosY + 30, mRenderOrder + 1, PARTICLE_PRESENT_PICKUP);
+                        // [TRANSLATION_NOTE]: C++ AddPvzpParticle 与 AddTodParticle 在 Rust 端同为 add_tod_particle 入口
+                        (*app).add_tod_particle(
+                            self.pos_x + 30.0,
+                            self.pos_y + 30.0,
+                            self.base.render_order + 1,
+                            ParticleEffect::PresentPickup as i32,
+                        );
                         if let Some(zg) = (*app).zen_garden {
                             let mut spec = self.potted_plant_spec.clone();
                             (*zg).add_potted_plant(&mut spec);

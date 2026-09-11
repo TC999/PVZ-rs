@@ -5229,12 +5229,18 @@ Spawn: {}
         self.tutorial_arrow_remove();
         if let Some(app) = self.app {
             unsafe {
-                let particle = (*app).add_tod_particle(x as f32, y as f32, crate::lawn::game_enums::RENDER_LAYER_TOP as i32, crate::lawn::game_enums::ParticleEffect::SeedPacketPick as i32);
-                // [TRANSLATION_NOTE]: mTutorialParticleID = ParticleGetID(aParticle) 依赖粒子 ID 系统
-                let _ = particle;
+                // C++: aParticle = mApp->AddPvzpParticle(theX, theY, MakeRenderOrder(RENDER_LAYER_TOP, 0, 0), PARTICLE_SEED_PACKET_PICK);
+                //      mTutorialParticleID = mApp->ParticleGetID(aParticle);
+                // [TRANSLATION_NOTE]: C++ AddPvzpParticle 与 AddTodParticle 在 Rust 端同为 add_tod_particle 入口
+                let particle = (*app).add_tod_particle(
+                    x as f32,
+                    y as f32,
+                    crate::lawn::game_enums::RENDER_LAYER_TOP as i32,
+                    crate::lawn::game_enums::ParticleEffect::SeedPacketPick as i32,
+                );
+                self.m_tutorial_particle_id = particle.map_or(0, |p| (*app).particle_get_id(p));
             }
         }
-        self.m_tutorial_particle_id = 1;
     }
 
     /// 移除教程箭头（对应 C++ TutorialArrowRemove）
