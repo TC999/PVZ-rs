@@ -1917,18 +1917,42 @@ impl Zombie {
                     a_throwing_distance -= RandFloat(100.0);
                 }
 
-                // 生成小鬼僵尸
+                                // C++ 2169-2195: 生成并配置小鬼僵尸
                 let from_wave = self.from_wave;
                 let row = self.base.row;
                 let render_order = self.base.render_order;
+                let a_pos_x = self.pos_x;
+                let a_chilled = self.chilled_counter;
                 let pos_y = self.get_pos_y_based_on_row(row);
                 let vel_z = 0.5 * (a_throwing_distance / 3.0) * crate::lawn::zombie::THOWN_ZOMBIE_GRAVITY;
                 if let Some(board) = self.base.get_board_mut() {
-                    board.add_zombie(ZombieType::Imp, from_wave);
-                    // 依赖底层系统
-                    // 无法直接设置小鬼属性，简化处理
+                    // C++: aZombieImp = mBoard->AddZombie(ZOMBIE_IMP, mFromWave); if (nullptr) return;
+                    let a_imp_idx = board.add_zombie_in_row(ZombieType::Imp, row, from_wave);
+                    if let Some(a_imp) = board.zombies.get_mut(a_imp_idx) {
+                        // C++: mPosX = mPosX - 133.0f; mPosY = GetPosYBasedOnRow(mRow); SetRow(mRow);
+                        a_imp.pos_x = a_pos_x - 133.0;
+                        a_imp.pos_y = pos_y;
+                        a_imp.base.row = row;
+                        // C++: mVariant = false; mAltitude = 88.0f; mRenderOrder = mRenderOrder + 1;
+                        a_imp.variant = false;
+                        a_imp.altitude = 88.0;
+                        a_imp.base.render_order = render_order + 1;
+                        // C++: mZombiePhase = PHASE_IMP_GETTING_THROWN; mVelX = 3.0f（DO_FIX_BUGS 分支未启用）
+                        a_imp.zombie_phase = ZombiePhase::ImpGettingThrown;
+                        a_imp.vel_x = 3.0;
+                        // C++: mChilledCounter = mChilledCounter;
+                        a_imp.chilled_counter = a_chilled;
+                        // C++: mVelZ = 0.5f * (aThrowingDistance / aZombieImp->mVelX) * THOWN_ZOMBIE_GRAVITY;
+                        a_imp.vel_z = vel_z;
+                        // C++: PlayZombieReanim("anim_thrown", REANIM_PLAY_ONCE_AND_HOLD, 0, 18.0f); UpdateReanim();
+                        a_imp.play_zombie_reanim("anim_thrown", ReanimLoopType::PlayOnceAndHold, 0, 18.0);
+                        a_imp.update_reanim();
+                    }
                 }
-                let _ = (row, render_order, pos_y, vel_z);
+                // C++: mApp->PlayFoley(FOLEY_IMP)
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Imp as i32);
+                }
             }
 
             // 动画循环结束后回 Normal
