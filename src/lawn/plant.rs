@@ -3031,19 +3031,33 @@ impl Plant {
                 }
             }
         } else if self.state == PlantState::ChomperBitingGotOne {
-            // [TRANSLATION_NOTE]: C++ 需 aBodyReanim->mLoopCount>0 才进入消化 — reanim 未接入
-            self.play_body_reanim("anim_chew", ReanimLoopType::Loop, 0, 15.0);
-            self.state = PlantState::ChomperDigesting;
-            self.state_countdown = 4000;
+            // C++: if (aBodyReanim->mLoopCount > 0)
+            let a_loop = self.base.get_app().and_then(|app| app.reanimation_get(self.body_reanim_id)).map_or(0, |r| r.m_loop_count);
+            if a_loop > 0 {
+                self.play_body_reanim("anim_chew", ReanimLoopType::Loop, 0, 15.0);
+                // C++: if (mApp->IsIZombieLevel()) aBodyReanim->mAnimRate = 0;
+                if let Some(app) = self.base.get_app_mut() {
+                    if app.is_izombie_level() {
+                        if let Some(r) = app.reanimation_get_mut(self.body_reanim_id) {
+                            r.m_anim_rate = 0.0;
+                        }
+                    }
+                }
+                self.state = PlantState::ChomperDigesting;
+                self.state_countdown = 4000;
+            }
         } else if self.state == PlantState::ChomperDigesting {
             if self.state_countdown == 0 {
                 self.play_body_reanim("anim_swallow", ReanimLoopType::PlayOnceAndHold, 20, 12.0);
                 self.state = PlantState::ChomperSwallowing;
             }
         } else if self.state == PlantState::ChomperSwallowing || self.state == PlantState::ChomperBitingMissed {
-            // [TRANSLATION_NOTE]: C++ 需 aBodyReanim->mLoopCount>0 — reanim 未接入
-            self.play_idle_anim(0.0);
-            self.state = PlantState::Ready;
+            // C++: if (aBodyReanim->mLoopCount > 0) { PlayIdleAnim(0.0f); mState = STATE_READY; }
+            let a_loop = self.base.get_app().and_then(|app| app.reanimation_get(self.body_reanim_id)).map_or(0, |r| r.m_loop_count);
+            if a_loop > 0 {
+                self.play_idle_anim(0.0);
+                self.state = PlantState::Ready;
+            }
         }
     }
 
@@ -3139,20 +3153,46 @@ impl Plant {
     }
 
     pub fn update_cob_cannon(&mut self) {
-        // 对应 C++ UpdateCobCannon
+        // C++ Plant::UpdateCobCannon（Plant.cpp:1668-1704）
         if self.state == PlantState::CobcannonArming {
             if self.state_countdown == 0 {
                 self.state = PlantState::CobcannonLoading;
+                // C++: PlayBodyReanim("anim_charge", REANIM_PLAY_ONCE_AND_HOLD, 20, 12.0f)
                 self.play_body_reanim("anim_charge", ReanimLoopType::PlayOnceAndHold, 20, 12.0);
             }
         } else if self.state == PlantState::CobcannonLoading {
-            // [TRANSLATION_NOTE]: ShouldTriggerTimedEvent(0.5) + FOLEY_SHOOP；mLoopCount → Ready — reanim 未接入
-            self.state = PlantState::CobcannonReady;
-            self.play_idle_anim(12.0);
+            // C++: if (aBodyReanim->ShouldTriggerTimedEvent(0.5f)) PlayFoley(FOLEY_SHOOP)
+            if let Some(app) = self.base.get_app() {
+                let a_trigger = app.reanimation_get(self.body_reanim_id).map_or(false, |r| r.should_trigger_timed_event(0.5));
+                if a_trigger {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Shoop as i32);
+                }
+            }
+            // C++: if (aBodyReanim->mLoopCount > 0) { mState = READY; PlayIdleAnim(12.0f); }
+            let a_loop = self.base.get_app().and_then(|app| app.reanimation_get(self.body_reanim_id)).map_or(0, |r| r.m_loop_count);
+            if a_loop > 0 {
+                self.state = PlantState::CobcannonReady;
+                self.play_idle_anim(12.0);
+            }
         } else if self.state == PlantState::CobcannonReady {
-            // [TRANSLATION_NOTE]: CobCannon_cob 轨道闪烁颜色 — reanim 未接入
+            // C++: aCobTrack = GetTrackInstanceByName("CobCannon_cob");
+            //      aCobTrack->mTrackColor = GetFlashingColor(mBoard->mMainCounter, 75);
+            let a_main_counter = self.base.get_board().map_or(0, |b| unsafe { (*b).m_main_counter });
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(r) = app.reanimation_get_mut(self.body_reanim_id) {
+                    if let Some(ti) = r.get_track_instance_by_name("CobCannon_cob") {
+                        ti.m_track_color = crate::todlib::tod_common::get_flashing_color(a_main_counter, 75);
+                    }
+                }
+            }
         } else if self.state == PlantState::CobcannonFiring {
-            // [TRANSLATION_NOTE]: ShouldTriggerTimedEvent(0.48) + FOLEY_COB_LAUNCH — reanim 未接入
+            // C++: if (aBodyReanim->ShouldTriggerTimedEvent(0.48f)) PlayFoley(FOLEY_COB_LAUNCH)
+            if let Some(app) = self.base.get_app() {
+                let a_trigger = app.reanimation_get(self.body_reanim_id).map_or(false, |r| r.should_trigger_timed_event(0.48));
+                if a_trigger {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::CobLaunch as i32);
+                }
+            }
         }
     }
     pub fn update_imitater(&mut self) {
@@ -3289,20 +3329,56 @@ impl Plant {
     }
 
     pub fn update_cactus(&mut self) {
+        // C++ Plant::UpdateCactus（Plant.cpp:1707-1748）
         if self.shooting_counter > 0 {
             return;
         }
+        // C++: aBodyReanim = mApp->ReanimationGet(mBodyReanimID)
+        let body_reanim_ptr = self.base.get_app_mut().and_then(|app| {
+            app.reanimation_get_mut(self.body_reanim_id).map(|r| r as *mut crate::todlib::reanimator::Reanimation)
+        });
+        let a_body_fps = unsafe { body_reanim_ptr.map_or(12.0, |p| (*p).m_fps) };
+
         if self.state == PlantState::CactusRising {
-            // 依赖底层系统
-            self.state = PlantState::CactusHigh;
-            self.launch_counter = 1;
+            // C++: if (aBodyReanim->mLoopCount > 0)
+            let a_loop_count = unsafe { body_reanim_ptr.map_or(0, |p| (*p).m_loop_count) };
+            if a_loop_count > 0 {
+                self.state = PlantState::CactusHigh;
+                // C++: PlayBodyReanim("anim_idlehigh", REANIM_LOOP, 20, 0.0f)
+                self.play_body_reanim("anim_idlehigh", ReanimLoopType::Loop, 20, 0.0);
+                // C++: if (mApp->IsIZombieLevel()) aBodyReanim->mAnimRate = 0;
+                if let Some(app) = self.base.get_app() {
+                    if app.is_izombie_level() {
+                        if let Some(p) = body_reanim_ptr {
+                            unsafe { (*p).m_anim_rate = 0.0; }
+                        }
+                    }
+                }
+                self.launch_counter = 1;
+            }
         } else if self.state == PlantState::CactusHigh {
-            // 依赖底层系统
+            // C++: if (FindTargetZombie(mRow, WEAPON_PRIMARY) == nullptr)
+            if self.find_target_zombie(self.base.row, PlantWeapon::Primary).is_none() {
+                self.state = PlantState::CactusLowering;
+                // C++: PlayBodyReanim("anim_lower", REANIM_PLAY_ONCE_AND_HOLD, 20, aBodyReanim->mDefinition->mFPS)
+                self.play_body_reanim("anim_lower", ReanimLoopType::PlayOnceAndHold, 20, a_body_fps);
+            }
         } else if self.state == PlantState::CactusLowering {
-            // 依赖底层系统
-            self.state = PlantState::CactusLow;
-        } else {
-            // 依赖底层系统
+            // C++: if (aBodyReanim->mLoopCount > 0)
+            let a_loop_count = unsafe { body_reanim_ptr.map_or(0, |p| (*p).m_loop_count) };
+            if a_loop_count > 0 {
+                self.state = PlantState::CactusLow;
+                // C++: PlayIdleAnim(0.0f)
+                self.play_idle_anim(0.0);
+            }
+        } else if self.find_target_zombie(self.base.row, PlantWeapon::Primary).is_some() {
+            self.state = PlantState::CactusRising;
+            // C++: PlayBodyReanim("anim_rise", REANIM_PLAY_ONCE_AND_HOLD, 20, aBodyReanim->mDefinition->mFPS)
+            self.play_body_reanim("anim_rise", ReanimLoopType::PlayOnceAndHold, 20, a_body_fps);
+            // C++: mApp->PlayFoley(FOLEY_PLANTGROW)
+            if let Some(app) = self.base.get_app() {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::PlantGrow as i32);
+            }
         }
     }
 
