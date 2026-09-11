@@ -595,8 +595,11 @@ impl ResourceManager {
     /// 删除字体资源
     pub fn delete_font(&mut self, _name: &str) {}
 
-    /// 加载字体
-    pub fn load_font(&mut self, _name: &str) -> Option<*mut Font> { None }
+    /// 加载字体（对应 C++ LoadFont；经全局字体缓存加载位图字库）
+    pub fn load_font(&mut self, name: &str) -> Option<*mut Font> {
+        let ptr = crate::framework::graphics::bitmap_font::font_global(name);
+        if ptr.is_null() { None } else { Some(ptr) }
+    }
 
     /// 获取图像（对应 C++ GetImage）
     pub fn get_image(&self, the_id: &str) -> SharedImageRef {
@@ -613,8 +616,11 @@ impl ResourceManager {
     /// 获取声音
     pub fn get_sound(&self, _id: &str) -> isize { 0 }
 
-    /// 获取字体
-    pub fn get_font(&self, _id: &str) -> Option<*mut Font> { None }
+    /// 获取字体（对应 C++ GetFont；经全局字体缓存加载位图字库）
+    pub fn get_font(&self, id: &str) -> Option<*mut Font> {
+        let ptr = crate::framework::graphics::bitmap_font::font_global(id);
+        if ptr.is_null() { None } else { Some(ptr) }
+    }
 
     /// 获取图像（抛出异常版本）
     pub fn get_image_throw(&self, the_id: &str) -> SharedImageRef {
@@ -625,8 +631,10 @@ impl ResourceManager {
     /// 获取声音（抛出异常版本）
     pub fn get_sound_throw(&self, _id: &str) -> isize { 0 }
 
-    /// 获取字体（抛出异常版本）
-    pub fn get_font_throw(&self, _id: &str) -> Option<*mut Font> { None }
+    /// 获取字体（抛出异常版本；对应 C++ GetFontThrow）
+    pub fn get_font_throw(&self, id: &str) -> Option<*mut Font> {
+        self.get_font(id)
+    }
 
     /// 删除资源组（对应 C++ DeleteResources）
     pub fn delete_resources(&mut self, _group: &str) {}

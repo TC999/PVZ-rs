@@ -14,6 +14,7 @@ use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
 use crate::framework::rect::Rect;
 use crate::framework::color::Color;
+use crate::framework::graphics::font::Font;
 
 /// 单个字形的绘制信息
 #[derive(Debug, Clone, Copy)]
@@ -428,6 +429,63 @@ pub fn get_bitmap_font(name: &str) -> Option<*mut BitmapFont> {
         }
     }
     None
+}
+
+// ============================================================
+// 全局字体（对应 C++ Sexy::FONT_* 全局 _Font* 指针）
+// ============================================================
+
+/// 全局 Font 对象缓存（Box::into_raw 持有，进程生命周期内不释放，同 C++ 全局字体）
+static mut FONT_OBJ_CACHE: Vec<(String, *mut Font)> = Vec::new();
+
+/// 惰性获取全局字体（对应 C++ ResourceManager::GetFontThrow 后赋给全局指针）
+/// 已缓存直接返回；未缓存则从资源包加载位图字库并构造 Font。
+pub fn font_global(name: &str) -> *mut Font {
+    unsafe {
+        for (k, v) in FONT_OBJ_CACHE.iter() {
+            if k == name {
+                return *v;
+            }
+        }
+    }
+    let bmp = load_bitmap_font(name);
+    let font = bmp.map(|bmp_ptr| {
+        let mut f = Font::new(name, 0);
+        f.set_bitmap(bmp_ptr);
+        f
+    });
+    let ptr = match font {
+        Some(f) => Box::into_raw(Box::new(f)),
+        None => std::ptr::null_mut(),
+    };
+    if !ptr.is_null() {
+        unsafe { FONT_OBJ_CACHE.push((name.to_string(), ptr)); }
+    }
+    ptr
+}
+
+/// 全局字体常量（对应 C++ Resources.cpp 中 Sexy::FONT_* 全局指针）
+pub static mut FONT_PICO129: *mut Font = std::ptr::null_mut();
+pub static mut FONT_CONTINUUMBOLD14: *mut Font = std::ptr::null_mut();
+pub static mut FONT_HOUSEOFTERROR16: *mut Font = std::ptr::null_mut();
+pub static mut FONT_DWARVENTODCRAFT12: *mut Font = std::ptr::null_mut();
+pub static mut FONT_BRIANNETOD16: *mut Font = std::ptr::null_mut();
+pub static mut FONT_BRIANNETOD12: *mut Font = std::ptr::null_mut();
+pub static mut FONT_BRIANNETOD32: *mut Font = std::ptr::null_mut();
+pub static mut FONT_TINYBOLD: *mut Font = std::ptr::null_mut();
+
+/// 初始化全局字体（对应 C++ LoadResources 中 GetFontThrow 批量赋值）
+pub fn init_global_fonts() {
+    unsafe {
+        FONT_PICO129 = font_global("FONT_PICO129");
+        FONT_CONTINUUMBOLD14 = font_global("FONT_CONTINUUMBOLD14");
+        FONT_HOUSEOFTERROR16 = font_global("FONT_HOUSEOFTERROR16");
+        FONT_DWARVENTODCRAFT12 = font_global("FONT_DWARVENTODCRAFT12");
+        FONT_BRIANNETOD16 = font_global("FONT_BRIANNETOD16");
+        FONT_BRIANNETOD12 = font_global("FONT_BRIANNETOD12");
+        FONT_BRIANNETOD32 = font_global("FONT_BRIANNETOD32");
+        FONT_TINYBOLD = font_global("FONT_TINYBOLD");
+    }
 }
 
 // ============================================================

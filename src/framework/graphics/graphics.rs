@@ -1233,7 +1233,7 @@ impl Graphics {
             }
             let font = &*self.font;
             let ascent = font.ascent;
-            let ascent_padding = 0; // Font 结构体暂未包含 ascent_padding
+            let ascent_padding = font.ascent_padding; // 对应 C++ GetAscentPadding()
             let y_offset = ascent - ascent_padding;
             let rect = Rect::new(x, y - y_offset, wrap_width, 0);
             self.write_word_wrapped(&rect, text, line_spacing, justification, max_width, -1, None)

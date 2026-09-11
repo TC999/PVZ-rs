@@ -278,6 +278,9 @@ impl LawnApp {
         if self.base.is_shutdown() { return; }
         self.base.title = "PvZ Portable".to_string();
 
+        // 初始化全局位图字体（对应 C++ LoadResources 中 GetFontThrow 批量赋值 Sexy::FONT_*）
+        crate::framework::graphics::bitmap_font::init_global_fonts();
+
         // 创建子系统（对应 C++ LawnApp::Init 中的 new Music / new TodFoley / new EffectSystem）
         let app_ptr = self as *mut LawnApp;
         if self.music.is_none() {

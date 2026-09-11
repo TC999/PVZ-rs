@@ -5,6 +5,7 @@
 
 use crate::framework::color::Color;
 use crate::framework::rect::Rect;
+use crate::framework::graphics::bitmap_font::BitmapFont;
 
 /// 字体基类（对应 C++ _Font）
 /// 在 C++ 中 Font 是基类，由 SysFont 和 ImageFont 继承。
@@ -33,6 +34,8 @@ pub struct Font {
     pub ascent_padding: i32,
     /// 行间距偏移（C++ mLineSpacingOffset）
     pub line_spacing_offset: i32,
+    /// 位图字库（C++ ImageFont 的字形数据；null 表示未接线，用默认近似）
+    pub bitmap: *mut BitmapFont,
 }
 
 impl Font {
@@ -49,11 +52,31 @@ impl Font {
             descent: (size as f64 * 0.15) as i32,
             ascent_padding: 0,
             line_spacing_offset: 0,
+            bitmap: std::ptr::null_mut(),
         }
     }
 
-    /// 获取字符串宽度（默认计算）
+    /// 绑定位图字库并把字形度量拷入 Font（对应 C++ ImageFont 的构造数据）
+    /// 调用方保证 bmp 生命周期长于本 Font。
+    pub fn set_bitmap(&mut self, bmp: *mut BitmapFont) {
+        self.bitmap = bmp;
+        if !bmp.is_null() {
+            unsafe {
+                let bmp_ref = &*bmp;
+                self.ascent = bmp_ref.ascent;
+                self.font_height = bmp_ref.height;
+                self.size = bmp_ref.point_size;
+                self.descent = bmp_ref.height - bmp_ref.ascent;
+                self.line_spacing = bmp_ref.height;
+            }
+        }
+    }
+
+    /// 获取字符串宽度（默认计算；已绑定位图字库时用真实字形宽度）
     pub fn string_width(&self, text: &str) -> i32 {
+        if !self.bitmap.is_null() {
+            unsafe { return (*self.bitmap).string_width(text); }
+        }
         let mut width = 0;
         let mut prev: char = '\0';
         for c in text.chars() {
@@ -63,8 +86,16 @@ impl Font {
         width
     }
 
-    /// 获取单个字符宽度（含字距调整）
+    /// 获取单个字符宽度（含字距调整；已绑定位图字库时用字形 advance）
     pub fn char_width_kern(&self, c: char, _prev: char) -> i32 {
+        if !self.bitmap.is_null() {
+            unsafe {
+                return match (*self.bitmap).glyphs.get(&c) {
+                    Some(g) => g.advance,
+                    None => (*self.bitmap).default_width,
+                };
+            }
+        }
         // 默认简单计算：每个字符约为 size * 0.6
         if c == ' ' {
             (self.size * 3 / 10).max(1)
@@ -117,6 +148,7 @@ impl Font {
     /// 绘制字符串（默认实现）
     /// 对于 SysFont 会使用系统字体渲染，ImageFont 使用精灵图渲染
     /// 默认实现使用简单矩形块近似文字，确保即使没有加载字体也能看到文本位置
+    /// 已绑定位图字库时委托 BitmapFont::draw_text 逐字形 blit（对应 C++ ImageFont::DrawString）
     pub fn draw_string(
         &self,
         g: &mut crate::framework::graphics::graphics::Graphics,
@@ -126,6 +158,12 @@ impl Font {
         color: &Color,
         _clip_rect: &Rect,
     ) {
+        if !self.bitmap.is_null() {
+            unsafe {
+                (*self.bitmap).draw_text(g, x, y, text, color);
+            }
+            return;
+        }
         // 默认实现：使用 Graphics 填充像素模拟文字
         // 实际渲染由子类型（SysFont/ImageFont）覆盖
         let orig_color = g.color;
