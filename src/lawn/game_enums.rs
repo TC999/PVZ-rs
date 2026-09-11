@@ -1694,6 +1694,19 @@ pub enum Dialogs {
     NumDialogs,
 }
 
+/// 数值到 Dialogs 枚举的转换（对应 C++ int↔Dialogs 隐式转换）
+impl std::convert::TryFrom<i32> for Dialogs {
+    type Error = ();
+    fn try_from(v: i32) -> std::result::Result<Dialogs, ()> {
+        if v >= 0 && v < Dialogs::NumDialogs as i32 {
+            // Dialogs 是 #[repr(i32)] 连续枚举（无 gaps），直接 transmute 安全
+            Ok(unsafe { std::mem::transmute::<i32, Dialogs>(v) })
+        } else {
+            Err(())
+        }
+    }
+}
+
 /// ParticleEffect — 粒子效果
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]

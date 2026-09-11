@@ -2252,8 +2252,177 @@ impl LawnApp {
     }
 
 
-    /// 写入注册表（对应 C++ WriteToRegistry）
-    pub fn write_to_registry(&mut self) {
+    /// 按钮点击回调（对应 C++ LawnApp::ButtonDepress，LawnApp.cpp:1860-2017）
+    ///
+    /// C++ 语义：按 theId 的百分比范围分流——
+    /// - `theId % 10000` 在 [2000, 3000) → 对话框 "Yes" 按钮，id - 2000 是对话框类型
+    /// - `theId % 10000` 在 [3000, 4000) → 对话框 "No" 按钮，id - 3000 是对话框类型
+    ///
+    /// [TRANSLATION_NOTE]: C++ 使用 `theId % 10000` 避免按钮 ID 与对话框 ID 冲突
+    /// （例如 DIALOG_USERDIALOG+2000=3029 与另一个 DIALOG 值冲突）；Rust 直接 1:1 保留。
+    ///
+    /// 此方法闭合以下对话框的 `EditWidgetText` / `mApp->ButtonDepress(mId + 2000)` 调用点：
+    /// - NewUserDialog::EditWidgetText → DIALOG_CREATEUSER / DIALOG_RENAMEUSER + 2000
+    /// - UserDialog::EditWidgetText → DIALOG_USERDIALOG + 2000
+    /// - CheatDialog::EditWidgetText → DIALOG_CHEAT + 2000
+    pub fn button_depress(&mut self, the_id: i32) {
+        let id_mod = the_id % 10000;
+        if id_mod >= 2000 && id_mod < 3000 {
+            // C++: ids in [2000, 3000): the "Yes" button of dialog (theId - 2000)
+            let dialog_id = the_id - 2000;
+            // [TRANSLATION_NOTE]: Rust match 不支持 `Dialogs::X as i32` pattern，
+            // 此处先用 transmute 转成枚举变体（带范围检查避免 panic），再匹配枚举。
+            let dialog_enum: Dialogs = if (0..Dialogs::NumDialogs as i32).contains(&dialog_id) {
+                unsafe { std::mem::transmute::<i32, Dialogs>(dialog_id) }
+            } else {
+                // 越界：走 C++ default 分支
+                let _ = self.base.kill_dialog(the_id);
+                return;
+            };
+            match dialog_enum {
+                Dialogs::NewGame => {
+                    self.kill_dialog(Dialogs::NewGame);
+                    self.show_game_selector();
+                }
+                Dialogs::NewOptions => {
+                    self.kill_new_options_dialog();
+                }
+                Dialogs::PreGameNag => {
+                    // C++: DoRegister(); [TRANSLATION_NOTE]: Rust 无 DoRegister
+                    self.kill_dialog(Dialogs::PreGameNag);
+                }
+                Dialogs::LoadGame => {
+                    // C++: return; 保留对话框
+                }
+                Dialogs::ConfirmUpdateCheck => {
+                    // C++: KillDialog + CheckForUpdates；Rust 无 CheckForUpdates，仅关对话框
+                    self.kill_dialog(Dialogs::ConfirmUpdateCheck);
+                }
+                Dialogs::Quit => {
+                    self.kill_dialog(Dialogs::Quit);
+                    // C++: #if !defined(__IPHONEOS__) CloseRequestAsync();
+                    self.close_request_async();
+                }
+                Dialogs::Nag => {
+                    // C++: KillDialog + DoRegister
+                    self.kill_dialog(Dialogs::Nag);
+                }
+                Dialogs::Info => {
+                    self.kill_dialog(Dialogs::Info);
+                }
+                Dialogs::Paused => {
+                    self.kill_dialog(Dialogs::Paused);
+                }
+                Dialogs::NoMoreMoney => {
+                    // C++: KillDialog + mBoard->AddSunMoney(100)
+                    if let Some(board_ptr) = self.board {
+                        unsafe { (*board_ptr).add_sun_money(100); }
+                    }
+                    self.kill_dialog(Dialogs::NoMoreMoney);
+                }
+                Dialogs::Bonus => {
+                    self.kill_dialog(Dialogs::Bonus);
+                }
+                Dialogs::ConfirmBackToMain => {
+                    // C++: KillDialog + mBoardResult = BOARDRESULT_QUIT + mBoard->TryToSaveGame() + DoBackToMain()
+                    self.board_result = BoardResult::Quit;
+                    if let Some(board_ptr) = self.board {
+                        unsafe { (*board_ptr).try_to_save_game(); }
+                    }
+                    self.kill_dialog(Dialogs::ConfirmBackToMain);
+                    self.do_back_to_main();
+                }
+                Dialogs::UserDialog => {
+                    self.finish_user_dialog(true);
+                }
+                Dialogs::CreateUser => {
+                    self.finish_create_user_dialog(true);
+                }
+                Dialogs::ConfirmDeleteUser => {
+                    self.finish_confirm_delete_user_dialog(true);
+                }
+                Dialogs::RenameUser => {
+                    self.finish_rename_user_dialog(true);
+                }
+                Dialogs::CreateUserError => {
+                    self.finish_name_error(the_id - 2000);
+                }
+                Dialogs::RenameUserError => {
+                    self.finish_name_error(the_id - 2000);
+                }
+                Dialogs::Cheat => {
+                    self.finish_cheat_dialog(true);
+                }
+                Dialogs::RestartConfirm => {
+                    // C++: FinishRestartConfirmDialog(); Rust 侧未实现，走 default kill_dialog 分支
+                    self.kill_dialog(Dialogs::RestartConfirm);
+                }
+                Dialogs::TimesUp => {
+                    self.finish_times_up_dialog();
+                }
+                _ => {
+                    // C++: default: KillDialog(theId - 2000); 含 20008 字面量分支
+                    // [TRANSLATION_NOTE]: C++ 20008 对应"正在检查更新"对话框的额外 ID；
+                    // Rust Dialogs 枚举无对应项，此处 fall through 到 base.kill_dialog 兜底
+                    if dialog_id == 20008 {
+                        self.kill_dialog(Dialogs::CheckingUpdates);
+                    }
+                    let _ = self.base.kill_dialog(the_id);
+                }
+            }
+            return;
+        }
+
+        if id_mod >= 3000 && the_id < 4000 {
+            // C++: ids in [3000, 4000): the "No" button of dialog (theId - 3000)
+            let dialog_id = the_id - 3000;
+            let dialog_enum: Dialogs = if (0..Dialogs::NumDialogs as i32).contains(&dialog_id) {
+                unsafe { std::mem::transmute::<i32, Dialogs>(dialog_id) }
+            } else {
+                let _ = self.base.kill_dialog(the_id);
+                return;
+            };
+            match dialog_enum {
+                Dialogs::PreGameNag => {
+                    // C++: KillDialog + Shutdown()
+                    self.kill_dialog(Dialogs::PreGameNag);
+                    self.shutdown();
+                }
+                Dialogs::LoadGame => {
+                    self.kill_dialog(Dialogs::LoadGame);
+                }
+                Dialogs::UserDialog => {
+                    self.finish_user_dialog(false);
+                }
+                Dialogs::CreateUser => {
+                    self.finish_create_user_dialog(false);
+                }
+                Dialogs::ConfirmDeleteUser => {
+                    self.finish_confirm_delete_user_dialog(false);
+                }
+                Dialogs::RenameUser => {
+                    self.finish_rename_user_dialog(false);
+                }
+                Dialogs::Cheat => {
+                    self.finish_cheat_dialog(false);
+                }
+                Dialogs::TimesUp => {
+                    self.finish_times_up_dialog();
+                }
+                _ => {
+                    // C++: default: KillDialog(theId - 3000); 含 10008 字面量分支
+                    // [TRANSLATION_NOTE]: C++ 10008 对应"正在检查更新"对话框的额外 ID
+                    if dialog_id == 10008 {
+                        self.kill_dialog(Dialogs::CheckingUpdates);
+                    }
+                    let _ = self.base.kill_dialog(the_id);
+                }
+            }
+            return;
+        }
+    }
+
+pub fn write_to_registry(&mut self) {
         if let Some(player_info) = &self.player_info {
             // C++: RegistryWriteString("CurUser", mPlayerInfo->mName) — 注册表写入未接入
             // C++: mPlayerInfo->SaveDetails() — 接入 PlayerInfo 存档 IO

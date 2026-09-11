@@ -649,7 +649,14 @@ impl UserDialog {
     /// C++: `mApp->ButtonDepress(mId + 2000);`
     /// [TRANSLATION_NOTE]: LawnApp::ButtonDepress 未实现（SexyAppBase 处为空体），保留语义注释。
     pub fn edit_widget_text(&mut self, _the_id: i32, _the_string: &str) {
-        let _ = (self.app, self.id);
+        // C++: mApp->ButtonDepress(mId + 2000)
+        // [TRANSLATION_NOTE]: LawnApp::ButtonDepress 已接入（commit 见 plan_step_11）
+        if let Some(app) = self.app {
+            unsafe {
+                let app_ref = &mut *app;
+                app_ref.button_depress(self.id + 2000);
+            }
+        }
     }
 
     /// 允许输入的字符（对应 C++ AllowChar）

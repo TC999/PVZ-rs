@@ -36,7 +36,7 @@
 
 ### 2.1 对话框族整套空体（已完成 ✅ 2026-09-11）
 
-> **本轮翻译完成状态**：本段 8 个文件共 32 个真实空体函数已全部翻译，5 个 commit：
+> **2.1 段翻译完成状态**：本段 8 个文件共 32 个真实空体函数已全部翻译，5 个 commit：
 > - `31a184e` NewUserDialog 空体全译（8 函数）
 > - `9ffbe45` ContinueDialog 空体全译（8 函数 + Drop 清理）
 > - `abe729f` UserDialog 空体全译（9 函数 + ListWidget 结构扩展 + Drop 清理）
@@ -46,10 +46,10 @@
 > 3 处"误报"（C++ 无对应虚函数或 C++ 也是空函数）已在下方勘误标注。
 > **真实剩余：0 项**。
 >
-> [TRANSLATION_NOTE]: `LawnApp::ButtonDepress` 未实现（SexyAppBase::button_depress 空体），
-> `NewUserDialog::EditWidgetText` / `UserDialog::EditWidgetText` / `CheatDialog::EditWidgetText`
-> 中的 `mApp->ButtonDepress(mId + 2000)` 语义保留为注释；待 `plan_step_11` 接入 `LawnApp::ButtonDepress`
-> 后统一补完 2000 偏移事件路由。
+> ✅ **plan_step_11 已接入**（LawnApp::ButtonDepress）——`NewUserDialog::EditWidgetText` /
+> `UserDialog::EditWidgetText` / `C cheatDialog::EditWidgetText` 中的 `mApp->ButtonDepress(mId + 2000)`
+> 语义已 1:1 翻译；`LawnApp::ButtonDepress` 按 C++ LawnApp.cpp:1860-2017 实现，覆盖 27 个
+> 对话框类型分支（Yes/No 按钮 + 特殊字面量 20008/10008）。commit 见本轮最后提交。
 
 C++ 有完整实现，Rust 对应函数全为空体（现已翻译完毕）：
 

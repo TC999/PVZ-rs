@@ -350,8 +350,15 @@ impl NewUserDialog {
     /// 直接返回；后续接入 `LawnApp::ButtonDepress` 时需在此处调用
     /// `(*app).button_depress(self.id + 2000)`。
     pub fn edit_widget_text(&mut self, _the_id: i32, _the_string: &str) {
-        // 保留 self.app / self.id 供后续 LawnApp::ButtonDepress 接入
-        let _ = (self.app, self.id);
+        // C++: mApp->ButtonDepress(mId + 2000)
+        // [TRANSLATION_NOTE]: LawnApp::ButtonDepress 已接入（commit 见 plan_step_11），
+        // 此处按 C++ 语义调用 mApp->ButtonDepress(mId + 2000)。
+        if let Some(app) = self.app {
+            unsafe {
+                let app_ref = &mut *app;
+                app_ref.button_depress(self.id + 2000);
+            }
+        }
     }
 
     /// 允许输入的字符（对应 C++ AllowChar）
