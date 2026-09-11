@@ -3521,12 +3521,34 @@ impl Plant {
         if self.state == PlantState::MagnetshroomCharging {
             if self.state_countdown == 0 {
                 self.state = PlantState::Ready;
-                // [TRANSLATION_NOTE]: PlayBodyReanim(anim_idle) + aBodyReanim->mAnimRate — reanim 未接入
+                // C++: aAnimRate = RandRangeFloat(10.0f, 15.0f); PlayBodyReanim("anim_idle", REANIM_LOOP, 30, aAnimRate)
+                let a_anim_rate = crate::todlib::tod_common::rand_range_float(10.0, 15.0);
+                self.play_body_reanim("anim_idle", ReanimLoopType::Loop, 30, a_anim_rate);
+                // C++: if (mApp->IsIZombieLevel()) aBodyReanim->mAnimRate = 0.0f
+                if let Some(app) = self.base.get_app_mut() {
+                    if app.is_izombie_level() {
+                        if let Some(r) = app.reanimation_get_mut(self.body_reanim_id) {
+                            r.m_anim_rate = 0.0;
+                        }
+                    }
+                }
                 self.magnet_items[0].item_type = MagnetItemType::None;
             }
         } else if self.state == PlantState::MagnetshroomSucking {
-            // [TRANSLATION_NOTE]: mLoopCount > 0 → 换 anim_nonactive_idle2 动画 — reanim 未接入
-            self.state = PlantState::MagnetshroomCharging;
+            // C++: if (aBodyReanim->mLoopCount > 0)
+            let a_loop = self.base.get_app().and_then(|app| app.reanimation_get(self.body_reanim_id)).map_or(0, |r| r.m_loop_count);
+            if a_loop > 0 {
+                // C++: PlayBodyReanim("anim_nonactive_idle2", REANIM_LOOP, 20, 2.0f)
+                self.play_body_reanim("anim_nonactive_idle2", ReanimLoopType::Loop, 20, 2.0);
+                if let Some(app) = self.base.get_app_mut() {
+                    if app.is_izombie_level() {
+                        if let Some(r) = app.reanimation_get_mut(self.body_reanim_id) {
+                            r.m_anim_rate = 0.0;
+                        }
+                    }
+                }
+                self.state = PlantState::MagnetshroomCharging;
+            }
         } else {
             // 找最近的、可被吸走装备的僵尸（对应 C++ GetCircleRectOverlap + 距离加权）
             let z_target = self.base.get_board().and_then(|board| {
