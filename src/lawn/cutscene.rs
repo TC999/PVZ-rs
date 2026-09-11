@@ -1320,7 +1320,10 @@ impl CutScene {
                             *p += 1;
                         }
                     }
-                    // C++: WriteCurrentUserConfig() —— [TRANSLATION_NOTE]: 存档由 try_to_save_game 路径处理，暂略
+            // C++: mApp->WriteCurrentUserConfig()
+            if let Some(app) = self.app {
+                unsafe { (*app).write_current_user_config(); }
+            }
                 }
             }
             // C++: mBoard->mSeedBank->UpdateWidth() —— [TRANSLATION_NOTE]: Rust seed_bank 为 Vec<SeedPacket>，无 UpdateWidth
