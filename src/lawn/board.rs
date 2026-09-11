@@ -9256,8 +9256,14 @@ Spawn: {}
         }
     }
 
-    /// 尝试保存游戏（对应 C++ Board::TryToSaveGame）
+    /// 尝试保存游戏（对应 C++ Board::TryToSaveGame，Board.cpp:348）
     pub fn try_to_save_game(&mut self) {
+        // C++: aFileName = GetSavedGameName(mApp->mGameMode, mApp->mPlayerInfo->mId)
+        let a_file_name = self.app.map_or(String::new(), |app| unsafe {
+            let profile_id = (*app).player_info.as_ref().map_or(0, |p| p.m_id) as i32;
+            crate::lawn::lawn_common::get_saved_game_name((*app).game_mode, profile_id)
+        });
+
         if !self.need_save_game() {
             return;
         }
@@ -9267,17 +9273,18 @@ Spawn: {}
             return;
         }
 
-        // MkDir 和文件系统操作暂略
-        // let a_file_name = get_saved_game_name(mApp->mGameMode, mApp->mPlayerInfo->mId);
+        // C++: MkDir(GetAppDataPath("userdata"))；[TRANSLATION_NOTE]: Rust 存档目录由 launcher 层确保，暂略
         if let Some(app) = self.app {
             unsafe {
                 if let Some(ref mut music) = (*app).music {
                     music.game_music_pause(true);
                 }
+                // C++: LawnSaveGame(this, aFileName)
+                let board_ptr = self as *const Board as usize as *mut Board;
+                let _ = crate::lawn::system::save_game::lawn_save_game(Some(board_ptr), &a_file_name);
+                // C++: mApp->ClearUpdateBacklog()；[TRANSLATION_NOTE]: Rust 无 update backlog 队列，暂略
             }
         }
-        // LawnSaveGame(this, aFileName) — 暂略
-        // self.app.map(|app| unsafe { (*app).clear_update_backlog() });
         self.survival_save_score();
     }
 
