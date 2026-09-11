@@ -17,7 +17,7 @@ use crate::lawn::lawn_mower::LawnMower;
 use crate::lawn::grid_item::{GridItem, GridItemType};
 use crate::lawn::seed_packet::SeedPacket;
 use crate::lawn::challenge::Challenge;
-use crate::lawn::cursor_object::CursorObject;
+use crate::lawn::cursor_object::{CursorObject, CursorPreview};
 use crate::lawn::tool_tip_widget::ToolTipWidget;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::rect::Rect;
@@ -341,6 +341,8 @@ pub struct Board {
     pub m_start_draw_time: i64,
     pub m_interval_draw_time: i64,
     pub m_interval_draw_count_start: u32,
+    /// 对应 C++ mMinFPS（Board.cpp:154 初始 1000.0f）
+    pub m_min_fps: f32,
     pub m_rise_from_grave_counter: i32,
     pub m_huge_wave_count_down: i32,
     pub m_zombie_count_down: i32,
@@ -354,6 +356,10 @@ pub struct Board {
     pub m_ice_timer: [i32; MAX_GRID_SIZE_Y],
     pub m_ice_min_x: [i32; MAX_GRID_SIZE_Y],
     pub m_ice_trap_counter: i32,
+    /// 对应 C++ mIceParticleID[MAX_GRID_SIZE_Y]（每行冰粒子系统 ID）
+    pub m_ice_particle_id: [crate::lawn::game_enums::ParticleSystemID; MAX_GRID_SIZE_Y],
+    /// 对应 C++ mPoolSparklyParticleID（泳池闪光粒子系统 ID）
+    pub m_pool_sparkly_particle_id: crate::lawn::game_enums::ParticleSystemID,
 
     // 火焰扫荡效果（对应 C++ mFwooshCountDown / mFwooshID）
     pub m_fwoosh_count_down: i32,
@@ -399,6 +405,8 @@ pub struct Board {
 
     // 光标对象
     pub cursor_object: CursorObject,
+    /// 对应 C++ mCursorPreview（种植预览，Board.h:90）
+    pub cursor_preview: CursorPreview,
 
     // 玉米加农炮瞄准（对应 C++ mCobCannonCursorDelayCounter/mCobCannonMouseX/mCobCannonMouseY）
     pub m_cob_cannon_cursor_delay_counter: i32,
@@ -553,6 +561,7 @@ impl Board {
             m_start_draw_time: 0,
             m_interval_draw_time: 0,
             m_interval_draw_count_start: 0,
+            m_min_fps: 1000.0,
             m_rise_from_grave_counter: 0,
             m_huge_wave_count_down: 0,
             m_zombie_count_down: 0,
@@ -564,6 +573,8 @@ impl Board {
             m_ice_timer: [0; MAX_GRID_SIZE_Y],
             m_ice_min_x: [0; MAX_GRID_SIZE_Y],
             m_ice_trap_counter: 0,
+            m_ice_particle_id: [0; MAX_GRID_SIZE_Y],
+            m_pool_sparkly_particle_id: 0,
             m_fwoosh_count_down: 0,
             m_fwoosh_id: [[REANIMATIONID_NULL; 12]; MAX_GRID_SIZE_Y],
             m_ice_particle: 0,
@@ -593,6 +604,7 @@ impl Board {
             m_sukhbir_mode: false,
             m_super_mower_mode: false,
             cursor_object: CursorObject::new(),
+            cursor_preview: CursorPreview::new(),
             m_cob_cannon_cursor_delay_counter: 0,
             m_cob_cannon_mouse_x: 0,
             m_cob_cannon_mouse_y: 0,
@@ -689,6 +701,11 @@ impl Board {
 
         // 设置波次信息
         self.setup_waves();
+
+        // C++ Board 构造函数：mCursorPreview = new CursorPreview()；
+        // 指针接线（与 coin/plant 等 GameObject 相同模式）
+        self.cursor_preview.base.board = Some(self as *mut Board);
+        self.cursor_preview.base.app = Some(app);
     }
 
     /// 设置关卡（对应 C++ InitLevel 的部分逻辑）
@@ -847,10 +864,27 @@ impl Board {
         //     mApp->mPoolEffect->mPoolCounter++;
         // }
         // ```
-        // [TRANSLATION_NOTE]: 第二段闪光粒子（BACKGROUND_3_POOL + mPoolSparklyParticleID == PARTICLESYSTEMID_NULL
-        // → AddPvzpParticle(450, 295, ..., PARTICLE_POOL_SPARKLY) + ParticleGetID）依赖
-        // LawnApp::AddPvzpParticle / ParticleGetID / Board.m_pool_sparkly_particle_id 等基础设施，
-        // 属 plan_step_10 附着层 stub 范围，此处保留 TODO。
+        // C++ 5800-5805: BACKGROUND_3_POOL 泳池闪光粒子（ID == NULL 时创建）
+        // ```cpp
+        // if (mBackground == BackgroundType::BACKGROUND_3_POOL && mPoolSparklyParticleID == ParticleSystemID::PARTICLESYSTEMID_NULL)
+        // {
+        //     int aRenderPosition = MakeRenderOrder(RENDER_LAYER_GROUND, 2, 0);
+        //     PvzpParticleSystem* aPoolParticle = mApp->AddPvzpParticle(450, 295, aRenderPosition, PARTICLE_POOL_SPARKLY);
+        //     mPoolSparklyParticleID = mApp->ParticleGetID(aPoolParticle);
+        // }
+        // ```
+        if self.m_background_type == BackgroundType::Pool && self.m_pool_sparkly_particle_id == 0 {
+            let a_render_position = make_render_order(RENDER_LAYER_GROUND, 2, 0);
+            if let Some(app) = self.app {
+                unsafe {
+                    if let Some(ptr) = (*app).add_tod_particle(
+                        450.0, 295.0, a_render_position, ParticleEffect::PoolSparkly as i32,
+                    ) {
+                        self.m_pool_sparkly_particle_id = (*app).particle_get_id(ptr);
+                    }
+                }
+            }
+        }
         if let Some(app) = self.app {
             unsafe {
                 let app_ref = &mut *app;
@@ -871,9 +905,9 @@ impl Board {
         self.update_grid_items();
         self.update_fwoosh();
         self.update_game();
-        // [TRANSLATION_NOTE]: C++ Board::Update 在此调用 UpdateFog()（5810）；
-        // Rust update_game() 内部已调用 update_fog()，故此处不再重复调用以避免双重更新
-        // self.update_fog();
+        // C++ Board.cpp:5810：UpdateGame() 之后独立调用 UpdateFog()。
+        // UpdateGame 在非 SCENE_PLAYING 时提前 return 但 UpdateFog 仍会执行，故必须放在此处而非 update_game 内部。
+        self.update_fog();
         // ★ 关键接入：挑战状态机每帧推进（C++ Board.cpp:5811）
         if let Some(ch) = self.challenge.as_mut() {
             ch.update();
@@ -1113,8 +1147,8 @@ impl Board {
     /// 从墓碑生成僵尸（对应 C++ SpawnZombiesFromGraves）
     fn spawn_zombies_from_graves(&mut self) {
         let app_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
-        // GAMEMODE_CHALLENGE_WAR_AND_PEAS_2 暂未翻译，仅检查 WarAndPeas
-        if app_mode == GameMode::ChallengeWarAndPeas {
+        // C++: GAMEMODE_CHALLENGE_WAR_AND_PEAS || GAMEMODE_CHALLENGE_WAR_AND_PEAS_2 → return
+        if app_mode == GameMode::ChallengeWarAndPeas || app_mode == GameMode::ChallengeWarAndPeas2 {
             return;
         }
 
@@ -1129,16 +1163,20 @@ impl Board {
         // 遍历所有格子系统，从墓碑生成僵尸
         let mut to_spawn: Vec<(i32, i32)> = Vec::new();
         for item in &self.grid_items {
+            // C++: if (aGridItem->mDead) continue;
+            if item.dead {
+                continue;
+            }
             if item.grid_item_type != GridItemType::Grave || item.counter < 100 {
                 continue;
             }
-            // GAMEMODE_CHALLENGE_GRAVE_DANGER 暂未翻译，跳过对应检查
-            // if app_mode == GameMode::ChallengeGraveDanger {
-            //     let rand_val = crate::todlib::tod_common::rand_range_int(0, self.m_num_waves - 1);
-            //     if rand_val > self.m_current_wave {
-            //         continue;
-            //     }
-            // }
+            // C++: if (mApp->mGameMode == GAMEMODE_CHALLENGE_GRAVE_DANGER && Rand(mNumWaves) > mCurrentWave) continue;
+            if app_mode == GameMode::ChallengeGraveDanger {
+                let rand_val = crate::todlib::tod_common::rand_range_int(0, self.m_num_waves);
+                if rand_val > self.m_current_wave {
+                    continue;
+                }
+            }
             to_spawn.push((item.grid_x, item.grid_y));
         }
 
@@ -1146,6 +1184,11 @@ impl Board {
             let ztype = self.pick_grave_rising_zombie_type();
             let mut zombie = Zombie::new();
             zombie.zombie_initialize(grid_y, ztype, false, None, self.m_current_wave);
+            // 指针接线（RiseFromGrave 内部经 base.get_board() 计算网格坐标）
+            zombie.base.board = Some(self as *mut Board);
+            zombie.base.app = self.app;
+            // C++: aZombie->RiseFromGrave(aGridItem->mGridX, aGridItem->mGridY)
+            zombie.rise_from_grave(grid_x, grid_y);
             self.zombies.push(zombie);
         }
     }
@@ -1250,7 +1293,10 @@ impl Board {
         self.plants.get_mut(idx)
     }
 
-    /// 在指定行查找僵尸（对应 C++ Plant::FindTargetZombie 简化：同行 + 植物右侧 + 最靠左）
+    /// 在指定行查找僵尸（对应 C++ Plant::FindTargetZombie，Plant.cpp:4769）
+    /// [TRANSLATION_NOTE]: 简化版（同行 + 植物右侧 + 最靠左）；C++ 完整版依赖 Plant 上下文
+    /// （mSeedType/mState/攻击矩形/伤害范围标志/Portal 检查/Chomper/PotatoMine/TangleKelp 特判），
+    /// 属 Plant 模块翻译范围，此处保留简化。
     pub fn find_zombie_in_row(&mut self, row: i32, from_col: i32) -> Option<&mut Zombie> {
         let mut best_idx = None;
         let mut best_x = i32::MAX;
@@ -1272,6 +1318,7 @@ impl Board {
 
     /// 添加硬币
     pub fn add_coin(&mut self, x: f32, y: f32, coin_type: CoinType, motion: CoinMotion) {
+        // 对应 C++ Board::AddCoin (Board.cpp:1985)
         let mut coin = Coin::new();
         coin.coin_initialize(x, y, coin_type, motion);
         coin.base.board = Some(self as *mut Board); // 注意：这是 unsafe 的简化
@@ -1279,6 +1326,12 @@ impl Board {
             coin.base.app = Some(app);
         }
         self.coins.push(coin);
+
+        // C++ 1989-1992: 首次冒险模式第 1 关提示点击阳光
+        let first_time = self.app.map_or(false, |app| unsafe { (*app).is_first_time_adventure_mode() });
+        if first_time && self.level == 1 {
+            self.display_advice("[ADVICE_CLICK_ON_SUN]", MessageStyle::TutorialLevel1Stay as i32, AdviceType::ClickOnSun);
+        }
     }
 
     /// 添加子弹，返回新子弹在 mProjectiles 中的下标
@@ -1339,14 +1392,6 @@ impl Board {
         plant.pos_y = y as f32;
         self.plants.push(plant);
         self.plants.last_mut()
-    }
-
-    /// 清理死亡实体
-    fn cleanup_dead(&mut self) {
-        self.plants.retain(|p| !p.dead);
-        self.zombies.retain(|z| !z.dead);
-        self.projectiles.retain(|p| !p.dead);
-        self.coins.retain(|c| !c.dead);
     }
 
     /// 在指定位置查找指定类型的格子物品（对应 C++ GetGridItemAt）
@@ -2553,8 +2598,13 @@ Spawn: {}
                 need_sound_effect = false;
             }
             if need_sound_effect {
-                // mApp->mMusic->StopAllMusic() 暂未接入
+                // C++: mApp->mMusic->StopAllMusic();
+                if let Some(music) = &mut app.music {
+                    music.stop_all_music();
+                }
                 if app.is_adventure_mode() && self.level == 50 {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::FinalFanfare as i32);
+                } else if app.trophies_need_for_gold_sunflower() == 1 {
                     app.play_foley(crate::todlib::tod_foley::FoleyType::FinalFanfare as i32);
                 } else {
                     app.play_foley(crate::todlib::tod_foley::FoleyType::WinMusic as i32);
@@ -2662,11 +2712,14 @@ Spawn: {}
         }
 
         // 2. 无草皮之地关卡，无草皮行在前 5 波不刷出僵尸
-        // 注意：C++ 中有 GAMEMODE_CHALLENGE_RESODDED，Rust 枚举中暂无对应变体
-        // 暂时跳过此检查，后续可添加
-
-        // 获取 app 的游戏模式
         let app_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+        // C++: GAMEMODE_CHALLENGE_RESODDED && PLANTROW_DIRT && mCurrentWave < 5 → false
+        if app_mode == GameMode::ChallengeResodded
+            && self.m_plant_row[row as usize] == PlantRowType::Dirt
+            && self.m_current_wave < 5
+        {
+            return false;
+        }
 
         // 3. 水路不允许不能进水的僵尸（气球僵尸除外）
         if self.m_plant_row[row as usize] == PlantRowType::Pool
@@ -3024,7 +3077,13 @@ Spawn: {}
         {
             a_render_list.push(RenderItem { render_object_type: RenderObjectType::Storm, z_pos: make_render_order(RENDER_LAYER_FOG, 0, 3), object_index: 0, boss_part: None });
         }
-        // [TRANSLATION_NOTE]: C++ AddGameObjectRenderItemCursorPreview 需要 Board::mCursorPreview 字段（Rust 未翻译），暂不添加 CURSOR_PREVIEW 渲染项
+        // C++ 6309: AddGameObjectRenderItemCursorPreview(...mCursorPreview)
+        a_render_list.push(RenderItem {
+            render_object_type: RenderObjectType::CursorPreview,
+            z_pos: self.cursor_preview.base.render_order,
+            object_index: 0,
+            boss_part: None,
+        });
 
         // C++ 6313: 按 zPos 排序
         a_render_list.sort_by(render_item_sort_func);
@@ -3158,6 +3217,13 @@ Spawn: {}
                         }
                     }
                 }
+                RenderObjectType::CursorPreview => {
+                    // C++ 6433-6442: RENDER_ITEM_CURSOR_PREVIEW → BeginDraw/Draw/EndDraw
+                    if self.cursor_preview.base.begin_draw(g) {
+                        self.cursor_preview.draw(g);
+                        self.cursor_preview.base.end_draw(g);
+                    }
+                }
                 RenderObjectType::CoinBank => {
                     self.draw_ui_coin_bank(g);
                 }
@@ -3192,11 +3258,40 @@ Spawn: {}
     }
 
     /// 主绘制入口（对应 C++ Board::Draw，Board.cpp:7463）
-    pub fn draw(&self, g: &mut Graphics) {
-        // [TRANSLATION_NOTE]: C++ 开头检查 DIALOG_STORE / DIALOG_ALMANAC 对话框；Rust 无对话框栈，跳过
+    pub fn draw(&mut self, g: &mut Graphics) {
+        // C++: if (mApp->GetDialog(DIALOG_STORE) || mApp->GetDialog(DIALOG_ALMANAC)) return;
+        // Rust 无对话框栈；以 store_screen / almanac_dialog 非空近似对话框打开状态
+        let dialog_open = self.app.map_or(false, |app| unsafe {
+            (*app).store_screen.is_some() || (*app).almanac_dialog.is_some()
+        });
+        if dialog_open {
+            return;
+        }
+
         g.set_linear_blend(true);
-        // [TRANSLATION_NOTE]: C++ 中 mDrawCount++ 及 FPS 统计（mMinFPS/mIntervalDrawTime 等）依赖 SDL_GetTicks，
-        // Rust 侧 draw 为 &self 且 m_draw_count 无消费方，暂不推进
+
+        // C++ 7467-7484: FPS 统计（SDL_GetTicks → 毫秒；Rust 用 SystemTime）
+        if self.m_draw_count != 0
+            && self.m_cut_scene.map_or(false, |cs| unsafe { (*cs).m_preloaded })
+        {
+            let a_tick_count = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_millis() as i64);
+            let a_interval_draws = self.m_draw_count as i64 - self.m_interval_draw_count_start as i64;
+            let a_interval = a_tick_count - self.m_interval_draw_time;
+            if a_interval > 10000 {
+                let a_interval_fps = (a_interval_draws * 1000 + 500) as f32 / a_interval as f32;
+                if self.m_min_fps > a_interval_fps {
+                    self.m_min_fps = a_interval_fps;
+                }
+                self.m_interval_draw_count_start = self.m_draw_count;
+                self.m_interval_draw_time = a_tick_count;
+            }
+        } else {
+            self.reset_fps_stats();
+        }
+
+        self.m_draw_count = self.m_draw_count.wrapping_add(1);
         self.draw_game_objects(g);
     }
 
@@ -3436,17 +3531,68 @@ Spawn: {}
 
     /// 关卡结束序列（对应 C++ UpdateLevelEndSequence）
     fn update_level_end_sequence(&mut self) {
-        // C++: 生存/恐怖罐阶段推进（简化：仅处理通用结束）
+        // C++ Board.cpp:1707-1756：生存/恐怖罐阶段推进
         if self.m_next_survival_stage_counter > 0 {
-            self.m_next_survival_stage_counter -= 1;
-            if self.m_next_survival_stage_counter == 0 {
-                if self.is_survival_stage_with_repick() {
-                    self.try_to_save_game();
+            // C++: if (!IsScaryPotterDaveTalking()) { mNextSurvivalStageCounter--; ... }
+            if !self.is_scary_potter_dave_talking() {
+                self.m_next_survival_stage_counter -= 1;
+                // C++: 冒险模式恐怖罐 300 帧时 CrazyDave 入场 + 下一阶段清场
+                let is_adventure_scary = self.app.map_or(false, |app| unsafe {
+                    (*app).is_adventure_mode() && (*app).is_scary_potter_level()
+                });
+                if is_adventure_scary && self.m_next_survival_stage_counter == 300 {
+                    if let Some(app) = self.app {
+                        unsafe {
+                            (*app).crazy_dave_enter();
+                            let talk_index = self.challenge.as_ref().map_or(2700, |c| {
+                                if c.survival_stage == 0 { 2700 } else { 2800 }
+                            });
+                            (*app).crazy_dave_talk_index(talk_index);
+                        }
+                    }
+                    if let Some(ch) = self.challenge.as_mut() {
+                        ch.puzzle_next_stage_clear();
+                    }
+                    self.m_next_survival_stage_counter = 100;
                 }
-                self.m_level_complete = true;
-                self.remove_zombies_for_repick();
             }
-            return;
+
+            // C++: if (mNextSurvivalStageCounter == 1 && mApp->IsSurvivalMode()) TryToSaveGame()
+            if self.m_next_survival_stage_counter == 1
+                && self.app.map_or(false, |app| unsafe { (*app).is_survival_mode() })
+            {
+                self.try_to_save_game();
+            }
+
+            if self.m_next_survival_stage_counter == 0 {
+                // C++ 分支：恐怖罐 / 无尽 IZombie / LastStand / 其他
+                let app_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+                let is_scary = self.app.map_or(false, |app| unsafe { (*app).is_scary_potter_level() });
+                let is_adventure = self.app.map_or(false, |app| unsafe { (*app).is_adventure_mode() });
+                if is_scary {
+                    if is_adventure {
+                        return;
+                    }
+                    if !self.is_final_scary_potter_stage() {
+                        if let Some(ch) = self.challenge.as_mut() {
+                            ch.puzzle_next_stage_clear();
+                            ch.scary_potter_populate();
+                        }
+                    }
+                } else if self.app.map_or(false, |app| unsafe { (*app).is_endless_izombie(app_mode) }) {
+                    if let Some(ch) = self.challenge.as_mut() {
+                        ch.puzzle_next_stage_clear();
+                    }
+                    // [TRANSLATION_NOTE]: Challenge::IZombieInitLevel（放置大脑 + 模式摆植物）未翻译
+                } else if app_mode == GameMode::ChallengeLastStand {
+                    self.clear_advice(AdviceType::None);
+                } else {
+                    self.m_level_complete = true;
+                    self.remove_zombies_for_repick();
+                }
+                return;
+            }
+            // C++: counter > 0 且未减到 0 时继续向下（mBoardFadeOutCounter 此时通常为负 → 下方 return）
         }
 
         if self.m_board_fade_out_counter < 0 {
@@ -3458,8 +3604,19 @@ Spawn: {}
             return;
         }
         if self.m_board_fade_out_counter == 300 {
-            // [TRANSLATION_NOTE]: PlaySample(SOUND_LIGHTFILL) 依赖音效系统，暂不执行
-            let _ = self.level;
+            // C++: if (!IsSurvivalStageWithRepick() && !(mLevel == 9 || 19 || 29 || 39 || 49)) PlaySample(SOUND_LIGHTFILL)
+            if !self.is_survival_stage_with_repick()
+                && self.level != 9
+                && self.level != 19
+                && self.level != 29
+                && self.level != 39
+                && self.level != 49
+            {
+                // C++: mApp->PlaySample(Sexy::SOUND_LIGHTFILL);
+                if let Some(app) = self.app {
+                    unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_LIGHTFILL); }
+                }
+            }
         }
     }
 
@@ -3489,6 +3646,11 @@ Spawn: {}
         self.update_mouse_position(x, y);
         self.ignore_mouse_up = !self.can_interact_with_board_buttons();
 
+        // C++ Board.cpp:4392: if (mTimeStopCounter > 0) return;
+        if self.m_time_stop_counter > 0 {
+            return;
+        }
+
         if self.m_board_fade_out_counter >= 0 {
             return;
         }
@@ -3510,13 +3672,61 @@ Spawn: {}
         // 更新光标
         self.update_cursor();
 
+        // [TRANSLATION_NOTE]: C++ 4388-4411 菜单/商店按钮悬停音效 PlaySample(SOUND_GRAVEBUTTON/SOUND_TAP)
+        // 未接入音效 ID 表；C++ 4413-4417 mCheatKeys 作弊加速（mNextSurvivalStageCounter=2 + 冰道截断）未接入。
+
+        // C++ 4419-4428：关卡开场（SCENE_LEVEL_INTRO）/僵尸胜利（SCENE_ZOMBIES_WON）场景分支
+        let scene = self.app.map_or(crate::lawn::lawn_app::GameScenes::Playing, |app| unsafe { (*app).game_scene });
+        if scene == crate::lawn::lawn_app::GameScenes::MainMenu {
+            // C++: mApp->mSeedChooserScreen->CancelLawnView()
+            if let Some(app) = self.app {
+                unsafe {
+                    if let Some(sc) = (*app).seed_chooser_screen {
+                        let sc_ptr = sc as *mut crate::lawn::widget::seed_chooser_screen::SeedChooserScreen;
+                        (*sc_ptr).cancel_lawn_view();
+                    }
+                }
+            }
+        }
+        if scene == crate::lawn::lawn_app::GameScenes::ZombiesWon {
+            // C++: mCutScene->ZombieWonClick(); return;
+            if let Some(cs) = self.m_cut_scene {
+                unsafe { (*cs).zombie_won_click(); }
+            }
+            return;
+        }
+        if scene == crate::lawn::lawn_app::GameScenes::MainMenu {
+            // C++: mCutScene->MouseDown(x, y)
+            if let Some(cs) = self.m_cut_scene {
+                unsafe { (*cs).mouse_down(x, y); }
+            }
+        }
+
         // 处理关卡场景
         if self.m_paused {
             return;
         }
 
-        // 处理工具点击
+        // C++ 4430-4444：COBCANNON_TARGET 点击 / Coin 点击
         let cursor_type = self.cursor_object.cursor_type;
+        if hit_result.object_type == GameObjectType::None {
+            if cursor_type == CursorType::CobcannonTarget {
+                self.mouse_down_cobcannon_fire(x, y, click_count);
+                self.update_cursor();
+                return;
+            }
+        } else if hit_result.object_type == GameObjectType::Coin && click_count >= 0 {
+            // C++: Coin* aCoin = (Coin*)aHitResult.mObject; aCoin->MouseDown(x, y, theClickCount)
+            if let Some(idx) = hit_result.object {
+                if let Some(coin) = self.coins.get_mut(idx) {
+                    coin.mouse_down(x, y, click_count);
+                }
+            }
+            self.update_cursor();
+            return;
+        }
+
+        // 处理工具点击
         let is_tool = matches!(cursor_type,
             CursorType::Shovel | CursorType::WateringCan | CursorType::Fertilizer |
             CursorType::BugSpray | CursorType::Phonograph | CursorType::Chocolate |
@@ -3531,10 +3741,56 @@ Spawn: {}
         } else if hit_result.object_type != GameObjectType::None {
             match hit_result.object_type {
                 GameObjectType::SeedPacket => {
-                    // ((SeedPacket*)obj)->MouseDown — 暂略
+                    // C++: if (!mPaused) ((SeedPacket*)obj)->MouseDown(x, y, theClickCount)
+                    if !self.m_paused {
+                        if let Some(idx) = hit_result.object {
+                            if let Some(packet) = self.seed_bank.get_mut(idx) {
+                                packet.mouse_down(x, y, click_count);
+                            }
+                        }
+                    }
+                }
+                GameObjectType::NextGarden => {
+                    // C++: ZEN_GARDEN → GotoNextGarden；TREE_OF_WISDOM → TreeOfWisdomNextGarden；PlaySample(SOUND_TAP)
+                    let app_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+                    if app_mode == GameMode::ChallengeZenGarden {
+                        if let Some(app) = self.app {
+                            unsafe {
+                                if let Some(zg) = (*app).zen_garden {
+                                    (*zg).goto_next_garden();
+                                }
+                            }
+                        }
+                    } else if app_mode == GameMode::ChallengeTreeOfWisdom {
+                        if let Some(ch) = self.challenge.as_ref() {
+                            ch.tree_of_wisdom_next_garden();
+                        }
+                    }
+                    // C++: mApp->PlaySample(Sexy::SOUND_TAP);
+                    if let Some(app) = self.app {
+                        unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_TAP); }
+                    }
+                }
+                GameObjectType::Shovel
+                | GameObjectType::WateringCan
+                | GameObjectType::Fertilizer
+                | GameObjectType::BugSpray
+                | GameObjectType::Phonograph
+                | GameObjectType::Chocolate
+                | GameObjectType::Glove
+                | GameObjectType::MoneySign
+                | GameObjectType::Wheelbarrow
+                | GameObjectType::TreeFood => {
+                    // C++: PickUpTool(aHitResult.mObjectType)
+                    self.pick_up_tool(hit_result.object_type);
                 }
                 GameObjectType::Plant => {
-                    // ((Plant*)obj)->MouseDown — 暂略
+                    // C++: ((Plant*)aHitResult.mObject)->MouseDown(x, y, theClickCount)
+                    if let Some(idx) = hit_result.object {
+                        if let Some(plant) = self.plants.get_mut(idx) {
+                            plant.mouse_down(x, y, click_count);
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -5188,9 +5444,17 @@ Spawn: {}
 
     /// 检查某行是否有冰冻效果（对应 C++ IsIceAt）
     pub fn is_ice_at(&self, grid_x: i32, grid_y: i32) -> bool {
+        // 对应 C++ Board::IsIceAt (Board.cpp:2708)
+        // if (mIceTimer[theGridY] == 0 || mIceMinX[theGridY] > 750) return false;
+        // return theGridX >= PixelToGridXKeepOnBoard(mIceMinX[theGridY] + 12, 0);
+        if grid_y < 0 || grid_y >= MAX_GRID_SIZE_Y as i32 {
+            return false;
+        }
         let gy = grid_y as usize;
-        if gy >= MAX_GRID_SIZE_Y { return false; }
-        self.m_ice_timer[gy] > 0 && self.m_ice_min_x[gy] <= grid_x * 80 + LAWN_XMIN
+        if self.m_ice_timer[gy] == 0 || self.m_ice_min_x[gy] > 750 {
+            return false;
+        }
+        grid_x >= self.pixel_to_grid_x_keep_on_board(self.m_ice_min_x[gy] + 12, 0)
     }
 
     /// 检查是否可以添加雪橇（对应 C++ CanAddBobSled）
@@ -5251,9 +5515,12 @@ Spawn: {}
             return false;
         }
 
-        // 注意：C++ 中还有 gZombieAllowedLevels 关卡允许表检查
-        // Rust 端暂未翻译该表，此处默认返回 true（不影响主要功能）
-        true
+        // 对应 C++ Board::CanZombieSpawnOnLevel (Board.cpp:2377-2379)
+        // PVZP_ASSERT(gZombieAllowedLevels[theZombieType].mZombieType == theZombieType);
+        // return gZombieAllowedLevels[theZombieType].mAllowedOnLevel[std::clamp(theLevel - 1, 0, 49)];
+        let allowed = crate::lawn::zombie::G_ZOMBIE_ALLOWED_LEVELS[zombie_type as usize];
+        let level_idx = (level - 1).max(0).min(49) as usize;
+        allowed[level_idx] != 0
     }
 
     /// 获取本关新出现的僵尸类型（对应 C++ GetIntroducedZombieType）
@@ -5518,7 +5785,7 @@ Spawn: {}
         }
     }
 
-    /// 检查是否可以种植（对应 C++ CanPlantAt 简化版）
+    /// 检查是否可以种植（对应 C++ CanPlantAt 完整版）
     pub fn can_plant_at(&self, grid_x: i32, grid_y: i32, seed_type: SeedType) -> PlantingReason {
         // 对应 C++ Board::CanPlantAt (Board.cpp:2717)
         if grid_x < 0 || grid_x >= MAX_GRID_SIZE_X as i32 || grid_y < 0 || grid_y >= MAX_GRID_SIZE_Y as i32 {
@@ -5880,7 +6147,12 @@ Spawn: {}
 
     /// 植物是否使用加速定价（对应 C++ PlantUsesAcceleratedPricing）
     pub fn plant_uses_accelerated_pricing(&self, seed_type: SeedType) -> bool {
-        Plant::is_upgrade(seed_type) // 简化为：生存无尽模式下涨价
+        // 对应 C++ Board::PlantUsesAcceleratedPricing (Board.cpp:9396)
+        // return Plant::IsUpgrade(theSeedType) && mApp->IsSurvivalEndless(mApp->mGameMode);
+        let is_survival_endless = self.app.map_or(false, |app| unsafe {
+            (*app).is_survival_endless((*app).game_mode)
+        });
+        Plant::is_upgrade(seed_type) && is_survival_endless
     }
 
     /// 获取植物的当前价格（对应 C++ GetCurrentPlantCost）
@@ -6164,7 +6436,10 @@ Spawn: {}
                     && a_gm != GameMode::ChallengeTreeOfWisdom
                     && a_gm != GameMode::Upsell
                 {
-                    // 对应 C++: PlaySample(SOUND_PAUSE)（音效层暂略）+ DoNewOptions(false)
+                    // 对应 C++: PlaySample(SOUND_PAUSE) + DoNewOptions(false)
+                    if let Some(app) = self.app {
+                        unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_PAUSE); }
+                    }
                     if let Some(app) = self.app.as_mut() {
                         unsafe { (**app).do_new_options(false); }
                     }
@@ -6653,7 +6928,10 @@ Spawn: {}
                         unsafe { (*app).play_foley(FoleyType::Drop as i32); }
                     }
                 } else {
-                    // [TRANSLATION_NOTE]: C++ 中 PlaySample(SOUND_BUZZER)
+                    // C++: mApp->PlaySample(Sexy::SOUND_BUZZER);
+                    if let Some(app) = self.app {
+                        unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_BUZZER); }
+                    }
                 }
             }
             GameObjectType::BugSpray => {
@@ -6668,7 +6946,10 @@ Spawn: {}
                         unsafe { (*app).play_foley(FoleyType::Drop as i32); }
                     }
                 } else {
-                    // [TRANSLATION_NOTE]: C++ 中 PlaySample(SOUND_BUZZER)
+                    // C++: mApp->PlaySample(Sexy::SOUND_BUZZER);
+                    if let Some(app) = self.app {
+                        unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_BUZZER); }
+                    }
                 }
             }
             GameObjectType::Phonograph => {
@@ -6689,7 +6970,10 @@ Spawn: {}
                         unsafe { (*app).play_foley(FoleyType::Drop as i32); }
                     }
                 } else {
-                    // [TRANSLATION_NOTE]: C++ 中 PlaySample(SOUND_BUZZER)
+                    // C++: mApp->PlaySample(Sexy::SOUND_BUZZER);
+                    if let Some(app) = self.app {
+                        unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_BUZZER); }
+                    }
                 }
             }
             GameObjectType::Glove => {
@@ -6724,7 +7008,10 @@ Spawn: {}
                             unsafe { (*app).play_foley(FoleyType::Drop as i32); }
                         }
                     } else {
-                        // [TRANSLATION_NOTE]: C++ 中 PlaySample(SOUND_BUZZER)
+                        // C++: mApp->PlaySample(Sexy::SOUND_BUZZER);
+                        if let Some(app) = self.app {
+                            unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_BUZZER); }
+                        }
                     }
                 }
             }
@@ -6894,12 +7181,27 @@ Spawn: {}
     /// 更新工具提示（对应 C++ UpdateToolTip L3302 完整版）
     /// 根据鼠标悬停的对象显示对应提示文本
     pub fn update_tool_tip(&mut self, mouse_x: i32, mouse_y: i32) {
-        // 对话框中不可见，ZombiesWon 场景不可见
-        self.tool_tip.m_visible = false;
-
-        if self.m_paused || self.m_time_stop_counter > 0 {
+        // C++ Board.cpp:3222-3230：!mMouseIn || !mActive || mTimeStopCounter > 0 ||
+        // GetDialogCount() > 0 || SCENE_ZOMBIES_WON → 隐藏并返回
+        let mouse_in = self.app.map_or(false, |app| unsafe {
+            (*app).base.widget_manager.map_or(false, |wm| (*wm).mouse_in)
+        });
+        let active = self.app.map_or(false, |app| unsafe { (*app).base.active });
+        let scene = self.app.map_or(crate::lawn::lawn_app::GameScenes::Playing, |app| unsafe { (*app).game_scene });
+        let dialog_count = self.app.map_or(0, |app| unsafe { (*app).get_dialog_count() });
+        if !mouse_in || !active || self.m_time_stop_counter > 0 || dialog_count > 0 || scene == crate::lawn::lawn_app::GameScenes::ZombiesWon {
+            self.tool_tip.m_visible = false;
             return;
         }
+
+        if self.m_paused {
+            self.tool_tip.m_visible = false;
+            return;
+        }
+
+        // C++: int aMouseX = mApp->mWidgetManager->mLastMouseX - mX; 同理 aMouseY
+        let a_mouse_x = mouse_x - self.m_x;
+        let a_mouse_y = mouse_y - self.m_y;
 
         // 获取 App 引用
         let app = match self.app {
@@ -6910,7 +7212,7 @@ Spawn: {}
         // 关卡开场（SCENE_LEVEL_INTRO）：显示僵尸名称提示
         if app.game_scene == crate::lawn::lawn_app::GameScenes::MainMenu {
             // 在选卡阶段显示僵尸提示
-            if let Some(z_idx) = self.zombie_hit_test(mouse_x, mouse_y) {
+            if let Some(z_idx) = self.zombie_hit_test(a_mouse_x, a_mouse_y) {
                 if let Some(z) = self.zombies.get(z_idx) {
                     if z.from_wave == Zombie::ZOMBIE_WAVE_CUTSCENE {
                         let def = get_zombie_definition(z.zombie_type);
@@ -6942,7 +7244,7 @@ Spawn: {}
 
         // 委托 Challenge::UpdateToolTip
         if let Some(ref ch) = self.challenge {
-            if ch.update_tool_tip(mouse_x, mouse_y) != 0 {
+            if ch.update_tool_tip(a_mouse_x, a_mouse_y) != 0 {
                 return;
             }
         }
@@ -6952,7 +7254,7 @@ Spawn: {}
             object: None,
             object_type: GameObjectType::None,
         };
-        self.mouse_hit_test(mouse_x, mouse_y, &mut hit_result);
+        self.mouse_hit_test(a_mouse_x, a_mouse_y, &mut hit_result);
 
         // 根据命中对象类型设置提示
         match hit_result.object_type {
@@ -7131,8 +7433,8 @@ Spawn: {}
                 continue;
             }
             let z = &self.zombies[i];
-            // [TRANSLATION_NOTE]: GetZombieRect().mX < -50 简化为 pos_x < -50
-            let off_screen = z.pos_x < -50.0;
+            // C++: aZombie->GetZombieRect().mX < -50
+            let off_screen = z.get_zombie_rect().x < -50;
             let rising = z.zombie_phase == ZombiePhase::RisingFromGrave || z.zombie_phase == ZombiePhase::DancerRising;
             if off_screen || rising {
                 let is_giant = z.zombie_type == ZombieType::Gargantuar || z.zombie_type == ZombieType::RedeEyeGargantuar;
@@ -7190,7 +7492,12 @@ Spawn: {}
     /// 处理待删除队列（对应 C++ ProcessDeleteQueue）
     /// C++ 中依次回收死亡的植物/僵尸/投射物/硬币/割草机/格子物品
     pub fn process_delete_queue(&mut self) {
-        self.cleanup_dead();
+        // C++ Board.cpp:8514-8555：逐类清理死亡对象（mPlants/mZombies/mProjectiles/mCoins/
+        // mLawnMowers/mGridItems 的 DataArrayFree，Rust 中 Vec retain 语义等价）
+        self.plants.retain(|p| !p.dead);
+        self.zombies.retain(|z| !z.dead);
+        self.projectiles.retain(|p| !p.dead);
+        self.coins.retain(|c| !c.dead);
         self.lawn_mowers.retain(|m| !m.dead);
         self.grid_items.retain(|g| !g.dead);
     }
@@ -7475,7 +7782,10 @@ Spawn: {}
                     if (*app).game_scene == crate::lawn::lawn_app::GameScenes::Playing {
                         self.display_advice("[CANT_USE_CODE]", MessageStyle::BigMiddleFast as i32, AdviceType::None);
                     }
-                    // [TRANSLATION_NOTE]: C++ 中 PlaySample(SOUND_BUZZER)
+                    // C++: mApp->PlaySample(Sexy::SOUND_BUZZER);
+                    if let Some(app) = self.app {
+                        unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_BUZZER); }
+                    }
                 }
                 return;
             }
@@ -7486,7 +7796,10 @@ Spawn: {}
                     if (*app).game_scene == crate::lawn::lawn_app::GameScenes::Playing {
                         self.display_advice("[CANT_USE_CODE]", MessageStyle::BigMiddleFast as i32, AdviceType::None);
                     }
-                    // [TRANSLATION_NOTE]: C++ 中 PlaySample(SOUND_BUZZER)
+                    // C++: mApp->PlaySample(Sexy::SOUND_BUZZER);
+                    if let Some(app) = self.app {
+                        unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_BUZZER); }
+                    }
                 }
                 return;
             }
@@ -7497,7 +7810,10 @@ Spawn: {}
                     if (*app).game_scene == crate::lawn::lawn_app::GameScenes::Playing {
                         self.display_advice("[CANT_USE_CODE]", MessageStyle::BigMiddleFast as i32, AdviceType::None);
                     }
-                    // [TRANSLATION_NOTE]: C++ 中 PlaySample(SOUND_BUZZER)
+                    // C++: mApp->PlaySample(Sexy::SOUND_BUZZER);
+                    if let Some(app) = self.app {
+                        unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_BUZZER); }
+                    }
                 }
                 return;
             }
@@ -7601,15 +7917,42 @@ Spawn: {}
 
     // ========== 僵尸生成 ==========
 
-    /// 在某行添加僵尸（对应 C++ AddZombieInRow 简化版）
+    /// 在某行添加僵尸（对应 C++ AddZombieInRow 完整版）
     /// 返回新僵尸的索引（对应 C++ 的 Zombie*）
     pub fn add_zombie_in_row(&mut self, zombie_type: ZombieType, row: i32, from_wave: i32) -> usize {
+        // 对应 C++ Board::AddZombieInRow (Board.cpp:2638)
+        // [TRANSLATION_NOTE]: C++ mZombies 为 DataArray（mSize >= mMaxSize-1 时
+        // PvzpTrace("Too many zombies!!") 并返回 nullptr）；Rust 用 Vec 无容量上限，跳过该检查。
+
+        if zombie_type == ZombieType::Yeti {
+            let is_adventure = self.app.map_or(false, |app| unsafe { (*app).is_adventure_mode() });
+            // C++: if (mApp->IsAdventureMode() && mLevel == 40 && theFromWave >= 0)
+            //          ReportAchievement::GiveAchievement(mApp, Zombologist, true);
+            if is_adventure && self.level == 40 && from_wave >= 0 {
+                crate::lawn::widget::achievements_screen::ReportAchievement::give_achievement(
+                    self.app,
+                    crate::lawn::widget::achievements_screen::AchievementId::Zombologist as i32,
+                    true,
+                );
+            }
+        }
+
+        // C++: bool aVariant = !Rand(5);  即 1/5 概率变体
+        let a_variant = crate::todlib::tod_common::rand_range_int(0, 4) == 0;
         let mut zombie = Zombie::new();
-        zombie.zombie_type = zombie_type;
-        zombie.from_wave = from_wave;
-        zombie.base.row = row;
+        zombie.zombie_initialize(row, zombie_type, a_variant, None, from_wave);
         self.zombies.push(zombie);
-        self.zombies.len() - 1
+        let idx = self.zombies.len() - 1;
+
+        // C++: 雪橇僵尸在棋盘内时额外生成 3 个伴舞（parent 指向主雪橇）
+        if zombie_type == ZombieType::Bobsled && self.zombies[idx].is_on_board() {
+            for _ in 0..3 {
+                let mut sled = Zombie::new();
+                sled.zombie_initialize(row, ZombieType::Bobsled, false, Some(&mut self.zombies[idx]), from_wave);
+                self.zombies.push(sled);
+            }
+        }
+        idx
     }
 
     /// 添加僵尸（对应 C++ AddZombie）
@@ -7727,17 +8070,50 @@ Spawn: {}
         for coin in &mut self.coins { coin.update(); }
         for mower in &mut self.lawn_mowers { mower.update(); }
         for item in &mut self.grid_items { item.update(); }
-        // [TRANSLATION_NOTE]: 光标预览/光标对象/种子槽更新暂未实现
-        // mCursorPreview->Update();
-        // mCursorObject->Update();
+        // C++ Board.cpp:5014-5016: mCursorPreview->Update(); mCursorObject->Update();
+        // CursorPreview::Update 使用 mApp->mWidgetManager->mLastMouseX/Y
+        let mouse_x = self.app.map_or(0, |app| unsafe {
+            (*app).base.widget_manager.map_or(0, |wm| (*wm).last_mouse_x)
+        });
+        let mouse_y = self.app.map_or(0, |app| unsafe {
+            (*app).base.widget_manager.map_or(0, |wm| (*wm).last_mouse_y)
+        });
+        self.cursor_preview.update(mouse_x, mouse_y);
+        // [TRANSLATION_NOTE]: mCursorObject->Update() 与种子槽更新暂未实现
         // for packet in seed_bank { packet.update(); }
     }
 
     // ========== 更新循环 ==========
 
-    /// 更新僵尸生成（对应 C++ UpdateZombieSpawning 简化版）
+    /// 更新僵尸生成（对应 C++ UpdateZombieSpawning，音效/音乐/FadeOutLevel/DisplayAdviceAgain 未接入）
     /// 控制僵尸从墓碑/水池/天空的生成时机
     fn update_zombie_spawning(&mut self) {
+        let app_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+        // C++ 5261-5262: GAMEMODE_UPSELL || GAMEMODE_INTRO → return
+        if app_mode == GameMode::Upsell || app_mode == GameMode::Intro {
+            return;
+        }
+
+        // C++ 5264-5271: 最终波次声音计时
+        if self.m_final_wave_sound_counter > 0 {
+            self.m_final_wave_sound_counter -= 1;
+            if self.m_final_wave_sound_counter == 0 {
+                // C++: mApp->PlaySample(Sexy::SOUND_FINALWAVE);
+                if let Some(app) = self.app {
+                    unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_FINALWAVE); }
+                }
+            }
+        }
+
+        // C++ 5273-5277: 教程状态 → return
+        if self.m_tutorial_state == TutorialState::Level1PickUpPeashooter
+            || self.m_tutorial_state == TutorialState::Level1PlantPeashooter
+            || self.m_tutorial_state == TutorialState::Level1RefreshPeashooter
+            || self.m_tutorial_state == TutorialState::SlotMachine
+        {
+            return;
+        }
+
         // 如果关卡已结束，提前返回
         if self.has_level_award_dropped() {
             return;
@@ -7758,9 +8134,19 @@ Spawn: {}
                 self.clear_advice(AdviceType::HugeWave);
                 self.next_wave_coming();
                 self.m_zombie_count_down = 1;
+            } else {
+                // C++ 5302-5305: ==725 时 PlaySample(SOUND_HUGE_WAVE)
+                if self.m_huge_wave_count_down == 725 {
+                    if let Some(app) = self.app {
+                        unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_HUGE_WAVE); }
+                    }
+                } else {
+                    // [TRANSLATION_NOTE]: C++ 此处按音乐 tune（DAY_GRASSWALK/POOL_WATERYGRAVES/
+                    // FOG_RIGORMORMIST/ROOF_GRAZETHEROOF）在 ==400 时 StartBurst，
+                    // NIGHT_MOONGRAINS 在 ==700 时 StartBurst；Music 接口未对齐，暂不执行。
+                }
+                return;
             }
-            // [TRANSLATION_NOTE]: 大波音效/音乐高潮暂未实现
-            return;
         }
 
         // 挑战模式自定义生成
@@ -7771,7 +8157,6 @@ Spawn: {}
         }
 
         // 如果已经是最后波次，检查是否继续生成
-        let app_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
         if self.m_current_wave >= self.m_num_waves {
             if self.is_final_survival_stage() || app_mode == GameMode::ChallengeLastStand {
                 return;
@@ -7780,14 +8165,6 @@ Spawn: {}
                 && !self.app.map_or(false, |app| unsafe { (*app).is_continuous_challenge() })
             {
                 return;
-            }
-        }
-
-        // 最终波次声音计时
-        if self.m_final_wave_sound_counter > 0 {
-            self.m_final_wave_sound_counter -= 1;
-            if self.m_final_wave_sound_counter == 0 {
-                // [TRANSLATION_NOTE]: PlaySample(SOUND_FINALWAVE) 暂未实现
             }
         }
 
@@ -7830,9 +8207,16 @@ Spawn: {}
                 self.m_zombie_health_to_next_wave = 0;
                 self.m_zombie_count_down = ZOMBIE_COUNTDOWN_BEFORE_FLAG;
             } else {
-                self.m_zombie_health_to_next_wave = (RandFloat(0.5) * self.m_zombie_health_wave_start as f32) as i32;
-                // [TRANSLATION_NOTE]: 特殊模式波次间隔调整暂未实现
-                self.m_zombie_count_down = ZOMBIE_COUNTDOWN + RandRange(ZOMBIE_COUNTDOWN_RANGE);
+                // C++ 5391: mZombieHealthToNextWave = RandRangeFloat(0.5f, 0.65f) * mZombieHealthWaveStart
+                self.m_zombie_health_to_next_wave = (crate::todlib::tod_common::rand_range_float(0.5, 0.65)
+                    * self.m_zombie_health_wave_start as f32) as i32;
+                // C++ 5392-5399: 小麻烦/竖列/最后防线模式波次间隔固定 750
+                let little_trouble = self.app.map_or(false, |app| unsafe { (*app).is_little_trouble_level() });
+                if little_trouble || app_mode == GameMode::ChallengeColumns || app_mode == GameMode::ChallengeLastStand {
+                    self.m_zombie_count_down = 750;
+                } else {
+                    self.m_zombie_count_down = ZOMBIE_COUNTDOWN + RandRange(ZOMBIE_COUNTDOWN_RANGE);
+                }
             }
             self.m_zombie_count_down_start = self.m_zombie_count_down;
         }
@@ -7860,70 +8244,88 @@ Spawn: {}
         }
     }
 
-    /// 更新冰冻效果（对应 C++ UpdateIce 简化版）
-    /// 管理冰道融化计时器
+    /// 更新冰冻效果（对应 C++ UpdateIce 完整版）
+    /// 管理冰道融化计时器与冰粒子系统
     fn update_ice(&mut self) {
         for row in 0..MAX_GRID_SIZE_Y {
             if self.m_ice_timer[row] > 0 {
                 self.m_ice_timer[row] -= 1;
+                // C++: PvzpParticleSystem* aParticleIce = mApp->ParticleTryToGet(mIceParticleID[aRow]);
+                let mut a_particle_ice = if let Some(app) = self.app {
+                    unsafe { (*app).particle_try_to_get(self.m_ice_particle_id[row]) }
+                } else {
+                    None
+                };
                 if self.m_ice_timer[row] == 0 {
-                    self.m_ice_min_x[row] = 0;
+                    self.m_ice_min_x[row] = BOARD_ICE_START;
+                    if let Some(ps) = a_particle_ice.as_mut() {
+                        ps.particle_system_die();
+                    }
+                } else {
+                    let a_pos_x = self.m_ice_min_x[row] as f32;
+                    let a_pos_y = self.grid_to_pixel_y(8, row as i32) as f32;
+                    if let Some(ps) = a_particle_ice.as_mut() {
+                        ps.system_move(a_pos_x, a_pos_y);
+                    } else {
+                        // C++: aRenderPosition = MakeRenderOrder(RENDER_LAYER_GROUND, aRow, 3);
+                        //       aParticleIce = mApp->AddPvzpParticle(..., PARTICLE_ICE_SPARKLE);
+                        //       mIceParticleID[aRow] = mApp->ParticleGetID(aParticleIce);
+                        let a_render_position = make_render_order(RENDER_LAYER_GROUND, row as i32, 3);
+                        if let Some(app) = self.app {
+                            unsafe {
+                                if let Some(ptr) = (*app).add_tod_particle(
+                                    a_pos_x, a_pos_y, a_render_position, ParticleEffect::IceSparkle as i32,
+                                ) {
+                                    self.m_ice_particle_id[row] = (*app).particle_get_id(ptr);
+                                }
+                            }
+                        }
+                    }
+                }
+                // C++: int anAlpha = std::clamp(mIceTimer[aRow] / 10, 0, 255);
+                //       aParticleIce->OverrideColor(nullptr, Color(255, 255, 255, anAlpha));
+                if let Some(ps) = a_particle_ice.as_mut() {
+                    let an_alpha = (self.m_ice_timer[row] / 10).clamp(0, 255) as u8;
+                    ps.override_color("", &crate::framework::color::Color::new(255, 255, 255, an_alpha));
                 }
             }
         }
-
-        if self.m_ice_trap_counter > 0 {
-            self.m_ice_trap_counter -= 1;
-        }
+        // 注：C++ mIceTrapCounter 递减位于 UpdateGame（Board.cpp:5682），不在 UpdateIce 内。
     }
 
-    /// 更新格子物品（对应 C++ UpdateGridItems 完整版）
-    /// 处理墓碑计数器、弹坑消失、以及各格子物品的逐帧更新
-    fn update_grid_items_detailed(&mut self) {
-        // 不能直接获取 &mut self.app 和 &mut self.grid_items 同时可变，
-        // 所以先取出需要的信息
-        let scene_playing = self.app.map_or(false, |app| unsafe {
-            (*app).game_scene == crate::lawn::lawn_app::GameScenes::Playing
-        });
-
-        for item in &mut self.grid_items {
-            // 墓碑计数器递增（不超过 100）
-            if self.m_enable_grave_stones
-                && item.grid_item_type == GridItemType::Grave
-                && item.counter < 100
-            {
-                item.counter += 1;
-            }
-
-            // 弹坑计数器递减，到 0 时消失
-            if item.grid_item_type == GridItemType::Crater && scene_playing {
-                if item.counter > 0 {
-                    item.counter -= 1;
-                }
-                if item.counter == 0 {
-                    item.grid_item_die();
-                }
-            }
-
-            // 调用格子物品的逐帧更新
-            item.update();
-        }
-    }
-
-    /// 主更新循环（对应 C++ UpdateGame 简化版）
-    /// 合并了 UpdateGame 的核心逻辑
+    /// 主更新循环（对应 C++ UpdateGame 完整版，粒子 mDontUpdate 恢复未接入）
     fn update_game(&mut self) {
-        // 更新所有游戏对象
+        // 更新所有游戏对象（对应 C++ UpdateGameObjects）
         self.update_game_objects();
 
-        // Fog 偏移更新（简化版）
+        // C++ 5658-5673: Fog 偏移动画
         if self.stage_has_fog() && self.m_fog_blown_count_down > 0 {
-            self.m_fog_blown_count_down -= 1;
+            let a_max_fog_offset = 1065.0 - self.left_fog_column() as f32 * 80.0;
+            let scene = self.app.map_or(crate::lawn::lawn_app::GameScenes::Playing, |app| unsafe { (*app).game_scene });
+            if scene == crate::lawn::lawn_app::GameScenes::LevelIntro {
+                self.m_fog_offset = crate::todlib::tod_common::tod_animate_curve_float(
+                    200, 0, self.m_fog_blown_count_down, a_max_fog_offset, 0.0,
+                    crate::lawn::game_enums::TodCurves::EaseOut,
+                );
+            } else if self.m_fog_blown_count_down < 2000 {
+                self.m_fog_offset = crate::todlib::tod_common::tod_animate_curve_float(
+                    2000, 0, self.m_fog_blown_count_down, a_max_fog_offset, 0.0,
+                    crate::lawn::game_enums::TodCurves::EaseOut,
+                );
+            } else if self.m_fog_offset < a_max_fog_offset {
+                // C++: PvzpAnimateCurveFloat(-5, aMaxFogOffset, mFogOffset * 1.1f, 0, aMaxFogOffset, CURVE_LINEAR)
+                // time 参数在 C++ 中为 int（float 隐式截断），此处显式 as i32 等价
+                self.m_fog_offset = crate::todlib::tod_common::tod_animate_curve_float(
+                    -5, a_max_fog_offset as i32, (self.m_fog_offset * 1.1) as i32, 0.0, a_max_fog_offset,
+                    crate::lawn::game_enums::TodCurves::Linear,
+                );
+            }
         }
 
-        // 游戏场景检查
+        // C++ 5675-5676: 场景检查（含 ShouldRunUpsellBoard）
         let scene = self.app.map_or(crate::lawn::lawn_app::GameScenes::Playing, |app| unsafe { (*app).game_scene });
-        if scene != crate::lawn::lawn_app::GameScenes::Playing {
+        let should_run_upsell = self.m_cut_scene.map_or(false, |c| unsafe { (*c).should_run_upsell_board() });
+        if scene != crate::lawn::lawn_app::GameScenes::Playing && !should_run_upsell {
             return;
         }
 
@@ -7931,13 +8333,41 @@ Spawn: {}
         self.update_sun_spawning();
         self.update_zombie_spawning();
         self.update_ice();
+
+        // C++ 5682-5693: mIceTrapCounter 递减
+        if self.m_ice_trap_counter > 0 {
+            self.m_ice_trap_counter -= 1;
+            if self.m_ice_trap_counter == 0 {
+                // C++: PvzpParticleSystem* aPoolSparklyParticle = mApp->ParticleTryToGet(mPoolSparklyParticleID);
+                //      if (aPoolSparklyParticle) aPoolSparklyParticle->mDontUpdate = false;
+                if let Some(app) = self.app {
+                    unsafe {
+                        if let Some(ps) = (*app).particle_try_to_get(self.m_pool_sparkly_particle_id) {
+                            ps.dont_update = false;
+                        }
+                    }
+                }
+            }
+        }
+
+        // C++ 5695-5698
+        if self.m_fog_blown_count_down > 0 {
+            self.m_fog_blown_count_down -= 1;
+        }
+
+        // C++ 5700-5712: 首次冒险模式的教程引导
+        let first_time_adventure = self.app.map_or(false, |app| unsafe { (*app).is_first_time_adventure_mode() });
+        if self.m_main_counter == 1 && first_time_adventure {
+            if self.level == 1 {
+                self.set_tutorial_state(TutorialState::Level1PickUpPeashooter);
+            } else if self.level == 2 {
+                self.set_tutorial_state(TutorialState::Level1PickUpSunflower);
+                self.display_advice("[ADVICE_PLANT_SUNFLOWER1]", MessageStyle::TutorialLevel2 as i32, AdviceType::None);
+                self.m_tutorial_timer = 500;
+            }
+        }
+
         self.update_progress_meter();
-
-        // 更新格子物品
-        self.update_grid_items_detailed();
-
-        // 更新浓雾
-        self.update_fog();
     }
 
     /// 更新浓雾效果（对应 C++ UpdateFog）
@@ -8038,7 +8468,7 @@ Spawn: {}
         }
     }
 
-    /// 更新火焰扫荡效果（对应 C++ UpdateFwoosh 简化版）
+    /// 更新火焰扫荡效果（对应 C++ UpdateFwoosh 完整版）
     fn update_fwoosh(&mut self) {
         // 对应 C++ UpdateFwoosh：火焰扫荡动画按倒计时推进
         if self.m_fwoosh_count_down == 0 {
@@ -8085,7 +8515,7 @@ Spawn: {}
         }
     }
 
-    /// 获取铁锹按钮矩形（对应 C++ GetShovelButtonRect 简化版）
+    /// 获取铁锹按钮矩形（对应 C++ GetShovelButtonRect 完整版）
     pub fn get_shovel_button_rect(&self) -> Rect {
         // 对应 C++ Board::GetShovelButtonRect（Board.cpp:1307）
         let mut a_rect = Rect::new(self.get_seed_bank_extra_width() + 456, 0, 0, 0);
@@ -8724,12 +9154,54 @@ Spawn: {}
 
     // ========== 背景与资源 ==========
 
-    /// 加载背景图片资源（对应 C++ Board::LoadBackgroundImages）
+    /// 加载背景图片资源（对应 C++ Board::LoadBackgroundImages，Board.cpp:813）
     pub fn load_background_images(&mut self, _app: *mut crate::lawn::lawn_app::LawnApp) {
-        // LoadBackgroundImages — 根据背景类型加载资源
-        // LoadBackgroundImages — 根据背景类型加载资源
-        // 资源加载在 Rust 版本中由 ResourceManager 处理
-        let _ = self.m_background_type;
+        // C++: 按背景类型把延迟加载资源名推入 mLoadedResourceNames，随后逐个 PvzpLoadResources
+        let mut loaded_resource_names: Vec<&str> = Vec::new();
+        match self.m_background_type {
+            BackgroundType::Day => {
+                loaded_resource_names.push("DelayLoad_Background1");
+                let is_adventure_low = self.app.map_or(false, |app| unsafe {
+                    (*app).is_adventure_mode() && self.level <= 4
+                });
+                let app_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+                if is_adventure_low || app_mode == GameMode::ChallengeResodded {
+                    loaded_resource_names.push("DelayLoad_BackgroundUnsodded");
+                }
+            }
+            BackgroundType::Night => loaded_resource_names.push("DelayLoad_Background2"),
+            BackgroundType::Pool => loaded_resource_names.push("DelayLoad_Background3"),
+            BackgroundType::Fog => loaded_resource_names.push("DelayLoad_Background4"),
+            BackgroundType::Roof => loaded_resource_names.push("DelayLoad_Background5"),
+            BackgroundType::Boss => loaded_resource_names.push("DelayLoad_Background6"),
+            BackgroundType::Greenhouse => {
+                loaded_resource_names.push("DelayLoad_GreenHouseGarden");
+                loaded_resource_names.push("DelayLoad_GreenHouseOverlay");
+            }
+            BackgroundType::TreeOfWisdom => {
+                // C++: ReanimatorEnsureDefinitionLoaded(REANIM_TREEOFWISDOM, true)
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(
+                    ReanimationType::Treeofwisdom,
+                );
+            }
+            BackgroundType::Zombiquarium => {
+                loaded_resource_names.push("DelayLoad_Zombiquarium");
+                loaded_resource_names.push("DelayLoad_GreenHouseOverlay");
+            }
+            BackgroundType::MushroomGarden => loaded_resource_names.push("DelayLoad_MushroomGarden"),
+            _ => {
+                // C++: PVZP_ASSERT(false)
+            }
+        }
+        for resource in loaded_resource_names {
+            if let Some(app) = self.app {
+                unsafe {
+                    if let Some(rm) = (*app).base.resource_manager.as_mut() {
+                        let _ = (**rm).load_resources(resource);
+                    }
+                }
+            }
+        }
     }
 
     // ========== 关卡初始化 ==========
@@ -8970,6 +9442,10 @@ Spawn: {}
         let is_scary = self.app.map_or(false, |app| unsafe { (*app).is_scary_potter_level() });
         if is_scary {
             for item in &self.grid_items {
+                // C++: if (aGridItem->mDead) continue;
+                if item.dead {
+                    continue;
+                }
                 if item.grid_item_type == GridItemType::ScaryPot
                     && item.grid_x <= a_grid_x
                     && item.grid_x > 0
@@ -8977,8 +9453,17 @@ Spawn: {}
                     a_grid_x = item.grid_x - 1;
                 }
             }
-        } else if !self.stage_has_zombie_walk_in_from_right() {
-            return;
+        } else {
+            // C++: !StageHasZombieWalkInFromRight() || GAMEMODE_CHALLENGE_BEGHOULED ||
+            //      GAMEMODE_CHALLENGE_BEGHOULED_TWIST || GAMEMODE_CHALLENGE_BOBSLED_BONANZA → return
+            let mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+            if !self.stage_has_zombie_walk_in_from_right()
+                || mode == GameMode::ChallengeBeghouled
+                || mode == GameMode::ChallengeBeghouledTwist
+                || mode == GameMode::ChallengeBobsledBonanza
+            {
+                return;
+            }
         }
 
         // 构建加权行选择数组
@@ -9009,8 +9494,15 @@ Spawn: {}
         rake.pos_x = self.grid_to_pixel_x(a_grid_x, a_grid_y) as f32;
         rake.pos_y = self.grid_to_pixel_y(a_grid_x, a_grid_y) as f32;
         rake.render_order = make_render_order(301000/*RenderLayer::GraveStone*/, a_grid_y, 9);
+        // C++: aRake->mGridItemReanimID = mApp->ReanimationGetID(CreateRakeReanim(aRake->mPosX, aRake->mPosY, 0));
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(reanim) = self.create_rake_reanim(rake.pos_x, rake.pos_y, 0) {
+                    rake.grid_item_reanim_id = (*app).reanimation_get_id(reanim);
+                }
+            }
+        }
         rake.grid_item_state = GridItemState::RakeAttracting;
-        // Reanimation 创建暂略（需 CreateRakeReanim 翻译）
         self.grid_items.push(rake);
     }
 
