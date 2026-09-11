@@ -7489,13 +7489,64 @@ Spawn: {}
         let is_endless_scary = self.app.map_or(false, |app| unsafe { (*app).is_endless_scary_potter(app_mode) });
         let is_izombie = self.app.map_or(false, |app| unsafe { (*app).is_izombie_level() });
 
-        if app_mode == GameMode::ChallengeZombiquarium
-            || app_mode == GameMode::ChallengeLastStand
-            || is_endless_izombie || is_endless_scary || is_izombie
-        {
-            // [TRANSLATION_NOTE]: C++ 为这些模式弹出 GameOverDialog 显示死亡文案；
-            // Rust 侧无 GameOverDialog/AddDialog/PlaySample/Reanimation 链，仅置状态
-            let _ = is_izombie; is_izombie;
+        // C++ 5096-5118: 特殊模式构造死亡文案 aGameOverMsg（普通模式走 SCENE_ZOMBIES_WON 演出）
+        let a_game_over_msg: Option<String> = if app_mode == GameMode::ChallengeZombiquarium {
+            Some(crate::todlib::tod_common::tod_string_translate("[ZOMBIQUARIUM_DEATH_MESSAGE]"))
+        } else if app_mode == GameMode::ChallengeLastStand {
+            // C++: aFlagStr = mApp->Pluralize(GetSurvivalFlagsCompleted(), "[ONE_FLAG]", "[COUNT_FLAGS]")
+            let a_flag_str = crate::lawn::lawn_app::LawnApp::pluralize(
+                self.get_survival_flags_completed(),
+                "[ONE_FLAG]",
+                "[COUNT_FLAGS]",
+            );
+            // [TRANSLATION_NOTE]: 对应 C++ PvzpReplaceString("[LAST_STAND_DEATH_MESSAGE]", "{FLAGS}", aFlagStr)
+            Some(crate::todlib::tod_common::tod_string_translate("[LAST_STAND_DEATH_MESSAGE]").replace("{FLAGS}", &a_flag_str))
+        } else if is_endless_izombie || is_endless_scary {
+            // [TRANSLATION_NOTE]: 对应 C++ PvzpReplaceNumberString("[ENDLESS_PUZZLE_DEATH_MESSAGE]", "{STREAK}", mChallenge->mSurvivalStage)
+            let a_streak = self.challenge.as_ref().map_or(0, |c| c.survival_stage);
+            Some(
+                crate::todlib::tod_common::tod_string_translate("[ENDLESS_PUZZLE_DEATH_MESSAGE]")
+                    .replace("{STREAK}", &format!("{}", a_streak)),
+            )
+        } else if is_izombie {
+            Some(crate::todlib::tod_common::tod_string_translate("[I_ZOMBIE_DEATH_MESSAGE]"))
+        } else {
+            None
+        };
+
+        if let Some(_a_game_over_msg) = a_game_over_msg {
+            // [TRANSLATION_NOTE]: C++ 5134-5135 弹 GameOverDialog(aGameOverMsg) + AddDialog(DIALOG_GAME_OVER) +
+            // mWidgetManager->SetFocus；Rust 无 GameOverDialog 组件与对话框栈，仅执行音乐/音效/Reanimation 演出，
+            // 文案 _a_game_over_msg 留待 GameOverDialog 接入轮使用。
+            // C++ 5138-5141: StopAllMusic / StopAllZombieSounds / PlaySample(SOUND_LOSEMUSIC)
+            if let Some(app) = self.app {
+                unsafe {
+                    if let Some(music) = &mut (*app).music {
+                        music.stop_all_music();
+                    }
+                }
+                self.stop_all_zombie_sounds();
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(
+                    crate::lawn::game_enums::ReanimationType::ZombiesWon,
+                );
+                unsafe {
+                    (*app).play_sample(crate::todlib::tod_foley::SOUND_LOSEMUSIC);
+                    // C++ 5143-5147: AddReanimation(-BOARD_OFFSET, 0, RENDER_LAYER_SCREEN_FADE, REANIM_ZOMBIES_WON)
+                    // + mLoopType=REANIM_PLAY_ONCE_AND_HOLD + fullscreen 轨道 mTrackColor=Black + SetFramesForLayer("anim_screen")
+                    if let Some(a_reanim) = (*app).add_reanimation(
+                        -BOARD_OFFSET as f32,
+                        0.0,
+                        make_render_order(RENDER_LAYER_SCREEN_FADE, 0, 0),
+                        crate::lawn::game_enums::ReanimationType::ZombiesWon as i32,
+                    ) {
+                        (*a_reanim).m_loop_type = crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold;
+                        if let Some(ti) = (*a_reanim).get_track_instance_by_name("fullscreen") {
+                            ti.m_track_color = Color::BLACK;
+                        }
+                        (*a_reanim).set_frames_for_layer("anim_screen");
+                    }
+                }
+            }
         } else {
             // C++ 5121-5132: 普通关卡切到 SCENE_ZOMBIES_WON 演出
             if let Some(app) = self.app {
@@ -7513,12 +7564,7 @@ Spawn: {}
             self.freeze_effects_for_cutscene(true);
             self.tutorial_arrow_remove();
             self.update_cursor();
-            return;
         }
-
-        // [TRANSLATION_NOTE]: C++ 5135-5147: GameOverDialog/AddDialog/SetFocus/StopAllMusic/StopAllZombieSounds/PlaySample/ReanimationType::ZombiesWon
-        // Rust 侧缺 GameOverDialog、AddDialog、mWidgetManager->SetFocus、SOUND_LOSEMUSIC、ReanimatorEnsureDefinitionLoaded 等
-        self.stop_all_zombie_sounds();
     }
 
     /// 兼容旧调用点：无特定僵尸的 zombies_won（theZombie=null）
