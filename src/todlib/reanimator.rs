@@ -74,6 +74,8 @@ pub struct Reanimation {
     // 对应 C++ mFrameStart/mFrameCount（SetFramesForLayer 计算的帧区间）
     pub m_frame_start: i32,
     pub m_frame_count: i32,
+    // 对应 C++ mOverlayMatrix（轨道绘制时叠加的 3x3 矩阵，DrawRenderGroup 应用）
+    pub m_overlay_matrix: crate::framework::sexy_matrix::SexyMatrix3,
     // 对应 C++ 的轨道图片覆盖表（trackName -> Image）
     pub m_image_overrides: Vec<(String, *mut Image)>,
 }
@@ -112,6 +114,7 @@ impl Reanimation {
             m_dead: false,
             m_frame_start: 0,
             m_frame_count: 0,
+            m_overlay_matrix: crate::framework::sexy_matrix::SexyMatrix3::identity(),
             m_image_overrides: Vec::new(),
         }
     }
@@ -161,7 +164,6 @@ impl Reanimation {
             if def.m_tracks.is_empty() {
                 return;
             }
-            let time = self.get_frame_time();
             for (i, track_def) in def.m_tracks.iter().enumerate() {
                 let ti = match self.m_track_instances.get(i) {
                     Some(t) => t,
@@ -177,25 +179,30 @@ impl Reanimation {
                 if frames.is_empty() {
                     continue;
                 }
-                // 当前帧索引：按动画时长取模（对应 C++ Ge tTransformByTime 简化）
-                let total_time = if def.m_fps > 0.0 { def.m_fps } else { 1.0 };
-                let frame_idx = ((time % total_time * total_time) as usize) % frames.len();
-                let t = &frames[frame_idx];
-                if !t.m_visible {
+                // C++ GetCurrentTransform（Reanimator.cpp:550）：GetFrameTime → GetTransformAtTime 帧间插值 → BlendTransform
+                let mut a_transform = crate::todlib::definition::ReanimatorTransform::default();
+                if !self.get_current_transform(i as i32, &mut a_transform) {
                     continue;
                 }
-                let px = self.m_x + t.m_trans_x;
-                let py = self.m_y + t.m_trans_y;
+                // C++ DrawTrack：blank frame（mFrame < 0）不绘制
+                if a_transform.m_frame < 0.0 {
+                    continue;
+                }
+                // C++ 矩阵链 MatrixFromTransform × mOverlayMatrix × 平移(shake + g 平移)
+                // [TRANSLATION_NOTE]: Graphics 无矩阵绘制接口，overlay 矩阵仅应用平移分量（m[0][2]/m[1][2]）；
+                // 其余分量（旋转/斜切/缩放叠加）需 PvzpBltMatrix 等价接口，暂未接入。
+                let px = self.m_x + a_transform.m_trans_x + self.m_overlay_matrix.m[0][2] + ti.m_shake_x;
+                let py = self.m_y + a_transform.m_trans_y + self.m_overlay_matrix.m[1][2] + ti.m_shake_y;
 
                 // 真实图片绘制：从图片名索引取标准 PNG 并绘制
                 // 对应 C++ Reanimation::DrawRenderGroup 的 SetImageTransform + DrawImage
-                let scale_x = self.m_override_scale_x * t.m_scale_x;
-                let scale_y = self.m_override_scale_y * t.m_scale_y;
-                if let Some(img_ptr) = crate::todlib::reanim_loader::reanimator_get_image(t.m_image) {
+                let scale_x = self.m_override_scale_x * a_transform.m_scale_x;
+                let scale_y = self.m_override_scale_y * a_transform.m_scale_y;
+                if let Some(img_ptr) = crate::todlib::reanim_loader::reanimator_get_image(a_transform.m_image) {
                     let img = unsafe { &*img_ptr };
                     if img.width > 0 && img.height > 0 {
                         // 设置透明度（通过颜色覆盖）
-                        let alpha = (t.m_alpha * 255.0).clamp(0.0, 255.0) as u8;
+                        let alpha = (a_transform.m_alpha * 255.0).clamp(0.0, 255.0) as u8;
                         g.set_color(&crate::framework::color::Color::new(255, 255, 255, alpha));
                         if (scale_x - 1.0).abs() > 0.001 || (scale_y - 1.0).abs() > 0.001 {
                             let w = (img.width as f32 * scale_x).round() as i32;
@@ -213,7 +220,7 @@ impl Reanimation {
                 // 图片缺失时的占位回退（按轨道索引着色，便于调试）
                 let w = (40.0 * scale_x).max(2.0) as i32;
                 let h = (40.0 * scale_y).max(2.0) as i32;
-                let alpha = (t.m_alpha * 255.0).clamp(0.0, 255.0) as u8;
+                let alpha = (a_transform.m_alpha * 255.0).clamp(0.0, 255.0) as u8;
                 let hue = (i * 47) % 256;
                 g.set_color(&crate::framework::color::Color::new(hue as u8, 128, 255 - hue as u8, alpha));
                 g.fill_rect_xywh(px as i32, py as i32, w, h);
@@ -497,6 +504,40 @@ impl Reanimation {
         }
     }
 
+    /// 混合两个变换（对应 C++ BlendTransform，Reanimator.cpp:518）
+    /// 对 trans/scale/alpha 做 FloatLerp；skew 相差超过 180° 时忽略 theTransform2 的 skew
+    fn blend_transform(
+        the_result: &mut ReanimatorTransform,
+        the_transform1: &ReanimatorTransform,
+        the_transform2: &ReanimatorTransform,
+        the_blend_factor: f32,
+    ) {
+        the_result.m_trans_x = crate::todlib::tod_common::lerp(the_transform1.m_trans_x, the_transform2.m_trans_x, the_blend_factor);
+        the_result.m_trans_y = crate::todlib::tod_common::lerp(the_transform1.m_trans_y, the_transform2.m_trans_y, the_blend_factor);
+        the_result.m_scale_x = crate::todlib::tod_common::lerp(the_transform1.m_scale_x, the_transform2.m_scale_x, the_blend_factor);
+        the_result.m_scale_y = crate::todlib::tod_common::lerp(the_transform1.m_scale_y, the_transform2.m_scale_y, the_blend_factor);
+        the_result.m_alpha = crate::todlib::tod_common::lerp(the_transform1.m_alpha, the_transform2.m_alpha, the_blend_factor);
+
+        let mut a_skew_x2 = the_transform2.m_skew_x;
+        let mut a_skew_y2 = the_transform2.m_skew_y;
+        // C++: skew 相差超过 180° 时 theTransform2 的 skew 被忽略（源码实现为直接取 theTransform1 的 skew）
+        while a_skew_x2 > the_transform1.m_skew_x + 180.0 {
+            a_skew_x2 = the_transform1.m_skew_x;
+        }
+        while a_skew_x2 < the_transform1.m_skew_x - 180.0 {
+            a_skew_x2 = the_transform1.m_skew_x;
+        }
+        while a_skew_y2 > the_transform1.m_skew_y + 180.0 {
+            a_skew_y2 = the_transform1.m_skew_y;
+        }
+        while a_skew_y2 < the_transform1.m_skew_y - 180.0 {
+            a_skew_y2 = the_transform1.m_skew_y;
+        }
+        the_result.m_skew_x = crate::todlib::tod_common::lerp(the_transform1.m_skew_x, a_skew_x2, the_blend_factor);
+        the_result.m_skew_y = crate::todlib::tod_common::lerp(the_transform1.m_skew_y, a_skew_y2, the_blend_factor);
+        the_result.m_frame = the_transform1.m_frame;
+    }
+
     /// 给前缀分配渲染组（对应 C++ AssignRenderGroupToPrefix）
     pub fn assign_render_group_to_prefix(&mut self, track_prefix: &str, render_group: i32) {
         if let Some(def) = self.m_definition {
@@ -692,26 +733,37 @@ impl Reanimation {
         }
     }
 
-    /// 获取当前变换（对应 C++ GetCurrentTransform，简化版：取当前帧索引）
+    /// 获取当前变换（对应 C++ GetCurrentTransform，Reanimator.cpp:550：
+    /// GetFrameTime → GetTransformAtTime 插值 → BlendTransform 混合）
     pub fn get_current_transform(&self, track_index: i32, out: &mut crate::todlib::definition::ReanimatorTransform) -> bool {
-        if let Some(def) = self.m_definition {
-            unsafe {
-                let def_ref = &*def;
-                if track_index < 0 || track_index as usize >= def_ref.m_tracks.len() {
-                    return false;
-                }
-                let track = &def_ref.m_tracks[track_index as usize];
-                if track.m_transforms.is_empty() {
-                    return false;
-                }
-                let total_time = if def_ref.m_fps > 0.0 { def_ref.m_fps } else { 1.0 };
-                let frame_idx = ((self.get_frame_time() % total_time) / total_time * track.m_transforms.len() as f32) as usize;
-                let idx = frame_idx.min(track.m_transforms.len() - 1);
-                *out = track.m_transforms[idx];
-                return true;
+        if self.m_definition.is_none() {
+            return false;
+        }
+        unsafe {
+            let def_ref = &*self.m_definition.unwrap();
+            if track_index < 0 || track_index as usize >= def_ref.m_tracks.len() {
+                return false;
+            }
+            if def_ref.m_tracks[track_index as usize].m_transforms.is_empty() {
+                return false;
             }
         }
-        false
+        let a_frame_time = self.get_frame_time_frame();
+        if !self.get_transform_at_time(track_index, out, &a_frame_time) {
+            return false;
+        }
+        // C++: FloatRoundToInt(mFrame) >= 0 且 mBlendCounter > 0 → BlendTransform
+        if out.m_frame.round() as i32 >= 0 {
+            if let Some(a_track) = self.m_track_instances.get(track_index as usize) {
+                if a_track.m_blend_count > 0.0 && a_track.m_blend_time > 0 {
+                    let a_blend_factor = a_track.m_blend_count / a_track.m_blend_time as f32;
+                    let a_blend_source = a_track.m_blend_transform;
+                    let a_current = *out; // C++ BlendTransform 的 theTransform1 参数（同对象别名，Rust 用拷贝）
+                    Self::blend_transform(out, &a_current, &a_blend_source, a_blend_factor);
+                }
+            }
+        }
+        true
     }
 
     /// 获取轨道速度（对应 C++ GetTrackVelocity，基于相邻帧 x 位移 * 帧时长 * 速率）
