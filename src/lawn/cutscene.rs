@@ -2159,12 +2159,29 @@ impl CutScene {
                     }
                 }
                 match self.m_crazy_dave_last_talk_index {
-                    3312 => self.load_upsell_board_pool(),
-                    3313 => self.load_upsell_board_fog(),
-                    3314 => self.load_upsell_challenge_screen(),
+                    3312 => {
+                        self.load_upsell_board_pool();
+                        // C++ 2187: mApp->PlaySample(SOUND_FINALWAVE)
+                        if let Some(app) = self.app {
+                            unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_FINALWAVE); }
+                        }
+                    }
+                    3313 => {
+                        self.load_upsell_board_fog();
+                        // C++ 2194: mApp->PlaySample(SOUND_HUGE_WAVE)
+                        if let Some(app) = self.app {
+                            unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_HUGE_WAVE); }
+                        }
+                    }
+                    3314 => {
+                        self.load_upsell_challenge_screen();
+                        // C++ 2201: mApp->PlaySample(SOUND_FINALWAVE)
+                        if let Some(app) = self.app {
+                            unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_FINALWAVE); }
+                        }
+                    }
                     _ => self.load_upsell_board_roof(),
                 }
-                // [TRANSLATION_NOTE]: C++ 中 PlaySample(SOUND_FINALWAVE/SOUND_HUGE_WAVE)
                 self.m_upsell_hide_board = false;
             }
             3315 => {

@@ -3710,8 +3710,29 @@ Spawn: {}
         // 更新光标
         self.update_cursor();
 
-        // [TRANSLATION_NOTE]: C++ 4388-4411 菜单/商店按钮悬停音效 PlaySample(SOUND_GRAVEBUTTON/SOUND_TAP)
-        // 未接入音效 ID 表；C++ 4413-4417 mCheatKeys 作弊加速（mNextSurvivalStageCounter=2 + 冰道截断）未接入。
+        // C++ 4397-4412: 菜单/商店按钮按下音效（theClickCount > 0）
+        let a_can_interact = self.can_interact_with_board_buttons();
+        let a_menu_over = self.menu_button.map_or(false, |m| unsafe { (*m).is_over });
+        let a_store_over = self.store_button.map_or(false, |m| unsafe { (*m).is_over });
+        if a_menu_over && a_can_interact && click_count > 0 {
+            if let Some(app) = self.app {
+                unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_GRAVEBUTTON); }
+            }
+        } else if a_store_over && a_can_interact && click_count > 0 {
+            let a_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+            if a_mode == GameMode::ChallengeZenGarden || a_mode == GameMode::ChallengeTreeOfWisdom {
+                // C++ 4406: PlaySample(SOUND_TAP)
+                if let Some(app) = self.app {
+                    unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_TAP); }
+                }
+            } else if a_mode == GameMode::ChallengeLastStand || a_mode == GameMode::Upsell {
+                // C++ 4410: PlaySample(SOUND_GRAVEBUTTON)
+                if let Some(app) = self.app {
+                    unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_GRAVEBUTTON); }
+                }
+            }
+        }
+        // [TRANSLATION_NOTE]: C++ 4413-4417 mCheatKeys 作弊加速（mNextSurvivalStageCounter=2 + 冰道截断）未接入。
 
         // C++ 4419-4428：关卡开场（SCENE_LEVEL_INTRO）/僵尸胜利（SCENE_ZOMBIES_WON）场景分支
         let scene = self.app.map_or(crate::lawn::lawn_app::GameScenes::Playing, |app| unsafe { (*app).game_scene });
@@ -8231,9 +8252,27 @@ Spawn: {}
                         unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_HUGE_WAVE); }
                     }
                 } else {
-                    // [TRANSLATION_NOTE]: C++ 此处按音乐 tune（DAY_GRASSWALK/POOL_WATERYGRAVES/
-                    // FOG_RIGORMORMIST/ROOF_GRAZETHEROOF）在 ==400 时 StartBurst，
-                    // NIGHT_MOONGRAINS 在 ==700 时 StartBurst；Music 接口未对齐，暂不执行。
+                    // C++ 5307-5321: 按当前音乐 tune 触发 StartBurst
+                    let a_tune = self.app.map_or(crate::lawn::system::music::MusicTune::None, |app| unsafe {
+                        (*app).music.as_ref().map_or(crate::lawn::system::music::MusicTune::None, |m| m.cur_music_tune)
+                    });
+                    if a_tune == crate::lawn::system::music::MusicTune::DayGrasswalk
+                        || a_tune == crate::lawn::system::music::MusicTune::PoolWateryGraves
+                        || a_tune == crate::lawn::system::music::MusicTune::FogRigormormist
+                        || a_tune == crate::lawn::system::music::MusicTune::RoofGrazeTheRoof
+                    {
+                        if self.m_huge_wave_count_down == 400 {
+                            if let Some(app) = self.app {
+                                unsafe { (*app).music.as_mut().map(|m| m.start_burst()); }
+                            }
+                        }
+                    } else if a_tune == crate::lawn::system::music::MusicTune::NightMoongrains {
+                        if self.m_huge_wave_count_down == 700 {
+                            if let Some(app) = self.app {
+                                unsafe { (*app).music.as_mut().map(|m| m.start_burst()); }
+                            }
+                        }
+                    }
                 }
                 return;
             }
