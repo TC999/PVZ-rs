@@ -16,6 +16,29 @@ use crate::lawn::system::music::MusicTune;
 use crate::todlib::tod_common::rand_range_float;
 use crate::todlib::tod_foley::FoleyType;
 
+/// 购买种子槽位对话框结果监听器（异步化 C++ WaitForResult）
+/// [TRANSLATION_NOTE]: C++ 中 DoDialog 后 WaitForResult() 阻塞等待；
+/// Rust 以 DialogListener 回调执行等价分支（ID_YES/ID_NO 时由 Dialog::button_depress 触发）。
+struct PurchasePacketSlotListener {
+    /// 宿主 CutScene 裸指针（对话框存活期间有效，按钮回调时访问）
+    host: *mut CutScene,
+    /// 触发对话框的戴夫消息索引（1503/1553）
+    message_index: i32,
+}
+
+impl crate::framework::widget::dialog_listener::DialogListener for PurchasePacketSlotListener {
+    fn dialog_button_press(&mut self, _dialog_id: i32, _button_id: i32) {}
+
+    fn dialog_button_depress(&mut self, _dialog_id: i32, button_id: i32) {
+        let is_yes = button_id == crate::framework::widget::dialog::ID_YES;
+        unsafe {
+            if let Some(h) = self.host.as_mut() {
+                h.purchase_packet_slot_result(self.message_index, is_yes);
+            }
+        }
+    }
+}
+
 /// 过场动画场景管理（对应 C++ CutScene）
 #[derive(Debug)]
 pub struct CutScene {
@@ -1235,12 +1258,96 @@ impl CutScene {
                 }
             }
         }
+        // (seed slot pitch) "How does that sound?"
+        if (message_index == 1503 || message_index == 1553) && !just_skipping {
+            // C++ CutScene.cpp:1608-1621: 购买种子槽位升级确认对话框
+            let a_cost = crate::lawn::widget::store_screen::StoreScreen::get_item_cost(StoreItem::PacketUpgrade);
+            let a_num_packets = self.app.map_or(0, |app| unsafe {
+                (*app).player_info.as_ref().map_or(0, |p| {
+                    p.m_purchases.get(StoreItem::PacketUpgrade as usize).copied().unwrap_or(0)
+                })
+            });
+            // C++: PvzpReplaceNumberString("[UPGRADE_DIALOG_BODY]", "{SLOTS}", aNumPackets + 7)
+            let a_body = crate::todlib::tod_common::tod_string_translate("[UPGRADE_DIALOG_BODY]")
+                .replace("{SLOTS}", &format!("{}", a_num_packets + 7));
+            let a_amount = crate::lawn::lawn_app::LawnApp::get_money_string(a_cost);
+            // C++: aDialog = mApp->DoDialog(DIALOG_PURCHASE_PACKET_SLOT, true, aAmountString, aBodyString, "", BUTTONS_YES_NO);
+            //      aDialog->mX += 120; aDialog->mY += 130; mBoard->ShowCoinBank(100); aResult = aDialog->WaitForResult();
+            // [TRANSLATION_NOTE]: Rust 无阻塞 WaitForResult；以 DialogListener 回调异步处理结果（等价分支）
+            if let Some(app) = self.get_app_mut() {
+                if let Some(a_dialog) = app.do_dialog(
+                    crate::lawn::game_enums::Dialogs::PurchasePacketSlot as i32,
+                    true,
+                    &a_amount,
+                    &a_body,
+                    "",
+                    crate::framework::widget::dialog::BUTTONS_YES_NO,
+                ) {
+                    unsafe {
+                        (*a_dialog).x += 120;
+                        (*a_dialog).y += 130;
+                        let host = self as *mut CutScene;
+                        (*a_dialog).dialog_listener = Some(Box::new(PurchasePacketSlotListener {
+                            host,
+                            message_index,
+                        }));
+                    }
+                }
+            }
+            if let Some(board) = self.get_board_mut() {
+                board.show_coin_bank(100);
+            }
+        }
         // "Of course it wasn't me, it was you!"
         if message_index == 406 {
             if let Some(board) = self.get_board_mut() {
                 board.m_enable_grave_stones = true;
             }
             self.add_grave_stone_particles();
+        }
+    }
+
+    /// 购买种子槽位结果处理（对应 C++ WaitForResult 分支，CutScene.cpp:1622-1651）
+    pub fn purchase_packet_slot_result(&mut self, message_index: i32, is_yes: bool) {
+        let a_cost = crate::lawn::widget::store_screen::StoreScreen::get_item_cost(StoreItem::PacketUpgrade);
+        if is_yes {
+            // C++: mApp->mPlayerInfo->AddCoins(-aCost); mPurchases[STORE_ITEM_PACKET_UPGRADE]++;
+            if let Some(app) = self.app {
+                unsafe {
+                    if let Some(player) = (*app).player_info.as_mut() {
+                        player.add_coins(-a_cost);
+                        if let Some(p) = player.m_purchases.get_mut(StoreItem::PacketUpgrade as usize) {
+                            *p += 1;
+                        }
+                    }
+                    // C++: WriteCurrentUserConfig() —— [TRANSLATION_NOTE]: 存档由 try_to_save_game 路径处理，暂略
+                }
+            }
+            // C++: mBoard->mSeedBank->UpdateWidth() —— [TRANSLATION_NOTE]: Rust seed_bank 为 Vec<SeedPacket>，无 UpdateWidth
+            // C++: 按消息索引推进戴夫对话
+            if message_index == 1503 {
+                if let Some(app) = self.app {
+                    unsafe { (*app).crazy_dave_talk_index(1510); }
+                }
+            } else if message_index == 1553 {
+                if let Some(app) = self.app {
+                    unsafe { (*app).crazy_dave_talk_index(1560); }
+                }
+            }
+        } else {
+            // C++: mApp->mPlayerInfo->mDidntPurchasePacketUpgrade++;
+            if let Some(app) = self.app {
+                unsafe {
+                    if let Some(player) = (*app).player_info.as_mut() {
+                        player.m_didnt_purchase_packet_upgrade += 1;
+                    }
+                    if message_index == 1503 {
+                        (*app).crazy_dave_talk_index(1520);
+                    } else if message_index == 1553 {
+                        (*app).crazy_dave_talk_index(1570);
+                    }
+                }
+            }
         }
     }
 
