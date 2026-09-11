@@ -381,7 +381,8 @@ impl SeedPacket {
 
             if !app.m_easy_planting_cheat {
                 if !self.active {
-                    // [TRANSLATION_NOTE]: PlaySample(SOUND_BUZZER) 未接入
+                    // C++: mApp->PlaySample(Sexy::SOUND_BUZZER);
+                    app.play_sample(crate::todlib::tod_foley::SOUND_BUZZER);
                     if app.is_first_time_adventure_mode() && b.level == 1 {
                         b.display_advice("[ADVICE_SEED_REFRESH]", MessageStyle::TutorialLevel1 as i32, AdviceType::SeedRefresh);
                     }
@@ -390,7 +391,8 @@ impl SeedPacket {
 
                 let a_cost = b.get_current_plant_cost(self.seed_type, self.imitater_type);
                 if !b.can_take_sun_money(a_cost) && !b.has_conveyor_belt_seed_bank() {
-                    // [TRANSLATION_NOTE]: PlaySample(SOUND_BUZZER) 未接入
+                    // C++: mApp->PlaySample(Sexy::SOUND_BUZZER);
+                    app.play_sample(crate::todlib::tod_foley::SOUND_BUZZER);
                     b.m_out_of_money_counter = 70;
                     if app.is_first_time_adventure_mode() && b.level == 1 {
                         b.display_advice("[ADVICE_CANT_AFFORD_PLANT]", MessageStyle::TutorialLevel1 as i32, AdviceType::CantAffordPlant);
@@ -399,7 +401,8 @@ impl SeedPacket {
                 }
 
                 if !b.planting_requirements_met(a_use_seed_type) {
-                    // [TRANSLATION_NOTE]: PlaySample(SOUND_BUZZER) 未接入
+                    // C++: mApp->PlaySample(Sexy::SOUND_BUZZER);
+                    app.play_sample(crate::todlib::tod_foley::SOUND_BUZZER);
                     let (advice, style) = match a_use_seed_type {
                         SeedType::Gatlingpea => (AdviceType::PlantNeedsRepeater, MessageStyle::HintLong),
                         SeedType::Wintermelon => (AdviceType::PlantNeedsMelonpult, MessageStyle::HintLong),
@@ -454,7 +457,8 @@ impl SeedPacket {
                 b.cursor_object.imitater_type = self.imitater_type;
                 b.cursor_object.cursor_type = CursorType::PlantFromBank;
                 b.cursor_object.seed_bank_index = self.packet_index;
-                // [TRANSLATION_NOTE]: PlaySample(SOUND_SEEDLIFT) 未接入
+                // C++: mApp->PlaySample(Sexy::SOUND_SEEDLIFT);
+                app.play_sample(crate::todlib::tod_foley::SOUND_SEEDLIFT);
 
                 if b.m_tutorial_state == TutorialState::Level1PickUpPeashooter {
                     b.set_tutorial_state(TutorialState::Level1PlantPeashooter);

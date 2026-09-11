@@ -10,11 +10,8 @@ use crate::framework::graphics::image::Image;
 
 /// 对应 C++ PURCHASE_COUNT_OFFSET（购买计数偏移基线）
 const PURCHASE_COUNT_OFFSET: i32 = 1000;
-/// [TRANSLATION_NOTE]: C++ SOUND_* 常量在 Rust game_enums 中未定义，用占位值
-const SOUND_DIAMOND: i32 = 0;
-const SOUND_SHOVEL: i32 = 0;
-const SOUND_TAP2: i32 = 0;
-const SOUND_SEEDLIFT: i32 = 0;
+// 音效常量改用 tod_foley 中由 LoadingSounds 资源加载赋值的真常量（原为占位值 0）
+use crate::todlib::tod_foley::{SOUND_DIAMOND, SOUND_SEEDLIFT, SOUND_SHOVEL, SOUND_TAP2};
 
 /// 硬币/掉落物品
 pub struct Coin {
@@ -1066,7 +1063,10 @@ impl Coin {
     /// 播放收集音效（对应 C++ PlayCollectSound）
     pub fn play_collect_sound(&self) {
         if self.coin_type == CoinType::UsableSeedPacket {
-            // [TRANSLATION_NOTE]: PlaySample(SOUND_SEEDLIFT) 未接入
+            // C++: mApp->PlaySample(Sexy::SOUND_SEEDLIFT);
+            if let Some(app) = self.base.get_app() {
+                app.play_sample(unsafe { crate::todlib::tod_foley::SOUND_SEEDLIFT });
+            }
             return;
         }
         if self.coin_type == CoinType::Silver || self.coin_type == CoinType::Gold {
@@ -1076,7 +1076,10 @@ impl Coin {
             return;
         }
         if self.coin_type == CoinType::Diamond {
-            // [TRANSLATION_NOTE]: PlaySample(SOUND_DIAMOND) 未接入
+            // C++: mApp->PlaySample(Sexy::SOUND_DIAMOND);
+            if let Some(app) = self.base.get_app() {
+                app.play_sample(unsafe { crate::todlib::tod_foley::SOUND_DIAMOND });
+            }
             return;
         }
         if self.is_sun {
