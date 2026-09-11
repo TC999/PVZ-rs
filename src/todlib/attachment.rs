@@ -362,7 +362,17 @@ impl Attachment {
                         }
                     }
                 }
-                EffectType::Trail | EffectType::Other => {}
+                EffectType::Trail => {
+                    // C++: aTrail->Draw(g)
+                    if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
+                        if let Some(es) = app.effect_system.as_ref() {
+                            if let Some(a_trail) = es.trails.get(a_attach_effect.effect_id as usize) {
+                                a_trail.draw(g);
+                            }
+                        }
+                    }
+                }
+                EffectType::Other => {}
             }
         }
     }
@@ -597,15 +607,30 @@ pub fn attach_particle(
     Some(a_attach_effect)
 }
 
-/// 附着拖尾效果（对应 C++ AttachTrail，Attachment.cpp）
-/// [TRANSLATION_NOTE]: Rust EffectSystem 尚无 trails 存储（mTrailHolder 未接入），暂保留占位
+/// 附着拖尾效果（对应 C++ AttachTrail，Attachment.cpp:998）
 pub fn attach_trail(
-    _attachment_id: &mut AttachmentID,
-    _trail: *mut std::ffi::c_void,
-    _offset_x: f32,
-    _offset_y: f32,
+    the_attachment_id: &mut AttachmentID,
+    the_trail: *mut std::ffi::c_void,
+    the_offset_x: f32,
+    the_offset_y: f32,
 ) -> Option<*mut AttachEffect> {
-    None
+    let app = crate::lawn::lawn_app::LawnApp::instance()?;
+    let es = app.effect_system.as_mut()?;
+    // C++: mTrailHolder->mTrails.DataArrayGetID(theTrail)
+    let a_trail_id = es.trails.iter().position(|tr| {
+        std::ptr::eq(
+            tr as *const crate::todlib::trail::Trail,
+            the_trail as *const crate::todlib::trail::Trail,
+        )
+    })? as u32;
+    let a_attach_effect = create_effect_attachment(
+        the_attachment_id, EffectType::Trail, a_trail_id, the_offset_x, the_offset_y,
+    )?;
+    // C++: PVZP_ASSERT(!theTrail->mIsAttachment); theTrail->mIsAttachment = true;
+    if let Some(a_tr) = es.trails.get_mut(a_trail_id as usize) {
+        a_tr.m_is_attachment = true;
+    }
+    Some(a_attach_effect)
 }
 
 /// 附件是否已满（对应 C++ IsFullOfAttachments，Attachment.cpp:1009）
