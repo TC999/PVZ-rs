@@ -1910,7 +1910,10 @@ impl Challenge {
         brain.pos_x = (x - 15) as f32;
         brain.pos_y = (y - 15) as f32;
         board.grid_items.push(brain);
-        // PlaySample(SOUND_TAP) 未接入
+        // C++: mApp->PlaySample(Sexy::SOUND_TAP);
+        if let Some(app) = self.app {
+            unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_TAP); }
+        }
     }
 
     pub fn zombiquarium_mouse_down(&mut self, x: i32, y: i32) {

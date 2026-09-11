@@ -2170,7 +2170,10 @@ impl CutScene {
             3315 => {
                 // "Terra cotta!!!"
                 self.clear_upsell_board();
-                // [TRANSLATION_NOTE]: C++ 中 PlaySample(SOUND_FINALWAVE)
+                // C++: mApp->PlaySample(Sexy::SOUND_FINALWAVE);
+                if let Some(app) = self.app {
+                    unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_FINALWAVE); }
+                }
                 self.m_upsell_hide_board = true;
                 if let Some(app) = self.app {
                     let render_position = crate::lawn::board::make_render_order(
@@ -2247,14 +2250,16 @@ impl CutScene {
             }
             if let Some(app) = self.get_app_mut() {
                 app.m_mute_sounds_for_cutscene = false;
-                // [TRANSLATION_NOTE]: PlaySample(SOUND_HUGE_WAVE) 依赖音效系统
+                // C++: mApp->PlaySample(Sexy::SOUND_HUGE_WAVE);
+                app.play_sample(unsafe { crate::todlib::tod_foley::SOUND_HUGE_WAVE });
                 app.m_mute_sounds_for_cutscene = true;
             }
         }
         if scene_time == TIME_INTRO_FADE_OUT - 200 {
             if let Some(app) = self.get_app_mut() {
                 app.m_mute_sounds_for_cutscene = false;
-                // [TRANSLATION_NOTE]: PlaySample(SOUND_SIREN) 依赖音效系统
+                // C++: mApp->PlaySample(Sexy::SOUND_SIREN);
+                app.play_sample(unsafe { crate::todlib::tod_foley::SOUND_SIREN });
                 app.m_mute_sounds_for_cutscene = true;
             }
         }

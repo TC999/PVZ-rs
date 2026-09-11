@@ -1180,7 +1180,10 @@ impl ZenGarden {
                     && self.garden_type == GardenType::Aquarium
                     && click_count <= -1
                 {
-                    // [TRANSLATION_NOTE]: C++ 中 PlaySample(SOUND_TAPGLASS)
+                    // C++: mApp->PlaySample(Sexy::SOUND_TAPGLASS);
+                    if let Some(app) = self.app {
+                        unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_TAPGLASS); }
+                    }
                 }
             }
         }
@@ -2533,7 +2536,11 @@ impl ZenGarden {
                 }
             }
         }
-        // [TRANSLATION_NOTE]: PlaySample(SOUND_TAP) 与 ClearAdvice(ADVICE_STINKY_SLEEPING) 依赖音效/提示系统，暂不执行
+        // C++: mApp->PlaySample(Sexy::SOUND_TAP);
+        if let Some(app) = self.app {
+            unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_TAP); }
+        }
+        // [TRANSLATION_NOTE]: C++ 中 ClearAdvice(ADVICE_STINKY_SLEEPING) 依赖提示系统，暂不执行
     }
 
     pub fn should_stinky_be_awake(&self) -> bool {
