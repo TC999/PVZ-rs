@@ -1548,22 +1548,14 @@ Spawn: {}
             _ => {}
         }
         // C++: SetFont(FONT_PICO129)；黑描边 4 次 + 白字（DrawStringWordWrapped）
-        // [TRANSLATION_NOTE]: Rust 端无 DrawStringWordWrapped/位图字体，用 Font 近似并按行绘制
-        let mut a_font = crate::framework::graphics::font::Font::new("Pico", 129);
-        a_font.ascent = 13;
-        a_font.font_height = 16;
-        g.set_font(&mut a_font as *mut crate::framework::graphics::font::Font);
-        let a_lines: Vec<&str> = a_text.lines().collect();
-        for (a_x, a_y) in [(10, 89), (11, 91), (9, 90), (11, 90)] {
-            g.set_color(&Color::BLACK);
-            for (i, a_line) in a_lines.iter().enumerate() {
-                g.draw_string(a_line, a_x, a_y + i as i32 * 16);
-            }
-        }
+        g.set_font(unsafe { crate::framework::graphics::bitmap_font::FONT_PICO129 });
+        g.set_color(&Color::BLACK);
+        g.draw_string_word_wrapped(&a_text, 10, 89, 10000000, -1, -1, None);
+        g.draw_string_word_wrapped(&a_text, 11, 91, 10000000, -1, -1, None);
+        g.draw_string_word_wrapped(&a_text, 9, 90, 10000000, -1, -1, None);
+        g.draw_string_word_wrapped(&a_text, 11, 90, 10000000, -1, -1, None);
         g.set_color(&Color::WHITE);
-        for (i, a_line) in a_lines.iter().enumerate() {
-            g.draw_string(a_line, 10, 90 + i as i32 * 16);
-        }
+        g.draw_string_word_wrapped(&a_text, 10, 90, 10000000, -1, -1, None);
     }
 
     /// [TRANSLATION_NOTE]: C++ Board::DrawDebugObjectRects (Board.cpp:7052) — collision rects;
@@ -1717,13 +1709,17 @@ Spawn: {}
             // C++: SetColor(Color(180, 255, 90, anAlpha)); SetFont(FONT_CONTINUUMBOLD14);
             //      aCoinLabel = mApp->GetMoneyString(mPlayerInfo->mCoins);
             //      DrawString(aCoinLabel, aPosX + 116 - FONT_CONTINUUMBOLD14->StringWidth(aCoinLabel), aPosY + 24);
-            // [TRANSLATION_NOTE]: Rust 无 FONT_CONTINUUMBOLD14 全局字体常量，金币数值文本绘制暂略
             let a_coin_label =
                 crate::lawn::lawn_app::LawnApp::get_money_string(unsafe {
                     (*app).player_info.as_ref().map_or(0, |p| p.m_coins)
                 });
-            let _ = a_coin_label;
-            let _ = a_pos_y;
+            g.set_color(&Color::new(180, 255, 90, an_alpha));
+            g.set_font(unsafe { crate::framework::graphics::bitmap_font::FONT_CONTINUUMBOLD14 });
+            let a_label_width = unsafe {
+                (*crate::framework::graphics::bitmap_font::FONT_CONTINUUMBOLD14)
+                    .string_width(&a_coin_label)
+            };
+            g.draw_string(&a_coin_label, a_pos_x + 116 - a_label_width, a_pos_y + 24);
             g.set_colorize_images(false);
         }
     }
@@ -1897,7 +1893,15 @@ Spawn: {}
             if self.m_out_of_money_counter > 0 && self.m_out_of_money_counter % 20 < 10 {
                 a_money_color = Color::new(255, 0, 0, 255);
             }
-            if !self.draw_ui_text(g, &a_money_label, 34, 78, &a_money_color) {
+            if !self.draw_ui_text(
+                g,
+                &a_money_label,
+                34,
+                78,
+                unsafe { crate::framework::graphics::bitmap_font::FONT_CONTINUUMBOLD14 },
+                &a_money_color,
+                DrawStringJustification::DS_ALIGN_CENTER,
+            ) {
                 g.set_color(&a_money_color);
                 g.draw_string(&a_money_label, 34, 78);
             }
@@ -2336,8 +2340,16 @@ Spawn: {}
                             unsafe { g.draw_image_f_xy(&*a_img, (a_button_rect.x - 6) as f32, (a_button_rect.y + a_offset_y - 7) as f32); }
                         }
                         g.set_colorize_images(false);
-                        // C++: PvzpDrawString("x%d", aButtonRect.mX + 64, ...+65, FONT_HOUSEOFTERROR16, White, DS_ALIGN_RIGHT)
-                        // [TRANSLATION_NOTE]: Rust 无 FONT_HOUSEOFTERROR16 全局字体，剩余次数文本绘制暂略
+                        // C++: aChargeString = StrFormat("x%d", aCharges);
+                        //      PvzpDrawString(g, aChargeString, aButtonRect.mX + 64, aButtonRect.mY + aOffsetY + 65, FONT_HOUSEOFTERROR16, Color::White, DS_ALIGN_RIGHT)
+                        let a_charge_string = format!("x{}", a_charges);
+                        g.set_font(unsafe { crate::framework::graphics::bitmap_font::FONT_HOUSEOFTERROR16 });
+                        g.set_color(&Color::WHITE);
+                        let a_charge_width = unsafe {
+                            (*crate::framework::graphics::bitmap_font::FONT_HOUSEOFTERROR16)
+                                .string_width(&a_charge_string)
+                        };
+                        g.draw_string(&a_charge_string, a_button_rect.x + 64 - a_charge_width, a_button_rect.y + a_offset_y + 65);
                     }
                     GameObjectType::BugSpray => {
                         let a_purchase = app_ref.player_info.as_ref().map_or(0, |p| {
@@ -2474,12 +2486,12 @@ Spawn: {}
             };
             if let Some(a_match_str) = a_mode_text {
                 // C++: PvzpDrawString(aMatchStr, aPosX, 589, FONT_DWARVENTODCRAFT12, aColor, DS_ALIGN_CENTER)
-                let mut a_font = crate::framework::graphics::font::Font::new("Dwarventodcraft", 12);
-                a_font.ascent = 13;
-                a_font.font_height = 12;
-                g.set_font(&mut a_font as *mut crate::framework::graphics::font::Font);
+                g.set_font(unsafe { crate::framework::graphics::bitmap_font::FONT_DWARVENTODCRAFT12 });
                 g.set_color(&a_color);
-                let a_text_width = a_font.string_width(&a_match_str);
+                let a_text_width = unsafe {
+                    (*crate::framework::graphics::bitmap_font::FONT_DWARVENTODCRAFT12)
+                        .string_width(&a_match_str)
+                };
                 g.draw_string(&a_match_str, a_pos_x - a_text_width / 2, 589);
             } else if self.progress_meter_has_flags() {
                 let a_num_waves_per_flag = self.get_num_waves_per_flag();
@@ -3349,13 +3361,30 @@ Spawn: {}
 
     /// 绘制 UI（对应 C++ Board::DrawUIBottom + DrawShovel + 阳光计数）
     /// 用位图字体绘制 UI 文本（成功返回 true；字体未加载返回 false）
-    fn draw_ui_text(&self, g: &mut Graphics, text: &str, x: i32, y: i32, color: &Color) -> bool {
-        if let Some(font_ptr) = crate::framework::graphics::bitmap_font::load_bitmap_font("continuumbold14") {
-            let font = unsafe { &*font_ptr };
-            font.draw_text(g, x, y, text, color);
-            return true;
+    fn draw_ui_text(
+        &self,
+        g: &mut Graphics,
+        text: &str,
+        x: i32,
+        y: i32,
+        font: *mut crate::framework::graphics::font::Font,
+        color: &Color,
+        justification: DrawStringJustification,
+    ) -> bool {
+        // 对应 C++ PvzpDrawString(g, theText, thePosX, thePosY, theFont, theColor, theJustification)
+        if font.is_null() {
+            return false;
         }
-        false
+        g.set_font(font);
+        g.set_color(color);
+        let text_width = unsafe { (*font).string_width(text) };
+        let draw_x = match justification {
+            DrawStringJustification::DS_ALIGN_RIGHT => x - text_width,
+            DrawStringJustification::DS_ALIGN_CENTER => x - text_width / 2,
+            _ => x,
+        };
+        g.draw_string(text, draw_x, y);
+        true
     }
 
     /// 绘制冰面（对应 C++ Board::DrawIce）
@@ -3509,7 +3538,16 @@ Spawn: {}
         if self.has_progress_meter() {
             a_pos_x = 593;
         }
-        self.draw_ui_text(g, &a_level_str, a_pos_x, a_pos_y, &crate::framework::color::Color::new(224, 187, 98, 255));
+        // C++: PvzpDrawString(g, aLevelStr, aPosX, aPosY, FONT_HOUSEOFTERROR16, Color(224, 187, 98), DS_ALIGN_RIGHT)
+        self.draw_ui_text(
+            g,
+            &a_level_str,
+            a_pos_x,
+            a_pos_y,
+            unsafe { crate::framework::graphics::bitmap_font::FONT_HOUSEOFTERROR16 },
+            &crate::framework::color::Color::new(224, 187, 98, 255),
+            DrawStringJustification::DS_ALIGN_RIGHT,
+        );
     }
 
     /// 获取 Board 图片（按资源管理器小写 id）
