@@ -710,6 +710,7 @@ pub static mut SOUND_SEEDLIFT: i32 = -1;
 pub static mut SOUND_SIREN: i32 = -1;
 pub static mut SOUND_TAPGLASS: i32 = -1;
 pub static mut SOUND_LOSEMUSIC: i32 = -1;
+pub static mut SOUND_ZOMBIESPLASH: i32 = -1;
 
 /// 草坪拟音参数表（对应 C++ gLawnFoleyParamArray，PvzpFoley.cpp:30，104 项）
 /// [TRANSLATION_NOTE]: 指针指向上方 SOUND_XXX 变量（C++ &Sexy::SOUND_XXX 地址语义），
@@ -969,6 +970,7 @@ pub fn assign_sound_id(name: &str, id: i32) {
             "sound_siren" => SOUND_SIREN = id,
             "sound_tapglass" => SOUND_TAPGLASS = id,
             "sound_losemusic" => SOUND_LOSEMUSIC = id,
+            "sound_zombiesplash" => SOUND_ZOMBIESPLASH = id,
             _ => {}
         }
     }

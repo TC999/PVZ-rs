@@ -3724,36 +3724,158 @@ impl Plant {
     }
 
     pub fn update_squash(&mut self) {
+        // C++ Plant::UpdateSquash（Plant.cpp:1482-1613）
         if self.state == PlantState::NotReady {
-            // 依赖底层系统
-            self.state = PlantState::SquashLook;
-            self.state_countdown = 80;
+            if let Some(a_zombie_idx) = self.find_squash_target() {
+                if let Some(board) = self.base.board {
+                    unsafe {
+                        let zombies_ref = &(*board).zombies;
+                        if let Some(zombie) = zombies_ref.get(a_zombie_idx) {
+                            // C++: mTargetZombieID = mBoard->ZombieGetID(aZombie);
+                            self.target_zombie_id = (*board).zombie_get_id(zombie);
+                            // C++: mTargetX = aZombie->ZombieTargetLeadX(0.0f) - mWidth / 2;
+                            self.target_x = (zombie.zombie_target_lead_x(0.0) - self.base.width as f32 / 2.0) as i32;
+                        }
+                    }
+                }
+                self.state = PlantState::SquashLook;
+                self.state_countdown = 80;
+                // C++: PlayBodyReanim(mTargetX < mX ? "anim_lookleft" : "anim_lookright", REANIM_PLAY_ONCE_AND_HOLD, 10, 24.0f)
+                let a_look = if self.target_x < self.base.x { "anim_lookleft" } else { "anim_lookright" };
+                self.play_body_reanim(a_look, ReanimLoopType::PlayOnceAndHold, 10, 24.0);
+                // C++: mApp->PlayFoley(FOLEY_SQUASH_HMM)
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::SquashHmm as i32);
+                }
+            }
         } else if self.state == PlantState::SquashLook {
             if self.state_countdown <= 0 {
+                // C++: PlayBodyReanim("anim_jumpup", REANIM_PLAY_ONCE_AND_HOLD, 20, 24.0f)
+                self.play_body_reanim("anim_jumpup", ReanimLoopType::PlayOnceAndHold, 20, 24.0);
                 self.state = PlantState::SquashPreLaunch;
                 self.state_countdown = 45;
             }
         } else if self.state == PlantState::SquashPreLaunch {
             if self.state_countdown <= 0 {
+                if let Some(a_zombie_idx) = self.find_squash_target() {
+                    if let Some(board) = self.base.board {
+                        unsafe {
+                            let zombies_ref = &(*board).zombies;
+                            if let Some(zombie) = zombies_ref.get(a_zombie_idx) {
+                                // C++: mTargetX = aZombie->ZombieTargetLeadX(30.0f) - mWidth / 2;
+                                self.target_x = (zombie.zombie_target_lead_x(30.0) - self.base.width as f32 / 2.0) as i32;
+                            }
+                        }
+                    }
+                }
                 self.state = PlantState::SquashRising;
                 self.state_countdown = 50;
+                // C++: mRenderOrder = Board::MakeRenderOrder(RENDER_LAYER_PARTICLE, mRow, 0);
+                self.base.render_order = crate::lawn::board::make_render_order(RENDER_LAYER_PARTICLE, self.base.row, 0);
             }
-        } else if self.state == PlantState::SquashRising {
-            if self.state_countdown == 0 {
-                self.state = PlantState::SquashFalling;
-                self.state_countdown = 10;
+        } else if self.state == PlantState::SquashRising
+            || self.state == PlantState::SquashFalling
+            || self.state == PlantState::SquashDoneFalling
+        {
+            // C++ else 分支（1488-1607）
+            let a_target_col;
+            let a_dest_y;
+            let board_ptr = self.base.board;
+            if let Some(board) = board_ptr {
+                unsafe {
+                    // C++: aTargetCol = mBoard->PixelToGridXKeepOnBoard(mTargetX, mY);
+                    a_target_col = (*board).pixel_to_grid_x_keep_on_board(self.target_x, self.base.y);
+                    // C++: aDestY = mBoard->GridToPixelY(aTargetCol, mRow) + 8;
+                    a_dest_y = (*board).grid_to_pixel_y(a_target_col, self.base.row) + 8;
+                }
+            } else {
+                return;
             }
-        } else if self.state == PlantState::SquashFalling {
-            if self.state_countdown == 5 {
-                self.do_squash_damage();
-            }
-            if self.state_countdown == 0 {
-                self.state = PlantState::SquashDoneFalling;
-                self.state_countdown = 100;
-            }
-        } else if self.state == PlantState::SquashDoneFalling {
-            if self.state_countdown == 0 {
-                self.die();
+
+            if self.state == PlantState::SquashRising {
+                // C++: mX = PvzpAnimateCurve(50, 20, mStateCountdown, GridToPixelX(mPlantCol, mStartRow), mTargetX, CURVE_EASE_IN_OUT);
+                //      mY = PvzpAnimateCurve(50, 20, mStateCountdown, GridToPixelY(mPlantCol, mStartRow), aDestY - 120, CURVE_EASE_IN_OUT);
+                if let Some(board) = board_ptr {
+                    unsafe {
+                        let a_start_x = (*board).grid_to_pixel_x(self.plant_col, self.start_row);
+                        let a_start_y = (*board).grid_to_pixel_y(self.plant_col, self.start_row);
+                        self.base.x = crate::todlib::tod_common::tod_animate_curve(
+                            50, 20, self.state_countdown, a_start_x, self.target_x, TodCurves::EaseInOut,
+                        );
+                        self.base.y = crate::todlib::tod_common::tod_animate_curve(
+                            50, 20, self.state_countdown, a_start_y, a_dest_y - 120, TodCurves::EaseInOut,
+                        );
+                    }
+                }
+                if self.state_countdown == 0 {
+                    // C++: PlayBodyReanim("anim_jumpdown", REANIM_PLAY_ONCE_AND_HOLD, 0, 60.0f);
+                    self.play_body_reanim("anim_jumpdown", ReanimLoopType::PlayOnceAndHold, 0, 60.0);
+                    self.state = PlantState::SquashFalling;
+                    self.state_countdown = 10;
+                }
+            } else if self.state == PlantState::SquashFalling {
+                // C++: mY = PvzpAnimateCurve(10, 0, mStateCountdown, aDestY - 120, aDestY, CURVE_EASE_IN_OUT);
+                if let Some(board) = board_ptr {
+                    unsafe {
+                        self.base.y = crate::todlib::tod_common::tod_animate_curve(
+                            10, 0, self.state_countdown, a_dest_y - 120, a_dest_y, TodCurves::EaseInOut,
+                        );
+                    }
+                }
+                if self.state_countdown == 5 {
+                    self.do_squash_damage();
+                }
+                if self.state_countdown == 0 {
+                    let a_is_pool = board_ptr.map_or(false, |b| unsafe { (*b).is_pool_square(a_target_col, self.base.row) });
+                    if a_is_pool {
+                        // C++: AddReanimation(mX - 11, mY + 20, mRenderOrder + 1, REANIM_SPLASH) + FOLEY_SPLAT + SOUND_ZOMBIESPLASH + Die()
+                        let a_splash_x = self.base.x - 11;
+                        let a_splash_y = self.base.y + 20;
+                        let a_splash_render = self.base.render_order + 1;
+                        if let Some(app) = self.base.get_app_mut() {
+                            app.add_reanimation(
+                                a_splash_x as f32,
+                                a_splash_y as f32,
+                                a_splash_render,
+                                ReanimationType::Splash as i32,
+                            );
+                            app.play_foley(crate::todlib::tod_foley::FoleyType::Splat as i32);
+                            app.play_sample(unsafe { crate::todlib::tod_foley::SOUND_ZOMBIESPLASH });
+                        }
+                        self.die();
+                    } else {
+                        // C++ 1564-1571: 陆地落定
+                        self.state = PlantState::SquashDoneFalling;
+                        self.state_countdown = 100;
+                        // C++: mBoard->ShakeBoard(1, 4); mApp->PlayFoley(FOLEY_THUMP);
+                        if let Some(board) = board_ptr {
+                            unsafe { (*board).shake_board(1, 4); }
+                        }
+                        if let Some(app) = self.base.get_app() {
+                            app.play_foley(crate::todlib::tod_foley::FoleyType::Thump as i32);
+                        }
+                        // C++: aOffsetY = mBoard->StageHasRoof() ? 69.0f : 80.0f;
+                        let a_offset_y = board_ptr.map_or(80.0, |b| unsafe {
+                            if (*b).stage_has_roof() { 69.0 } else { 80.0 }
+                        });
+                        // C++: mApp->AddPvzpParticle(mX + 40, mY + aOffsetY, mRenderOrder + 4, PARTICLE_DUST_SQUASH);
+                        let a_dust_x = self.base.x + 40;
+                        let a_dust_y = self.base.y as f32 + a_offset_y;
+                        let a_dust_render = self.base.render_order + 4;
+                        if let Some(app) = self.base.get_app_mut() {
+                            app.add_tod_particle(
+                                a_dust_x as f32,
+                                a_dust_y,
+                                a_dust_render,
+                                ParticleEffect::DustSquash as i32,
+                            );
+                        }
+                    }
+                }
+            } else if self.state == PlantState::SquashDoneFalling {
+                if self.state_countdown == 0 {
+                    self.die();
+                }
             }
         }
     }
