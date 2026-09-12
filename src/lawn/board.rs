@@ -7714,9 +7714,15 @@ Spawn: {}
 
     /// 种子栏是否包含点（对应 C++ SeedBank::ContainsPoint，SeedPacket.cpp:1013）
     pub fn seed_bank_contains_point(&self, the_x: i32, the_y: i32) -> bool {
-        // [TRANSLATION_NOTE]: C++ mWidth = IMAGE_SEEDBANK->GetWidth() + GetSeedBankExtraWidth()，
-        // Rust 无 IMAGE_SEEDBANK 资源，用 456 近似（与 board 绘图处一致）
-        let a_width = self.get_seed_bank_extra_width() + 456;
+        // C++: mWidth = IMAGE_SEEDBANK->GetWidth() + GetSeedBankExtraWidth()（SeedPacket.cpp:1168）
+        let a_seed_bank_width = match self.app {
+            Some(app) => {
+                let img = crate::lawn::board::get_overlay_image(unsafe { &*app }, "IMAGE_SEEDBANK");
+                if img.is_null() { 456 } else { unsafe { (*img).width } }
+            }
+            None => 456,
+        };
+        let a_width = self.get_seed_bank_extra_width() + a_seed_bank_width;
         the_x >= self.m_seed_bank_x
             && the_x < self.m_seed_bank_x + a_width
             && the_y >= self.m_seed_bank_y
@@ -8780,9 +8786,14 @@ Spawn: {}
             the_rect.x = 0;
         }
 
-        // [TRANSLATION_NOTE]: C++ 中 aShovelWidth = IMAGE_SHOVELBANK->GetWidth()；
-        // Rust 侧无该图片资源，以固定宽度近似
-        let a_shovel_width = 72;
+        // C++: aShovelWidth = IMAGE_SHOVELBANK->GetWidth()（Board.cpp:1331）
+        let a_shovel_width = match self.app {
+            Some(app) => {
+                let img = crate::lawn::board::get_overlay_image(unsafe { &*app }, "IMAGE_SHOVELBANK");
+                if img.is_null() { 72 } else { unsafe { (*img).width } }
+            }
+            None => 72,
+        };
         for an_object in (GameObjectType::WateringCan as i32)..(object_type as i32) {
             let obj = unsafe { std::mem::transmute::<i32, GameObjectType>(an_object) };
             if self.can_use_game_object(obj) {
