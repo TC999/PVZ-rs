@@ -706,6 +706,7 @@ pub static mut SOUND_LIGHTFILL: i32 = -1;
 pub static mut SOUND_PAUSE: i32 = -1;
 pub static mut SOUND_GRAVEBUTTON: i32 = -1;
 pub static mut SOUND_BOING: i32 = -1;
+pub static mut SOUND_LOADINGBAR_FLOWER: i32 = -1;
 pub static mut SOUND_SEEDLIFT: i32 = -1;
 pub static mut SOUND_SIREN: i32 = -1;
 pub static mut SOUND_TAPGLASS: i32 = -1;
@@ -966,6 +967,7 @@ pub fn assign_sound_id(name: &str, id: i32) {
             "sound_pause" => SOUND_PAUSE = id,
             "sound_gravebutton" => SOUND_GRAVEBUTTON = id,
             "sound_boing" => SOUND_BOING = id,
+            "sound_loadingbar_flower" => SOUND_LOADINGBAR_FLOWER = id,
             "sound_seedlift" => SOUND_SEEDLIFT = id,
             "sound_siren" => SOUND_SIREN = id,
             "sound_tapglass" => SOUND_TAPGLASS = id,

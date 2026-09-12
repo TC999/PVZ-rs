@@ -7981,9 +7981,12 @@ Spawn: {}
 
     /// 切换未来模式（对应 C++ SetFutureMode）
     fn set_future_mode(&mut self, enable: bool) {
-        // [TRANSLATION_NOTE]: C++ 中 PlaySample(SOUND_BOING)
+        // C++ 7501: mApp->PlaySample(Sexy::SOUND_BOING);
         if let Some(app) = self.app {
-            unsafe { (*app).m_future_mode = enable; }
+            unsafe {
+                (*app).play_sample(crate::todlib::tod_foley::SOUND_BOING);
+                (*app).m_future_mode = enable;
+            }
         }
         self.m_future_mode = enable;
         for i in 0..self.zombies.len() {
@@ -8038,18 +8041,24 @@ Spawn: {}
 
     /// 切换雏菊模式（对应 C++ SetDaisyMode）
     fn set_daisy_mode(&mut self, enable: bool) {
-        // [TRANSLATION_NOTE]: C++ 中 PlaySample(SOUND_LOADINGBAR_FLOWER)
+        // C++ 7560: mApp->PlaySample(SOUND_LOADINGBAR_FLOWER);
         if let Some(app) = self.app {
-            unsafe { (*app).m_daisy_mode = enable; }
+            unsafe {
+                (*app).play_sample(crate::todlib::tod_foley::SOUND_LOADINGBAR_FLOWER);
+                (*app).m_daisy_mode = enable;
+            }
         }
         self.m_daisy_mode = enable;
     }
 
     /// 切换苏克尔模式（对应 C++ SetSukhbirMode）
     fn set_sukhbir_mode(&mut self, enable: bool) {
-        // [TRANSLATION_NOTE]: C++ 中 PlaySample(SOUND_SUKHBIR)
+        // C++ 7567: mApp->PlaySample(Sexy::SOUND_SUKHBIR);
         if let Some(app) = self.app {
-            unsafe { (*app).m_sukhbir_mode = enable; }
+            unsafe {
+                (*app).play_sample(crate::todlib::tod_foley::SOUND_SUKHBIR);
+                (*app).m_sukhbir_mode = enable;
+            }
         }
         self.m_sukhbir_mode = enable;
     }
@@ -9427,7 +9436,14 @@ Spawn: {}
     /// 初始化生存模式阶段（对应 C++ InitSurvivalStage）
     pub fn init_survival_stage(&mut self) {
         self.refresh_seed_packet_from_cursor();
-        // mApp->mSoundSystem->GamePause(true) — 依赖 SoundSystem 翻译
+        // C++ 1281: mApp->mSoundSystem->GamePause(true);
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(ref ss) = (*app).sound_system {
+                    ss.game_pause(true);
+                }
+            }
+        }
         self.freeze_effects_for_cutscene(true);
         self.m_level_complete = false;
         self.init_zombie_waves();
@@ -9493,7 +9509,12 @@ Spawn: {}
                 let survival_stage = (*app).game_mode as i32 - GameMode::SurvivalEndlessStage1 as i32;
                 if survival_stage >= 0 && survival_stage <= 4 {
                     if self.get_survival_flags_completed() >= 20 {
-                        // ReportAchievement::GiveAchievement 暂略
+                        // C++ 1667: ReportAchievement::GiveAchievement(mApp, Immortal, true);
+                        crate::lawn::widget::achievements_screen::ReportAchievement::give_achievement(
+                            Some(app),
+                            crate::lawn::widget::achievements_screen::AchievementId::Immortal as i32,
+                            true,
+                        );
                     }
                 }
 
@@ -9501,7 +9522,10 @@ Spawn: {}
                     && self.challenge.as_ref().map_or(false, |c| c.survival_stage > 0)
                 {
                     self.freeze_effects_for_cutscene(false);
-                    // mApp->mSoundSystem->GamePause(false) — 暂略
+                    // C++ 1674: mApp->mSoundSystem->GamePause(false);
+                    if let Some(ref ss) = (*app).sound_system {
+                        ss.game_pause(false);
+                    }
                 }
 
                 let gm = (*app).game_mode;
