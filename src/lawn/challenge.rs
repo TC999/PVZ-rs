@@ -153,7 +153,9 @@ impl Challenge {
             let board = self.get_board();
             board.m_zombie_count_down = 200;
             board.m_zombie_count_down_start = board.m_zombie_count_down;
-            // C++: mBoard->mSeedBank->AddSeed(SEED_WALLNUT) —— [TRANSLATION_NOTE]: SeedBank 未接入 Rust，跳过
+            // C++: mBoard->mSeedBank->AddSeed(SEED_WALLNUT)（SeedBank::AddSeed，SeedPacket.cpp:1018；
+            // 保龄球为传送带模式，thePlaceOnLeft 默认 false）
+            board.add_seed(SeedType::Wallnut, false);
             self.conveyor_belt_counter = 400;
             self.show_bowling_line = 1;
         }
@@ -511,7 +513,19 @@ impl Challenge {
             self.scary_potter_update();
         }
         // C++ L2174-L2184: (ScaryPotter || WhackAZombie) && mSeedBank->mY < 0 时种子栏滑入
-        // [TRANSLATION_NOTE]: SeedBank 整体 y 坐标未接入 Rust（board.seed_bank 为 Vec<SeedPacket>），此段跳过
+        if self.get_app().is_scary_potter_level() || self.get_app().is_whack_a_zombie_level() {
+            let board = self.get_board();
+            if board.m_seed_bank_y < 0 {
+                // C++: mSunMoney + CountSunBeingCollected() > 0 || mSeedBank->mY > IMAGE_SEEDBANK->mWidth
+                //（IMAGE_SEEDBANK->mWidth 以 456 近似，与 board.rs:7718 一致）
+                if board.m_sun_money + board.count_sun_being_collected() > 0 || board.m_seed_bank_y > 456 {
+                    board.m_seed_bank_y += 2;
+                    if board.m_seed_bank_y > 0 {
+                        board.m_seed_bank_y = 0;
+                    }
+                }
+            }
+        }
         if self.get_app().is_whack_a_zombie_level() {
             self.whack_a_zombie_update();
         }
