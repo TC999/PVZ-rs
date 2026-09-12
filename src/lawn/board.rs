@@ -5441,10 +5441,18 @@ Spawn: {}
     pub fn refresh_seed_packet_from_cursor(&mut self) {
         match self.cursor_object.cursor_type {
             CursorType::PlantFromUsableCoin => {
-                // 需要 Coin 的 DataArrayTryToGet 实现 — 暂略
+                // C++ 2027: mCoins.DataArrayTryToGet(mCursorObject->mCoinID)->DroppedUsableSeed();
+                // [TRANSLATION_NOTE]: C++ DataArray id 以 Vec 索引近似（Rust 侧 Coin 无 id 字段，coin_id 未接入赋值流程）
+                if let Some(coin) = self.coins.get_mut(self.cursor_object.coin_id as usize) {
+                    coin.dropped_usable_seed();
+                }
             }
             CursorType::PlantFromBank => {
-                // 需要 SeedBank 和 SeedPacket 的 Activate — 暂略
+                // C++ 2030-2031: mSeedBank->mSeedPackets[mCursorObject->mSeedBankIndex].Activate();
+                let a_index = self.cursor_object.seed_bank_index;
+                if a_index >= 0 && (a_index as usize) < self.seed_bank.len() {
+                    self.seed_bank[a_index as usize].activate();
+                }
             }
             _ => {}
         }
