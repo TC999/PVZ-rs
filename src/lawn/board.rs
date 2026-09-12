@@ -6497,8 +6497,15 @@ Spawn: {}
                     for widget_ptr in (*wm).widget_list.iter() {
                         (**widget_ptr).mark_dirty();
                     }
-                    // C++: for (Dialog* aDialog : mApp->mDialogList) { BringToFront(aDialog); MarkDirty(); }
-                    // [TRANSLATION_NOTE]: Rust 对话框列表/前置（mDialogList）未接入
+                }
+                // C++: for (Dialog* aDialog : mApp->mDialogList) { BringToFront(aDialog); MarkDirty(); }
+                // [TRANSLATION_NOTE]: Rust Dialog 不经 widget_manager 管理（do_dialog 仅入
+                // dialog_map/m_dialog_list），BringToFront 对不在 widget_list 中的对话框为空操作、
+                // MarkDirty 重绘标记无对应；保留遍历调用链，Dialog 未来挂入 widget 系统时生效
+                for &a_dialog in (*app).base.m_dialog_list.iter() {
+                    if let Some(wm) = (*app).base.widget_manager {
+                        (*wm).bring_to_front(a_dialog as *mut crate::framework::widget::widget::Widget);
+                    }
                 }
             }
         }

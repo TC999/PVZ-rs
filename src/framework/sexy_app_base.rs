@@ -88,6 +88,9 @@ pub struct SexyAppBase {
 
     // 对话框
     pub dialog_map: HashMap<i32, *mut Dialog>,
+    /// 对话框有序列表（对应 C++ DialogList mDialogList，SexyAppBase.h:188；
+    /// std::list 语义，AddDialog push_back / KillDialog erase 维护）
+    pub m_dialog_list: Vec<*mut Dialog>,
 
     // 光标
     pub cursor_num: i32,
@@ -244,6 +247,7 @@ impl SexyAppBase {
             music_interface: None,
             resource_manager: None,
             dialog_map: HashMap::new(),
+            m_dialog_list: Vec::new(),
             build_num: 0,
             build_date: String::new(),
             user_name: String::new(),
@@ -892,12 +896,17 @@ impl SexyAppBase {
 
     /// 对话框管理
     pub fn kill_dialog(&mut self, dialog_id: i32) -> bool {
-        self.dialog_map.remove(&dialog_id);
+        if let Some(d) = self.dialog_map.remove(&dialog_id) {
+            // 对应 C++ KillDialog（SexyAppBase.cpp:857-859）：从 mDialogList 移除该对话框
+            self.m_dialog_list.retain(|x| *x != d);
+        }
         true
     }
 
     pub fn add_dialog(&mut self, dialog_id: i32, dialog: *mut Dialog) {
         self.dialog_map.insert(dialog_id, dialog);
+        // 对应 C++ AddDialog（SexyAppBase.cpp:912）：mDialogList.push_back(theDialog)
+        self.m_dialog_list.push(dialog);
     }
 
     /// 重绘

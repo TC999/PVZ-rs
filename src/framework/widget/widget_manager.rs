@@ -111,8 +111,7 @@ impl WidgetManager {
     }
 
     /// 移除 Widget
-    pub fn remove_widget(&mut self, widget: *mut Widget) {
-        self.widget_list.retain(|w| *w != widget);
+    pub fn remove_widget(&mut self, widget: *mut Widget) {        self.widget_list.retain(|w| *w != widget);
         self.disable_widget(widget);
         // 对应 C++ WidgetManager::RemoveWidget（WidgetManager.cpp:98-103）：
         // 移除的 widget 若是 base modal / over / focus 则清空对应状态
@@ -124,6 +123,17 @@ impl WidgetManager {
         }
         if self.last_down_widget == Some(widget) {
             self.last_down_widget = None;
+        }
+    }
+
+    /// 前置 Widget（对应 C++ WidgetContainer::BringToFront：从列表移除并插入末尾）
+    pub fn bring_to_front(&mut self, widget: *mut Widget) {
+        if let Some(idx) = self.widget_list.iter().position(|w| *w == widget) {
+            self.widget_list.remove(idx);
+            self.widget_list.push(widget);
+            unsafe {
+                (*widget).order_in_manager_changed();
+            }
         }
     }
 
