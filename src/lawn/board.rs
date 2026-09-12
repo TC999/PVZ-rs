@@ -3733,8 +3733,6 @@ Spawn: {}
                 }
             }
         }
-        // [TRANSLATION_NOTE]: C++ 4413-4417 mCheatKeys 作弊加速（mNextSurvivalStageCounter=2 + 冰道截断）未接入。
-
         // C++ 4419-4428：关卡开场（SCENE_LEVEL_INTRO）/僵尸胜利（SCENE_ZOMBIES_WON）场景分支
         let scene = self.app.map_or(crate::lawn::lawn_app::GameScenes::Playing, |app| unsafe { (*app).game_scene });
         if scene == crate::lawn::lawn_app::GameScenes::MainMenu {
@@ -3762,12 +3760,25 @@ Spawn: {}
             }
         }
 
+        // C++ 4430-4437: mCheatKeys && !IsScaryPotterLevel() && mNextSurvivalStageCounter > 0
+        // → mNextSurvivalStageCounter = 2; mIceTimer[i] = min(mIceTimer[i], 2)
+        let is_scary_potter = self.app.map_or(false, |app| unsafe { (*app).is_scary_potter_level() });
+        if self.app.map_or(false, |app| unsafe { (*app).m_cheat_keys_used })
+            && !is_scary_potter
+            && self.m_next_survival_stage_counter > 0
+        {
+            self.m_next_survival_stage_counter = 2;
+            for i in 0..MAX_GRID_SIZE_Y {
+                self.m_ice_timer[i] = self.m_ice_timer[i].min(2);
+            }
+        }
+
         // 处理关卡场景
         if self.m_paused {
             return;
         }
 
-        // C++ 4430-4444：COBCANNON_TARGET 点击 / Coin 点击
+        // C++ 4439-4444：COBCANNON_TARGET 点击 / Coin 点击
         let cursor_type = self.cursor_object.cursor_type;
         if hit_result.object_type == GameObjectType::None {
             if cursor_type == CursorType::CobcannonTarget {
