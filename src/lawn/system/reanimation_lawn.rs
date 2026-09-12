@@ -21,20 +21,20 @@ pub type ImageVariationList = TodList<ReanimCacheImageVariation>;
 
 /// 重动画缓存（对应 C++ ReanimatorCache）
 pub struct ReanimatorCache {
-    pub plant_images: [Option<*mut MemoryImage>; 77],  // NUM_SEED_TYPES
+    pub plant_images: [Option<*mut MemoryImage>; NUM_SEED_TYPES],  // 对应 C++ mPlantImages[SeedType::NUM_SEED_TYPES]
     pub image_variation_list: ImageVariationList,
     pub lawn_mowers: [Option<*mut MemoryImage>; 4],    // NUM_MOWER_TYPES
-    pub zombie_images: [Option<*mut MemoryImage>; 37], // NUM_CACHED_ZOMBIE_TYPES
+    pub zombie_images: [Option<*mut MemoryImage>; NUM_CACHED_ZOMBIE_TYPES], // 对应 C++ mZombieImages[ZombieType::NUM_CACHED_ZOMBIE_TYPES]
     pub app: Option<*mut crate::lawn::lawn_app::LawnApp>,
 }
 
 impl ReanimatorCache {
     pub fn new() -> Self {
         ReanimatorCache {
-            plant_images: [None; 77],
+            plant_images: [None; NUM_SEED_TYPES],
             image_variation_list: TodList::new(),
             lawn_mowers: [None; 4],
-            zombie_images: [None; 37],
+            zombie_images: [None; NUM_CACHED_ZOMBIE_TYPES],
             app: None,
         }
     }
@@ -42,19 +42,19 @@ impl ReanimatorCache {
     pub fn reanimator_cache_initialize(&mut self) {
         // 对应 C++ ReanimatorCacheInitialize（ReanimationLawn.cpp:340）：mApp = gSexyAppBase + 清零三个图像数组
         self.app = crate::lawn::lawn_app::LawnApp::instance().map(|app| app as *mut _);
-        self.plant_images = [None; 77];
+        self.plant_images = [None; NUM_SEED_TYPES];
         self.lawn_mowers = [None; 4];
-        self.zombie_images = [None; 37];
+        self.zombie_images = [None; NUM_CACHED_ZOMBIE_TYPES];
     }
 
     pub fn reanimator_cache_dispose(&mut self) {
         // [TRANSLATION_NOTE]: C++ 中 delete 各图像并置 nullptr（图像由缓存独占）且
         // while 循环 RemoveHead 释放变体列表节点；Rust 图像对象由 resource_manager
         // 统一管理，此处仅清引用（对应置空语义），列表以新空列表替换（无已加节点）
-        self.plant_images = [None; 77];
+        self.plant_images = [None; NUM_SEED_TYPES];
         self.image_variation_list = TodList::new();
         self.lawn_mowers = [None; 4];
-        self.zombie_images = [None; 37];
+        self.zombie_images = [None; NUM_CACHED_ZOMBIE_TYPES];
     }
 
     pub fn update_reanimation_for_variation(&self, reanim: &mut Reanimation, draw_variation: DrawVariation) {
@@ -157,7 +157,16 @@ impl ReanimatorCache {
 
     pub fn draw_cached_zombie(&self, g: &mut Graphics, pos_x: f32, pos_y: f32, zombie_type: ZombieType) {
         // 对应 C++ DrawCachedZombie：实时绘制僵尸缓存图（Boss 用头、普通用 anim_idle）
-        let a_zombie_def = crate::lawn::zombie::get_zombie_definition(zombie_type);
+        // [TRANSLATION_NOTE]: C++ 先查 mZombieImages[theZombieType] 缓存，未命中才调
+        // MakeCachedZombieFrame 生成；Rust 侧为实时绘制简化版。
+        // 对应 C++ MakeCachedZombieFrame（ReanimationLawn.cpp:268）：缓存类型 34
+        // 以 ZOMBIE_POLEVAULTER 定义生成带杆帧；此处先转换再查表，避免 ZOMBIE_DEFS[34] 越界
+        let a_use_zombie_type = if zombie_type == ZombieType::CachedPolevaulterWithPole {
+            ZombieType::Polevaulter
+        } else {
+            zombie_type
+        };
+        let a_zombie_def = crate::lawn::zombie::get_zombie_definition(a_use_zombie_type);
         if a_zombie_def.reanimation_type == ReanimationType::None {
             return;
         }

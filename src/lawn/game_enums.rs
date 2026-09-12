@@ -395,6 +395,9 @@ pub enum ZombieType {
     SquashHead,
     TallnutHead,
     RedeEyeGargantuar,
+    /// 对应 C++ ZOMBIE_CACHED_POLEVAULTER_WITH_POLE（= NUM_ZOMBIE_TYPES 33 + 1），
+    /// 仅用于 ReanimatorCache 缓存带杆撑杆跳僵尸帧，不作为实际出场僵尸类型
+    CachedPolevaulterWithPole,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1980,6 +1983,9 @@ pub const NUM_SEEDS_IN_CHOOSER: i32 = 49; // 对应 C++ SEED_IMITATER + 1，可�
 pub const NUM_ZOMBIE_TYPES: i32 = 33;
 /// 提示类型计数常量（对应 C++ ConstEnums.h AdviceType 结束符 NUM_ADVICE_TYPES）
 pub const NUM_ADVICE_TYPES: i32 = 66;
-pub const NUM_SEED_TYPES: usize = 77;
+/// 对应 C++ SeedType::NUM_SEED_TYPES（= SEED_LEFTPEATER 52 + 1）。其后 53..73 的
+/// SEED_BEGHOULED_BUTTON_* / SEED_ZOMBIE_* / Zombiquarium 等为值域扩展项，不计入本常量。
+pub const NUM_SEED_TYPES: usize = 53;
 pub const NUM_MOWER_TYPES: usize = 4;
-pub const NUM_CACHED_ZOMBIE_TYPES: usize = 37;
+/// 对应 C++ ZombieType::NUM_CACHED_ZOMBIE_TYPES（= ZOMBIE_CACHED_POLEVAULTER_WITH_POLE 34 + 1）
+pub const NUM_CACHED_ZOMBIE_TYPES: usize = 35;

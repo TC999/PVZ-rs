@@ -767,6 +767,10 @@ impl Zombie {
                 self.zombie_phase = ZombiePhase::SquashPreLaunch;
                 self.variant = false;
             }
+            // 对应 C++ Zombie.cpp:851-855：case ZOMBIE_CACHED_POLEVAULTER_WITH_POLE /
+            // NUM_ZOMBIE_TYPES / NUM_CACHED_ZOMBIE_TYPES / ZOMBIE_INVALID 均为空分支（break），
+            // 该类型不作为实际出场僵尸，仅用于 ReanimatorCache 缓存带杆帧
+            ZombieType::CachedPolevaulterWithPole => {}
             _ => {}
         }
 
