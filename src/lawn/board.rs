@@ -7903,8 +7903,10 @@ Spawn: {}
                 );
                 return;
             }
-            // [TRANSLATION_NOTE]: C++ 中还有 mSuperMowerCheck2（Rust 侧仅一个检查）
-            if (*app).m_super_mower_check.as_mut().map_or(false, |c| c.check_key(key)) {
+            // C++ 7585: mSuperMowerCheck->Check(theKey) || mSuperMowerCheck2->Check(theKey)
+            if (*app).m_super_mower_check.as_mut().map_or(false, |c| c.check_key(key))
+                || (*app).m_super_mower_check2.as_mut().map_or(false, |c| c.check_key(key))
+            {
                 self.set_super_mower_mode(!self.m_super_mower_mode);
                 return;
             }

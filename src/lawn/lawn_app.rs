@@ -130,6 +130,7 @@ pub struct LawnApp {
     pub m_mustache_check: Option<Box<crate::lawn::system::typing_check::TypingCheck>>,
     pub m_moustache_check: Option<Box<crate::lawn::system::typing_check::TypingCheck>>,
     pub m_super_mower_check: Option<Box<crate::lawn::system::typing_check::TypingCheck>>,
+    pub m_super_mower_check2: Option<Box<crate::lawn::system::typing_check::TypingCheck>>,
     pub m_future_check: Option<Box<crate::lawn::system::typing_check::TypingCheck>>,
     pub m_pinata_check: Option<Box<crate::lawn::system::typing_check::TypingCheck>>,
     pub m_dance_check: Option<Box<crate::lawn::system::typing_check::TypingCheck>>,
@@ -234,6 +235,7 @@ impl LawnApp {
             m_crazy_dave_message_text: String::new(),
             m_konami_check: None, m_mustache_check: None,
             m_moustache_check: None, m_super_mower_check: None,
+            m_super_mower_check2: None,
             m_future_check: None, m_pinata_check: None,
             m_dance_check: None, m_daisy_check: None, m_sukhbir_check: None,
             m_mustache_mode: false, m_super_mower_mode: false,
@@ -328,6 +330,31 @@ impl LawnApp {
                 (*wm).set_focus(Some(title_widget_ptr));
             }
         }
+
+        // 初始化打字检测（对应 C++ LawnApp::Init 中 LawnApp.cpp:1286-1301 的 TypingCheck 初始化）
+        use crate::framework::key_codes as kc;
+        let mut a_konami = crate::lawn::system::typing_check::TypingCheck::new();
+        a_konami.add_key_code(kc::KEYCODE_UP);
+        a_konami.add_key_code(kc::KEYCODE_UP);
+        a_konami.add_key_code(kc::KEYCODE_DOWN);
+        a_konami.add_key_code(kc::KEYCODE_DOWN);
+        a_konami.add_key_code(kc::KEYCODE_LEFT);
+        a_konami.add_key_code(kc::KEYCODE_RIGHT);
+        a_konami.add_key_code(kc::KEYCODE_LEFT);
+        a_konami.add_key_code(kc::KEYCODE_RIGHT);
+        a_konami.add_char('b');
+        a_konami.add_char('a');
+        self.m_konami_check = Some(Box::new(a_konami));
+        let with_phrase = crate::lawn::system::typing_check::TypingCheck::with_phrase;
+        self.m_mustache_check = Some(Box::new(with_phrase("mustache")));
+        self.m_moustache_check = Some(Box::new(with_phrase("moustache")));
+        self.m_super_mower_check = Some(Box::new(with_phrase("trickedout")));
+        self.m_super_mower_check2 = Some(Box::new(with_phrase("tricked out")));
+        self.m_future_check = Some(Box::new(with_phrase("future")));
+        self.m_pinata_check = Some(Box::new(with_phrase("pinata")));
+        self.m_dance_check = Some(Box::new(with_phrase("dance")));
+        self.m_daisy_check = Some(Box::new(with_phrase("daisies")));
+        self.m_sukhbir_check = Some(Box::new(with_phrase("sukhbir")));
     }
 
     /// 启动（对应 C++ Start）
