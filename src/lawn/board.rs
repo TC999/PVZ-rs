@@ -2368,7 +2368,14 @@ Spawn: {}
                             unsafe { g.draw_image_f_xy(&*a_img, a_button_rect.x as f32, (a_button_rect.y + a_offset_y - 1) as f32); }
                         }
                         g.set_colorize_images(false);
-                        // [TRANSLATION_NOTE]: 剩余次数文本（x%d）同上暂略
+                        // C++ 6823-6825: PvzpDrawString(g, StrFormat("x%d", aCharges), mX+64, mY+aOffsetY+65, FONT_HOUSEOFTERROR16, White, DS_ALIGN_RIGHT)
+                        let a_charge_string = format!("x{}", a_charges);
+                        g.set_font(unsafe { crate::framework::graphics::bitmap_font::FONT_HOUSEOFTERROR16 });
+                        g.set_color(&Color::WHITE);
+                        let a_charge_width = unsafe {
+                            (*crate::framework::graphics::bitmap_font::FONT_HOUSEOFTERROR16).string_width(&a_charge_string)
+                        };
+                        g.draw_string(&a_charge_string, a_button_rect.x + 64 - a_charge_width, a_button_rect.y + a_offset_y + 65);
                     }
                     GameObjectType::Phonograph => {
                         let a_img = crate::lawn::board::get_overlay_image(app_ref, "IMAGE_PHONOGRAPH");
@@ -2390,6 +2397,14 @@ Spawn: {}
                             unsafe { g.draw_image_f_xy(&*a_img, (a_button_rect.x + 6) as f32, (a_button_rect.y + a_offset_y + 4) as f32); }
                         }
                         g.set_colorize_images(false);
+                        // C++ 6836-6838: PvzpDrawString(g, StrFormat("x%d", aCharges), mX+64, mY+aOffsetY+65, FONT_HOUSEOFTERROR16, White, DS_ALIGN_RIGHT)
+                        let a_charge_string = format!("x{}", a_charges);
+                        g.set_font(unsafe { crate::framework::graphics::bitmap_font::FONT_HOUSEOFTERROR16 });
+                        g.set_color(&Color::WHITE);
+                        let a_charge_width = unsafe {
+                            (*crate::framework::graphics::bitmap_font::FONT_HOUSEOFTERROR16).string_width(&a_charge_string)
+                        };
+                        g.draw_string(&a_charge_string, a_button_rect.x + 64 - a_charge_width, a_button_rect.y + a_offset_y + 65);
                     }
                     GameObjectType::Glove => {
                         let a_cursor_2 = self.cursor_object.cursor_type;
