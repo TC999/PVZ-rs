@@ -7125,7 +7125,8 @@ Spawn: {}
             }
         }
 
-        // [TRANSLATION_NOTE]: C++ 中结尾 mCursorObject->mType = SEED_NONE；Rust 侧 cursor_object 无 m_type 字段
+        // C++ 中结尾 mCursorObject->mType = SEED_NONE：由 cursor_object.deactivate()（clear_cursor）覆盖
+        // （CursorObject 以 seed_type 字段对应 mType，deactivate 中置为 SeedType::None）
     }
 
     /// 清除光标（对应 C++ ClearCursor L4616 完整版）
@@ -7133,7 +7134,12 @@ Spawn: {}
     pub fn clear_cursor(&mut self) {
         self.cursor_object.deactivate();
         self.m_advice = AdviceType::None;
-        // mApp->SetCursor(CURSOR_POINTER) — 暂略
+        // C++ 4549: mApp->SetCursor(CURSOR_POINTER) — Rust 无 set_cursor 方法（框架光标 API 未接入）
+        // C++ 4550: mChallenge->ClearCursor();
+        if let Some(ch) = self.challenge.as_mut() {
+            ch.clear_cursor();
+        }
+        // [TRANSLATION_NOTE]: C++ 4552+ 教程状态推进（TUTORIAL_LEVEL_1_PLANT_PEASHOOTER 等）依赖 SetTutorialState，暂略
     }
 
     /// 更新鼠标位置（对应 C++ UpdateMousePosition 简化版）
@@ -8246,8 +8252,16 @@ Spawn: {}
             (*app).base.widget_manager.map_or(0, |wm| (*wm).last_mouse_y)
         });
         self.cursor_preview.update(mouse_x, mouse_y);
-        // [TRANSLATION_NOTE]: mCursorObject->Update() 与种子槽更新暂未实现
-        // for packet in seed_bank { packet.update(); }
+        // C++ 5015: mCursorObject->Update()（CursorObject.cpp:45-70，非 Playing 场景隐藏）
+        let is_playing = self.app.map_or(false, |app| unsafe {
+            (*app).game_scene == crate::lawn::lawn_app::GameScenes::Playing
+        });
+        let is_in_shovel_tutorial = self.m_cut_scene.map_or(false, |c| unsafe { (*c).is_in_shovel_tutorial() });
+        self.cursor_object.update(mouse_x, mouse_y, is_playing, is_in_shovel_tutorial);
+        // C++ 5016-5019: for i in 0..mSeedBank->mNumPackets { mSeedBank->mSeedPackets[i].Update(); }
+        for packet in &mut self.seed_bank {
+            packet.update();
+        }
     }
 
     // ========== 更新循环 ==========
