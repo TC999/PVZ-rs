@@ -9786,37 +9786,48 @@ Spawn: {}
     /// 完成结束关卡序列（用于保存前清理，对应 C++ Board::CompleteEndLevelSequenceForSaving）
     /// 将所有未触发的割草机转换为金币，收集正在收集的硬币，更新玩家资料
     pub fn complete_end_level_sequence_for_saving(&mut self) {
-        if !self.can_drop_loot() {
-            return;
-        }
-
-        // 遍历所有未触发的割草机，将其转换为金币
-        for mower in &self.lawn_mowers {
-            if mower.mower_state != LawnMowerState::Triggered
-                && mower.mower_state != LawnMowerState::Squished
-            {
-                // 对应 C++: int aCoinValue = Coin::GetCoinValue(COIN_GOLD);
-                //           mApp->mPlayerInfo->AddCoins(aCoinValue); mCoinsCollected += aCoinValue;
-                let a_coin_value = crate::lawn::coin::Coin::get_coin_value(CoinType::Gold);
-                if let Some(app) = self.app {
-                    unsafe {
-                        if let Some(player) = (*app).player_info.as_mut() {
-                            player.add_coins(a_coin_value);
+        // C++ 1804-1814: if (CanDropLoot()) 遍历未触发割草机转为金币
+        if self.can_drop_loot() {
+            for mower in &self.lawn_mowers {
+                if mower.dead {
+                    continue;
+                }
+                if mower.mower_state != LawnMowerState::Triggered
+                    && mower.mower_state != LawnMowerState::Squished
+                {
+                    // C++: int aCoinValue = Coin::GetCoinValue(COIN_GOLD);
+                    //       mApp->mPlayerInfo->AddCoins(aCoinValue); mCoinsCollected += aCoinValue;
+                    let a_coin_value = crate::lawn::coin::Coin::get_coin_value(CoinType::Gold);
+                    if let Some(app) = self.app {
+                        unsafe {
+                            if let Some(player) = (*app).player_info.as_mut() {
+                                player.add_coins(a_coin_value);
+                            }
                         }
                     }
+                    self.m_coins_collected += a_coin_value;
                 }
-                self.m_coins_collected += a_coin_value;
             }
         }
 
-        // 处理正在收集的硬币：标记为死亡（移除）
-        // 注：C++ 中调用 ScoreCoin() 处理正在收集的硬币，Rust 版简化处理
+        // C++ 1815-1822: 正在收集的硬币计分，其余死亡
         for coin in &mut self.coins {
-            coin.dead = true;
+            if coin.dead {
+                continue;
+            }
+            if coin.is_being_collected {
+                coin.score_coin();
+            } else {
+                coin.die();
+            }
         }
 
-        // C++ 中还会调用 mApp->UpdatePlayerProfileForFinishingLevel()
-        // 该方法暂未翻译，此处留空
+        // C++ 1824: mApp->UpdatePlayerProfileForFinishingLevel();
+        if let Some(app) = self.app {
+            unsafe {
+                (*app).update_player_profile_for_finishing_level();
+            }
+        }
     }
 
     /// 种植效果（音效和粒子），对应 C++ Board::DoPlantingEffects
