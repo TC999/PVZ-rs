@@ -476,6 +476,13 @@ impl LawnApp {
         self.board = Some(Box::into_raw(board));
     }
 
+    /// 完成 ZenGarden 教学（对应 C++ LawnApp::FinishZenGardenToturial，LawnApp.cpp:3177）
+    pub fn finish_zen_garden_tutorial(&mut self) {
+        self.board_result = BoardResult::Won;
+        self.kill_board();
+        self.pre_new_game(GameMode::Adventure, false);
+    }
+
     /// 销毁 Board（对应 C++ KillBoard）
     pub fn kill_board(&mut self) {
         if let Some(b) = self.board.take() {

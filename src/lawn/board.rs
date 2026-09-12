@@ -3618,10 +3618,11 @@ Spawn: {}
                         }
                     }
                 } else if self.app.map_or(false, |app| unsafe { (*app).is_endless_izombie(app_mode) }) {
+                    // C++ 1739-1744: mChallenge->PuzzleNextStageClear(); mChallenge->IZombieInitLevel();
                     if let Some(ch) = self.challenge.as_mut() {
                         ch.puzzle_next_stage_clear();
+                        ch.i_zombie_init_level();
                     }
-                    // [TRANSLATION_NOTE]: Challenge::IZombieInitLevel（放置大脑 + 模式摆植物）未翻译
                 } else if app_mode == GameMode::ChallengeLastStand {
                     self.clear_advice(AdviceType::None);
                 } else {
@@ -6494,7 +6495,10 @@ Spawn: {}
 
             // 对应 C++: 分支分派
             if self.m_tutorial_state == crate::lawn::game_enums::TutorialState::ZenGardenCompleted {
-                // [TRANSLATION_NOTE]: C++ mApp->FinishZenGardenToturial() 依赖 ZenGarden 系统，暂未接入
+                // C++ 4627: mApp->FinishZenGardenToturial() → mBoardResult=WON; KillBoard(); PreNewGame(ADVENTURE)
+                if let Some(app) = self.app.as_mut() {
+                    unsafe { (**app).finish_zen_garden_tutorial(); }
+                }
             } else {
                 let a_gm = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
                 if a_gm != GameMode::ChallengeZenGarden
@@ -6523,11 +6527,21 @@ Spawn: {}
             let a_gm = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
             match a_gm {
                 GameMode::ChallengeZenGarden => {
-                    // [TRANSLATION_NOTE]: C++ ClearAdviceImmediately + mApp->mZenGarden->OpenStore()
-                    // 依赖 ZenGarden 系统，暂未接入
+                    // C++ 4645: ClearAdviceImmediately(); mApp->mZenGarden->OpenStore();
+                    self.clear_advice_immediately();
+                    if let Some(app) = self.app.as_mut() {
+                        unsafe {
+                            if let Some(zg) = (**app).zen_garden.as_mut() {
+                                (**zg).open_store();
+                            }
+                        }
+                    }
                 }
                 GameMode::ChallengeTreeOfWisdom => {
-                    // [TRANSLATION_NOTE]: C++ mChallenge->TreeOfWisdomOpenStore() 依赖 Challenge 树系统，暂未接入
+                    // C++ 4649: mChallenge->TreeOfWisdomOpenStore();
+                    if let Some(challenge) = self.challenge.as_mut() {
+                        challenge.tree_of_wisdom_open_store();
+                    }
                 }
                 GameMode::ChallengeLastStand => {
                     // 对应 C++: 进入 Onslaught 阶段并倒计时 10
@@ -8306,7 +8320,8 @@ Spawn: {}
         self.m_zombie_count_down -= 1;
         if self.m_current_wave == self.m_num_waves && self.app.map_or(false, |app| unsafe { (*app).is_survival_mode() }) {
             if self.m_zombie_count_down == 0 {
-                // [TRANSLATION_NOTE]: FadeOutLevel() 暂未实现
+                // C++ 5354: FadeOutLevel();
+                self.fade_out_level();
             }
             return;
         }
@@ -9241,8 +9256,9 @@ Spawn: {}
                     }
                 }
                 if (*app).game_mode == GameMode::ChallengeTreeOfWisdom {
+                    // C++ 278: mChallenge->TreeOfWisdomLeave();
                     if let Some(ref mut challenge) = self.challenge {
-                        // challenge.tree_of_wisdom_leave() — 暂略
+                        challenge.tree_of_wisdom_leave();
                     }
                 }
                 // 停止雨声 Foley
