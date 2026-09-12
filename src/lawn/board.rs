@@ -846,9 +846,10 @@ impl Board {
                 self.m_y = crate::todlib::tod_common::tod_animate_curve(12, 0, self.m_shake_counter, 0, self.m_shake_amount_y, crate::lawn::game_enums::TodCurves::Bounce);
             }
         }
-        if self.m_coin_bank_fade_count > 0
-            // [TRANSLATION_NOTE]: C++ 检查 DIALOG_PURCHASE_PACKET_SLOT 未打开才递减；Rust 侧 LawnApp 无对话框管理，暂不过滤
-        {
+        // C++ 5786: mCoinBankFadeCount > 0 && GetDialog(DIALOG_PURCHASE_PACKET_SLOT) == nullptr → 递减
+        // [TRANSLATION_NOTE]: DIALOG_PURCHASE_PACKET_SLOT 以 get_dialog_count()==0 近似（Rust 无对话框栈，与 update_tool_tip 口径一致）
+        let a_no_purchase_dialog = self.app.map_or(true, |app| unsafe { (*app).get_dialog_count() == 0 });
+        if self.m_coin_bank_fade_count > 0 && a_no_purchase_dialog {
             self.m_coin_bank_fade_count -= 1;
         }
         self.update_layers();
