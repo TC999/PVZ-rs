@@ -234,6 +234,8 @@ pub struct Board {
     pub m_width: i32,
     pub m_height: i32,
     pub m_board_result: BoardResult,
+    /// 对应 C++ mPrevBoardResult（进入关卡前的上一局结果，InitLevel 时取自 mApp->mBoardResult）
+    pub m_prev_board_result: BoardResult,
     pub m_advice: AdviceType,
     /// 对应 C++ mHelpDisplayed[NUM_ADVICE_TYPES]（每个提示只显示一次）
     pub m_help_displayed: [bool; NUM_ADVICE_TYPES as usize],
@@ -483,6 +485,7 @@ impl Board {
             m_width: 800,
             m_height: 600,
             m_board_result: BoardResult::None,
+            m_prev_board_result: BoardResult::None,
             m_advice: AdviceType::None,
             m_help_displayed: [false; NUM_ADVICE_TYPES as usize],
             m_advice_widget: crate::lawn::widget::message_widget::MessageWidget::new(None),
@@ -5681,8 +5684,8 @@ Spawn: {}
         self.m_enable_grave_stones = false;
         self.m_sod_position = 0;
 
-        // mPrevBoardResult = mApp->mBoardResult;
-        // [TRANSLATION_NOTE]: m_prev_board_result 字段未在 Rust Board 定义，跳过
+        // C++ 1358: mPrevBoardResult = mApp->mBoardResult;
+        self.m_prev_board_result = self.app.map_or(BoardResult::None, |app| unsafe { (*app).board_result });
 
         let app_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
         // mLevel = mApp->IsAdventureMode() ? mApp->mPlayerInfo->mLevel : 0;
@@ -5726,7 +5729,8 @@ Spawn: {}
         if !self.stage_is_night() {
             self.m_sun_countdown = crate::todlib::tod_common::rand_range_int(425, 700);
         }
-        // [TRANSLATION_NOTE]: memset(mHelpDisplayed,0,...) 字段未定义，跳过
+        // C++ 1404: memset(mHelpDisplayed, 0, sizeof(mHelpDisplayed));
+        self.m_help_displayed = [false; NUM_ADVICE_TYPES as usize];
 
         // C++ 1405-1543: SeedBank 包数/宽度/坐标/各模式种子预设
         // [TRANSLATION_NOTE]: Rust seed_bank 为 Vec<SeedPacket>，与 C++ SeedBank* 结构不同；
