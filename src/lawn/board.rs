@@ -6473,8 +6473,15 @@ Spawn: {}
             return;
         }
 
-        // [TRANSLATION_NOTE]: C++ GAMEMODE_CHALLENGE_BEGHOULED 的 mChallenge->MouseUp 特判
-        // 依赖 Challenge::MouseUp，Rust 挑战层暂略
+        // C++ 4616: mGameMode==GAMEMODE_CHALLENGE_BEGHOULED && mChallenge->MouseUp(x,y) && theClickCount>0 → return
+        let a_beghouled_gm = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+        if a_beghouled_gm == GameMode::ChallengeBeghouled {
+            if let Some(ch) = self.challenge.as_mut() {
+                if ch.mouse_up(x, y) != 0 && click_count > 0 {
+                    return;
+                }
+            }
+        }
 
         if !self.can_interact_with_board_buttons() || click_count <= 0 {
             return;
@@ -8337,7 +8344,12 @@ Spawn: {}
         if self.m_zombie_count_down == 5 {
             if self.is_flag_wave(self.m_current_wave) {
                 self.clear_advice_immediately();
-                // [TRANSLATION_NOTE]: DisplayAdviceAgain 大波提示暂未实现
+                // C++ 5368: DisplayAdviceAgain("[ADVICE_HUGE_WAVE]", MESSAGE_STYLE_HUGE_WAVE, ADVICE_HUGE_WAVE);
+                self.display_advice_again(
+                    "[ADVICE_HUGE_WAVE]",
+                    crate::lawn::game_enums::MessageStyle::HugeWave as i32,
+                    crate::lawn::game_enums::AdviceType::HugeWave,
+                );
                 self.m_huge_wave_count_down = 750;
                 return;
             }
@@ -9219,9 +9231,9 @@ Spawn: {}
                     self.can_zombie_spawn_on_level(a_zombie_type, self.level);
             }
         } else {
-            // 非冒险模式：由 Challenge 的 InitZombieWaves 处理
-            if let Some(ref challenge) = self.challenge {
-                // challenge.init_zombie_waves() 暂未实现，后续补充
+            // 非冒险模式：由 Challenge 的 InitZombieWaves 处理（C++ 1219: mChallenge->InitZombieWaves();）
+            if let Some(ref mut challenge) = self.challenge {
+                challenge.init_zombie_waves();
             }
         }
 
@@ -9270,8 +9282,9 @@ Spawn: {}
                     (*zg).board = Some(std::ptr::null_mut());
                 }
                 (*app).crazy_dave_die();
-                if let Some(ref es) = (*app).effect_system {
-                    // es.effect_system_free_all() — 暂略
+                if let Some(ref mut es) = (*app).effect_system {
+                    // C++ 281: mApp->mEffectSystem->EffectSystemFreeAll();
+                    es.effect_system_free_all();
                 }
             }
         }
