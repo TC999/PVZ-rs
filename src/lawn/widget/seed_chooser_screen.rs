@@ -213,10 +213,159 @@ impl SeedChooserScreen {
         self.app.map_or(false, |app| unsafe { (*app).is_trial_stage_locked() })
             && (t == SeedType::Squash || t == SeedType::Threepeater)
     }
-    pub fn draw(&self, _g: &mut Graphics) {
-        // 对应 C++ Draw：绘制种子选择器背景/按钮/飞入种子
-        // [TRANSLATION_NOTE]: C++ 中绘制 IMAGE_SEEDCHOOSER_BACKGROUND 等图片资源；
-        // Rust 侧图片资源未接入，暂略
+    pub fn draw(&self, g: &mut Graphics) {
+        // 对应 C++ Draw（SeedChooserScreen.cpp:345）
+        let Some(app) = self.app else { return };
+        unsafe {
+            // C++: if (mApp->GetDialog(DIALOG_STORE) || mApp->GetDialog(DIALOG_ALMANAC)) return;
+            if (*app).base.dialog_map.contains_key(&(Dialogs::Store as i32))
+                || (*app).base.dialog_map.contains_key(&(Dialogs::Almanac as i32))
+            {
+                return;
+            }
+
+            g.set_linear_blend(true);
+            // C++: if (!mBoard->ChooseSeedsOnCurrentLevel() || (mBoard->mCutScene && mBoard->mCutScene->IsBeforePreloading())) return;
+            let a_board = match self.board {
+                Some(b) => &mut *b,
+                None => return,
+            };
+            if !a_board.choose_seeds_on_current_level() {
+                return;
+            }
+            if let Some(cs) = a_board.m_cut_scene {
+                if (*cs).is_before_preloading() {
+                    return;
+                }
+            }
+
+            // C++: g->DrawImage(IMAGE_SEEDCHOOSER_BACKGROUND, 0, 87)
+            let a_background = crate::lawn::board::get_overlay_image(&*app, "IMAGE_SEEDCHOOSER_BACKGROUND");
+            if !a_background.is_null() {
+                g.draw_image_xy(&*a_background, 0, 87);
+            }
+            if (*app).has_seed_type(SeedType::Imitater) {
+                // C++: g->DrawImage(IMAGE_SEEDCHOOSER_IMITATERADDON, 459, 503)
+                let a_imitater_addon = crate::lawn::board::get_overlay_image(&*app, "IMAGE_SEEDCHOOSER_IMITATERADDON");
+                if !a_imitater_addon.is_null() {
+                    g.draw_image_xy(&*a_imitater_addon, 459, 503);
+                }
+            }
+            // C++: PvzpDrawString("[CHOOSE_YOUR_PLANTS]", 229, 110, FONT_DWARVENTODCRAFT18YELLOW, White, DS_ALIGN_CENTER)
+            let mut a_font = crate::framework::graphics::font::Font::new("Dwarventodcraft", 18);
+            a_font.ascent = 13;
+            a_font.font_height = 18;
+            g.set_font(&mut a_font as *mut crate::framework::graphics::font::Font);
+            g.set_color(&crate::framework::color::Color::new(255, 255, 255, 255));
+            let a_text_width = a_font.string_width("[CHOOSE_YOUR_PLANTS]");
+            g.draw_string("[CHOOSE_YOUR_PLANTS]", 229 - a_text_width / 2, 110);
+
+            // C++: 遍历选择器格（Has7Rows ? 48 : 40）：已拥有且不在选择器内画淡色包（55），未拥有画剪影
+            let a_num_seeds = if self.has_7_rows() { 48 } else { 40 };
+            for a_seed_shadow in 0..a_num_seeds {
+                let a_seed = unsafe { std::mem::transmute::<i32, SeedType>(a_seed_shadow) };
+                let (mut x, mut y) = (0, 0);
+                self.get_seed_position_in_chooser(a_seed_shadow, &mut x, &mut y);
+                if a_seed == SeedType::Imitater {
+                    continue;
+                }
+                if (*app).has_seed_type(a_seed) {
+                    // C++: ChosenSeed& aChosenSeed = mChosenSeeds[aSeedShadow];
+                    //      if (aChosenSeed.mSeedState != SEED_IN_CHOOSER) DrawSeedPacket(x, y, 55)
+                    // [TRANSLATION_NOTE]: Rust chosen_seeds 为动态 Vec（C++ 固定数组构造时填满），
+                    // 缺失槽视为无已选种子跳过
+                    if let Some(a_chosen) = self.chosen_seeds.get(a_seed_shadow as usize) {
+                        if a_chosen.seed_state != ChosenSeedState::InChooser {
+                            crate::lawn::seed_packet::draw_seed_packet(g, x as f32, y as f32, a_seed, SeedType::None, 0.0, 55, true, false);
+                        }
+                    }
+                } else {
+                    let a_silhouette = crate::lawn::board::get_overlay_image(&*app, "IMAGE_SEEDPACKETSILHOUETTE");
+                    if !a_silhouette.is_null() {
+                        g.draw_image_xy(&*a_silhouette, x, y);
+                    }
+                }
+            }
+
+            // C++: 遍历 bank 槽：空槽画剪影（FindSeedInBank == SEED_NONE）
+            let a_num_seeds_in_bank = a_board.get_num_seeds_in_bank();
+            for an_index in 0..a_num_seeds_in_bank {
+                if self.find_seed_in_bank(an_index) == SeedType::None {
+                    let (mut x, mut y) = (0, 0);
+                    self.get_seed_position_in_bank(an_index, &mut x, &mut y);
+                    let a_silhouette = crate::lawn::board::get_overlay_image(&*app, "IMAGE_SEEDPACKETSILHOUETTE");
+                    if !a_silhouette.is_null() {
+                        g.draw_image_xy(&*a_silhouette, x, y);
+                    }
+                }
+            }
+
+            // C++: 遍历已选种子：灰化判定 + DrawSeedPacket（mX/mY 恒 0 简化，ViewLawn 动画未翻译）
+            let a_seed_choosing = a_board.m_cut_scene.map_or(false, |cs| unsafe { (*cs).m_seed_choosing });
+            for a_seed_index in 0..NUM_SEEDS_IN_CHOOSER {
+                let a_seed = unsafe { std::mem::transmute::<i32, SeedType>(a_seed_index) };
+                if !(*app).has_seed_type(a_seed) {
+                    continue;
+                }
+                let a_chosen = match self.chosen_seeds.get(a_seed_index as usize) {
+                    Some(c) => c,
+                    None => continue,
+                };
+                let a_state = a_chosen.seed_state;
+                if a_state == ChosenSeedState::FlyingToBank
+                    || a_state == ChosenSeedState::FlyingToChooser
+                    || a_state == ChosenSeedState::Hidden
+                {
+                    continue;
+                }
+                if a_state != ChosenSeedState::InChooser && !a_seed_choosing {
+                    continue;
+                }
+                // C++: aGrayed = ((SeedNotRecommendedToPick || SeedNotAllowedToPick) && IN_CHOOSER) || SeedNotAllowedDuringTrial
+                let a_grayed = ((self.seed_not_recommended_to_pick(a_seed) != 0 || self.seed_not_allowed_to_pick(a_seed))
+                    && a_state == ChosenSeedState::InChooser)
+                    || self.seed_not_allowed_during_trial(a_seed);
+                let mut a_pos_x = a_chosen.x;
+                let mut a_pos_y = a_chosen.y;
+                if a_state == ChosenSeedState::InBank {
+                    // C++: aPosX -= mX; aPosY -= mY（mX/mY 随 ViewLawn 动画变化，Rust 恒 0）
+                    a_pos_x -= 0;
+                    a_pos_y -= 0;
+                }
+                crate::lawn::seed_packet::draw_seed_packet(
+                    g, a_pos_x as f32, a_pos_y as f32, a_chosen.seed_type, a_chosen.imitater_type,
+                    0.0, if a_grayed { 115 } else { 255 }, true, false,
+                );
+            }
+
+            // C++: mImitaterButton->Draw(g)
+            if let Some(btn) = self.imitater_button { unsafe { (&mut *btn).draw(g); } }
+            // C++: 遍历飞行中的种子
+            for a_seed_index in 0..NUM_SEEDS_IN_CHOOSER {
+                let a_seed = unsafe { std::mem::transmute::<i32, SeedType>(a_seed_index) };
+                if !(*app).has_seed_type(a_seed) {
+                    continue;
+                }
+                if let Some(a_chosen) = self.chosen_seeds.get(a_seed_index as usize) {
+                    let a_state = a_chosen.seed_state;
+                    if a_state == ChosenSeedState::FlyingToBank || a_state == ChosenSeedState::FlyingToChooser {
+                        crate::lawn::seed_packet::draw_seed_packet(
+                            g, a_chosen.x as f32, a_chosen.y as f32, a_chosen.seed_type, a_chosen.imitater_type,
+                            0.0, 255, true, false,
+                        );
+                    }
+                }
+            }
+
+            // C++: 各按钮（mMenuButton 用副本 Graphics，trans -= mX/mY 恒 0 等价直绘）
+            if let Some(btn) = self.start_button { unsafe { (&mut *btn).draw(g); } }
+            if let Some(btn) = self.random_button { unsafe { (&mut *btn).draw(g); } }
+            if let Some(btn) = self.view_lawn_button { unsafe { (&mut *btn).draw(g); } }
+            if let Some(btn) = self.almanac_button { unsafe { (&mut *btn).draw(g); } }
+            if let Some(btn) = self.store_button { unsafe { (&mut *btn).draw(g); } }
+            if let Some(btn) = self.menu_button { unsafe { (&mut *btn).draw(g); } }
+            if let Some(tt) = self.tool_tip { unsafe { (*tt).draw(g); } }
+        }
     }
     pub fn update_view_lawn(&mut self) {
         if self.choose_state != SeedChooserState::ViewLawn { return; }
