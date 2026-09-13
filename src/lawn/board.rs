@@ -7224,13 +7224,20 @@ Spawn: {}
 
         let app_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
         if app_mode == GameMode::ChallengeZenGarden {
-            // [TRANSLATION_NOTE]: C++ 获取 Stinky 后判断 MouseHitTest 是否命中
-            let stinky_idx = self.app.and_then(|app| unsafe {
+            // C++: GridItem* aStinky = mApp->mZenGarden->GetStinky();
+            //      if (aStinky) { MouseHitTest(...); aStinky->mHighlighted = aHitResult.mObjectType == OBJECT_TYPE_STINKY; }
+            let stinky_ptr = self.app.and_then(|app| unsafe {
                 (*app).zen_garden.and_then(|zg| (*zg).get_stinky())
             });
-            // [TRANSLATION_NOTE]: Rust get_stinky 返回 Option<*mut GridItem>，无法直接在此比较 HitResult 索引
-            // 简化：跳过 Stinky 高亮（ZenGarden 子系统交互尚未完整接入）
-            let _ = stinky_idx;
+            if let Some(stinky_ptr) = stinky_ptr {
+                let mut a_hit_result = HitResult { object: None, object_type: GameObjectType::None };
+                self.mouse_hit_test(a_mouse_x, a_mouse_y, &mut a_hit_result);
+                let is_stinky_hit = a_hit_result.object_type == GameObjectType::Stinky;
+                let stinky_idx = self.grid_items.iter().position(|gi| std::ptr::eq(gi as *const GridItem, stinky_ptr));
+                if let Some(idx) = stinky_idx {
+                    self.grid_items[idx].highlighted = is_stinky_hit;
+                }
+            }
         }
 
         // 工具光标高亮
