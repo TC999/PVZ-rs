@@ -30,7 +30,8 @@ use crate::todlib::tod_common::{TodSmoothArray, TodWeightedArray, TodWeightedGri
 pub const MAX_GRID_SIZE_X: usize = 9;
 pub const MAX_GRID_SIZE_Y: usize = 6;
 pub const MAX_PLANTS: usize = 200;
-pub const MAX_ZOMBIES: usize = 200;
+/// 僵尸池容量（对应 C++ mZombies.DataArrayInitialize(1024U, "zombies")，Board.cpp:78）
+pub const MAX_ZOMBIES: usize = 1024;
 pub const MAX_PROJECTILES: usize = 200;
 pub const MAX_COINS: usize = 200;
 pub const MAX_LAWN_MOWERS: usize = 6;
@@ -8127,8 +8128,11 @@ Spawn: {}
     /// 返回新僵尸的索引（对应 C++ 的 Zombie*）
     pub fn add_zombie_in_row(&mut self, zombie_type: ZombieType, row: i32, from_wave: i32) -> usize {
         // 对应 C++ Board::AddZombieInRow (Board.cpp:2638)
-        // [TRANSLATION_NOTE]: C++ mZombies 为 DataArray（mSize >= mMaxSize-1 时
-        // PvzpTrace("Too many zombies!!") 并返回 nullptr）；Rust 用 Vec 无容量上限，跳过该检查。
+        // 对应 C++ mZombies.mSize >= mZombies.mMaxSize - 1（Board.cpp:2640）：
+        // PvzpTrace("Too many zombies!!") 并返回 nullptr；Rust 以 usize::MAX 为失败哨兵
+        if self.zombies.len() >= MAX_ZOMBIES - 1 {
+            return usize::MAX;
+        }
 
         if zombie_type == ZombieType::Yeti {
             let is_adventure = self.app.map_or(false, |app| unsafe { (*app).is_adventure_mode() });
