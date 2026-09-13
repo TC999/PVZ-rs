@@ -1012,6 +1012,9 @@ impl LawnApp {
     pub fn kill_new_options_dialog(&mut self) -> bool {
         if let Some(a_ptr) = self.new_options_dialog.take() {
             unsafe {
+                // C++: KillDialog → RemovedFromManager → RemoveWidget（子控件）；
+                // Rust 对话框驱动，先释放子控件再释放对话框（避免 listener 悬垂）
+                (*a_ptr).free_controls();
                 let _ = Box::from_raw(a_ptr);
             }
             // [TRANSLATION_NOTE]: C++ 中由全屏/硬件加速复选框状态调用
@@ -1043,6 +1046,8 @@ impl LawnApp {
         a_dialog.y = (BOARD_HEIGHT - 340) / 2;
         a_dialog.width = 400;
         a_dialog.height = 340;
+        // C++ 构造函数创建 8 个子控件（滑块/复选框/按钮）
+        a_dialog.setup_controls();
         self.new_options_dialog = Some(Box::into_raw(a_dialog));
     }
 
