@@ -186,23 +186,147 @@ impl AlmanacDialog {
         draw_almanac_text(g, "[SUBURBAN_ALMANAC_ZOMBIES]", crate::lawn::game_enums::BOARD_WIDTH / 2, 54, 24,
             &crate::framework::color::Color { r: 0, g: 196, b: 0, a: 255 });
 
-        // 对应 C++: 遍历 26 个僵尸条目绘制窗口/剪影
-        // [TRANSLATION_NOTE]: 完整实现依赖 GetZombieDefinition 表（起始关卡/名称）、
-        // ZombieIsShown/Silhouette 判定与 ReanimatorCache::DrawCachedZombie；此处绘制骨架。
+        // C++: aZombieMouseOn = ZombieHitTest(mWidgetManager->mLastMouseX/Y)
+        let (a_mouse_x, a_mouse_y) = self.app.map_or((0, 0), |app| unsafe {
+            match (*app).base.widget_manager {
+                Some(w) => ((*w).last_mouse_x, (*w).last_mouse_y),
+                None => (0, 0),
+            }
+        });
+        let a_zombie_mouse_on = self.zombie_hit_test(a_mouse_x, a_mouse_y);
+
         for i in 0..crate::lawn::widget::almanac_dialog::NUM_ALMANAC_ZOMBIES {
-            let _a_zombie_type = unsafe { std::mem::transmute::<i32, ZombieType>(i) };
-            // 简化网格（6 列×5 行）；C++ 走 GetZombiePosition 定位
-            let (a_pos_x, a_pos_y) = (23 + i % 6 * 85, 78 + i / 6 * 90);
-            draw_almanac_image(g, "IMAGE_ALMANAC_ZOMBIEWINDOW", a_pos_x, a_pos_y);
-            draw_almanac_image(g, "IMAGE_ALMANAC_ZOMBIEWINDOW2", a_pos_x, a_pos_y);
+            let a_zombie_type = Self::get_zombie_type(i);
+            let (mut a_pos_x, mut a_pos_y) = (0, 0);
+            self.get_zombie_position(a_zombie_type, &mut a_pos_x, &mut a_pos_y);
+            if a_zombie_type != ZombieType::Invalid {
+                if !self.zombie_is_shown(a_zombie_type) {
+                    // C++: 未遇到画空白占位
+                    draw_almanac_image(g, "IMAGE_ALMANAC_ZOMBIEBLANK", a_pos_x, a_pos_y);
+                } else {
+                    draw_almanac_image(g, "IMAGE_ALMANAC_ZOMBIEWINDOW", a_pos_x, a_pos_y);
+                    if a_zombie_type == a_zombie_mouse_on {
+                        // C++: 鼠标悬停窗口以半透明白 additive 叠加高亮
+                        g.set_draw_mode(crate::framework::graphics::graphics::DrawMode::Additive as i32);
+                        g.set_color(&crate::framework::color::Color::new(255, 255, 255, 48));
+                        g.set_colorize_images(true);
+                        draw_almanac_image(g, "IMAGE_ALMANAC_ZOMBIEWINDOW", a_pos_x, a_pos_y);
+                        g.set_draw_mode(crate::framework::graphics::graphics::DrawMode::Normal as i32);
+                        g.set_colorize_images(false);
+                    }
+
+                    let mut a_zombie_type_to_draw = a_zombie_type;
+                    // C++: Graphics aZombieGraphics = Graphics(*g)（副本）；Rust 以 push/pop 状态栈等价
+                    g.push_state();
+                    g.set_clip_rect_xywh(a_pos_x + 2, a_pos_y + 2, 72, 72);
+                    g.translate(a_pos_x + 1, a_pos_y - 6);
+                    g.scale_x = 0.5;
+                    g.scale_y = 0.5;
+                    // C++: switch 按类型平移（ZOMBIE_POLEVAULTER 转画带杆缓存帧）
+                    match a_zombie_type {
+                        ZombieType::Polevaulter => {
+                            g.translate_f(2.0, -3.0);
+                            a_zombie_type_to_draw = ZombieType::CachedPolevaulterWithPole;
+                        }
+                        ZombieType::Flag => g.translate_f(2.0, 10.0),
+                        ZombieType::TrafficCone => g.translate_f(0.0, 12.0),
+                        ZombieType::Pail => g.translate_f(0.0, 9.0),
+                        ZombieType::Football => g.translate_f(-15.0, -1.0),
+                        ZombieType::Zamboni => g.translate_f(0.0, 3.0),
+                        ZombieType::DolphinRider => g.translate_f(-2.0, -10.0),
+                        ZombieType::Pogo => g.translate_f(0.0, -3.0),
+                        ZombieType::Gargantuar => g.translate_f(15.0, 17.0),
+                        ZombieType::Imp => g.translate_f(-8.0, -7.0),
+                        ZombieType::Bungee => g.translate_f(-4.0, 3.0),
+                        ZombieType::Dancer => g.translate_f(0.0, 15.0),
+                        ZombieType::BackupDancer => g.translate_f(-4.0, 20.0),
+                        ZombieType::Snorkel => g.translate_f(-10.0, 0.0),
+                        ZombieType::Yeti => g.translate_f(0.0, 4.0),
+                        ZombieType::Catapult => g.translate_f(-24.0, -1.0),
+                        ZombieType::Bobsled => g.translate_f(0.0, -8.0),
+                        ZombieType::Ladder => g.translate_f(0.0, -3.0),
+                        _ => {}
+                    }
+                    if self.zombie_has_silhouette(a_zombie_type) {
+                        // C++: 剪影：半透明黑 + colorize
+                        g.set_color(&crate::framework::color::Color::new(0, 0, 0, 40));
+                        g.set_colorize_images(true);
+                    }
+                    // C++: mApp->mReanimatorCache->DrawCachedZombie(&aZombieGraphics, 0, 0, aZombieTypeToDraw)
+                    if let Some(app) = self.app {
+                        unsafe {
+                            if let Some(cache) = (*app).m_reanimator_cache {
+                                (*cache).draw_cached_zombie(g, 0.0, 0.0, a_zombie_type_to_draw);
+                            }
+                        }
+                    }
+                    g.set_colorize_images(false);
+                    g.pop_state();
+
+                    draw_almanac_image(g, "IMAGE_ALMANAC_ZOMBIEWINDOW2", a_pos_x, a_pos_y);
+                    if a_zombie_type == a_zombie_mouse_on {
+                        g.set_draw_mode(crate::framework::graphics::graphics::DrawMode::Additive as i32);
+                        g.set_color(&crate::framework::color::Color::new(255, 255, 255, 48));
+                        g.set_colorize_images(true);
+                        draw_almanac_image(g, "IMAGE_ALMANAC_ZOMBIEWINDOW2", a_pos_x, a_pos_y);
+                        g.set_draw_mode(crate::framework::graphics::graphics::DrawMode::Normal as i32);
+                        g.set_colorize_images(false);
+                    }
+                }
+            }
         }
 
-        draw_almanac_image(g, "IMAGE_ALMANAC_GROUNDDAY", 518, 110);
+        // C++: 地面（Zamboni/Bobsled 用冰面）
+        let a_is_ice_ground = self.zombie.map_or(false, |z| unsafe {
+            let t = (*z).zombie_type;
+            t == ZombieType::Zamboni || t == ZombieType::Bobsled
+        });
+        draw_almanac_image(g, if a_is_ice_ground { "IMAGE_ALMANAC_GROUNDICE" } else { "IMAGE_ALMANAC_GROUNDDAY" }, 518, 110);
+
+        // C++: 选中僵尸大图（BeginDraw 变换栈 + clip + 平移 + 阴影 + Draw；Rust 以 push/pop 近似）
         if let Some(zombie_ptr) = self.zombie {
-            unsafe { (*zombie_ptr).draw(g); }
+            unsafe {
+                let a_zombie = &mut *zombie_ptr;
+                if !self.zombie_has_silhouette(a_zombie.zombie_type) {
+                    g.push_state();
+                    g.set_clip_rect_xywh(-42, -51, 197, 187);
+                    match a_zombie.zombie_type {
+                        ZombieType::Zamboni => g.translate_f(-30.0, 5.0),
+                        ZombieType::Gargantuar => g.translate_f(0.0, 40.0),
+                        ZombieType::Football => g.translate_f(-10.0, 0.0),
+                        ZombieType::Balloon => g.translate_f(0.0, -20.0),
+                        ZombieType::Bungee => g.translate_f(15.0, 0.0),
+                        ZombieType::Catapult => g.translate_f(-10.0, 0.0),
+                        ZombieType::Boss => g.translate_f(-540.0, -175.0),
+                        _ => {}
+                    }
+                    let t = a_zombie.zombie_type;
+                    if t != ZombieType::Bungee && t != ZombieType::Boss
+                        && t != ZombieType::Zamboni && t != ZombieType::Catapult
+                    {
+                        a_zombie.draw_shadow(g);
+                    }
+                    a_zombie.draw(g);
+                    g.pop_state();
+                }
+            }
         }
-        // [TRANSLATION_NOTE]: 僵尸卡片/名称/描述依赖 ZombieDefinition 表，暂略
+
         draw_almanac_image(g, "IMAGE_ALMANAC_ZOMBIECARD", 455, 78);
+
+        // C++: 名称（剪影为 ???）与描述（未遇到时 [NOT_ENCOUNTERED_YET]）
+        let a_zombie_def = crate::lawn::zombie::get_zombie_definition(self.selected_zombie);
+        let a_name = if self.zombie_has_silhouette(self.selected_zombie) {
+            "???".to_string()
+        } else {
+            format!("[{}]", a_zombie_def.zombie_name)
+        };
+        draw_almanac_text(g, &a_name, 613, 362, 18,
+            &crate::framework::color::Color { r: 190, g: 255, b: 235, a: 255 });
+        // [TRANSLATION_NOTE]: C++ 描述依赖字符串系统（PvzpStringTranslate/Format 与
+        // 隐藏格式标记 PVZP_FORMAT_HIDE_UNTIL_MAGNETSHROOM），此处以「未遇到」文案近似
+        draw_almanac_text(g, "[NOT_ENCOUNTERED_YET]", 484, 377, 12,
+            &crate::framework::color::Color { r: 40, g: 50, b: 90, a: 255 });
     }
 
     /// 绘制（对应 C++ AlmanacDialog::Draw，:507）
@@ -255,16 +379,27 @@ impl AlmanacDialog {
         if let Some(app) = self.app { unsafe { (*app).has_finished_adventure() } } else { false }
     }
     pub fn get_zombie_position(&self, t: ZombieType, x: &mut i32, y: &mut i32) {
-        *x = (t as i32) % 5 * 53 + 10;
-        *y = (t as i32) / 5 * 80 + 140;
+        // 对应 C++ GetZombiePosition（AlmanacDialog.cpp）：Boss 特殊位置，其余 5 列网格
+        if t == ZombieType::Boss {
+            *x = 192;
+            *y = 486;
+        } else {
+            *x = (t as i32) % 5 * 85 + 22;
+            *y = (t as i32) / 5 * 80 + 86;
+        }
     }
     pub fn zombie_hit_test(&self, x: i32, y: i32) -> ZombieType {
+        // 对应 C++ ZombieHitTest（AlmanacDialog.cpp）：openPage==Zombies 时遍历可见僵尸的
+        // 76x76 窗口命中（mMouseVisible 为 Widget 基类字段，Rust 无对应，省略该条件）
         if self.open_page == AlmanacPage::Zombies {
             for zt in 0..NUM_ALMANAC_ZOMBIES {
-                let ztype = unsafe { std::mem::transmute::<i32, ZombieType>(zt) };
-                let (zx, zy) = (0, 0);
-                let rect = crate::framework::rect::Rect::new(zx, zy, 50, 70);
-                if rect.contains(x, y) { return ztype; }
+                let ztype = Self::get_zombie_type(zt);
+                if ztype != ZombieType::Invalid && self.zombie_is_shown(ztype) {
+                    let (mut zx, mut zy) = (0, 0);
+                    self.get_zombie_position(ztype, &mut zx, &mut zy);
+                    let rect = crate::framework::rect::Rect::new(zx, zy, 76, 76);
+                    if rect.contains(x, y) { return ztype; }
+                }
             }
         }
         ZombieType::Invalid
@@ -289,7 +424,14 @@ impl AlmanacDialog {
         let zombie = self.zombie_hit_test(x, y);
         if zombie != ZombieType::Invalid { self.show_zombie(zombie); return; }
     }
-    pub fn get_zombie_type(index: i32) -> ZombieType { ZombieType::Invalid }
+    pub fn get_zombie_type(index: i32) -> ZombieType {
+        // 对应 C++ GetZombieType（AlmanacDialog.cpp）：索引 < NUM_ZOMBIE_TYPES 直接转换，否则 INVALID
+        if index < NUM_ZOMBIE_TYPES {
+            unsafe { std::mem::transmute::<i32, ZombieType>(index) }
+        } else {
+            ZombieType::Invalid
+        }
+    }
     pub fn show_plant(&mut self, t: SeedType) {
         self.selected_seed = t;
         self.set_page(AlmanacPage::Plants);
