@@ -69,6 +69,8 @@ impl NewOptionsDialog {
 
     /// 对应 C++ NewOptionsDialog::Draw（NewOptionsDialog.cpp 184-207）
     pub fn draw(&self, g: &mut Graphics) {
+        let Some(app) = self.app else { return };
+        unsafe {
         let a_back = self.get_resource_image("IMAGE_OPTIONS_MENUBACK");
         if !a_back.is_null() {
             g.draw_image_xy(unsafe { &*a_back }, 0, 0);
@@ -80,15 +82,25 @@ impl NewOptionsDialog {
         let a_3d_accel_offset = if self.from_game_selector { 15 } else { 0 };
         let a_full_screen_offset = if self.from_game_selector { 20 } else { 0 };
 
-        // [TRANSLATION_NOTE]: C++ mApp->GetInteger("OPTION_DLG_SLIDER_LABELS_OFFSET_X", 186) /
-        // ("OPTION_DLG_CHECKBOX_LABELS_OFFSET_X", 274) 及标签文案 GetString（本地化表），Rust 用默认值/英文
-        let a_slider_labels_x = 186;
-        let a_checkbox_labels_x = 274;
+        // C++: aSliderLabelsX = mApp->GetInteger("OPTION_DLG_SLIDER_LABELS_OFFSET_X", 186);
+        //      aCheckboxLabelsX = mApp->GetInteger("OPTION_DLG_CHECKBOX_LABELS_OFFSET_X", 274)
+        //      （GetString 本地化标签以默认英文文案呈现）
+        let a_slider_labels_x = (*app).base.get_integer_default("OPTION_DLG_SLIDER_LABELS_OFFSET_X", 186);
+        let a_checkbox_labels_x = (*app).base.get_integer_default("OPTION_DLG_CHECKBOX_LABELS_OFFSET_X", 274);
+        // C++: aFontScale = mApp->GetDouble("OPTION_DLG_LABEL_FONT_SCALE", 1.0)；
+        //      非 1.0 时 SetScale 缩放标签，绘制后恢复
+        let a_font_scale = (*app).base.get_double_default("OPTION_DLG_LABEL_FONT_SCALE", 1.0);
+        if a_font_scale != 1.0 {
+            g.set_scale(a_font_scale as f32, a_font_scale as f32, 0.0, 0.0);
+        }
         self.draw_label_right(g, "Music", a_slider_labels_x, 140 + a_music_offset);
         self.draw_label_right(g, "Sound FX", a_slider_labels_x, 167 + a_sfx_offset);
         self.draw_label_right(g, "3D Acceleration", a_checkbox_labels_x, 197 + a_3d_accel_offset);
         self.draw_label_right(g, "Full Screen", a_checkbox_labels_x, 229 + a_full_screen_offset);
-        // [TRANSLATION_NOTE]: C++ aFontScale（OPTION_DLG_LABEL_FONT_SCALE）缩放未模拟
+        if a_font_scale != 1.0 {
+            g.set_scale(1.0, 1.0, 0.0, 0.0);
+        }
+        }
     }
     pub fn update(&mut self) {}
     pub fn key_down(&mut self, key: i32) {
@@ -138,13 +150,9 @@ impl NewOptionsDialog {
         unsafe {
             match the_id {
                 6 => { // NewOptionsDialog_Fullscreen
-                    if !checked {
-                        // [TRANSLATION_NOTE]: C++ 中 !checked && mApp->mForceFullscreen 时
-                        // DoDialog(DIALOG_COLORDEPTH_EXP) 并还原复选框；Rust 侧 mForceFullscreen 缺
-                        self.fullscreen_checked = true;
-                    } else {
-                        self.fullscreen_checked = true;
-                    }
+                    // C++: !checked && mApp->mForceFullscreen 时 DoDialog(DIALOG_COLORDEPTH_EXP)
+                    // 并还原复选框；Rust 无 mForceFullscreen（窗口模式限制弹窗），直接反映勾选状态
+                    self.fullscreen_checked = checked;
                 }
                 7 => { // NewOptionsDialog_HardwareAcceleration
                     if checked {
