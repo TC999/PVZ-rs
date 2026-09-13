@@ -482,9 +482,8 @@ impl SeedChooserScreen {
                 }
             }
         } else {
-            // C++: !mBoard->mSeedBank->ContainsPoint(x, y) && !mAlmanacButton->IsMouseOver() && !mStoreButton->IsMouseOver() && mApp->CanShowAlmanac()
-            // [TRANSLATION_NOTE]: Rust 侧 seed_bank 为 Vec<SeedPacket>（无 ContainsPoint），暂按 false 处理
-            let a_seed_bank_contains = false;
+            // C++: !mBoard->mSeedBank->ContainsPoint(x, y)（SeedBank::ContainsPoint，SeedPacket.cpp:1013）
+            let a_seed_bank_contains = self.board.map_or(false, |b| unsafe { (*b).seed_bank_contains_point(x, y) });
             let a_almanac_over = self.almanac_button.map_or(false, |b| unsafe { (*b).is_over });
             let a_store_over = self.store_button.map_or(false, |b| unsafe { (*b).is_over });
             if !a_seed_bank_contains && !a_almanac_over && !a_store_over {
