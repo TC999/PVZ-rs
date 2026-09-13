@@ -1939,8 +1939,18 @@ Spawn: {}
                 g.draw_image_cel(unsafe { &*a_wave_center }, 320, 40, a_wave_time);
                 g.draw_image_cel(unsafe { &*a_wave_center }, 480, 40, a_wave_time);
             }
-            // C++: PvzpDrawImageCelScaled(g, IMAGE_WAVESIDE, 800, 40, celCol, celRow, -1.0f, 1.0f)
-            // [TRANSLATION_NOTE]: Rust 无 PvzpDrawImageCelScaled 入口，右端波浪镜像绘制暂略
+            // C++: PvzpDrawImageCelScaled(g, IMAGE_WAVESIDE, 800, 40,
+            //      aWaveTime % mNumCols, aWaveTime / mNumCols, -1.0f, 1.0f)
+            //（scaleX=-1 即水平镜像；Rust 以 draw_image_mirror_src 等价实现 cel 级镜像绘制）
+            if !a_wave_side.is_null() {
+                let a_wave_side_ref = unsafe { &*a_wave_side };
+                let a_cel_width = a_wave_side_ref.get_cel_width();
+                let a_cel_height = a_wave_side_ref.get_cel_height();
+                let a_col = a_wave_time % a_wave_side_ref.num_cols;
+                let a_row = a_wave_time / a_wave_side_ref.num_cols;
+                let a_src_rect = Rect::new(a_col * a_cel_width, a_row * a_cel_height, a_cel_width, a_cel_height);
+                g.draw_image_mirror_src(a_wave_side_ref, 800, 40, &a_src_rect, true);
+            }
             g.set_draw_mode(DrawMode::Normal as i32);
         }
 
