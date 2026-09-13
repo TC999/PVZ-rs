@@ -1027,11 +1027,10 @@ impl Challenge {
             return;
         }
 
-        // [TRANSLATION_NOTE]: C++ 复制 Graphics(*g) 为 gBoardParent 后修改副本；Rust 侧保存/恢复被改字段
-        let old_trans_x = g.trans_x;
-        let old_trans_y = g.trans_y;
-        let old_color = *g.get_color();
-        let old_colorize = g.get_colorize_images();
+        // C++: Graphics gBoardParent = Graphics(*g) —— 拷贝全部绘制状态后绘制，副本随函数结束丢弃；
+        // Rust 以 push_state/pop_state 状态栈等价实现（覆盖 trans/scale/clip/color/font 等全部字段，
+        // 避免 Reanimation::draw 内部对 Graphics 的修改泄漏到后续绘制）
+        g.push_state();
 
         // C++: mSlotMachineRollCount < 3 && mCursorObject->mCursorType == CURSOR_TYPE_NORMAL &&
         //      mChallengeState != STATECHALLENGE_SLOT_MACHINE_ROLLING && !mBoard->HasLevelAwardDropped()
@@ -1054,10 +1053,7 @@ impl Challenge {
             reanim.draw(g);
         }
 
-        g.trans_x = old_trans_x;
-        g.trans_y = old_trans_y;
-        g.set_color(&old_color);
-        g.set_colorize_images(old_colorize);
+        g.pop_state();
     }
 
     pub fn update_tool_tip(&self, x: i32, y: i32) -> i32 {
