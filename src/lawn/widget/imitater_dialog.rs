@@ -100,14 +100,55 @@ impl ImitaterDialog {
         (x, y)
     }
 
-    /// 绘制（对应 C++ Draw L93-L108）
-    pub fn draw(&self, _g: &mut Graphics) {
-        // C++ 中：
-        // 1. LawnDialog::Draw(g) — 绘制对话框背景
-        // 2. 遍历种子，调用 DrawSeedPacket(g, x, y, SEED_IMITATER, seedType, 0, alpha, true, false)
-        // 3. mToolTip->Draw(g)
-        //
-        // 依赖 LawnDialog::Draw() 和 DrawSeedPacket()，暂为不可用时跳过
+    /// 绘制（对应 C++ ImitaterDialog::Draw，ImitaterDialog.cpp:93）
+    pub fn draw(&self, g: &mut Graphics) {
+        // [TRANSLATION_NOTE]: C++ 先调 LawnDialog::Draw 画对话框背景（IMAGE_IMITATERDIALOG 等
+        // 资源未接入时跳过背景）；种子包按对话框局部坐标 + self.x/self.y 偏移绘制
+        let a_back = self.app.map_or(std::ptr::null_mut(), |app| unsafe {
+            let a_rm = match (*app).base.resource_manager {
+                Some(r) => r,
+                None => return std::ptr::null_mut(),
+            };
+            (*a_rm).get_image("IMAGE_IMITATERDIALOG").as_image_ptr()
+        });
+        if !a_back.is_null() {
+            unsafe { g.draw_image_xy(&*a_back, self.x, self.y); }
+        }
+        g.set_linear_blend(true);
+
+        // C++: for (SeedType aSeedType = 0; aSeedType < SEED_GATLINGPEA; aSeedType++)
+        //      if (mApp->HasSeedType) DrawSeedPacket(g, x, y, SEED_IMITATER, aSeedType, 0, aGrayed?115:255, true, false)
+        let Some(app) = self.app else { return };
+        unsafe {
+            let a_seed_chooser = (*app).seed_chooser_screen.unwrap_or(std::ptr::null_mut()) as *mut crate::lawn::widget::seed_chooser_screen::SeedChooserScreen;
+            for a_seed_val in 0..(SeedType::Gatlingpea as i32) {
+                let a_seed_type = match num_to_seed_type(a_seed_val) {
+                    Some(st) => st,
+                    None => continue,
+                };
+                if (*app).has_seed_type(a_seed_type) {
+                    let (a_seed_x, a_seed_y) = self.get_seed_position(a_seed_type);
+                    // C++: aGrayed = mSeedChooserScreen->SeedNotAllowedToPick || SeedNotRecommendedToPick
+                    let a_grayed = if a_seed_chooser.is_null() {
+                        false
+                    } else {
+                        (*a_seed_chooser).seed_not_allowed_to_pick(a_seed_type)
+                            || (*a_seed_chooser).seed_not_recommended_to_pick(a_seed_type) != 0
+                    };
+                    crate::lawn::seed_packet::draw_seed_packet(
+                        g, (self.x + a_seed_x) as f32, (self.y + a_seed_y) as f32,
+                        SeedType::Imitater, a_seed_type, 0.0, if a_grayed { 115 } else { 255 }, true, false,
+                    );
+                }
+            }
+        }
+
+        // C++: mToolTip->Draw(g)
+        if let Some(ref tip) = self.tool_tip {
+            if tip.m_visible {
+                tip.draw(g);
+            }
+        }
     }
 
     /// 显示工具提示（对应 C++ ShowToolTip L110-L156）
@@ -144,22 +185,44 @@ impl ImitaterDialog {
         self.tool_tip_seed = SeedType::None;
     }
 
-    /// 鼠标按下（对应 C++ MouseDown L164-L186）
+    /// 鼠标按下（对应 C++ ImitaterDialog::MouseDown，ImitaterDialog.cpp:164）
     pub fn mouse_down(&mut self, x: i32, y: i32, _click_count: i32) {
-        let seed_type = self.seed_hit_test(x, y);
-        if seed_type != SeedType::None {
-            // C++ 中：
-            // 1. 检查 SeedNotAllowedToPick
-            // 2. 设置 ChosenSeed（模仿者类型）
-            // 3. 调用 ClickedSeedInChooser
-            // 4. 调用 UpdateImitaterButton
-            // 5. 关闭对话框
-
-            // 由于 SeedChooserScreen 依赖未完整翻译，此处暂简化
-            // 仅更新 tool_tip_seed 表示选中
-            self.tool_tip_seed = seed_type;
-            self.visible = false; // 对应 KillDialog
+        let a_seed_type = self.seed_hit_test(x, y);
+        if a_seed_type != SeedType::None {
+            let Some(app) = self.app else { return };
+            unsafe {
+                let a_seed_chooser = (*app).seed_chooser_screen.unwrap_or(std::ptr::null_mut()) as *mut crate::lawn::widget::seed_chooser_screen::SeedChooserScreen;
+                if a_seed_chooser.is_null() {
+                    return;
+                }
+                // C++: if (!aSeedChooser->SeedNotAllowedToPick(aSeedType))
+                if !(*a_seed_chooser).seed_not_allowed_to_pick(a_seed_type) {
+                    // C++: ChosenSeed& aImitater = aSeedChooser->mChosenSeeds[SEED_IMITATER];
+                    //      mSeedState = SEED_IN_CHOOSER; mImitaterType = aSeedType;
+                    //      mX/mY = mImitaterButton 位置
+                    let a_imitater_idx = SeedType::Imitater as usize;
+                    let a_button_pos = (*a_seed_chooser).imitater_button.map_or((0, 0), |b| unsafe {
+                        ((*b).x, (*b).y)
+                    });
+                    // nightly 禁止裸指针隐式 autoref：先显式解引用
+                    let a_chooser_ref = &mut *a_seed_chooser;
+                    let a_imitater_ptr = match a_chooser_ref.chosen_seeds.get_mut(a_imitater_idx) {
+                        Some(s) => s as *mut crate::lawn::widget::seed_chooser_screen::ChosenSeed,
+                        None => return,
+                    };
+                    (*a_imitater_ptr).seed_state = ChosenSeedState::InChooser;
+                    (*a_imitater_ptr).imitater_type = a_seed_type;
+                    (*a_imitater_ptr).x = a_button_pos.0;
+                    (*a_imitater_ptr).y = a_button_pos.1;
+                    // C++: aSeedChooser->ClickedSeedInChooser(aImitater); UpdateImitaterButton();
+                    (*a_seed_chooser).clicked_seed_in_chooser(&mut *a_imitater_ptr);
+                    (*a_seed_chooser).update_imitater_button();
+                    // C++: mApp->KillDialog(mId) —— Rust 由持有方（update 转发）检测 visible 释放
+                    self.visible = false;
+                }
+            }
         }
+        // C++ else: Widget::MouseDown —— Rust 无 Widget 基类，等效空操作
     }
 }
 

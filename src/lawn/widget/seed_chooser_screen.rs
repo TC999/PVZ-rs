@@ -10,6 +10,7 @@ use crate::framework::key_codes::{KEYCODE_ESCAPE, KEYCODE_RETURN, KEYCODE_SPACE,
 use crate::framework::color::Color;
 use crate::framework::widget::dialog::{BUTTONS_YES_NO, ID_YES};
 use crate::lawn::game_enums::*;
+use crate::lawn::widget::imitater_dialog::ImitaterDialog;
 use crate::lawn::widget::game_button::GameButton;
 use crate::todlib::tod_common::TodWeightedArray;
 use crate::framework::mt_rand::MTRand;
@@ -70,6 +71,8 @@ pub struct SeedChooserScreen {
     pub seeds_in_bank: i32,
     pub tool_tip: Option<*mut crate::lawn::tool_tip_widget::ToolTipWidget>,
     pub tool_tip_seed: i32,
+    /// 对应 C++ LawnApp 对话框系统中的 ImitaterDialog（Rust 对话框驱动持有）
+    pub imitater_dialog: Option<*mut ImitaterDialog>,
     pub last_mouse_x: i32,
     pub last_mouse_y: i32,
     pub choose_state: SeedChooserState,
@@ -87,7 +90,7 @@ impl SeedChooserScreen {
             app: None, board: None,
             num_seeds_to_choose: 0, seed_chooser_age: 0,
             seeds_in_flight: 0, seeds_in_bank: 0,
-            tool_tip: None, tool_tip_seed: 0,
+            tool_tip: None, tool_tip_seed: 0, imitater_dialog: None,
             last_mouse_x: 0, last_mouse_y: 0,
             choose_state: SeedChooserState::Normal,
             view_lawn_time: 0,
@@ -214,6 +217,11 @@ impl SeedChooserScreen {
             && (t == SeedType::Squash || t == SeedType::Threepeater)
     }
     pub fn draw(&self, g: &mut Graphics) {
+        // C++: ImitaterDialog 由 LawnApp 对话框系统绘制（Rust 对话框驱动转发）
+        if let Some(d) = self.imitater_dialog {
+            unsafe { (*d).draw(g); }
+            return;
+        }
         // 对应 C++ Draw（SeedChooserScreen.cpp:345）
         let Some(app) = self.app else { return };
         unsafe {
@@ -387,6 +395,18 @@ impl SeedChooserScreen {
         // 简化版：不处理光标变化
     }
     pub fn update(&mut self) {
+        // C++: ImitaterDialog 由 LawnApp 对话框系统更新（Rust 对话框驱动转发）
+        if let Some(d) = self.imitater_dialog {
+            unsafe {
+                (*d).update();
+                if !(*d).visible {
+                    // 对应 C++ KillDialog：选中后关闭并释放
+                    let _ = Box::from_raw(d);
+                    self.imitater_dialog = None;
+                }
+            }
+            return;
+        }
         self.seed_chooser_age += 1;
         if let Some(app) = self.app { unsafe {
             self.last_mouse_x = 0 /* widget_manager */;
@@ -593,6 +613,11 @@ impl SeedChooserScreen {
 
     /// 对应 C++ SeedChooserScreen::MouseDown（SeedChooserScreen.cpp:908）
     pub fn mouse_down(&mut self, x: i32, y: i32, _the_click_count: i32) {
+        // C++: ImitaterDialog 由 LawnApp 对话框系统接收鼠标（Rust 对话框驱动转发）
+        if let Some(d) = self.imitater_dialog {
+            unsafe { (*d).mouse_down(x - (*d).x, y - (*d).y, _the_click_count); }
+            return;
+        }
         // C++: Widget::MouseDown(x, y, theClickCount) —— Rust 无 Widget 基类，等效空操作
 
         if self.seeds_in_flight > 0 {
@@ -652,8 +677,20 @@ impl SeedChooserScreen {
                 if let Some(app) = self.app {
                     unsafe {
                         (*app).play_sample(crate::framework::resources::ResourceId::SoundTap as i32);
-                        // [TRANSLATION_NOTE]: C++ 中 new ImitaterDialog + AddDialog + Resize + SetFocus；
-                        // Rust 侧 ImitaterDialog 为独立结构（register 链未接入 widget 体系），暂以注释占位。
+                        // C++: ImitaterDialog* aDialog = new ImitaterDialog();
+                        //      mApp->AddDialog(aDialog->mId, aDialog);
+                        //      aDialog->Resize(居中, mWidth, mHeight); SetFocus(aDialog)
+                        // [TRANSLATION_NOTE]: Rust ImitaterDialog 为独立结构（非 framework Dialog），
+                        // 由 SeedChooserScreen 对话框驱动持有（见 draw/update/mouse_down 转发）
+                        if self.imitater_dialog.is_none() {
+                            let mut a_dialog = Box::new(ImitaterDialog::new(app, BOARD_WIDTH, BOARD_HEIGHT));
+                            let a_w = a_dialog.width;
+                            let a_h = a_dialog.height;
+                            a_dialog.x = (BOARD_WIDTH - a_w) / 2;
+                            a_dialog.y = (BOARD_HEIGHT - a_h) / 2;
+                            a_dialog.visible = true;
+                            self.imitater_dialog = Some(Box::into_raw(a_dialog));
+                        }
                     }
                 }
             }
