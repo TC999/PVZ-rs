@@ -255,10 +255,17 @@ impl Projectile {
         self.base.y = (self.pos_y + self.pos_z) as i32;
     }
 
-    /// 更新正常运动（对应 C++ Projectile::UpdateNormalMotion）
+    /// 更新正常运动（对应 C++ Projectile::UpdateNormalMotion，Projectile.cpp:314-380）
     pub fn update_normal_motion(&mut self) {
         match self.motion {
             ProjectileMotion::Floating => {
+                // C++: MOTION_FLOAT_OVER —— velZ < 0 时上升趋缓并带旋转
+                if self.vel_z < 0.0 {
+                    self.vel_z += 0.002;
+                    self.vel_z = self.vel_z.min(0.0);
+                    self.pos_y += self.vel_z;
+                    self.rotation = 0.3 - 0.7 * self.vel_z * std::f32::consts::PI * 0.25;
+                }
                 self.pos_x += 0.4;
             }
             ProjectileMotion::Threepeater => {
@@ -272,11 +279,70 @@ impl Projectile {
                 self.pos_y += self.vel_y;
                 self.shadow_y += self.vel_y;
                 if self.vel_y != 0.0 {
-                    // [TRANSLATION_NOTE]: PixelToGridYKeepOnBoard 暂未实现
+                    // C++: mRow = mBoard->PixelToGridYKeepOnBoard(mPosX, mPosY)
+                    if let Some(board) = self.base.get_board() {
+                        self.base.row = board.pixel_to_grid_y_keep_on_board(self.pos_x as i32, self.pos_y as i32);
+                    }
                 }
             }
             // C++: MOTION_BACKWARDS —— ZombiePea 向左直飞（与默认向右镜像）
             ProjectileMotion::Backwards => {
+                self.pos_x -= 3.33;
+            }
+            ProjectileMotion::Homing => {
+                // C++: MOTION_HOMING（Projectile.cpp:343-365）—— 追踪目标僵尸
+                if let Some(board) = self.base.get_board() {
+                    if let Some(a_zombie) = board.zombies.get(self.target_zombie_id as usize) {
+                        if a_zombie.effected_by_damage(self.damage_range_flags) {
+                            // C++: aTargetCenter(ZombieTargetLeadX(0), aZombieRect.mY + height/2)
+                            let a_zombie_rect = a_zombie.get_zombie_rect();
+                            let a_target_center_x = a_zombie.zombie_target_lead_x(0.0);
+                            let a_target_center_y = (a_zombie_rect.y + a_zombie_rect.height / 2) as f32;
+                            // C++: aProjectileCenter(mPosX + width/2, mPosY + height/2)
+                            let a_projectile_center_x = self.pos_x + self.base.width as f32 / 2.0;
+                            let a_projectile_center_y = self.pos_y + self.base.height as f32 / 2.0;
+                            // C++: aToTarget = (aTargetCenter - aProjectileCenter).Normalize()
+                            let mut a_to_target_x = a_target_center_x - a_projectile_center_x;
+                            let mut a_to_target_y = a_target_center_y - a_projectile_center_y;
+                            let a_to_target_len = (a_to_target_x * a_to_target_x + a_to_target_y * a_to_target_y).sqrt();
+                            if a_to_target_len > 0.0001 {
+                                a_to_target_x /= a_to_target_len;
+                                a_to_target_y /= a_to_target_len;
+                            }
+                            // C++: aMotion(mVelX, mVelY) += aToTarget * (0.001 * mProjectileAge); Normalize; * 2
+                            let mut a_motion_x = self.vel_x + a_to_target_x * (0.001 * self.projectile_age as f32);
+                            let mut a_motion_y = self.vel_y + a_to_target_y * (0.001 * self.projectile_age as f32);
+                            let a_motion_len = (a_motion_x * a_motion_x + a_motion_y * a_motion_y).sqrt();
+                            if a_motion_len > 0.0001 {
+                                a_motion_x = a_motion_x / a_motion_len * 2.0;
+                                a_motion_y = a_motion_y / a_motion_len * 2.0;
+                            }
+                            self.vel_x = a_motion_x;
+                            self.vel_y = a_motion_y;
+                            // C++: mRotation = -atan2(mVelY, mVelX)
+                            self.rotation = -a_motion_y.atan2(a_motion_x);
+                        }
+                    }
+                }
+                self.pos_y += self.vel_y;
+                self.pos_x += self.vel_x;
+                self.shadow_y += self.vel_y;
+                if let Some(board) = self.base.get_board() {
+                    self.base.row = board.pixel_to_grid_y_keep_on_board(self.pos_x as i32, self.pos_y as i32);
+                }
+            }
+            ProjectileMotion::Bee => {
+                // C++: MOTION_BEE —— 前 60 帧上升，随后直飞
+                if self.projectile_age < 60 {
+                    self.pos_y -= 0.5;
+                }
+                self.pos_x += 3.33;
+            }
+            ProjectileMotion::BeeBackwards => {
+                // C++: MOTION_BEE_BACKWARDS —— 前 60 帧上升，随后左飞
+                if self.projectile_age < 60 {
+                    self.pos_y -= 0.5;
+                }
                 self.pos_x -= 3.33;
             }
             _ => {
