@@ -5318,7 +5318,13 @@ impl Zombie {
         }
 
         if self.phase_counter == 100 {
-            // [TRANSLATION_NOTE]: mSpecialHeadReanimID 的 anim_shooting 播放未接入
+            // C++: aHeadReanim = mApp->ReanimationGet(mSpecialHeadReanimID);
+            //      aHeadReanim->PlayReanim("anim_shooting", REANIM_PLAY_ONCE_AND_HOLD, 20, 38.0f)
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(a_head_reanim) = app.reanimation_get_mut(self.special_head_reanim_id) {
+                    a_head_reanim.play_reanim("anim_shooting", ReanimLoopType::PlayOnceAndHold, 20, 38.0);
+                }
+            }
         } else if matches!(self.phase_counter, 18 | 35 | 51 | 68) {
             if let Some(app) = self.base.get_app() {
                 app.play_foley(crate::todlib::tod_foley::FoleyType::Throw as i32);
@@ -5332,7 +5338,12 @@ impl Zombie {
                 // [TRANSLATION_NOTE]: C++ MOTION_BACKWARDS（ZombiePea 向左飞行）未在 Rust 枚举中
             }
         } else if self.phase_counter == 0 {
-            // [TRANSLATION_NOTE]: anim_head_idle 播放未接入
+            // C++: aHeadReanim->PlayReanim("anim_idle", REANIM_LOOP, 20, 12.0f)
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(a_head_reanim) = app.reanimation_get_mut(self.special_head_reanim_id) {
+                    a_head_reanim.play_reanim("anim_idle", ReanimLoopType::Loop, 20, 12.0);
+                }
+            }
             self.phase_counter = 150;
         }
     }
@@ -5343,7 +5354,20 @@ impl Zombie {
             self.stop_eating();
             self.play_zombie_reanim("anim_idle", ReanimLoopType::Loop, 20, 12.0);
             self.has_head = false;
-            // [TRANSLATION_NOTE]: mSpecialHeadReanimID 的 anim_jumpup 播放/位置设置未接入
+            // C++: aHeadReanim->PlayReanim("anim_jumpup", REANIM_PLAY_ONCE_AND_HOLD, 20, 24.0f);
+            //      mRenderOrder = mRenderOrder + 1; SetPosition(mPosX + 6, mPosY - 21);
+            //      OverrideScale(0.75, 0.75); mOverlayMatrix.m10 = 0
+            //（AttachmentDetach(aTrackInstance->mAttachmentID) 依赖附着系统未接入）
+            let a_render_order = self.base.render_order + 1;
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(a_head_reanim) = app.reanimation_get_mut(self.special_head_reanim_id) {
+                    a_head_reanim.play_reanim("anim_jumpup", ReanimLoopType::PlayOnceAndHold, 20, 24.0);
+                    a_head_reanim.m_render_order = a_render_order;
+                    a_head_reanim.set_position(self.pos_x + 6.0, self.pos_y - 21.0);
+                    a_head_reanim.override_scale(0.75, 0.75);
+                    a_head_reanim.m_overlay_matrix.m[1][0] = 0.0;
+                }
+            }
             self.zombie_phase = ZombiePhase::SquashRising;
             self.phase_counter = 95;
         }
@@ -5351,17 +5375,61 @@ impl Zombie {
         if self.zombie_phase == ZombiePhase::SquashRising {
             let board = match self.base.board { Some(b) => b, None => return };
             let a_dest_x = unsafe { (*board).grid_to_pixel_x((*board).pixel_to_grid_x_keep_on_board(self.base.x, self.base.y), self.base.row) };
-            // [TRANSLATION_NOTE]: C++ PvzpAnimateCurve(50,20,phaseCounter,0,aDestX-mPosX) + 头部位置设置未接入
-            let _ = a_dest_x;
+            // C++: aPosX = PvzpAnimateCurve(50, 20, mPhaseCounter, 0, aDestX - mPosX, CURVE_EASE_IN_OUT);
+            //      aPosY = PvzpAnimateCurve(50, 20, mPhaseCounter, 0, -20, CURVE_EASE_IN_OUT);
+            //      aHeadReanim->SetPosition(mPosX + aPosX + 6, mPosY + aPosY - 21)
+            let a_pos_x = crate::todlib::tod_common::tod_animate_curve(
+                50, 20, self.phase_counter, 0, a_dest_x - self.pos_x as i32, TodCurves::EaseInOut,
+            );
+            let a_pos_y = crate::todlib::tod_common::tod_animate_curve(
+                50, 20, self.phase_counter, 0, -20, TodCurves::EaseInOut,
+            );
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(a_head_reanim) = app.reanimation_get_mut(self.special_head_reanim_id) {
+                    a_head_reanim.set_position(self.pos_x + a_pos_x as f32 + 6.0, self.pos_y + a_pos_y as f32 - 21.0);
+                }
+            }
             if self.phase_counter == 0 {
-                // [TRANSLATION_NOTE]: anim_jumpdown 播放未接入
+                // C++: aHeadReanim->PlayReanim("anim_jumpdown", REANIM_PLAY_ONCE_AND_HOLD, 0, 60.0f)
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_head_reanim) = app.reanimation_get_mut(self.special_head_reanim_id) {
+                        a_head_reanim.play_reanim("anim_jumpdown", ReanimLoopType::PlayOnceAndHold, 0, 60.0);
+                    }
+                }
                 self.zombie_phase = ZombiePhase::SquashFalling;
                 self.phase_counter = 10;
             }
         }
 
         if self.zombie_phase == ZombiePhase::SquashFalling {
-            // [TRANSLATION_NOTE]: C++ PvzpAnimateCurve(10,0,phaseCounter,-20,74) 头部下落 + 落地 SquishAllInSquare 未接入
+            // C++: aPosY = PvzpAnimateCurve(10, 0, mPhaseCounter, -20, 74, CURVE_LINEAR);
+            //      aHeadReanim->SetPosition(mPosX + 6 + aDestX - mPosX, mPosY - 21 + aPosY)
+            let board = match self.base.board { Some(b) => b, None => return };
+            let a_dest_x = unsafe { (*board).grid_to_pixel_x((*board).pixel_to_grid_x_keep_on_board(self.base.x, self.base.y), self.base.row) };
+            let a_pos_y = crate::todlib::tod_common::tod_animate_curve(
+                10, 0, self.phase_counter, -20, 74, TodCurves::Linear,
+            );
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(a_head_reanim) = app.reanimation_get_mut(self.special_head_reanim_id) {
+                    a_head_reanim.set_position(self.pos_x + 6.0 + a_dest_x as f32 - self.pos_x, self.pos_y - 21.0 + a_pos_y as f32);
+                }
+            }
+            // C++: mPhaseCounter == 2 时 SquishAllInSquare(PixelToGridXKeepOnBoard(mX, mY), mRow, ATTACKTYPE_CHEW)
+            if self.phase_counter == 2 {
+                let a_grid_x = unsafe { (*board).pixel_to_grid_x_keep_on_board(self.base.x, self.base.y) };
+                let a_row = self.base.row;
+                if let Some(board) = self.base.get_board_mut() {
+                    for plant in &mut board.plants {
+                        if plant.dead { continue; }
+                        if plant.base.row == a_row && plant.plant_col == a_grid_x {
+                            if plant.seed_type != SeedType::Spikerock {
+                                board.m_plants_eaten += 1;
+                                plant.squish();
+                            }
+                        }
+                    }
+                }
+            }
             if self.phase_counter == 0 {
                 self.zombie_phase = ZombiePhase::SquashDoneFalling;
                 self.phase_counter = 100;
@@ -5375,7 +5443,15 @@ impl Zombie {
         }
 
         if self.zombie_phase == ZombiePhase::SquashDoneFalling && self.phase_counter == 0 {
-            // [TRANSLATION_NOTE]: C++ 头部 reanim 死亡 + TakeDamage(1800, 9U) — reanim 未接入
+            // C++: aHeadReanim->ReanimationDie(); mSpecialHeadReanimID = REANIMATIONID_NULL;
+            //      TakeDamage(1800, 9U)
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(a_head_reanim) = app.reanimation_get_mut(self.special_head_reanim_id) {
+                    a_head_reanim.reanimation_die();
+                }
+            }
+            self.special_head_reanim_id = REANIMATIONID_NULL;
+            self.take_damage(1800, 9);
         }
     }
 
