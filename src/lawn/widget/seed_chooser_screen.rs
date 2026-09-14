@@ -395,7 +395,26 @@ impl SeedChooserScreen {
         self.show_tool_tip();
         if self.choose_state == SeedChooserState::ViewLawn { self.update_view_lawn(); }
     }
-    pub fn display_repick_warning_dialog(&self, _msg: &str) -> bool { true }
+    pub fn display_repick_warning_dialog(&self, msg: &str) -> bool {
+        // 对应 C++ DisplayRepickWarningDialog：LawnMessageBox(DIALOG_CHOOSER_WARNING,
+        // "[DIALOG_WARNING]", theMessage, "[DIALOG_BUTTON_YES]", "[REPICK_BUTTON]", BUTTONS_YES_NO)
+        // == ID_YES
+        // [TRANSLATION_NOTE]: C++ 为阻塞式（返回按钮 ID）；Rust do_dialog 非阻塞（结果经
+        // dialog_listener 回调），此处弹出对话框并返回 true（无法同步判定 Yes，调用链按放行处理）
+        if let Some(app) = self.app {
+            unsafe {
+                (*app).do_dialog(
+                    Dialogs::ChooserWarning as i32,
+                    true,
+                    "[DIALOG_WARNING]",
+                    msg,
+                    "[REPICK_BUTTON]",
+                    BUTTONS_YES_NO,
+                );
+            }
+        }
+        true
+    }
     pub fn flyers_are_coming(&self) -> bool {
         if let Some(board) = self.board { unsafe {
             for wave in 0..(*board).m_num_waves {
@@ -425,9 +444,17 @@ impl SeedChooserScreen {
             return true;
         }
 
-        // [TRANSLATION_NOTE]: C++ 用 Plant::GetNameString 构建 [SEED_CHOOSER_UPGRADE_WARNING] 文本后弹窗；
-        // Rust 侧字符串翻译与弹窗未完全移植，直接调用 display_repick_warning_dialog
-        self.display_repick_warning_dialog("")
+        // C++: aWarning = PvzpStringTranslate("[SEED_CHOOSER_UPGRADE_WARNING]")
+        //      → PvzpReplaceString(aWarning, "{UPGRADE_TO}", Plant::GetNameString(theSeedTypeTo))
+        //      → PvzpReplaceString(aWarning, "{UPGRADE_FROM}", Plant::GetNameString(theSeedTypeFrom))
+        //      → DisplayRepickWarningDialog(aWarning)
+        //（字符串翻译系统未接入，以键名作为原始文本）
+        let mut a_warning = "[SEED_CHOOSER_UPGRADE_WARNING]".to_string();
+        let a_name_to = crate::lawn::plant::Plant::get_name_string(to, SeedType::None);
+        let a_name_from = crate::lawn::plant::Plant::get_name_string(from, SeedType::None);
+        a_warning = a_warning.replace("{UPGRADE_TO}", &a_name_to);
+        a_warning = a_warning.replace("{UPGRADE_FROM}", &a_name_from);
+        self.display_repick_warning_dialog(&a_warning)
     }
     pub fn on_start_button(&mut self) {
         // OnStartButton — 简化版
