@@ -479,7 +479,7 @@ impl Projectile {
         }
 
         if let Some(zombie_idx) = hit_zombie_idx {
-            self.do_impact_by_index(zombie_idx);
+            self.do_impact_by_index(Some(zombie_idx));
         }
     }
 
@@ -523,7 +523,7 @@ impl Projectile {
                             && my_pos_y > a_zombie_rect.y as f32
                             && my_pos_y < (a_zombie_rect.y + a_zombie_rect.height) as f32
                         {
-                            self.do_impact_by_index(self.target_zombie_id as usize);
+                            self.do_impact_by_index(Some(self.target_zombie_id as usize));
                         }
                     }
                 }
@@ -581,7 +581,7 @@ impl Projectile {
             if a_zombie_on_high_ground && self.cant_hit_high_ground() {
                 return;
             }
-            self.do_impact_by_index(zombie_idx);
+            self.do_impact_by_index(Some(zombie_idx));
         }
     }
 
@@ -649,8 +649,9 @@ impl Projectile {
 
     /// 通过索引对僵尸造成碰撞效果（对应 C++ DoImpact 主体）
     /// 命中结算（对应 C++ Projectile::DoImpact，Projectile.cpp:823）
-    pub fn do_impact_by_index(&mut self, zombie_idx: usize) {
-        self.play_impact_sound(Some(zombie_idx));
+    pub fn do_impact_by_index(&mut self, zombie_idx: Option<usize>) {
+        // zombie_idx 为 None 对应 C++ DoImpact(nullptr)：无单体伤害，仅溅射/粒子/音效
+        self.play_impact_sound(zombie_idx);
 
         let proj_type = self.projectile_type;
         let a_last_pos_x = self.pos_x - self.vel_x;
@@ -662,7 +663,7 @@ impl Projectile {
         // 对应 C++ IsSplashDamage(theZombie)：火球命中火抗僵尸不算溅射
         let mut a_zombie_is_fire_resistant = false;
         if let Some(board) = self.base.get_board() {
-            if let Some(zombie) = board.zombies.get(zombie_idx) {
+            if let Some(zombie) = zombie_idx.and_then(|idx| board.zombies.get(idx)) {
                 a_zombie_is_fire_resistant = zombie.is_fire_resistant();
             }
         }
@@ -672,17 +673,17 @@ impl Projectile {
         if is_splash {
             if proj_type == ProjectileType::Fireball {
                 if let Some(board) = self.base.get_board_mut() {
-                    if let Some(zombie) = board.zombies.get_mut(zombie_idx) {
+                    if let Some(zombie) = zombie_idx.and_then(|idx| board.zombies.get_mut(idx)) {
                         zombie.remove_cold_effects();
                     }
                 }
             }
-            self.do_splash_damage(Some(zombie_idx));
+            self.do_splash_damage(zombie_idx);
         } else {
             let a_damage = self.damage;
             let a_damage_flags = self.damage_flags;
             if let Some(board) = self.base.get_board_mut() {
-                if let Some(zombie) = board.zombies.get_mut(zombie_idx) {
+                if let Some(zombie) = zombie_idx.and_then(|idx| board.zombies.get_mut(idx)) {
                     zombie.take_damage(a_damage, a_damage_flags);
                 }
             }
@@ -749,7 +750,7 @@ impl Projectile {
                 a_splat_pos_y = a_last_pos_y + 63.0;
                 a_effect = ParticleEffect::ButterSplat;
                 if let Some(board) = self.base.get_board_mut() {
-                    if let Some(zombie) = board.zombies.get_mut(zombie_idx) {
+                    if let Some(zombie) = zombie_idx.and_then(|idx| board.zombies.get_mut(idx)) {
                         zombie.apply_butter();
                     }
                 }
@@ -761,7 +762,7 @@ impl Projectile {
         if a_effect != ParticleEffect::None {
             let mut a_particle_applied = false;
             if let Some(board) = self.base.get_board_mut() {
-                if let Some(zombie) = board.zombies.get_mut(zombie_idx) {
+                if let Some(zombie) = zombie_idx.and_then(|idx| board.zombies.get_mut(idx)) {
                     let mut a_pos_x = a_splat_pos_x + 52.0 - zombie.base.x as f32;
                     let mut a_pos_y = a_splat_pos_y - zombie.base.y as f32;
                     if zombie.zombie_phase == ZombiePhase::SnorkelWalkingInPool
@@ -1258,10 +1259,49 @@ impl Projectile {
         ) && !self.on_high_ground
     }
 
-    /// 检查高台（对应 C++ CheckForHighGround）
+    /// 检查高台（对应 C++ Projectile::CheckForHighGround，Projectile.cpp:409-435）
     pub fn check_for_high_ground(&mut self) {
-        if self.on_high_ground && self.cant_hit_high_ground() {
-            // [TRANSLATION_NOTE]: 高台碰撞检测暂未实现
+        let a_shadow_delta = self.shadow_y - self.pos_y;
+
+        // C++: PEA|SNOWPEA|FIREBALL|SPIKE|COBBIG 且 aShadowDelta < 28 → DoImpact(nullptr)
+        if matches!(
+            self.projectile_type,
+            ProjectileType::Pea
+                | ProjectileType::Snowpea
+                | ProjectileType::Fireball
+                | ProjectileType::Spike
+                | ProjectileType::Cobbig
+        ) && a_shadow_delta < 28.0
+        {
+            self.do_impact_by_index(None);
+            return;
+        }
+
+        // C++: PUFF && aShadowDelta < 0 → DoImpact(nullptr)
+        if self.projectile_type == ProjectileType::Puff && a_shadow_delta < 0.0 {
+            self.do_impact_by_index(None);
+            return;
+        }
+
+        // C++: STAR && aShadowDelta < 23 → DoImpact(nullptr)
+        if self.projectile_type == ProjectileType::Star && a_shadow_delta < 23.0 {
+            self.do_impact_by_index(None);
+            return;
+        }
+
+        // C++: CantHitHighGround() 且所在格为 GRIDSQUARE_HIGH_GROUND → DoImpact(nullptr)
+        if self.cant_hit_high_ground() {
+            if let Some(board) = self.base.get_board() {
+                let a_grid_x = board.pixel_to_grid_x_keep_on_board(
+                    (self.pos_x + 30.0) as i32,
+                    self.pos_y as i32,
+                );
+                if board.grid_square_type[a_grid_x as usize][self.base.row as usize]
+                    == GridSquareType::HighGround
+                {
+                    self.do_impact_by_index(None);
+                }
+            }
         }
     }
 }
