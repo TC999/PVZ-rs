@@ -1764,10 +1764,8 @@ fn sync_plant_tail_portable(ctx: &mut PortableSaveContext, plant: &mut Plant) {
     ctx.sync_i32(&mut plant.shooting_counter);
     ctx.sync_u32(&mut plant.body_reanim_id);
     ctx.sync_u32(&mut plant.head_reanim_id);
-    // [TRANSLATION_NOTE]: C++ mHeadReanimID2/mHeadReanimID3 未翻译为 Plant 字段，占位保持格式
-    let mut tmp_reanim = 0u32;
-    ctx.sync_u32(&mut tmp_reanim);
-    ctx.sync_u32(&mut tmp_reanim);
+    ctx.sync_u32(&mut plant.head_reanim_id2);
+    ctx.sync_u32(&mut plant.head_reanim_id3);
     ctx.sync_u32(&mut plant.blink_reanim_id);
     ctx.sync_u32(&mut plant.light_reanim_id);
     ctx.sync_u32(&mut plant.sleeping_reanim_id);
@@ -2053,7 +2051,8 @@ fn sync_music_tail_portable(ctx: &mut PortableSaveContext, music: &mut Music) {
 }
 
 /// 同步光标 chunk（对应 C++ SyncCursorPortable，SaveGame.cpp:2007）
-/// [TRANSLATION_NOTE]: C++ CursorObject 继承 GameObject；Rust CursorObject 无基类字段，占位读写
+/// C++ CursorObject 继承 GameObject；Rust CursorObject 无基类字段，
+/// 基类 x/y/width/height/visible 经平铺字段映射（row/render_order 无对应，占位）
 fn sync_cursor_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
     let mut tmp_base = GameObject::new();
     if ctx.reading {
@@ -2077,7 +2076,15 @@ fn sync_cursor_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
             };
             match field_id {
                 1 => {
-                    let _ = read_game_object_field(field_data, &mut tmp_base);
+                    if read_game_object_field(field_data, &mut tmp_base) {
+                        // C++: CursorObject 继承 GameObject，基类字段读回 Rust 平铺成员
+                        //（row/render_order Rust CursorObject 无对应成员，丢弃）
+                        board.cursor_object.x = tmp_base.x;
+                        board.cursor_object.y = tmp_base.y;
+                        board.cursor_object.width = tmp_base.width;
+                        board.cursor_object.height = tmp_base.height;
+                        board.cursor_object.visible = tmp_base.visible;
+                    }
                 }
                 // C++: 2U 为旧版字段（legacy）
                 2 => {
@@ -2091,6 +2098,13 @@ fn sync_cursor_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
         }
     } else {
         let mut a_blob: Vec<u8> = Vec::new();
+        // C++: CursorObject 继承 GameObject，基类字段 x/y/width/height/visible 从 Rust 平铺字段映射
+        //（row/render_order Rust CursorObject 无对应成员，保持默认 0 占位）
+        tmp_base.x = board.cursor_object.x;
+        tmp_base.y = board.cursor_object.y;
+        tmp_base.width = board.cursor_object.width;
+        tmp_base.height = board.cursor_object.height;
+        tmp_base.visible = board.cursor_object.visible;
         write_game_object_field(&mut a_blob, 1, &mut tmp_base);
         append_field_with_sync(&mut a_blob, PORTABLE_FIELD_TAIL, |c| sync_cursor_object_tail_portable(c, &mut board.cursor_object));
         write_tlv_blob(ctx, &a_blob);
