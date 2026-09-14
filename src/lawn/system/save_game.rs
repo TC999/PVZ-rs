@@ -1041,10 +1041,9 @@ fn append_board_base_fields(a_blob: &mut Vec<u8>, board: &mut Board) {
     append_field_with_sync(a_blob, BoardBaseFieldId::BonusLawnMowersRemaining as u32, |c| c.sync_i32(&mut tmp_i32));
     append_field_with_sync(a_blob, BoardBaseFieldId::IceMinX as u32, |c| sync_i32_array(c, &mut board.m_ice_min_x));
     append_field_with_sync(a_blob, BoardBaseFieldId::IceTimer as u32, |c| sync_i32_array(c, &mut board.m_ice_timer));
-    // [TRANSLATION_NOTE]: mIceParticleID[6] 未翻译（Rust 仅 m_ice_particle 单值），循环占位
     append_field_with_sync(a_blob, BoardBaseFieldId::IceParticleId as u32, |c| {
-        for _ in 0..MAX_GRID_SIZE_Y {
-            c.sync_u32(&mut tmp_u32);
+        for row in 0..MAX_GRID_SIZE_Y {
+            c.sync_u32(&mut board.m_ice_particle_id[row]);
         }
     });
     append_field_with_sync(a_blob, BoardBaseFieldId::RowPickingArray as u32, |c| {
@@ -1117,8 +1116,7 @@ fn append_board_base_fields(a_blob: &mut Vec<u8>, board: &mut Board) {
         c.sync_i32(&mut raw);
         board.m_board_rand_seed = raw as u32;
     });
-    // [TRANSLATION_NOTE]: mPoolSparklyParticleID 未翻译为 Board 字段，占位保持格式
-    append_field_with_sync(a_blob, BoardBaseFieldId::PoolSparklyParticleId as u32, |c| c.sync_u32(&mut tmp_u32));
+    append_field_with_sync(a_blob, BoardBaseFieldId::PoolSparklyParticleId as u32, |c| c.sync_u32(&mut board.m_pool_sparkly_particle_id));
     append_field_with_sync(a_blob, BoardBaseFieldId::FwooshId as u32, |c| {
         for row in 0..MAX_GRID_SIZE_Y {
             for slot in 0..12 {
@@ -1141,8 +1139,7 @@ fn append_board_base_fields(a_blob: &mut Vec<u8>, board: &mut Board) {
     append_field_with_sync(a_blob, BoardBaseFieldId::DanceMode as u32, |c| c.sync_bool(&mut board.m_dance_mode));
     append_field_with_sync(a_blob, BoardBaseFieldId::DaisyMode as u32, |c| c.sync_bool(&mut board.m_daisy_mode));
     append_field_with_sync(a_blob, BoardBaseFieldId::SukhbirMode as u32, |c| c.sync_bool(&mut board.m_sukhbir_mode));
-    // [TRANSLATION_NOTE]: mPrevBoardResult 未翻译为 Board 字段（Rust 有 m_board_result），占位保持格式
-    append_field_with_sync(a_blob, BoardBaseFieldId::PrevBoardResult as u32, |c| c.sync_i32(&mut tmp_i32));
+    append_field_with_sync(a_blob, BoardBaseFieldId::PrevBoardResult as u32, |c| c.sync_enum(&mut board.m_prev_board_result));
     append_field_with_sync(a_blob, BoardBaseFieldId::TriggeredLawnMowers as u32, |c| c.sync_i32(&mut board.m_triggered_lawn_mowers));
     // [TRANSLATION_NOTE]: mPlayTimeActiveLevel/mPlayTimeInactiveLevel/mMaxSunPlants 未翻译，占位保持格式
     append_field_with_sync(a_blob, BoardBaseFieldId::PlayTimeActiveLevel as u32, |c| c.sync_u32(&mut tmp_u32));
@@ -1151,8 +1148,8 @@ fn append_board_base_fields(a_blob: &mut Vec<u8>, board: &mut Board) {
     append_field_with_sync(a_blob, BoardBaseFieldId::StartDrawTime as u32, |c| c.sync_i64(&mut board.m_start_draw_time));
     append_field_with_sync(a_blob, BoardBaseFieldId::IntervalDrawTime as u32, |c| c.sync_i64(&mut board.m_interval_draw_time));
     append_field_with_sync(a_blob, BoardBaseFieldId::IntervalDrawCountStart as u32, |c| c.sync_u32(&mut board.m_interval_draw_count_start));
-    // [TRANSLATION_NOTE]: mMinFPS/mPreloadTime/mGameID（intptr_t）未翻译，占位保持格式
-    append_field_with_sync(a_blob, BoardBaseFieldId::MinFps as u32, |c| c.sync_f32(&mut tmp_f32));
+    // [TRANSLATION_NOTE]: mMinFPS 已接线；mPreloadTime/mGameID（intptr_t）未翻译，占位保持格式
+    append_field_with_sync(a_blob, BoardBaseFieldId::MinFps as u32, |c| c.sync_f32(&mut board.m_min_fps));
     append_field_with_sync(a_blob, BoardBaseFieldId::PreloadTime as u32, |c| c.sync_i32(&mut tmp_i32));
     append_field_with_sync(a_blob, BoardBaseFieldId::GameId as u32, |c| c.sync_i64(&mut tmp_i64));
     append_field_with_sync(a_blob, BoardBaseFieldId::GravesCleared as u32, |c| c.sync_u32(&mut board.m_graves_cleared));
@@ -1219,8 +1216,7 @@ fn apply_board_base_field(field_id: u32, data: &[u8], board: &mut Board) {
         BoardBaseFieldId::BonusLawnMowersRemaining => { apply_field_with_sync(data, |c| c.sync_i32(&mut tmp_i32)); }
         BoardBaseFieldId::IceMinX => { apply_field_with_sync(data, |c| sync_i32_array(c, &mut board.m_ice_min_x)); }
         BoardBaseFieldId::IceTimer => { apply_field_with_sync(data, |c| sync_i32_array(c, &mut board.m_ice_timer)); }
-        // [TRANSLATION_NOTE]: mIceParticleID[6] 未翻译，读取后丢弃
-        BoardBaseFieldId::IceParticleId => { apply_field_with_sync(data, |c| for _ in 0..MAX_GRID_SIZE_Y { c.sync_u32(&mut tmp_u32); }); }
+        BoardBaseFieldId::IceParticleId => { apply_field_with_sync(data, |c| for row in 0..MAX_GRID_SIZE_Y { c.sync_u32(&mut board.m_ice_particle_id[row]); }); }
         BoardBaseFieldId::RowPickingArray => { apply_field_with_sync(data, |c| sync_pvzp_smooth_array_list(c, &mut board.m_row_picking_array)); }
         BoardBaseFieldId::ZombiesInWave => {
             apply_field_with_sync(data, |c| for wave in 0..MAX_ZOMBIE_WAVES { for slot in 0..MAX_ZOMBIES_IN_WAVE { c.sync_enum(&mut board.m_zombies_in_wave[wave][slot]); } });
@@ -1282,8 +1278,7 @@ fn apply_board_base_field(field_id: u32, data: &[u8], board: &mut Board) {
             c.sync_i32(&mut raw);
             board.m_board_rand_seed = raw as u32;
         }); }
-        // [TRANSLATION_NOTE]: mPoolSparklyParticleID 未翻译，读取后丢弃
-        BoardBaseFieldId::PoolSparklyParticleId => { apply_field_with_sync(data, |c| c.sync_u32(&mut tmp_u32)); }
+        BoardBaseFieldId::PoolSparklyParticleId => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_pool_sparkly_particle_id)); }
         BoardBaseFieldId::FwooshId => {
             apply_field_with_sync(data, |c| for row in 0..MAX_GRID_SIZE_Y { for slot in 0..12 { c.sync_u32(&mut board.m_fwoosh_id[row][slot]); } });
         }
@@ -1302,8 +1297,7 @@ fn apply_board_base_field(field_id: u32, data: &[u8], board: &mut Board) {
         BoardBaseFieldId::DanceMode => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_dance_mode)); }
         BoardBaseFieldId::DaisyMode => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_daisy_mode)); }
         BoardBaseFieldId::SukhbirMode => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_sukhbir_mode)); }
-        // [TRANSLATION_NOTE]: mPrevBoardResult 未翻译，读取后丢弃
-        BoardBaseFieldId::PrevBoardResult => { apply_field_with_sync(data, |c| c.sync_i32(&mut tmp_i32)); }
+        BoardBaseFieldId::PrevBoardResult => { apply_field_with_sync(data, |c| c.sync_enum(&mut board.m_prev_board_result)); }
         BoardBaseFieldId::TriggeredLawnMowers => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_triggered_lawn_mowers)); }
         // [TRANSLATION_NOTE]: mPlayTimeActiveLevel/mPlayTimeInactiveLevel/mMaxSunPlants 未翻译，读取后丢弃
         BoardBaseFieldId::PlayTimeActiveLevel => { apply_field_with_sync(data, |c| c.sync_u32(&mut tmp_u32)); }
@@ -1312,8 +1306,8 @@ fn apply_board_base_field(field_id: u32, data: &[u8], board: &mut Board) {
         BoardBaseFieldId::StartDrawTime => { apply_field_with_sync(data, |c| c.sync_i64(&mut board.m_start_draw_time)); }
         BoardBaseFieldId::IntervalDrawTime => { apply_field_with_sync(data, |c| c.sync_i64(&mut board.m_interval_draw_time)); }
         BoardBaseFieldId::IntervalDrawCountStart => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_interval_draw_count_start)); }
-        // [TRANSLATION_NOTE]: mMinFPS/mPreloadTime/mGameID 未翻译，读取后丢弃
-        BoardBaseFieldId::MinFps => { apply_field_with_sync(data, |c| c.sync_f32(&mut tmp_f32)); }
+        // [TRANSLATION_NOTE]: mMinFPS 已接线；mPreloadTime/mGameID 未翻译，读取后丢弃
+        BoardBaseFieldId::MinFps => { apply_field_with_sync(data, |c| c.sync_f32(&mut board.m_min_fps)); }
         BoardBaseFieldId::PreloadTime => { apply_field_with_sync(data, |c| c.sync_i32(&mut tmp_i32)); }
         BoardBaseFieldId::GameId => { apply_field_with_sync(data, |c| c.sync_i64(&mut tmp_i64)); }
         BoardBaseFieldId::GravesCleared => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_graves_cleared)); }
