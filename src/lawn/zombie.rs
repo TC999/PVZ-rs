@@ -884,7 +884,7 @@ impl Zombie {
     }
 
     pub fn pick_random_speed(&mut self) {
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        // 对应 C++ Zombie::PickRandomSpeed：按僵尸类型/阶段设置 mVelX 与 mAnimTicksPerFrame
         if self.zombie_phase == ZombiePhase::SnorkelWalkingInPool {
             self.vel_x = 0.3;
         } else if self.zombie_phase == ZombiePhase::DiggerWalking {
@@ -3500,7 +3500,7 @@ impl Zombie {
         zombie.take_damage(DAMAGE_PER_EAT, 9);  // DAMAGE_PER_EAT = TICKS_BETWEEN_EATS = 4
         self.start_eating();
         if zombie.body_health <= 0 {
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+            // C++: mApp->PlaySample(SOUND_GULP)——吞吃音效未接入
         }
     }
 
@@ -3566,7 +3566,7 @@ impl Zombie {
     }
 
     pub fn effected_by_damage(&self, damage_range_flags: u32) -> bool {
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        // 对应 C++ EffectedByDamage：按伤害范围标志与僵尸状态判定是否有效伤害
         if !test_bit(damage_range_flags, 5) && self.is_dead_or_dying() {
             return false;
         }
@@ -3587,7 +3587,7 @@ impl Zombie {
             return false;
         }
         if self.zombie_type == ZombieType::Boss {
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+            // C++: mZombieType == ZOMBIE_BOSS 时仅特定头部阶段可被伤害
             if self.zombie_phase == ZombiePhase::BossHeadEnter {
                 return false;
             }
@@ -3626,8 +3626,7 @@ impl Zombie {
         if self.zombie_height == ZombieHeight::DraggedUnder {
             return true;
         }
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        // C++ 默认返回 false（其余情况不判定为有效伤害）
         false
     }
 
@@ -3669,8 +3668,7 @@ impl Zombie {
         }
 
         self.buttered_counter = 400;
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        // C++: ZombieTryToGet(mRelatedZombieID) 后互清 related ID（Zombie.cpp:8523）；Rust 未保留该清理
 
         if self.zombie_type == ZombieType::Pogo {
             self.altitude = 0.0;
@@ -3678,9 +3676,9 @@ impl Zombie {
                 self.altitude += HIGH_GROUND_HEIGHT;
             }
         } else if self.zombie_type == ZombieType::Balloon {
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+            // C++: BalloonPropellerHatSpin(false)——气球螺旋桨停转
         } else if Self::is_zombotany(self.zombie_type) {
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+            // C++: aHeadReanim->mAnimRate = 0.0f——植物头僵尸停止动画（reanim 覆盖未接入）
         }
 
         self.update_anim_speed();
@@ -3698,7 +3696,7 @@ impl Zombie {
         }
 
         if self.zombie_type == ZombieType::SquashHead && !self.has_head {
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+            // C++: RemoveReanimation(mSpecialHeadReanimID) + 置空（Zombie.cpp:8672）
             self.special_head_reanim_id = REANIMATIONID_NULL;
         }
 
@@ -3707,7 +3705,8 @@ impl Zombie {
         }
         self.buttered_counter = self.buttered_counter.min(0);
 
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        // C++: AttachmentDetachCrossFadeParticleType(PARTICLE_ZAMBONI_SMOKE) + BungeeDropPlant()
+        //（附着粒子/绳降依赖未接入，见 Zombie.cpp:8680）
 
         if self.zombie_phase == ZombiePhase::Dying
             || self.zombie_phase == ZombiePhase::PolevaulterInVault
@@ -3740,14 +3739,13 @@ impl Zombie {
             self.drop_loot();
 
             if self.zombie_type == ZombieType::Balloon {
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+                // C++: BalloonPropellerHatSpin(false)——燃烧气球停转螺旋桨（Zombie.cpp:8712）
             }
         } else {
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+            // C++ 其余情况：DieWithLoot()
             self.die_with_loot();
         }
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        // 对应 C++ ApplyBurn（Zombie.cpp:8660）结束
     }
 
     pub fn hit_ice_trap(&mut self) {
@@ -3771,10 +3769,10 @@ impl Zombie {
 
         self.stop_zombie_sound();
         if self.zombie_type == ZombieType::Balloon {
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+            // C++: 冰阱命中时气球螺旋桨停转（BalloonPropellerHatSpin(false)）
         }
         if self.zombie_phase == ZombiePhase::BossHeadSpit {
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+            // C++: Boss 吐息阶段冻结特殊头动画（mSpecialHeadReanimID）
         }
 
         self.take_damage(20, 1);
@@ -3819,16 +3817,14 @@ impl Zombie {
             self.phase_counter = 50;
             self.zombie_height = ZombieHeight::Normal;
             self.start_walk_anim(0);
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+            // C++: 水池分支完成（进入泳池行走，见 RiseFromGrave Zombie.cpp:8184）
         } else {
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+            // C++: 非水池分支（陆地出土）
         }
     }
 
     pub fn walk_into_house(&mut self) {
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+        // 对应 C++ Zombie::WalkIntoHouse（Zombie.cpp:9633）：胜利后僵尸走入屋内
         self.from_wave = Zombie::ZOMBIE_WAVE_WINNER;
         self.reanim_reenable_clipping();
 
@@ -3880,8 +3876,7 @@ impl Zombie {
             } else if self.zombie_type == ZombieType::Zamboni {
                 self.pos_x -= 28.0;
             }
-
-    // [TRANSLATION_NOTE]: comment garbled in local file; see C++ Zombie.cpp
+            // C++: 位置微调后完成胜利行走（WalkIntoHouse 结束）
         }
     }
 
