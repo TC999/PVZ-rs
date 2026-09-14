@@ -1352,22 +1352,6 @@ pub enum PottedPlantNeed {
     Phonograph,
 }
 
-/// ProjectileMotion — 抛射物运动方式
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(i32)]
-pub enum ProjectileMotion {
-    Straight = 0,
-    Lobbed,
-    Threepeater,
-    Bee,
-    BeeBackwards,
-    Floating,
-    Following,
-    Homing,
-    Slow,
-    Boomerang,
-}
-
 /// ProjectileType — 抛射物类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]

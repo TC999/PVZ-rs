@@ -24,15 +24,16 @@ fn pvzp_scale_rotate_transform_matrix(m: &mut SexyMatrix3, x: f32, y: f32, rad: 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum ProjectileMotion {
-    Straight = 0,
-    Lobbed,
-    Floating,
-    Threepeater,
-    Star,
-    /// 对应 C++ MOTION_BACKWARDS（ZombiePea 向左直飞）
-    Backwards,
-    /// 对应 C++ MOTION_BEE_BACKWARDS（蜜蜂向后飞，绘制时需镜像）
-    BeeBackwards,
+    Straight = 0,      // MOTION_STRAIGHT
+    Lobbed = 1,        // MOTION_LOBBED
+    Threepeater = 2,   // MOTION_THREEPEATER
+    Bee = 3,           // MOTION_BEE
+    BeeBackwards = 4,  // MOTION_BEE_BACKWARDS（蜜蜂向后飞，绘制时需镜像）
+    Puff = 5,          // MOTION_PUFF（直飞，随时间淡出）
+    Backwards = 6,     // MOTION_BACKWARDS（ZombiePea 向左直飞）
+    Star = 7,          // MOTION_STAR（斜向）
+    Floating = 8,      // MOTION_FLOAT_OVER（慢速漂浮，无碰撞）
+    Homing = 9,        // MOTION_HOMING（追踪）
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

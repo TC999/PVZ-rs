@@ -1015,19 +1015,17 @@ impl Plant {
                     proj.shadow_y -= 80.0;
                 }
             } else if self.seed_type == SeedType::Puffshroom || self.seed_type == SeedType::Seashroom {
-                // [TRANSLATION_NOTE]: C++ MOTION_PUFF 未在 Rust 枚举中，用 Floating 近似
-                proj.motion = crate::lawn::projectile::ProjectileMotion::Floating;
+                // C++: aProjectile->mMotionType = MOTION_PUFF（Plant.cpp:4740）
+                proj.motion = crate::lawn::projectile::ProjectileMotion::Puff;
             } else if self.seed_type == SeedType::Splitpea && the_plant_weapon == PlantWeapon::Secondary {
-                // [TRANSLATION_NOTE]: C++ MOTION_BACKWARDS 未在 Rust 枚举中，暂用 Straight + 负速
-                proj.motion = crate::lawn::projectile::ProjectileMotion::Straight;
-                proj.vel_x = -3.33;
+                // C++: aProjectile->mMotionType = MOTION_BACKWARDS（Plant.cpp:4744，向左由运动逻辑处理）
+                proj.motion = crate::lawn::projectile::ProjectileMotion::Backwards;
             } else if self.seed_type == SeedType::Leftpeater {
-                // [TRANSLATION_NOTE]: C++ MOTION_BACKWARDS 未在 Rust 枚举中，暂用 Straight + 负速
-                proj.motion = crate::lawn::projectile::ProjectileMotion::Straight;
-                proj.vel_x = -3.33;
+                // C++: aProjectile->mMotionType = MOTION_BACKWARDS（Plant.cpp:4748）
+                proj.motion = crate::lawn::projectile::ProjectileMotion::Backwards;
             } else if self.seed_type == SeedType::Cattail {
-                // [TRANSLATION_NOTE]: C++ MOTION_HOMING 未在 Rust 枚举中，暂用 Straight
-                proj.motion = crate::lawn::projectile::ProjectileMotion::Straight;
+                // C++: aProjectile->mMotionType = MOTION_HOMING（Plant.cpp:4753）+ mTargetZombieID
+                proj.motion = crate::lawn::projectile::ProjectileMotion::Homing;
                 proj.target_zombie_id = target_zombie_id.unwrap_or(ZOMBIEID_NULL);
             } else if self.seed_type == SeedType::Cobcannon {
                 proj.motion = crate::lawn::projectile::ProjectileMotion::Lobbed;
