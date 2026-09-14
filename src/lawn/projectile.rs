@@ -350,8 +350,20 @@ impl Projectile {
             }
         }
 
-        // [TRANSLATION_NOTE]: HighGravity 模式暂略
-        // [TRANSLATION_NOTE]: CheckForCollision + CheckForHighGround 暂略
+        // C++: mApp->mGameMode == GAMEMODE_CHALLENGE_HIGH_GRAVITY 时重力增强（Projectile.cpp:369-376）
+        if self
+            .base
+            .get_app()
+            .map_or(false, |app| app.game_mode == GameMode::ChallengeHighGravity)
+        {
+            if self.motion == ProjectileMotion::Floating {
+                self.vel_z += 0.004;
+            } else {
+                self.vel_z += 0.2;
+            }
+            self.pos_y += self.vel_z;
+        }
+        // [TRANSLATION_NOTE]: CheckForHighGround 暂略（碰撞检测 CheckForCollision 已在 update() 调用）
     }
 
     /// 更新抛物线运动（对应 C++ Projectile::UpdateLobMotion）
