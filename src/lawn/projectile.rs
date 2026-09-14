@@ -498,25 +498,58 @@ impl Projectile {
         let motion = self.motion;
         let proj_age = self.projectile_age;
 
-        // 生命周期检查：Puff 75帧
-        if motion == ProjectileMotion::Floating && proj_age >= 75 {
+        // C++: MOTION_PUFF && mProjectileAge >= 75 → Die（Projectile.cpp:340）
+        if motion == ProjectileMotion::Puff && proj_age >= 75 {
             self.die();
             return;
         }
 
-        // 飞出屏幕
-        if my_pos_x > 900.0 || (my_pos_x + my_width as f32) < 0.0 {
+        // C++: mPosX > WIDE_BOARD_WIDTH || mPosX + mWidth < 0 → Die（:343）
+        if my_pos_x > WIDE_BOARD_WIDTH as f32 || (my_pos_x + my_width as f32) < 0.0 {
             self.die();
             return;
         }
 
-        // 星星飞出垂直范围
+        // C++: MOTION_HOMING —— 追踪目标僵尸的专用碰撞（:347-360）
+        if motion == ProjectileMotion::Homing {
+            if let Some(board) = self.base.get_board() {
+                if let Some(a_zombie) = board.zombies.get(self.target_zombie_id as usize) {
+                    if a_zombie.effected_by_damage(self.damage_range_flags) {
+                        let a_projectile_rect = self.get_projectile_rect();
+                        let a_zombie_rect = a_zombie.get_zombie_rect();
+                        // C++: GetRectOverlap(aProjectileRect, aZombieRect) >= 0
+                        //      && mPosY > aZombieRect.mY && mPosY < aZombieRect.mY + mHeight → DoImpact
+                        if crate::lawn::board::get_rect_overlap(&a_projectile_rect, &a_zombie_rect) >= 0
+                            && my_pos_y > a_zombie_rect.y as f32
+                            && my_pos_y < (a_zombie_rect.y + a_zombie_rect.height) as f32
+                        {
+                            self.do_impact_by_index(self.target_zombie_id as usize);
+                        }
+                    }
+                }
+            }
+            return;
+        }
+
+        // C++: PROJECTILE_STAR && (mPosY > 600 || mPosY < 40) → Die（:362）
         if proj_type == ProjectileType::Star && (my_pos_y > 600.0 || my_pos_y < 40.0) {
             self.die();
             return;
         }
 
-        // 僵尸豌豆：专打植物（对应 C++ CheckForCollision 的 PROJECTILE_ZOMBIE_PEA 分支）
+        // C++: (PEA || STAR) && mShadowY - mPosY > 90 → return（不碰撞，:365）
+        if (proj_type == ProjectileType::Pea || proj_type == ProjectileType::Star)
+            && self.shadow_y - my_pos_y > 90.0
+        {
+            return;
+        }
+
+        // C++: MOTION_FLOAT_OVER → return（:369）
+        if motion == ProjectileMotion::Floating {
+            return;
+        }
+
+        // C++: PROJECTILE_ZOMBIE_PEA —— 专打植物（:371-385）
         if proj_type == ProjectileType::ZombiePea {
             let hit_plant_idx = self.find_collision_target_plant();
             if let Some(plant_idx) = hit_plant_idx {
@@ -536,10 +569,18 @@ impl Projectile {
             return;
         }
 
-        // 查找碰撞僵尸（对应 C++ FindCollisionTarget）
+        // C++: FindCollisionTarget + aZombie->mOnHighGround && CantHitHighGround() → return（:387-394）
         let hit_zombie_idx = self.find_collision_target();
 
         if let Some(zombie_idx) = hit_zombie_idx {
+            let a_zombie_on_high_ground = self
+                .base
+                .get_board()
+                .and_then(|b| b.zombies.get(zombie_idx))
+                .map_or(false, |z| z.on_high_ground);
+            if a_zombie_on_high_ground && self.cant_hit_high_ground() {
+                return;
+            }
             self.do_impact_by_index(zombie_idx);
         }
     }
@@ -1201,11 +1242,20 @@ impl Projectile {
 
     /// 无法击中高台（对应 C++ CantHitHighGround）
     pub fn cant_hit_high_ground(&self) -> bool {
-        self.projectile_type == ProjectileType::Pea
-            || self.projectile_type == ProjectileType::Snowpea
-            || self.projectile_type == ProjectileType::Cactus
-            || self.projectile_type == ProjectileType::Spike
-            || self.projectile_type == ProjectileType::Kernel
+        // 对应 C++ CantHitHighGround（Projectile.cpp:395-407）：
+        // BACKWARDS/HOMING 恒可命中（返回 false）；
+        // 其余 (PEA|SNOWPEA|STAR|PUFF|FIREBALL) 且自身不在高台时不可命中
+        if self.motion == ProjectileMotion::Backwards || self.motion == ProjectileMotion::Homing {
+            return false;
+        }
+        matches!(
+            self.projectile_type,
+            ProjectileType::Pea
+                | ProjectileType::Snowpea
+                | ProjectileType::Star
+                | ProjectileType::Puff
+                | ProjectileType::Fireball
+        ) && !self.on_high_ground
     }
 
     /// 检查高台（对应 C++ CheckForHighGround）
