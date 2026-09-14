@@ -2659,7 +2659,9 @@ impl Zombie {
                     self.boss_play_idle();
                 }
             }
-            _ => {}
+            _ => {
+                // C++: else 分支为 PVZP_ASSERT(false)——所有 Boss 阶段均已覆盖，Rust 不应到达
+            }
         }
     }
     fn find_plant_target_index(&self, attack_type: ZombieAttackType) -> Option<usize> {
