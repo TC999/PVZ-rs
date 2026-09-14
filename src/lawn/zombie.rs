@@ -7445,7 +7445,8 @@ impl Zombie {
             an_offset_x += 90.0 * scale_zombie;
         }
 
-        // [TRANSLATION_NOTE]: C++ 中 mOverlayMatrix 设置/PropogateColorToAttachments — Rust Reanimation 无 overlay 矩阵字段
+        // [TRANSLATION_NOTE]: C++ 中 mOverlayMatrix 设置/PropogateColorToAttachments —
+        // Rust Reanimation 有 m_overlay_matrix 字段但该处未用矩阵，以 override_scale/set_position 近似
         body.override_scale(scale_zombie, scale_zombie);
         body.set_position(
             an_offset_x + 30.0 - scale_zombie * 30.0,
