@@ -682,7 +682,12 @@ impl Coin {
                     self.disappear_counter = 0;
                     self.fade_count = 0;
                     if a_is_endless_award {
-                        // [TRANSLATION_NOTE]: AttachmentDetachCrossFadeParticleType 未实现
+                        // 对应 C++ Coin.cpp:1083 AttachmentDetachCrossFadeParticleType(mAttachmentID, PARTICLE_AWARD_PICKUP_ARROW, nullptr)
+                        crate::todlib::attachment::attachment_detach_cross_fade_particle_type(
+                            &mut self.attachment_id,
+                            ParticleEffect::AwardPickupArrow,
+                            None,
+                        );
                         if let Some(board) = board_ptr {
                             (*board).fade_out_level();
                         }
@@ -694,10 +699,25 @@ impl Coin {
 
         // C++ 1086-1099: COIN_PRESENT_MINIGAMES
         if self.coin_type == CoinType::PresentMinigames {
-            // [TRANSLATION_NOTE]: AddPvzpParticle 未实现
+            // 对应 C++ Coin.cpp:1089 AddPvzpParticle(mPosX+30, mPosY+30, mRenderOrder+1, PARTICLE_PRESENT_PICKUP)
+            if let Some(app) = app_ptr {
+                unsafe {
+                    (*app).add_tod_particle(
+                        self.pos_x + 30.0,
+                        self.pos_y + 30.0,
+                        self.base.render_order + 1,
+                        ParticleEffect::PresentPickup as i32,
+                    );
+                }
+            }
             self.disappear_counter = 0;
             self.fade_count = 0;
-            // [TRANSLATION_NOTE]: AttachmentDetachCrossFadeParticleType 未实现
+            // 对应 C++ Coin.cpp:1094 AttachmentDetachCrossFadeParticleType(mAttachmentID, PARTICLE_AWARD_PICKUP_ARROW, nullptr)
+            crate::todlib::attachment::attachment_detach_cross_fade_particle_type(
+                &mut self.attachment_id,
+                ParticleEffect::AwardPickupArrow,
+                None,
+            );
             if let Some(app) = app_ptr {
                 unsafe {
                     if let Some(pi) = (*app).player_info.as_mut() {
@@ -709,10 +729,25 @@ impl Coin {
         }
         // C++ 1100-1113: COIN_PRESENT_PUZZLE_MODE
         if self.coin_type == CoinType::PresentPuzzleMode {
-            // [TRANSLATION_NOTE]: AddPvzpParticle 未实现
+            // 对应 C++ Coin.cpp:1103 AddPvzpParticle(PARTICLE_PRESENT_PICKUP)
+            if let Some(app) = app_ptr {
+                unsafe {
+                    (*app).add_tod_particle(
+                        self.pos_x + 30.0,
+                        self.pos_y + 30.0,
+                        self.base.render_order + 1,
+                        ParticleEffect::PresentPickup as i32,
+                    );
+                }
+            }
             self.disappear_counter = 0;
             self.fade_count = 0;
-            // [TRANSLATION_NOTE]: AttachmentDetachCrossFadeParticleType 未实现
+            // 对应 C++ Coin.cpp:1109 AttachmentDetachCrossFadeParticleType(mAttachmentID, PARTICLE_AWARD_PICKUP_ARROW, nullptr)
+            crate::todlib::attachment::attachment_detach_cross_fade_particle_type(
+                &mut self.attachment_id,
+                ParticleEffect::AwardPickupArrow,
+                None,
+            );
             if let Some(app) = app_ptr {
                 unsafe {
                     if let Some(pi) = (*app).player_info.as_mut() {
@@ -724,10 +759,25 @@ impl Coin {
         }
         // C++ 1114-1127: COIN_PRESENT_SURVIVAL_MODE
         if self.coin_type == CoinType::PresentSurvivalMode {
-            // [TRANSLATION_NOTE]: AddPvzpParticle 未实现
+            // 对应 C++ Coin.cpp:1117 AddPvzpParticle(PARTICLE_PRESENT_PICKUP)
+            if let Some(app) = app_ptr {
+                unsafe {
+                    (*app).add_tod_particle(
+                        self.pos_x + 30.0,
+                        self.pos_y + 30.0,
+                        self.base.render_order + 1,
+                        ParticleEffect::PresentPickup as i32,
+                    );
+                }
+            }
             self.disappear_counter = 0;
             self.fade_count = 0;
-            // [TRANSLATION_NOTE]: AttachmentDetachCrossFadeParticleType 未实现
+            // 对应 C++ Coin.cpp:1123 AttachmentDetachCrossFadeParticleType(mAttachmentID, PARTICLE_AWARD_PICKUP_ARROW, nullptr)
+            crate::todlib::attachment::attachment_detach_cross_fade_particle_type(
+                &mut self.attachment_id,
+                ParticleEffect::AwardPickupArrow,
+                None,
+            );
             if let Some(app) = app_ptr {
                 unsafe {
                     if let Some(pi) = (*app).player_info.as_mut() {
@@ -767,7 +817,12 @@ impl Coin {
                     self.disappear_counter = 0;
                     self.start_fade();
                     if a_is_endless_award {
-                        // [TRANSLATION_NOTE]: AttachmentDetachCrossFadeParticleType 未实现
+                        // 对应 C++ Coin.cpp:1150 AttachmentDetachCrossFadeParticleType(mAttachmentID, PARTICLE_AWARD_PICKUP_ARROW, nullptr)
+                        crate::todlib::attachment::attachment_detach_cross_fade_particle_type(
+                            &mut self.attachment_id,
+                            ParticleEffect::AwardPickupArrow,
+                            None,
+                        );
                         if let Some(board) = board_ptr {
                             (*board).fade_out_level();
                         }
@@ -822,18 +877,74 @@ impl Coin {
                         (*app).play_sample(SOUND_TAP2);
                     }
 
-                    // [TRANSLATION_NOTE]: AddPvzpParticle(PARTICLE_STARBURST) 未实现
+                    // 对应 C++ Coin.cpp:1218 AddPvzpParticle(mPosX+30, mPosY+30, mRenderOrder+1, PARTICLE_STARBURST)
+                    if let Some(app) = app_ptr {
+                        unsafe {
+                            (*app).add_tod_particle(
+                                self.pos_x + 30.0,
+                                self.pos_y + 30.0,
+                                self.base.render_order + 1,
+                                ParticleEffect::Starburst as i32,
+                            );
+                        }
+                    }
                     if let Some(board) = board_ptr {
                         (*board).fade_out_level();
                     }
-                    // [TRANSLATION_NOTE]: AttachmentDetachCrossFadeParticleType x3 未实现
+                    // 对应 C++ Coin.cpp:1225-1227 AttachmentDetachCrossFadeParticleType x3
+                    crate::todlib::attachment::attachment_detach_cross_fade_particle_type(
+                        &mut self.attachment_id,
+                        ParticleEffect::SeedPacket,
+                        None,
+                    );
+                    crate::todlib::attachment::attachment_detach_cross_fade_particle_type(
+                        &mut self.attachment_id,
+                        ParticleEffect::AwardPickupArrow,
+                        None,
+                    );
+                    crate::todlib::attachment::attachment_detach_cross_fade_particle_type(
+                        &mut self.attachment_id,
+                        ParticleEffect::CoinPickupArrow,
+                        None,
+                    );
 
                     if self.coin_type == CoinType::Note {
-                        // [TRANSLATION_NOTE]: AddPvzpParticle(PARTICLE_PRESENT_PICKUP) 未实现
+                        // 对应 C++ Coin.cpp:1230 AddPvzpParticle(PARTICLE_PRESENT_PICKUP)
+                        if let Some(app) = app_ptr {
+                            unsafe {
+                                (*app).add_tod_particle(
+                                    self.pos_x + 30.0,
+                                    self.pos_y + 30.0,
+                                    self.base.render_order + 1,
+                                    ParticleEffect::PresentPickup as i32,
+                                );
+                            }
+                        }
                         self.start_fade();
                     } else if !a_is_endless_award {
-                        // [TRANSLATION_NOTE]: Is3DAccelerated 未实现；AttachParticle 未实现
-                        // C++ 1234-1240: 3D 加速时附加 PARTICLE_SEED_PACKET_PICKUP
+                        // 对应 C++ Coin.cpp:1234-1240: 3D 加速时附加 PARTICLE_SEED_PACKET_PICKUP
+                        // [TRANSLATION_NOTE]: Is3DAccelerated 恒真（与 Rust 全库 3D 加速默认一致），
+                        // 附件粒子经 AttachParticle 挂接
+                        if let Some(app) = app_ptr {
+                            unsafe {
+                                let a_particle_offset_x = self.base.width / 2;
+                                let a_particle_offset_y = self.base.height / 2;
+                                let a_particle = (*app).add_tod_particle(
+                                    self.pos_x + a_particle_offset_x as f32,
+                                    self.pos_y + a_particle_offset_y as f32,
+                                    self.base.render_order - 1,
+                                    ParticleEffect::SeedPacketPickup as i32,
+                                );
+                                if let Some(a_particle) = a_particle {
+                                    crate::todlib::attachment::attach_particle(
+                                        &mut self.attachment_id,
+                                        a_particle as *mut std::ffi::c_void,
+                                        a_particle_offset_x as f32,
+                                        a_particle_offset_y as f32,
+                                    );
+                                }
+                            }
+                        }
                     }
 
                     self.disappear_counter = 0;
@@ -889,7 +1000,12 @@ impl Coin {
             }
         }
 
-        // [TRANSLATION_NOTE]: AttachmentDetachCrossFadeParticleType(PARTICLE_COIN_PICKUP_ARROW) 未实现
+        // 对应 C++ Coin.cpp:1285 AttachmentDetachCrossFadeParticleType(mAttachmentID, PARTICLE_COIN_PICKUP_ARROW, nullptr)
+        crate::todlib::attachment::attachment_detach_cross_fade_particle_type(
+            &mut self.attachment_id,
+            ParticleEffect::CoinPickupArrow,
+            None,
+        );
 
         // C++ 1286-1289: 首次冒险模式 1-11 关点击金币提示
         if let Some(app) = app_ptr {

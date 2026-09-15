@@ -400,13 +400,67 @@ pub static mut G_LAWN_TRAIL_ARRAY: [TrailParams; 1] = [TrailParams::new(TRAIL_IC
 
 // ======== 自由函数 ========
 
-/// 加载单条轨迹定义（对应 C++ TrailLoadADef，Trail.cpp:45）
+/// 加载单条轨迹定义（对应 C++ TrailLoadADef，Trail.cpp:45：
+/// DefinitionLoadXML + FloatTrackSetDefault 默认值阶段）
 pub fn trail_load_a_def(
     trail_def: &mut TrailDefinition,
-    _trail_file_name: &str,
+    trail_file_name: &str,
 ) -> bool {
-    // [TRANSLATION_NOTE]: C++ 的 DefinitionLoadXML（XML 解析）在 Rust 端暂未实现，
-    // 定义由后续轮次的解析器填充；此处完成 C++ 的 FloatTrackSetDefault 默认值阶段。
+    // 对应 C++ DefinitionLoadXML(theTrailFileName, &gTrailDefMap, theTrailDef)
+    let xml_data = crate::framework::paklib::with_pak_interface(|pak| pak.load_file(trail_file_name));
+    let xml = match xml_data {
+        Some(data) => String::from_utf8_lossy(&data).to_string(),
+        None => return false,
+    };
+    let nodes = crate::todlib::xml_parser::parse_fragment(&xml);
+    // 对应 C++ gTrailDefFields（Definition.cpp:44-55）
+    for node in &nodes {
+        let field_name = node.name.as_str();
+        let text = node.text.trim().to_string();
+        match field_name {
+            "Image" => {
+                let a_idx = crate::todlib::reanim_loader::resolve_reanim_image_name(&text);
+                trail_def.m_image = crate::todlib::reanim_loader::reanimator_get_image(a_idx)
+                    .unwrap_or(std::ptr::null_mut());
+            }
+            "MaxPoints" => trail_def.m_max_points = text.parse().unwrap_or(2),
+            "MinPointDistance" => trail_def.m_min_point_distance = text.parse().unwrap_or(0.0),
+            "TrailFlags" => {
+                // 对应 C++ DT_FLAGS（gTrailFlagDefSymbols：Loops=0）
+                let a_flag: f32 = text.parse().unwrap_or(0.0);
+                if a_flag != 0.0 {
+                    trail_def.m_trail_flags |= 1 << 0;
+                }
+            }
+            "WidthOverLength" => {
+                if let Some(t) = crate::todlib::tod_particle::parse_float_track(&text) {
+                    trail_def.m_width_over_length = t;
+                }
+            }
+            "WidthOverTime" => {
+                if let Some(t) = crate::todlib::tod_particle::parse_float_track(&text) {
+                    trail_def.m_width_over_time = t;
+                }
+            }
+            "AlphaOverLength" => {
+                if let Some(t) = crate::todlib::tod_particle::parse_float_track(&text) {
+                    trail_def.m_alpha_over_length = t;
+                }
+            }
+            "AlphaOverTime" => {
+                if let Some(t) = crate::todlib::tod_particle::parse_float_track(&text) {
+                    trail_def.m_alpha_over_time = t;
+                }
+            }
+            "TrailDuration" => {
+                if let Some(t) = crate::todlib::tod_particle::parse_float_track(&text) {
+                    trail_def.m_trail_duration = t;
+                }
+            }
+            _ => {}
+        }
+    }
+    // 对应 C++ FloatTrackSetDefault（Trail.cpp:48-53）
     trail_def.m_width_over_length.set_default(1.0);
     trail_def.m_width_over_time.set_default(1.0);
     trail_def.m_trail_duration.set_default(100.0);
@@ -446,7 +500,8 @@ pub fn trail_load_definitions(params: &mut [TrailParams]) {
 /// 释放轨迹定义（对应 C++ TrailFreeDefinitions，Trail.cpp:70）
 pub fn trail_free_definitions() {
     unsafe {
-        // [TRANSLATION_NOTE]: C++ 中 DefinitionFreeMap 释放 XML map；Rust 无 XML 解析，仅回收数组
+        // 对应 C++ TrailFreeDefinitions：DefinitionFreeMap 释放 XML map；
+        // Rust 侧回收原始数组（XML 定义由 trail_load_a_def 解析后随数组释放）
         if !G_TRAIL_DEF_ARRAY.is_null() {
             let count = G_TRAIL_DEF_COUNT as usize;
             let _ = Vec::from_raw_parts(G_TRAIL_DEF_ARRAY, count, count);
@@ -471,4 +526,25 @@ fn normalize(v: SexyVector2) -> SexyVector2 {
 
 fn approx_zero(v: f32) -> bool {
     v.abs() < 0.0001
+}
+
+#[cfg(test)]
+mod trail_tests {
+    use super::*;
+
+    #[test]
+    fn test_trail_load_ice() {
+        crate::framework::paklib::init_pak_interface();
+        crate::framework::paklib::with_pak_interface_mut(|pak| { pak.add_pak_file("main.pak"); });
+        let mut def = TrailDefinition::new();
+        let ok = trail_load_a_def(&mut def, "particles/IceTrail.trail");
+        assert!(ok, "IceTrail.trail 应加载成功");
+        // XML 加载成功：WidthOverLength 由 XML 定义（节点数 >= 1）
+        assert!(!def.m_width_over_length.nodes.is_empty());
+        // 未显式定义的 track 得到默认值（m_trail_duration 默认 100.0）
+        if !def.m_trail_duration.nodes.is_empty() {
+            assert_eq!(def.m_trail_duration.nodes[0].low_value, 100.0);
+        }
+        println!("TRAIL OK: max_points={}", def.m_max_points);
+    }
 }

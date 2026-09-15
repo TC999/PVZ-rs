@@ -6,6 +6,7 @@
 use crate::lawn::game_enums::{ParticleID, ReanimationID, CoinID, ATTACHMENTID_NULL};
 use crate::todlib::reanimator::Reanimation;
 use crate::todlib::tod_particle::ParticleSystem;
+use crate::todlib::tod_particle::MAX_PARTICLES_SIZE;
 use crate::todlib::attachment::Attachment;
 use crate::todlib::trail::Trail;
 use crate::framework::graphics::graphics::Graphics;
@@ -28,16 +29,23 @@ pub struct EffectSystem {
     pub attachments: Vec<Attachment>,
     /// 对应 C++ mTrailHolder->mTrails（Rust 以 Vec 承载 Trail）
     pub trails: Vec<Trail>,
+    /// 粒子发射器/粒子池（对应 C++ mParticleHolder->mEmitters/mParticles；
+    /// 粒子系统本体由 particle_systems Vec 承载，emitter 分配经此 holder 完成）
+    pub particle_holder: crate::todlib::tod_particle::TodParticleHolder,
 }
 
 impl EffectSystem {
     pub fn new() -> Self {
-        EffectSystem {
+        let mut es = EffectSystem {
             reanimations: Vec::new(),
             particle_systems: Vec::new(),
             attachments: Vec::new(),
             trails: Vec::new(),
-        }
+            particle_holder: crate::todlib::tod_particle::TodParticleHolder::new(),
+        };
+        // 对应 C++ EffectSystem 初始化：mParticleHolder->InitializeHolder()
+        es.particle_holder.initialize_holder();
+        es
     }
 
     /// 更新所有特效（对应 C++ EffectSystem::Update；
@@ -95,6 +103,58 @@ impl EffectSystem {
             p.self_id = id;
         }
         id
+    }
+
+    /// 从定义分配粒子系统并加入系统数组（对应 C++ PvzpParticleHolder::AllocParticleSystemFromDef）
+    /// 系统本体存于 particle_systems Vec；emitter 分配经 particle_holder 完成
+    pub fn alloc_particle_system_from_def(
+        &mut self,
+        x: f32,
+        y: f32,
+        render_order: i32,
+        definition: *mut crate::todlib::tod_particle::TodParticleDefinition,
+        effect: crate::lawn::game_enums::ParticleEffect,
+    ) -> Option<*mut ParticleSystem> {
+        // 对应 C++: 系统数组满
+        if self.particle_systems.len() as u32 >= MAX_PARTICLES_SIZE as u32 {
+            return None;
+        }
+        unsafe {
+            let def = &*definition;
+            // 对应 C++: 定义中的发射器数量 + 现有发射器数超过上限
+            if def.emitter_defs.len() as u32 + self.particle_holder.emitters.len() as u32
+                > self.particle_holder.emitters.max_size()
+            {
+                return None;
+            }
+        }
+        let mut a_system = ParticleSystem::new();
+        let id = self.add_particle_system(a_system);
+        let idx = (id - 1) as usize;
+        let a_system_ptr = &mut self.particle_systems[idx] as *mut ParticleSystem;
+        unsafe {
+            (*a_system_ptr).particle_holder = &mut self.particle_holder as *mut _;
+            (*a_system_ptr).pvzp_particle_initialize_from_def(
+                x,
+                y,
+                render_order,
+                definition,
+                effect,
+            );
+        }
+        Some(a_system_ptr)
+    }
+
+    /// 按效果类型分配粒子系统（对应 C++ PvzpParticleHolder::AllocParticleSystem）
+    pub fn alloc_particle_system(
+        &mut self,
+        x: f32,
+        y: f32,
+        render_order: i32,
+        effect: crate::lawn::game_enums::ParticleEffect,
+    ) -> Option<*mut ParticleSystem> {
+        let a_def = crate::todlib::tod_particle::particle_get_definition(effect)?;
+        self.alloc_particle_system_from_def(x, y, render_order, a_def, effect)
     }
 
     /// 按 ID 获取粒子系统（对应 C++ EffectSystem::ParticleTryToGet 语义）

@@ -11,7 +11,7 @@ use std::ptr;
 use std::collections::LinkedList;
 
 use crate::lawn::game_enums::{
-    ParticleID, ParticleEmitterID, ParticleSystemID,
+    ParticleID, ParticleEmitterID, ParticleSystemID, ParticleEffect,
     PARTICLESYSTEMID_NULL, PARTICLEID_NULL, PARTICLEEMITTERID_NULL,
     TodCurves,
 };
@@ -34,7 +34,7 @@ static mut G_PARTICLE_DEF_ARRAY: Vec<TodParticleDefinition> = Vec::new();
 /// 获取粒子定义（对应 C++ gParticleDefArray[theParticleEffect]）
 pub fn particle_get_definition(effect: ParticleEffect) -> Option<*mut TodParticleDefinition> {
     unsafe {
-        if effect < 0 || effect as usize >= G_PARTICLE_DEF_ARRAY.len() {
+        if (effect as i32) < 0 || effect as usize >= G_PARTICLE_DEF_ARRAY.len() {
             return None;
         }
         Some(&mut G_PARTICLE_DEF_ARRAY[effect as usize] as *mut TodParticleDefinition)
@@ -152,9 +152,8 @@ fn pvzp_scale_rotate_transform_matrix(m: &mut crate::framework::sexy_matrix::Sex
     m.m[2][2] = 1.0;
 }
 
-/// 粒子效果枚举（对应 C++ ParticleEffect，定义在 Lawn 层）
-/// 实际在 LawnApp 中定义，此处列出基础类型
-pub type ParticleEffect = i32;
+/// 粒子效果枚举（对应 C++ ParticleEffect，从 game_enums 导入）
+/// 见 crate::lawn::game_enums::ParticleEffect
 
 // ============================================================
 // 定义数据结构
@@ -199,9 +198,10 @@ pub struct FloatParameterTrack {
 impl FloatParameterTrack {
     pub fn new() -> Self { FloatParameterTrack { nodes: Vec::new() } }
 
-    /// 设置默认值（对应 C++ FloatTrackSetDefault：轨道未定义时赋单节点默认值）
+    /// 设置默认值（对应 C++ FloatTrackSetDefault，Definition.cpp:1362：
+    /// 轨道未定义且 theValue != 0 时填单节点；theValue == 0 时保持未设置）
     pub fn set_default(&mut self, value: f32) {
-        if self.nodes.is_empty() {
+        if self.nodes.is_empty() && value != 0.0 {
             self.nodes.push(FloatParameterTrackNode {
                 time: 0.0,
                 low_value: value,
@@ -379,8 +379,118 @@ impl TodParticleDefinition {
 #[derive(Debug, Clone)]
 pub struct ParticleParams {
     pub effect: ParticleEffect,
-    pub file_name: String,
+    pub file_name: &'static str,
 }
+
+// 粒子参数表（对应 C++ gLawnParticleArray，PvzpParticle.cpp:36）
+pub static G_LAWN_PARTICLE_ARRAY: &[ParticleParams] = &[
+    ParticleParams { effect: ParticleEffect::Melonsplash, file_name: "particles/MelonImpact.xml" },
+    ParticleParams { effect: ParticleEffect::Wintermelon, file_name: "particles/WinterMelonImpact.xml" },
+    ParticleParams { effect: ParticleEffect::Fumecloud, file_name: "particles/FumeCloud.xml" },
+    ParticleParams { effect: ParticleEffect::Popcornsplash, file_name: "particles/PopcornSplash.xml" },
+    ParticleParams { effect: ParticleEffect::Powie, file_name: "particles/Powie.xml" },
+    ParticleParams { effect: ParticleEffect::Jackexplode, file_name: "particles/JackExplode.xml" },
+    ParticleParams { effect: ParticleEffect::ZombieHead, file_name: "particles/ZombieHead.xml" },
+    ParticleParams { effect: ParticleEffect::ZombieArm, file_name: "particles/ZombieArm.xml" },
+    ParticleParams { effect: ParticleEffect::ZombieTrafficCone, file_name: "particles/ZombieTrafficCone.xml" },
+    ParticleParams { effect: ParticleEffect::ZombiePail, file_name: "particles/ZombiePail.xml" },
+    ParticleParams { effect: ParticleEffect::ZombieHelmet, file_name: "particles/ZombieHelmet.xml" },
+    ParticleParams { effect: ParticleEffect::ZombieFlag, file_name: "particles/ZombieFlag.xml" },
+    ParticleParams { effect: ParticleEffect::ZombieDoor, file_name: "particles/ZombieDoor.xml" },
+    ParticleParams { effect: ParticleEffect::ZombieNewspaper, file_name: "particles/ZombieNewspaper.xml" },
+    ParticleParams { effect: ParticleEffect::ZombieHeadlight, file_name: "particles/ZombieHeadLight.xml" },
+    ParticleParams { effect: ParticleEffect::Pow, file_name: "particles/Pow.xml" },
+    ParticleParams { effect: ParticleEffect::ZombiePogo, file_name: "particles/ZombiePogo.xml" },
+    ParticleParams { effect: ParticleEffect::ZombieNewspaperHead, file_name: "particles/ZombieNewspaperHead.xml" },
+    ParticleParams { effect: ParticleEffect::ZombieBalloonHead, file_name: "particles/ZombieBalloonHead.xml" },
+    ParticleParams { effect: ParticleEffect::SodRoll, file_name: "particles/SodRoll.xml" },
+    ParticleParams { effect: ParticleEffect::GraveStoneRise, file_name: "particles/GraveStoneRise.xml" },
+    ParticleParams { effect: ParticleEffect::Planting, file_name: "particles/Planting.xml" },
+    ParticleParams { effect: ParticleEffect::PlantingPool, file_name: "particles/PlantingPool.xml" },
+    ParticleParams { effect: ParticleEffect::ZombieRise, file_name: "particles/ZombieRise.xml" },
+    ParticleParams { effect: ParticleEffect::GraveBuster, file_name: "particles/GraveBuster.xml" },
+    ParticleParams { effect: ParticleEffect::GraveBusterDie, file_name: "particles/GraveBusterDie.xml" },
+    ParticleParams { effect: ParticleEffect::PoolSplash, file_name: "particles/PoolSplash.xml" },
+    ParticleParams { effect: ParticleEffect::IceSparkle, file_name: "particles/IceSparkle.xml" },
+    ParticleParams { effect: ParticleEffect::SeedPacket, file_name: "particles/SeedPacket.xml" },
+    ParticleParams { effect: ParticleEffect::TallNutBlock, file_name: "particles/TallNutBlock.xml" },
+    ParticleParams { effect: ParticleEffect::Doom, file_name: "particles/Doom.xml" },
+    ParticleParams { effect: ParticleEffect::DiggerRise, file_name: "particles/DiggerRise.xml" },
+    ParticleParams { effect: ParticleEffect::DiggerTunnel, file_name: "particles/DiggerTunnel.xml" },
+    ParticleParams { effect: ParticleEffect::DancerRise, file_name: "particles/DancerRise.xml" },
+    ParticleParams { effect: ParticleEffect::PoolSparkly, file_name: "particles/PoolSparkly.xml" },
+    ParticleParams { effect: ParticleEffect::WallnutEatSmall, file_name: "particles/WallnutEatSmall.xml" },
+    ParticleParams { effect: ParticleEffect::WallnutEatLarge, file_name: "particles/WallnutEatLarge.xml" },
+    ParticleParams { effect: ParticleEffect::PeaSplat, file_name: "particles/PeaSplat.xml" },
+    ParticleParams { effect: ParticleEffect::ButterSplat, file_name: "particles/ButterSplat.xml" },
+    ParticleParams { effect: ParticleEffect::CabbageSplat, file_name: "particles/CabbageSplat.xml" },
+    ParticleParams { effect: ParticleEffect::PuffSplat, file_name: "particles/PuffSplat.xml" },
+    ParticleParams { effect: ParticleEffect::StarSplat, file_name: "particles/StarSplat.xml" },
+    ParticleParams { effect: ParticleEffect::IceTrap, file_name: "particles/IceTrap.xml" },
+    ParticleParams { effect: ParticleEffect::SnowpeaSplat, file_name: "particles/SnowPeaSplat.xml" },
+    ParticleParams { effect: ParticleEffect::SnowpeaPuff, file_name: "particles/SnowPeaPuff.xml" },
+    ParticleParams { effect: ParticleEffect::SnowpeaTrail, file_name: "particles/SnowPeaTrail.xml" },
+    ParticleParams { effect: ParticleEffect::LanternShine, file_name: "particles/LanternShine.xml" },
+    ParticleParams { effect: ParticleEffect::SeedPacketPickup, file_name: "particles/Award.xml" },
+    ParticleParams { effect: ParticleEffect::PotatoMine, file_name: "particles/PotatoMine.xml" },
+    ParticleParams { effect: ParticleEffect::PotatoMineRise, file_name: "particles/PotatoMineRise.xml" },
+    ParticleParams { effect: ParticleEffect::PuffshroomTrail, file_name: "particles/PuffShroomTrail.xml" },
+    ParticleParams { effect: ParticleEffect::PuffshroomMuzzle, file_name: "particles/PuffShroomMuzzle.xml" },
+    ParticleParams { effect: ParticleEffect::SeedPacketFlash, file_name: "particles/SeedPacketFlash.xml" },
+    ParticleParams { effect: ParticleEffect::WhackAZombieRise, file_name: "particles/WhackAZombieRise.xml" },
+    ParticleParams { effect: ParticleEffect::ZombieLadder, file_name: "particles/ZombieLadder.xml" },
+    ParticleParams { effect: ParticleEffect::UmbrellaReflect, file_name: "particles/UmbrellaReflect.xml" },
+    ParticleParams { effect: ParticleEffect::SeedPacketPick, file_name: "particles/SeedPacketPick.xml" },
+    ParticleParams { effect: ParticleEffect::IceTrapZombie, file_name: "particles/IceTrapZombie.xml" },
+    ParticleParams { effect: ParticleEffect::IceTrapRelease, file_name: "particles/IceTrapRelease.xml" },
+    ParticleParams { effect: ParticleEffect::ZamboniSmoke, file_name: "particles/ZamboniSmoke.xml" },
+    ParticleParams { effect: ParticleEffect::Gloomcloud, file_name: "particles/GloomCloud.xml" },
+    ParticleParams { effect: ParticleEffect::ZombiePogoHead, file_name: "particles/ZombiePogoHead.xml" },
+    ParticleParams { effect: ParticleEffect::ZamboniTire, file_name: "particles/ZamboniTire.xml" },
+    ParticleParams { effect: ParticleEffect::ZamboniExplosion, file_name: "particles/ZamboniExplosion.xml" },
+    ParticleParams { effect: ParticleEffect::ZamboniExplosion2, file_name: "particles/ZamboniExplosion2.xml" },
+    ParticleParams { effect: ParticleEffect::CatapultExplosion, file_name: "particles/CatapultExplosion.xml" },
+    ParticleParams { effect: ParticleEffect::MowerCloud, file_name: "particles/MowerCloud.xml" },
+    ParticleParams { effect: ParticleEffect::BossIceBall, file_name: "particles/BossIceBallTrail.xml" },
+    ParticleParams { effect: ParticleEffect::Blastmark, file_name: "particles/BlastMark.xml" },
+    ParticleParams { effect: ParticleEffect::CoinPickupArrow, file_name: "particles/CoinPickupArrow.xml" },
+    ParticleParams { effect: ParticleEffect::PresentPickup, file_name: "particles/PresentPickup.xml" },
+    ParticleParams { effect: ParticleEffect::ImitaterMorph, file_name: "particles/ImitaterMorph.xml" },
+    ParticleParams { effect: ParticleEffect::MoweredZombieHead, file_name: "particles/MoweredZombieHead.xml" },
+    ParticleParams { effect: ParticleEffect::MoweredZombieArm, file_name: "particles/MoweredZombieArm.xml" },
+    ParticleParams { effect: ParticleEffect::ZombieHeadPool, file_name: "particles/ZombieHeadPool.xml" },
+    ParticleParams { effect: ParticleEffect::ZombieBossFireball, file_name: "particles/Zombie_boss_fireball.xml" },
+    ParticleParams { effect: ParticleEffect::FireballDeath, file_name: "particles/FireballDeath.xml" },
+    ParticleParams { effect: ParticleEffect::IceballDeath, file_name: "particles/IceballDeath.xml" },
+    ParticleParams { effect: ParticleEffect::IceballTrail, file_name: "particles/Iceball_Trail.xml" },
+    ParticleParams { effect: ParticleEffect::FireballTrail, file_name: "particles/Fireball_Trail.xml" },
+    ParticleParams { effect: ParticleEffect::BossExplosion, file_name: "particles/BossExplosion.xml" },
+    ParticleParams { effect: ParticleEffect::ScreenFlash, file_name: "particles/ScreenFlash.xml" },
+    ParticleParams { effect: ParticleEffect::TrophySparkle, file_name: "particles/TrophySparkle.xml" },
+    ParticleParams { effect: ParticleEffect::PortalCircle, file_name: "particles/PortalCircle.xml" },
+    ParticleParams { effect: ParticleEffect::PortalSquare, file_name: "particles/PortalSquare.xml" },
+    ParticleParams { effect: ParticleEffect::PottedPlantGlow, file_name: "particles/PottedPlantGlow.xml" },
+    ParticleParams { effect: ParticleEffect::PottedWaterPlantGlow, file_name: "particles/PottedWaterPlantGlow.xml" },
+    ParticleParams { effect: ParticleEffect::PottedZenGlow, file_name: "particles/PottedZenGlow.xml" },
+    ParticleParams { effect: ParticleEffect::MindControl, file_name: "particles/MindControl.xml" },
+    ParticleParams { effect: ParticleEffect::VaseShatter, file_name: "particles/VaseShatter.xml" },
+    ParticleParams { effect: ParticleEffect::VaseShatterLeaf, file_name: "particles/VaseShatterLeaf.xml" },
+    ParticleParams { effect: ParticleEffect::VaseShatterZombie, file_name: "particles/VaseShatterZombie.xml" },
+    ParticleParams { effect: ParticleEffect::AwardPickupArrow, file_name: "particles/AwardPickupArrow.xml" },
+    ParticleParams { effect: ParticleEffect::ZombieSeaweed, file_name: "particles/Zombie_seaweed.xml" },
+    ParticleParams { effect: ParticleEffect::ZombieMustache, file_name: "particles/ZombieMustache.xml" },
+    ParticleParams { effect: ParticleEffect::ZombieSunglass, file_name: "particles/ZombieFutureGlasses.xml" },
+    ParticleParams { effect: ParticleEffect::ZombiePinata, file_name: "particles/Pinata.xml" },
+    ParticleParams { effect: ParticleEffect::DustSquash, file_name: "particles/Dust_Squash.xml" },
+    ParticleParams { effect: ParticleEffect::DustFoot, file_name: "particles/Dust_Foot.xml" },
+    ParticleParams { effect: ParticleEffect::ZombieDaisies, file_name: "particles/Daisy.xml" },
+    ParticleParams { effect: ParticleEffect::CreditStrobe, file_name: "particles/Credits_Strobe.xml" },
+    ParticleParams { effect: ParticleEffect::CreditsRayswipe, file_name: "particles/Credits_RaysWipe.xml" },
+    ParticleParams { effect: ParticleEffect::CreditsZombieheadwipe, file_name: "particles/Credits_ZombieHeadWipe.xml" },
+    ParticleParams { effect: ParticleEffect::Starburst, file_name: "particles/Starburst.xml" },
+    ParticleParams { effect: ParticleEffect::CreditsFog, file_name: "particles/Credits_fog.xml" },
+    ParticleParams { effect: ParticleEffect::PresentPickUpArrow, file_name: "particles/UpsellArrow.xml" },
+];
 
 // ============================================================
 // 粒子渲染参数
@@ -474,14 +584,12 @@ impl TodParticleHolder {
 
         let a_system = unsafe { &mut *self.particle_systems.alloc() };
         a_system.particle_holder = self as *mut TodParticleHolder;
-        // [TRANSLATION_NOTE]: Rust 侧 particle effect 参数以 i32 传递，转换为 game_enums 枚举（repr(i32)）
-        let a_effect: crate::lawn::game_enums::ParticleEffect = unsafe { std::mem::transmute(effect) };
         a_system.pvzp_particle_initialize_from_def(
             x,
             y,
             render_order,
             definition as *const TodParticleDefinition as *mut TodParticleDefinition,
-            a_effect,
+            effect,
         );
         Some(a_system)
     }
@@ -756,9 +864,22 @@ impl TodParticleEmitter {
         self.system_last_time_value = self.system_time_value;
     }
     /// 绘制粒子（对应 C++ PvzpParticleEmitter::Draw，PvzpParticle.cpp:1060）
-    /// [TRANSLATION_NOTE]: C++ 按 mEmitterDef 的 SOFTWARE_ONLY/HARDWARE_ONLY 位做 3D 加速过滤；
-    /// Rust 无 3D 加速检测，过滤跳过（TRANSLATION_NOTE）
     pub fn draw(&self, g: &mut Graphics) {
+        // 对应 C++ Draw：3D 加速过滤。
+        // [TRANSLATION_NOTE]: Rust 未接入 Is3DAccelerated()，按 C++ 注释的默认加速态
+        // （hardware = true）处理：SOFTWARE_ONLY 粒子跳过、HARDWARE_ONLY 粒子保留
+        let a_hardware = true;
+        if (crate::lawn::zombie::test_bit(
+            unsafe { (*self.emitter_def).particle_flags as u32 },
+            ParticleFlags::SoftwareOnly as u32,
+        ) && a_hardware)
+            || (crate::lawn::zombie::test_bit(
+                unsafe { (*self.emitter_def).particle_flags as u32 },
+                ParticleFlags::HardwareOnly as u32,
+            ) && !a_hardware)
+        {
+            return;
+        }
         let mut node = self.particle_list.head;
         while !node.is_null() {
             unsafe {
@@ -799,9 +920,34 @@ impl TodParticleEmitter {
             if a_color.a > 0 {
                 a_params.pos_x += g.trans_x as f32;
                 a_params.pos_y += g.trans_y as f32;
-                // [TRANSLATION_NOTE]: C++ 无图时尝试 cross-fade 源粒子渲染；
-                // Rust 渲染以 emitter_def.image/image_override 为准，render_particle 内无图即返回
-                self.render_particle(g, the_particle, a_color, &a_params);
+                // 对应 C++ DrawParticle（PvzpParticle.cpp:1032-1040）：
+                // 有图（mImageOverride || mEmitterDef->mImage）时用本粒子；
+                // 无图时用 cross-fade 源粒子（mCrossFadeParticleID）
+                let a_emitter_def = unsafe { &*self.emitter_def };
+                let a_has_image = !self.image_override.is_null() || !a_emitter_def.image.is_null();
+                if a_has_image {
+                    self.render_particle(g, the_particle, a_color, &a_params);
+                } else if the_particle.cross_fade_particle_id != PARTICLEID_NULL {
+                    unsafe {
+                        let a_source_particle_ptr = {
+                            let holder = (*self.particle_system).particle_holder;
+                            if holder.is_null() {
+                                std::ptr::null_mut()
+                            } else {
+                                match (*holder)
+                                    .particles
+                                    .try_to_get_mut(the_particle.cross_fade_particle_id)
+                                {
+                                    Some(p) => p as *mut TodParticle,
+                                    None => std::ptr::null_mut(),
+                                }
+                            }
+                        };
+                        if !a_source_particle_ptr.is_null() {
+                            self.render_particle(g, &mut *a_source_particle_ptr, a_color, &a_params);
+                        }
+                    }
+                }
             }
         }
     }
@@ -2066,10 +2212,409 @@ impl TodParticleSystem {
 // 全局函数
 // ============================================================
 
+/// 曲线名 → TodCurves（对应 C++ gDefTrackEaseSymbols，Definition.cpp:867）
+fn curve_from_name(name: &str) -> Option<TodCurves> {
+    match name {
+        "EaseInOutWeak" => Some(TodCurves::EaseInOutWeak),
+        "FastInOutWeak" => Some(TodCurves::FastInOutWeak),
+        "EaseInOut" => Some(TodCurves::EaseInOut),
+        "FastInOut" => Some(TodCurves::FastInOut),
+        "EaseIn" => Some(TodCurves::EaseIn),
+        "EaseOut" => Some(TodCurves::EaseOut),
+        "EaseSinWave" => Some(TodCurves::EaseSinWave),
+        "BounceFastMiddle" => Some(TodCurves::BounceFastMiddle),
+        "BounceSlowMiddle" => Some(TodCurves::BounceSlowMiddle),
+        "Bounce" => Some(TodCurves::Bounce),
+        "SinWave" => Some(TodCurves::SinWave),
+        "Linear" => Some(TodCurves::Linear),
+        _ => None,
+    }
+}
+
+/// 解析 track float 字符串（对应 C++ DefinitionReadFloatTrackField，Definition.cpp:882）
+/// 格式示例："1,80 0"、"0,2 1,2 4,21"、"[5 30]"、".4 EaseIn 10,10"、"[-1120 1120] [-300 300]"
+pub(crate) fn parse_float_track(text: &str) -> Option<FloatParameterTrack> {
+    let chars: Vec<char> = text.chars().collect();
+    let len = chars.len();
+    let mut idx = 0usize;
+    let mut nodes: Vec<FloatParameterTrackNode> = Vec::new();
+    let mut node = FloatParameterTrackNode::new();
+
+    loop {
+        if idx >= len {
+            return None;
+        }
+        if chars[idx] == '\0' {
+            break; // No empty strings allowed
+        }
+        node.time = -1.0;
+        node.curve_type = TodCurves::Linear;
+        node.distribution = TodCurves::Linear;
+
+        if chars[idx] == '[' {
+            // <range>
+            idx += 1;
+            // mLowValue
+            let rest: String = chars[idx..].iter().collect();
+            let (a_value, a_len) = parse_leading_f32(&rest)?;
+            idx += a_len;
+            node.low_value = a_value;
+            node.high_value = a_value;
+            if idx >= len || chars[idx] != ']' {
+                idx += 1; // space (' ')
+                // <curve> — could be the distribution
+                let rest: String = chars[idx..].iter().collect();
+                if let Some((a_name, a_str_len)) = leading_curve_name(&rest) {
+                    node.distribution = a_name;
+                    idx += a_str_len + 1; // Accounts for space (' '), expressions never end with a curve
+                }
+                let rest: String = chars[idx..].iter().collect();
+                match parse_leading_f32(&rest) {
+                    Some((a_value, a_len)) => {
+                        idx += a_len;
+                        node.high_value = a_value;
+                    }
+                    None => {
+                        // No float to read just continue
+                    }
+                }
+            }
+            if idx >= len || chars[idx] != ']' {
+                return None; // Invalid format
+            }
+            idx += 1;
+            if idx >= len || chars[idx] == '\0' {
+                break; // Done!
+            }
+            if chars[idx] == ',' {
+                idx += 1;
+                let rest: String = chars[idx..].iter().collect();
+                let (a_value, a_len) = parse_leading_f32(&rest)?; // mTime
+                idx += a_len;
+                node.time = a_value * 0.01;
+            }
+            if idx >= len || chars[idx] == '\0' {
+                break; // Done!
+            }
+            idx += 1;
+        } else {
+            // <norange>
+            let rest: String = chars[idx..].iter().collect();
+            let (a_value, a_len) = parse_leading_f32(&rest)?; // mLow/HighValue
+            idx += a_len;
+            node.low_value = a_value;
+            node.high_value = a_value;
+            if idx >= len || chars[idx] == '\0' {
+                break; // Done!
+            }
+            if chars[idx] == ',' {
+                idx += 1;
+                let rest: String = chars[idx..].iter().collect();
+                let (a_value, a_len) = parse_leading_f32(&rest)?; // mTime
+                idx += a_len;
+                node.time = a_value * 0.01;
+            }
+            if idx >= len || chars[idx] == '\0' {
+                break; // Done!
+            }
+            idx += 1;
+            // <curve> — mCurveType
+            let rest: String = chars[idx..].iter().collect();
+            if let Some((a_name, a_str_len)) = leading_curve_name(&rest) {
+                node.curve_type = a_name;
+                idx += a_str_len;
+                if idx >= len || chars[idx] == '\0' {
+                    break; // Done!
+                }
+                idx += 1;
+            }
+        }
+
+        nodes.push(node);
+    }
+    nodes.push(node);
+
+    // Search forward for a timestamp（对应 C++：向后填充时间戳）
+    let mut a_base_idx = 0usize;
+    let mut low = 0.0f32;
+    loop {
+        let mut an_idx = a_base_idx;
+        let mut high = 1.0f32;
+        let mut a_found = false;
+        while an_idx < nodes.len() {
+            if nodes[an_idx].time >= 0.0 {
+                // Found a timestamp!
+                high = nodes[an_idx].time;
+                a_found = true;
+                break;
+            }
+            an_idx += 1;
+        }
+        if !a_found {
+            // Didn't find another value, we're finished: high stays 1.0
+        }
+        // Going backwards set previous timestamps
+        for i in a_base_idx..an_idx {
+            let interp = if (an_idx - 1) != a_base_idx {
+                (i - a_base_idx) as f32 / ((an_idx - 1) - a_base_idx) as f32
+            } else if a_base_idx == 0 {
+                0.0
+            } else {
+                1.0
+            };
+            nodes[i].time = high * interp + low * (1.0 - interp);
+        }
+        // Start again
+        a_base_idx = an_idx + 1;
+        low = high;
+        if a_base_idx >= nodes.len() {
+            break;
+        }
+    }
+
+    Some(FloatParameterTrack { nodes })
+}
+
+/// 解析字符串开头的浮点数（对应 sscanf("%f%n")；返回 (值, 消耗字符数)）
+fn parse_leading_f32(s: &str) -> Option<(f32, usize)> {
+    let s = s.trim_start();
+    let bytes = s.as_bytes();
+    let mut end = 0usize;
+    // 符号
+    if end < bytes.len() && (bytes[end] == b'+' || bytes[end] == b'-') {
+        end += 1;
+    }
+    // 整数部分
+    let digits_start = end;
+    while end < bytes.len() && bytes[end].is_ascii_digit() {
+        end += 1;
+    }
+    // 小数部分
+    if end < bytes.len() && bytes[end] == b'.' {
+        end += 1;
+        while end < bytes.len() && bytes[end].is_ascii_digit() {
+            end += 1;
+        }
+    }
+    // 指数
+    if end < bytes.len() && (bytes[end] == b'e' || bytes[end] == b'E') {
+        let mut exp_end = end + 1;
+        if exp_end < bytes.len() && (bytes[exp_end] == b'+' || bytes[exp_end] == b'-') {
+            exp_end += 1;
+        }
+        let exp_digits = exp_end;
+        while exp_end < bytes.len() && bytes[exp_end].is_ascii_digit() {
+            exp_end += 1;
+        }
+        if exp_end > exp_digits {
+            end = exp_end;
+        }
+    }
+    if end == 0 && digits_start == end {
+        return None;
+    }
+    let value: f32 = s[..end].parse().ok()?;
+    // 记录原串中从起始位置消耗的字符数（含前导空白）
+    let leading_ws = s.len() - s.trim_start().len();
+    Some((value, leading_ws + end))
+}
+
+/// 识别字符串开头的曲线名（对应 C++ strncmp 匹配 gDefTrackEaseSymbols）
+fn leading_curve_name(s: &str) -> Option<(TodCurves, usize)> {
+    for (name, curve) in [
+        ("EaseInOutWeak", TodCurves::EaseInOutWeak),
+        ("FastInOutWeak", TodCurves::FastInOutWeak),
+        ("EaseInOut", TodCurves::EaseInOut),
+        ("FastInOut", TodCurves::FastInOut),
+        ("EaseIn", TodCurves::EaseIn),
+        ("EaseOut", TodCurves::EaseOut),
+        ("EaseSinWave", TodCurves::EaseSinWave),
+        ("BounceFastMiddle", TodCurves::BounceFastMiddle),
+        ("BounceSlowMiddle", TodCurves::BounceSlowMiddle),
+        ("Bounce", TodCurves::Bounce),
+        ("SinWave", TodCurves::SinWave),
+        ("Linear", TodCurves::Linear),
+    ] {
+        if s.len() >= name.len() && s[..name.len()].eq_ignore_ascii_case(name) {
+            return Some((curve, name.len()));
+        }
+    }
+    None
+}
+
+/// 解析单个 <Emitter> 节点（对应 C++ gEmitterDefMap + DefinitionLoadMap）
+fn parse_emitter_node(node: &crate::todlib::xml_parser::XmlNode) -> TodEmitterDefinition {
+    let mut def = TodEmitterDefinition::new();
+    for child in &node.children {
+        let field_name = child.name.as_str();
+        let text = child.text.trim().to_string();
+        // 先试 flag 字段（对应 C++ DT_FLAGS：RandomLaunchSpin/AlignLaunchSpin 等独立元素）
+        match field_name {
+            "RandomLaunchSpin" => set_flag(&mut def.particle_flags, 0, &text),
+            "AlignLaunchSpin" => set_flag(&mut def.particle_flags, 1, &text),
+            "AlignToPixel" | "AlignToPixels" => set_flag(&mut def.particle_flags, 2, &text),
+            "SystemLoops" => set_flag(&mut def.particle_flags, 3, &text),
+            "ParticleLoops" => set_flag(&mut def.particle_flags, 4, &text),
+            "ParticlesDontFollow" => set_flag(&mut def.particle_flags, 5, &text),
+            "RandomStartTime" => set_flag(&mut def.particle_flags, 6, &text),
+            "DieIfOverloaded" => set_flag(&mut def.particle_flags, 7, &text),
+            "Additive" => set_flag(&mut def.particle_flags, 8, &text),
+            "FullScreen" => set_flag(&mut def.particle_flags, 9, &text),
+            "SoftwareOnly" => set_flag(&mut def.particle_flags, 10, &text),
+            "HardwareOnly" => set_flag(&mut def.particle_flags, 11, &text),
+            _ => {}
+        }
+        match field_name {
+            "Image" => {
+                // 对应 C++ DT_IMAGE：名字经资源映射为图片；此处登记名字并尝试加载
+                let a_image_idx = crate::todlib::reanim_loader::resolve_reanim_image_name(&text);
+                def.image = crate::todlib::reanim_loader::reanimator_get_image(a_image_idx)
+                    .unwrap_or(std::ptr::null_mut());
+            }
+            "ImageRow" => def.image_row = text.parse().unwrap_or(0),
+            "ImageCol" => def.image_col = text.parse().unwrap_or(0),
+            "ImageFrames" => def.image_frames = text.parse().unwrap_or(0),
+            "Animated" => def.animated = text.parse().unwrap_or(0),
+            "EmitterType" => {
+                def.emitter_type = match text.as_str() {
+                    "Circle" => EmitterType::Circle,
+                    "Box" => EmitterType::Box,
+                    "BoxPath" => EmitterType::BoxPath,
+                    "CirclePath" => EmitterType::CirclePath,
+                    "CircleEvenSpacing" => EmitterType::CircleEvenSpacing,
+                    _ => EmitterType::Circle,
+                }
+            }
+            "Name" => def.name = text,
+            "OnDuration" => def.on_duration = text,
+            "SystemDuration" => { if let Some(t) = parse_float_track(&text) { def.system_duration = t; } }
+            "CrossFadeDuration" => { if let Some(t) = parse_float_track(&text) { def.cross_fade_duration = t; } }
+            "SpawnRate" => { if let Some(t) = parse_float_track(&text) { def.spawn_rate = t; } }
+            "SpawnMinActive" => { if let Some(t) = parse_float_track(&text) { def.spawn_min_active = t; } }
+            "SpawnMaxActive" => { if let Some(t) = parse_float_track(&text) { def.spawn_max_active = t; } }
+            "SpawnMaxLaunched" => { if let Some(t) = parse_float_track(&text) { def.spawn_max_launched = t; } }
+            "EmitterRadius" => { if let Some(t) = parse_float_track(&text) { def.emitter_radius = t; } }
+            "EmitterOffsetX" => { if let Some(t) = parse_float_track(&text) { def.emitter_offset_x = t; } }
+            "EmitterOffsetY" => { if let Some(t) = parse_float_track(&text) { def.emitter_offset_y = t; } }
+            "EmitterBoxX" => { if let Some(t) = parse_float_track(&text) { def.emitter_box_x = t; } }
+            "EmitterBoxY" => { if let Some(t) = parse_float_track(&text) { def.emitter_box_y = t; } }
+            "EmitterPath" => { if let Some(t) = parse_float_track(&text) { def.emitter_path = t; } }
+            "EmitterSkewX" => { if let Some(t) = parse_float_track(&text) { def.emitter_skew_x = t; } }
+            "EmitterSkewY" => { if let Some(t) = parse_float_track(&text) { def.emitter_skew_y = t; } }
+            "ParticleDuration" => { if let Some(t) = parse_float_track(&text) { def.particle_duration = t; } }
+            "SystemRed" => { if let Some(t) = parse_float_track(&text) { def.system_red = t; } }
+            "SystemGreen" => { if let Some(t) = parse_float_track(&text) { def.system_green = t; } }
+            "SystemBlue" => { if let Some(t) = parse_float_track(&text) { def.system_blue = t; } }
+            "SystemAlpha" => { if let Some(t) = parse_float_track(&text) { def.system_alpha = t; } }
+            "SystemBrightness" => { if let Some(t) = parse_float_track(&text) { def.system_brightness = t; } }
+            "LaunchSpeed" => { if let Some(t) = parse_float_track(&text) { def.launch_speed = t; } }
+            "LaunchAngle" => { if let Some(t) = parse_float_track(&text) { def.launch_angle = t; } }
+            "ParticleRed" => { if let Some(t) = parse_float_track(&text) { def.particle_red = t; } }
+            "ParticleGreen" => { if let Some(t) = parse_float_track(&text) { def.particle_green = t; } }
+            "ParticleBlue" => { if let Some(t) = parse_float_track(&text) { def.particle_blue = t; } }
+            "ParticleAlpha" => { if let Some(t) = parse_float_track(&text) { def.particle_alpha = t; } }
+            "ParticleBrightness" => { if let Some(t) = parse_float_track(&text) { def.particle_brightness = t; } }
+            "ParticleSpinAngle" => { if let Some(t) = parse_float_track(&text) { def.particle_spin_angle = t; } }
+            "ParticleSpinSpeed" => { if let Some(t) = parse_float_track(&text) { def.particle_spin_speed = t; } }
+            "ParticleScale" => { if let Some(t) = parse_float_track(&text) { def.particle_scale = t; } }
+            "ParticleStretch" => { if let Some(t) = parse_float_track(&text) { def.particle_stretch = t; } }
+            "CollisionReflect" => { if let Some(t) = parse_float_track(&text) { def.collision_reflect = t; } }
+            "CollisionSpin" => { if let Some(t) = parse_float_track(&text) { def.collision_spin = t; } }
+            "ClipTop" => { if let Some(t) = parse_float_track(&text) { def.clip_top = t; } }
+            "ClipBottom" => { if let Some(t) = parse_float_track(&text) { def.clip_bottom = t; } }
+            "ClipLeft" => { if let Some(t) = parse_float_track(&text) { def.clip_left = t; } }
+            "ClipRight" => { if let Some(t) = parse_float_track(&text) { def.clip_right = t; } }
+            "AnimationRate" => { if let Some(t) = parse_float_track(&text) { def.animation_rate = t; } }
+            "Field" => {
+                // 对应 C++ DT_ARRAY：ParticleField
+                let mut a_field = ParticleField::new();
+                for fc in &child.children {
+                    match fc.name.as_str() {
+                        "FieldType" => {
+                            a_field.field_type = match fc.text.trim() {
+                                "Friction" => ParticleFieldType::Friction,
+                                "Acceleration" => ParticleFieldType::Acceleration,
+                                "Attractor" => ParticleFieldType::Attractor,
+                                "MaxVelocity" => ParticleFieldType::MaxVelocity,
+                                "Velocity" => ParticleFieldType::Velocity,
+                                "Position" => ParticleFieldType::Position,
+                                "SystemPosition" => ParticleFieldType::SystemPosition,
+                                "GroundConstraint" => ParticleFieldType::GroundConstraint,
+                                "Shake" => ParticleFieldType::Shake,
+                                "Circle" => ParticleFieldType::Circle,
+                                "Away" => ParticleFieldType::Away,
+                                _ => ParticleFieldType::Invalid,
+                            }
+                        }
+                        "X" | "x" => { if let Some(t) = parse_float_track(fc.text.trim()) { a_field.x = t; } }
+                        "Y" | "y" => { if let Some(t) = parse_float_track(fc.text.trim()) { a_field.y = t; } }
+                        _ => {}
+                    }
+                }
+                def.particle_fields.fields.push(a_field);
+            }
+            "SystemField" => {
+                let mut a_field = ParticleField::new();
+                for fc in &child.children {
+                    match fc.name.as_str() {
+                        "FieldType" => {
+                            a_field.field_type = match fc.text.trim() {
+                                "Friction" => ParticleFieldType::Friction,
+                                "Acceleration" => ParticleFieldType::Acceleration,
+                                "Attractor" => ParticleFieldType::Attractor,
+                                "MaxVelocity" => ParticleFieldType::MaxVelocity,
+                                "Velocity" => ParticleFieldType::Velocity,
+                                "Position" => ParticleFieldType::Position,
+                                "SystemPosition" => ParticleFieldType::SystemPosition,
+                                "GroundConstraint" => ParticleFieldType::GroundConstraint,
+                                "Shake" => ParticleFieldType::Shake,
+                                "Circle" => ParticleFieldType::Circle,
+                                "Away" => ParticleFieldType::Away,
+                                _ => ParticleFieldType::Invalid,
+                            }
+                        }
+                        "X" | "x" => { if let Some(t) = parse_float_track(fc.text.trim()) { a_field.x = t; } }
+                        "Y" | "y" => { if let Some(t) = parse_float_track(fc.text.trim()) { a_field.y = t; } }
+                        _ => {}
+                    }
+                }
+                def.system_fields.fields.push(a_field);
+            }
+            _ => {}
+        }
+    }
+    def
+}
+
+/// 设置粒子标志位（对应 C++ DefinitionReadFlagField：值为 0 清位、非 0 置位）
+fn set_flag(flags: &mut i32, bit: i32, text: &str) {
+    let a_flag: f32 = text.trim().parse().unwrap_or(0.0);
+    let a_flag_int = a_flag as i32;
+    if a_flag_int != 0 {
+        *flags |= 1 << bit;
+    } else {
+        *flags &= !(1 << bit);
+    }
+}
+
 /// 加载单个粒子定义（对应 C++ TodParticleLoadADef，PvzpParticle.cpp:145）
-pub fn tod_particle_load_a_def(def: &mut TodParticleDefinition, _file: &str) -> bool {
-    // [TRANSLATION_NOTE]: C++ 的 DefinitionLoadXML（XML 解析）在 Rust 端暂未实现，
-    // 定义由调用方/后续轮次的解析器填充；此处完成 C++ 的 FloatTrackSetDefault 默认值阶段。
+/// 从 pak/文件系统读取 particles/*.xml 并解析（对应 C++ DefinitionLoadXML + FloatTrackSetDefault）
+pub fn tod_particle_load_a_def(def: &mut TodParticleDefinition, file: &str) -> bool {
+    // 对应 C++ DefinitionCompileAndLoad：优先读取编译缓存（.COMPILED），
+    // Rust 侧直接解析 pak 中的明文 XML（pak 内同时存在 COMPILED 与 XML，XML 为源码等价物）
+    let xml_data = crate::framework::paklib::with_pak_interface(|pak| pak.load_file(file));
+    let xml = match xml_data {
+        Some(data) => String::from_utf8_lossy(&data).to_string(),
+        None => return false,
+    };
+    let nodes = crate::todlib::xml_parser::parse_fragment(&xml);
+    def.emitter_defs.clear();
+    for node in &nodes {
+        if node.name == "Emitter" {
+            def.emitter_defs.push(parse_emitter_node(node));
+        }
+    }
+    // 对应 C++ TodParticleLoadADef 的 FloatTrackSetDefault 默认值阶段
     for a_emitter_def in def.emitter_defs.iter_mut() {
         a_emitter_def.system_duration.set_default(0.0);
         a_emitter_def.spawn_rate.set_default(0.0);
@@ -2109,7 +2654,7 @@ pub fn tod_particle_load_a_def(def: &mut TodParticleDefinition, _file: &str) -> 
         a_emitter_def.clip_right.set_default(0.0);
         a_emitter_def.animation_rate.set_default(0.0);
     }
-    true
+    !def.emitter_defs.is_empty()
 }
 
 /// 加载所有粒子定义（对应 C++ TodParticleLoadDefinitions，:204）
@@ -2148,3 +2693,145 @@ pub fn cross_fade_lerp(from: f32, to: f32, from_is_set: bool, to_is_set: bool, f
 pub type ParticleSystem = TodParticleSystem;
 pub type ParticleEmitter = TodParticleEmitter;
 pub type Particle = TodParticle;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_float_track_simple() {
+        // "200" → 单节点 time=0
+        let t = parse_float_track("200").unwrap();
+        assert_eq!(t.nodes.len(), 1);
+        assert_eq!(t.nodes[0].low_value, 200.0);
+        assert_eq!(t.nodes[0].high_value, 200.0);
+        assert_eq!(t.nodes[0].time, 0.0);
+    }
+
+    #[test]
+    fn test_parse_float_track_time() {
+        // "1,80 0" → 首节点 value=1 time=0.8，次节点 value=0 time 回溯为 1.0
+        let t = parse_float_track("1,80 0").unwrap();
+        assert_eq!(t.nodes.len(), 2);
+        assert_eq!(t.nodes[0].low_value, 1.0);
+        assert!((t.nodes[0].time - 0.8).abs() < 0.001);
+        assert_eq!(t.nodes[1].low_value, 0.0);
+        assert_eq!(t.nodes[1].time, 1.0);
+    }
+
+    #[test]
+    fn test_parse_float_track_range() {
+        // "[5 30]" → low=5 high=30
+        let t = parse_float_track("[5 30]").unwrap();
+        assert_eq!(t.nodes.len(), 1);
+        assert_eq!(t.nodes[0].low_value, 5.0);
+        assert_eq!(t.nodes[0].high_value, 30.0);
+    }
+
+    #[test]
+    fn test_parse_float_track_ease() {
+        // ".4 EaseIn 10,10" → low=0.4 curve=EaseIn, 下一节点 10 time=0.1
+        let t = parse_float_track(".4 EaseIn 10,10").unwrap();
+        assert_eq!(t.nodes.len(), 2);
+        assert_eq!(t.nodes[0].low_value, 0.4);
+        assert_eq!(t.nodes[0].curve_type, TodCurves::EaseIn);
+        assert_eq!(t.nodes[0].time, 0.0);
+        assert!((t.nodes[1].low_value - 10.0).abs() < 0.001);
+        assert!((t.nodes[1].time - 0.1).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_parse_float_track_multi_range() {
+        // "[-1120 1120] [-300 300]"
+        let t = parse_float_track("[-1120 1120] [-300 300]").unwrap();
+        assert_eq!(t.nodes.len(), 2);
+        assert_eq!(t.nodes[0].low_value, -1120.0);
+        assert_eq!(t.nodes[0].high_value, 1120.0);
+        assert_eq!(t.nodes[0].time, 0.0);
+        assert_eq!(t.nodes[1].low_value, -300.0);
+        assert_eq!(t.nodes[1].time, 1.0);
+    }
+}
+
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+
+    #[test]
+    fn test_load_melon_impact_xml() {
+        crate::framework::paklib::init_pak_interface();
+        crate::framework::paklib::with_pak_interface_mut(|pak| {
+            pak.add_pak_file("main.pak");
+        });
+        let mut def = TodParticleDefinition::new();
+        let ok = tod_particle_load_a_def(&mut def, "particles/MelonImpact.xml");
+        assert!(ok, "MelonImpact.xml 应加载成功");
+        assert!(!def.emitter_defs.is_empty(), "应至少解析 1 个 Emitter");
+        let e = &def.emitter_defs[0];
+        // SpawnRate=200、SpawnMaxLaunched=15、ParticleDuration=50、SystemDuration=50、ImageFrames=9
+        assert_eq!(e.spawn_rate.nodes[0].low_value, 200.0);
+        assert_eq!(e.spawn_max_launched.nodes[0].low_value, 15.0);
+        assert_eq!(e.particle_duration.nodes[0].low_value, 50.0);
+        assert_eq!(e.image_frames, 9);
+        assert!(!e.image.is_null(), "Image 应加载（IMAGE_MELONPULT_PARTICLES）");
+        // EmitterRadius=[5 30] → low=5 high=30
+        assert_eq!(e.emitter_radius.nodes[0].low_value, 5.0);
+        assert_eq!(e.emitter_radius.nodes[0].high_value, 30.0);
+        // 3 个 Field
+        assert_eq!(e.particle_fields.fields.len(), 3);
+        assert_eq!(e.particle_fields.fields[0].field_type, ParticleFieldType::Friction);
+        assert_eq!(e.particle_fields.fields[1].field_type, ParticleFieldType::Acceleration);
+        assert_eq!(e.particle_fields.fields[2].field_type, ParticleFieldType::Position);
+    }
+
+    #[test]
+    fn test_load_all_lawn_particles() {
+        crate::framework::paklib::init_pak_interface();
+        crate::framework::paklib::with_pak_interface_mut(|pak| {
+            pak.add_pak_file("main.pak");
+        });
+        let mut loaded = 0;
+        for p in G_LAWN_PARTICLE_ARRAY.iter() {
+            let mut def = TodParticleDefinition::new();
+            if tod_particle_load_a_def(&mut def, p.file_name) {
+                loaded += 1;
+            }
+        }
+        // 106 项中绝大多数应从 pak 加载成功（部分依赖图集/资源可能为空）
+        println!("loaded {} / {}", loaded, G_LAWN_PARTICLE_ARRAY.len());
+        assert!(loaded >= 100, "应加载至少 100 个粒子定义，实际 {}", loaded);
+    }
+}
+
+
+#[cfg(test)]
+mod integration_tests2 {
+    use super::*;
+
+    #[test]
+    fn test_alloc_particle_system_from_def() {
+        crate::framework::paklib::init_pak_interface();
+        crate::framework::paklib::with_pak_interface_mut(|pak| { pak.add_pak_file("main.pak"); });
+        // 加载 MelonImpact 定义
+        let mut def = TodParticleDefinition::new();
+        assert!(tod_particle_load_a_def(&mut def, "particles/MelonImpact.xml"));
+        // 放入全局定义数组（effect 0 = Melonsplash）
+        unsafe {
+            if G_PARTICLE_DEF_ARRAY.is_empty() {
+                G_PARTICLE_DEF_ARRAY.push(def.clone());
+            }
+        }
+        let mut es = crate::todlib::effect_system::EffectSystem::new();
+        let ps = es.alloc_particle_system(100.0, 200.0, 3, ParticleEffect::Melonsplash);
+        assert!(ps.is_some(), "应能分配粒子系统");
+        unsafe {
+            let ps = ps.unwrap();
+            assert!(!(*ps).particle_holder.is_null(), "holder 应已设置");
+            assert_eq!((*ps).emitter_list.count, 1, "应有 1 个 emitter");
+            let def_ref = &*((*ps).particle_def);
+            assert_eq!(def_ref.emitter_defs.len(), 1);
+            // 更新不崩溃
+            (*ps).update();
+        }
+    }
+}

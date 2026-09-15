@@ -1441,22 +1441,11 @@ impl LawnApp {
         REANIMATIONID_NULL
     }
 
-    /// 添加粒子（对应 C++ AddTodParticle）
+    /// 添加粒子（对应 C++ LawnApp::AddPvzpParticle → AllocParticleSystem，LawnApp.cpp:2378）
     pub fn add_tod_particle(&mut self, x: f32, y: f32, render_order: i32, effect: i32) -> Option<*mut TodParticleSystem> {
         let effect = unsafe { std::mem::transmute::<i32, ParticleEffect>(effect) };
         if let Some(es) = self.effect_system.as_mut() {
-            let mut ps = TodParticleSystem::new();
-            ps.effect_type = effect;
-            ps.render_order = render_order;            // [TRANSLATION_NOTE]: 粒子系统位置以 render_order 近似存储（完整版使用 emitter 偏移）
-            let _ = (x, y);
-            let id = es.add_particle_system(ps);
-            // id 为 1-based（0 保留给 PARTICLESYSTEMID_NULL）
-            if id != 0 {
-                let idx = (id - 1) as usize;
-                if idx < es.particle_systems.len() {
-                    return Some(&mut es.particle_systems[idx] as *mut TodParticleSystem);
-                }
-            }
+            return es.alloc_particle_system(x, y, render_order, effect);
         }
         None
     }
@@ -2842,8 +2831,10 @@ pub fn write_to_registry(&mut self) {
         // TrailLoadDefinitions(gLawnTrailArray, LENGTH(gLawnTrailArray)) — Rust G_LAWN_TRAIL_ARRAY 同 1 项（TRAIL_ICE）
         crate::todlib::trail::trail_load_definitions(unsafe { &mut crate::todlib::trail::G_LAWN_TRAIL_ARRAY });
 
-        // PvzpParticleLoadDefinitions(gLawnParticleArray, ...) — [TRANSLATION_NOTE]: Rust 无 gLawnParticleArray 表，传空
-        crate::todlib::tod_particle::tod_particle_load_definitions(&[]);
+        // PvzpParticleLoadDefinitions(gLawnParticleArray, LENGTH(gLawnParticleArray))
+        // 对应 C++ LawnApp.cpp:1760；G_LAWN_PARTICLE_ARRAY 对应 C++ gLawnParticleArray（PvzpParticle.cpp:36，106 项）
+        crate::todlib::tod_particle::tod_particle_load_definitions(
+            crate::todlib::tod_particle::G_LAWN_PARTICLE_ARRAY);
 
         // LoadGroup("LoadingSounds", 54)
         if let Some(rm) = self.base.resource_manager {
