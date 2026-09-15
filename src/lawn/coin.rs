@@ -153,8 +153,36 @@ impl Coin {
             self.update_collected();
         }
 
-        // [TRANSLATION_NOTE]: AttachmentUpdateAndMove 暂未实现
-        // 钻石/金钱类硬币有位置偏移 + 颜色/缩放覆盖 + 移动中隐藏动画
+        // 对应 C++ Coin::Update 尾部（Coin.cpp:756-773）：
+        // mAttachmentID 非空时 AttachmentUpdateAndMove + OverrideColor + OverrideScale
+        if self.attachment_id != ATTACHMENTID_NULL {
+            let mut a_offset_x = 0.0f32;
+            let mut a_offset_y = 0.0f32;
+            if self.coin_type == CoinType::Diamond {
+                a_offset_x = 18.0 - 18.0 * self.scale;
+                a_offset_y = 13.0 - 13.0 * self.scale;
+            }
+            crate::todlib::attachment::attachment_update_and_move(
+                &mut self.attachment_id,
+                self.pos_x + a_offset_x,
+                self.pos_y + a_offset_y,
+            );
+            let a_color = self.get_color();
+            crate::todlib::attachment::attachment_override_color(
+                &mut self.attachment_id,
+                &crate::framework::color::Color::new(a_color.0, a_color.1, a_color.2, a_color.3),
+            );
+            crate::todlib::attachment::attachment_override_scale(&mut self.attachment_id, self.scale);
+            if (!self.hit_ground || self.is_being_collected)
+                && (self.coin_type == CoinType::Silver || self.coin_type == CoinType::Gold)
+            {
+                // 对应 C++: 移动中的银/金币用静态图，隐藏附件的动画
+                crate::todlib::attachment::attachment_override_color(
+                    &mut self.attachment_id,
+                    &crate::framework::color::Color::new(0, 0, 0, 0),
+                );
+            }
+        }
     }
 
     /// 获取颜色（对应 C++ GetColor）
@@ -1317,8 +1345,21 @@ impl Coin {
 
     /// 硬币死亡（对应 C++ Die）
     pub fn die(&mut self) {
+        // 对应 C++ Coin::Die（Coin.cpp:1404-1407）：
+        // PVZP_ASSERT(!mBoard || mCursorObject->mCoinID != DataArrayGetID(this))
+        // 即光标对象正持有的金币不应被 Die；Rust 以索引一致性近似检查
+        if let Some(board) = self.base.board {
+            unsafe {
+                if self.coin_id != crate::lawn::game_enums::COINID_NULL
+                    && (*board).cursor_object.coin_id == self.coin_id
+                {
+                    debug_assert!(false, "Coin::Die on coin currently held by cursor");
+                }
+            }
+        }
         self.dead = true;
-        // [TRANSLATION_NOTE]: AttachmentDie(mAttachmentID) 暂未实现
+        // 对应 C++: AttachmentDie(mAttachmentID)
+        crate::todlib::attachment::attachment_die(&mut self.attachment_id);
     }
 
     /// 获取硬币值（静态，对应 C++ GetCoinValue）

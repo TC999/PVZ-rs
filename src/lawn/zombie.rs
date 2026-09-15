@@ -6344,9 +6344,10 @@ impl Zombie {
             self.draw_butter(g, &a_draw_pos);
         }
 
-        // C++: 附着物绘制
+        // 对应 C++ Zombie.cpp:6337 AttachmentDraw(mAttachmentID, &theParticleGraphics, false)
         if self.attachment_id != crate::lawn::game_enums::ATTACHMENTID_NULL {
-            // [TRANSLATION_NOTE]: AttachmentDraw 在 Rust 侧为 stub，暂不绘制附着物
+            let mut a_attachment_id = self.attachment_id;
+            crate::todlib::attachment::attachment_draw(&mut a_attachment_id, g, false);
         }
 
         g.clear_clip_rect();
@@ -7487,19 +7488,24 @@ impl Zombie {
             }
         }
 
-        // C++: AttachReanim 将头部附着到身体 "Boss_head2" 轨道
-        // [TRANSLATION_NOTE]: Rust 侧 AttachReanim 为 stub（返回 None），附着效果待 AttachEffect 系统接入
+        // 对应 C++ Zombie.cpp:10517-10518:
+        // aTrackInstance = GetTrackInstanceByName("Boss_head2")
+        // AttachReanim(aTrackInstance->mAttachmentID, aHeadReanim, 28.0f, -84.0f)
         if let Some(app) = self.base.get_app_mut() {
+            // 先取驾驶员头部 reanim 指针（special_head_reanim_id 对应 aHeadReanim）
+            let a_head_reanim_ptr: *mut crate::todlib::reanimator::Reanimation =
+                app.reanimation_get_mut(self.special_head_reanim_id)
+                    .map_or(std::ptr::null_mut(), |r| r as *mut crate::todlib::reanimator::Reanimation);
             if let Some(body) = app.reanimation_get_mut(a_body_reanim_id) {
                 if let Some(track_instance) = body.get_track_instance_by_name("Boss_head2") {
                     let mut a_attachment_id = crate::lawn::game_enums::ATTACHMENTID_NULL;
                     let _ = crate::todlib::attachment::attach_reanim(
                         &mut a_attachment_id,
-                        std::ptr::null_mut(),
+                        a_head_reanim_ptr as *mut std::ffi::c_void,
                         28.0,
                         -84.0,
                     );
-                    let _ = track_instance;
+                    track_instance.m_attachment_id = a_attachment_id;
                 }
                 body.m_frame_base_pose = 0;
             }

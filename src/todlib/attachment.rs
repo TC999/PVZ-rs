@@ -209,13 +209,13 @@ impl Attachment {
                         }
                     }
                 }
-                // [TRANSLATION_NOTE]: C++ 中 Trail 分支依赖 Trail 系统（Rust 暂无）
+                // 对应 C++: aReanimation->mOverlayMatrix = aPosition（渲染矩阵）
                 EffectType::Reanim => {
-                    // [TRANSLATION_NOTE]: C++ 中 aReanimation->mOverlayMatrix = aPosition（渲染矩阵）；
-                    // Rust Reanimation 无 m_overlay_matrix 字段，以平移分量近似
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
                             if let Some(a_reanim) = es.reanimations.get_mut(self.effect_array[i].effect_id as usize) {
+                                a_reanim.m_overlay_matrix = a_position;
+                                // 平移分量同时同步到 m_x/m_y（既有 Rust 定位逻辑依赖）
                                 a_reanim.set_position(a_position.m[0][2], a_position.m[1][2]);
                             }
                         }
@@ -341,7 +341,7 @@ impl Attachment {
                         }
                     }
                 }
-                // [TRANSLATION_NOTE]: C++ 中 Trail 分支依赖 Trail 系统（Rust 暂无）
+                // 对应 C++ Attachment::Draw 的 Reanim 分支：aReanimation->DrawAllRenderGroups(g)
                 EffectType::Reanim => {
                     // [TRANSLATION_NOTE]: C++ 中 aReanimation->DrawAllRenderGroups(g)；
                     // Rust 以 Reanimation::draw 近似（渲染组遍历依赖 reanim 完整实现）
@@ -395,7 +395,16 @@ impl Attachment {
                         }
                     }
                 }
-                // [TRANSLATION_NOTE]: C++ 中 Trail 分支依赖 Trail 系统（Rust 暂无）
+                EffectType::Trail => {
+                    // 对应 C++ Attachment::AttachmentDie 的 Trail 分支：aTrail->mDead = true
+                    if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
+                        if let Some(es) = app.effect_system.as_mut() {
+                            if let Some(a_trail) = es.trails.get_mut(self.effect_array[i].effect_id as usize) {
+                                a_trail.m_dead = true;
+                            }
+                        }
+                    }
+                }
                 EffectType::Reanim => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
@@ -414,7 +423,7 @@ impl Attachment {
                         }
                     }
                 }
-                EffectType::Trail | EffectType::Other => {}
+                EffectType::Other => {}
             }
             // 对应 C++: aAttachEffect->mEffectID = 0
             self.effect_array[i].effect_id = 0;
@@ -436,12 +445,21 @@ impl Attachment {
                         }
                     }
                 }
-                // [TRANSLATION_NOTE]: C++ 中 Trail 分支依赖 Trail 系统（Rust 暂无）
                 EffectType::Reanim => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
                             if let Some(a_reanim) = es.reanimations.get_mut(self.effect_array[i].effect_id as usize) {
                                 a_reanim.m_is_attachment = false;
+                            }
+                        }
+                    }
+                }
+                EffectType::Trail => {
+                    // 对应 C++ Attachment::Detach 的 Trail 分支：aTrail->mIsAttachment = false
+                    if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
+                        if let Some(es) = app.effect_system.as_mut() {
+                            if let Some(a_trail) = es.trails.get_mut(self.effect_array[i].effect_id as usize) {
+                                a_trail.m_is_attachment = false;
                             }
                         }
                     }
@@ -481,8 +499,17 @@ impl Attachment {
             }
             match a_attach_effect.effect_type {
                 EffectType::Particle => {
-                    // [TRANSLATION_NOTE]: C++ 中为粒子的 OverrideColor/OverrideExtraAdditiveDraw，
-                    // 依赖 tod_particle 完整实现（当前 stub）
+                    // 对应 C++ Attachment::PropogateColor 粒子分支：
+                    // OverrideColor(nullptr, theColor) + OverrideExtraAdditiveDraw(nullptr, theEnableAdditiveColor)
+                    let a_effect_id = a_attach_effect.effect_id;
+                    if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
+                        if let Some(es) = app.effect_system.as_mut() {
+                            if let Some(a_ps) = es.particle_systems.get_mut(a_effect_id as usize) {
+                                a_ps.override_color("", color);
+                                a_ps.override_extra_additive_draw("", enable_additive_color);
+                            }
+                        }
+                    }
                 }
                 EffectType::Reanim => {
                     let a_effect_id = a_attach_effect.effect_id;
@@ -650,6 +677,188 @@ pub fn is_full_of_attachments(the_attachment_id: AttachmentID) -> bool {
     a_attachment.num_effects >= MAX_EFFECTS_PER_ATTACHMENT as i32
 }
 
+/// 按 ID 获取附件可变指针（对应 C++ DataArrayTryToGet；找不到返回 None）
+pub fn get_attachment_mut(the_attachment_id: AttachmentID) -> Option<*mut Attachment> {
+    if the_attachment_id == ATTACHMENTID_NULL {
+        return None;
+    }
+    let app = crate::lawn::lawn_app::LawnApp::instance()?;
+    let es = app.effect_system.as_mut()?;
+    let idx = the_attachment_id as usize;
+    if idx < es.attachments.len() {
+        Some(&mut es.attachments[idx] as *mut Attachment)
+    } else {
+        None
+    }
+}
+
+/// 更新附件并设置矩阵（对应 C++ AttachmentUpdateAndSetMatrix，Attachment.cpp:708）
+/// 附件无效时回写 NULL
+pub fn attachment_update_and_set_matrix(
+    the_attachment_id: &mut AttachmentID,
+    the_matrix: &crate::framework::sexy_matrix::SexyMatrix3,
+) {
+    if *the_attachment_id == ATTACHMENTID_NULL {
+        return;
+    }
+    let a_attachment = get_attachment_mut(*the_attachment_id);
+    if let Some(a_attachment) = a_attachment {
+        unsafe {
+            (*a_attachment).update();
+            (*a_attachment).set_matrix(the_matrix);
+        }
+    } else {
+        *the_attachment_id = ATTACHMENTID_NULL;
+    }
+}
+
+/// 更新附件并移动位置（对应 C++ AttachmentUpdateAndMove，Attachment.cpp:726）
+/// 附件无效时回写 NULL
+pub fn attachment_update_and_move(
+    the_attachment_id: &mut AttachmentID,
+    the_x: f32,
+    the_y: f32,
+) {
+    if *the_attachment_id == ATTACHMENTID_NULL {
+        return;
+    }
+    let a_attachment = get_attachment_mut(*the_attachment_id);
+    if let Some(a_attachment) = a_attachment {
+        unsafe {
+            (*a_attachment).update();
+            (*a_attachment).set_position(&crate::framework::common::SexyVector2::new(the_x, the_y));
+        }
+    } else {
+        *the_attachment_id = ATTACHMENTID_NULL;
+    }
+}
+
+/// 覆盖附件颜色（对应 C++ AttachmentOverrideColor，Attachment.cpp:744）
+pub fn attachment_override_color(
+    the_attachment_id: &mut AttachmentID,
+    the_color: &Color,
+) {
+    if *the_attachment_id == ATTACHMENTID_NULL {
+        return;
+    }
+    if let Some(a_attachment) = get_attachment_mut(*the_attachment_id) {
+        unsafe {
+            (*a_attachment).override_color(the_color);
+        }
+    }
+}
+
+/// 覆盖附件缩放（对应 C++ AttachmentOverrideScale，Attachment.cpp:757）
+pub fn attachment_override_scale(
+    the_attachment_id: &mut AttachmentID,
+    the_scale: f32,
+) {
+    if *the_attachment_id == ATTACHMENTID_NULL {
+        return;
+    }
+    if let Some(a_attachment) = get_attachment_mut(*the_attachment_id) {
+        unsafe {
+            (*a_attachment).override_scale(the_scale);
+        }
+    }
+}
+
+/// 销毁附件中指定重动画类型的动画（对应 C++ AttachmentReanimTypeDie，Attachment.cpp:770）
+pub fn attachment_reanim_type_die(
+    the_attachment_id: &mut AttachmentID,
+    the_reanim_type: crate::lawn::game_enums::ReanimationType,
+) {
+    let a_attachment = get_attachment_mut(*the_attachment_id);
+    let a_attachment = match a_attachment {
+        Some(a) => a,
+        None => return,
+    };
+    let a_effect_ids: Vec<(EffectType, u32)> = unsafe {
+        (0..(*a_attachment).num_effects as usize)
+            .map(|i| ((*a_attachment).effect_array[i].effect_type, (*a_attachment).effect_array[i].effect_id))
+            .collect()
+    };
+    let app = match crate::lawn::lawn_app::LawnApp::instance() {
+        Some(a) => a,
+        None => return,
+    };
+    let es = match app.effect_system.as_mut() {
+        Some(e) => e,
+        None => return,
+    };
+    for (a_effect_type, a_effect_id) in a_effect_ids {
+        if a_effect_type == EffectType::Reanim {
+            if let Some(a_reanim) = es.reanimations.get_mut(a_effect_id as usize) {
+                if a_reanim.reanim_type == the_reanim_type {
+                    a_reanim.reanimation_die();
+                }
+            }
+        }
+    }
+}
+
+/// 附件整体淡出（对应 C++ AttachmentCrossFade，Attachment.cpp:858）
+pub fn attachment_cross_fade(
+    the_attachment_id: &mut AttachmentID,
+    the_cross_fade_name: &str,
+) {
+    if *the_attachment_id == ATTACHMENTID_NULL {
+        return;
+    }
+    if let Some(a_attachment) = get_attachment_mut(*the_attachment_id) {
+        unsafe {
+            (*a_attachment).cross_fade(the_cross_fade_name);
+        }
+    }
+}
+
+/// 绘制附件（对应 C++ AttachmentDraw，Attachment.cpp:871）
+pub fn attachment_draw(
+    the_attachment_id: &mut AttachmentID,
+    g: &mut Graphics,
+    the_parent_hidden: bool,
+) {
+    if *the_attachment_id == ATTACHMENTID_NULL {
+        return;
+    }
+    if let Some(a_attachment) = get_attachment_mut(*the_attachment_id) {
+        unsafe {
+            (*a_attachment).draw(g, the_parent_hidden);
+        }
+    }
+}
+
+/// 销毁附件（对应 C++ AttachmentDie，Attachment.cpp:708 附近）
+/// the_attachment_id 无效时直接置 NULL 返回；否则取到 Attachment 并调 die
+pub fn attachment_die(the_attachment_id: &mut AttachmentID) {
+    if *the_attachment_id == ATTACHMENTID_NULL {
+        return;
+    }
+    let a_attachment: Option<*mut Attachment> = {
+        let app = crate::lawn::lawn_app::LawnApp::instance();
+        if let Some(app) = app {
+            if let Some(es) = app.effect_system.as_mut() {
+                let idx = *the_attachment_id as usize;
+                if idx < es.attachments.len() {
+                    Some(&mut es.attachments[idx] as *mut Attachment)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
+    *the_attachment_id = ATTACHMENTID_NULL;
+    if let Some(a_attachment) = a_attachment {
+        unsafe {
+            (*a_attachment).die();
+        }
+    }
+}
+
 /// 创建效果附着（对应 C++ CreateEffectAttachment，Attachment.cpp）
 /// attachment id 无效或已死时分配新 Attachment 并回写 id
 pub fn create_effect_attachment(
@@ -812,5 +1021,87 @@ pub fn prune_dead_effects(attachment: &mut Attachment) {
 
     if attachment.num_effects == 0 {
         attachment.dead = true;
+    }
+}
+
+/// 分离指定粒子效果的附件并淡出/销毁（对应 C++ AttachmentDetachCrossFadeParticleType，Attachment.cpp:792）
+/// 遍历效果数组，对 particle_def 匹配的粒子系统：theCrossFadeName 非空则 CrossFade，否则 ParticleSystemDie；
+/// 随后立即移除该效果条目（memmove 前移语义），全部移除后附件置死
+pub fn attachment_detach_cross_fade_particle_type(
+    the_attachment_id: &mut AttachmentID,
+    the_particle_effect: crate::lawn::game_enums::ParticleEffect,
+    the_cross_fade_name: Option<&str>,
+) {
+    if *the_attachment_id == ATTACHMENTID_NULL {
+        return;
+    }
+    let app = match crate::lawn::lawn_app::LawnApp::instance() {
+        Some(a) => a,
+        None => return,
+    };
+    let es = match app.effect_system.as_mut() {
+        Some(e) => e,
+        None => return,
+    };
+    let idx = *the_attachment_id as usize;
+    if idx >= es.attachments.len() {
+        return;
+    }
+    // 对应 C++: aDefinition = &gParticleDefArray[theParticleEffect]
+    let a_definition = crate::todlib::tod_particle::particle_get_definition(the_particle_effect);
+    let a_definition = match a_definition {
+        Some(d) => d,
+        None => return,
+    };
+    let mut i = 0usize;
+    while i < es.attachments[idx].num_effects as usize {
+        let a_effect_type = es.attachments[idx].effect_array[i].effect_type;
+        if a_effect_type != EffectType::Particle {
+            i += 1;
+            continue;
+        }
+        let a_effect_id = es.attachments[idx].effect_array[i].effect_id;
+        // 对应 C++: aParticleSystem->mParticleDef == aDefinition
+        let a_matches = es
+            .particle_systems
+            .get(a_effect_id as usize)
+            .map_or(false, |ps| ps.particle_def == a_definition);
+        if a_matches {
+            // 借用规避：先取得粒子系统指针，再移除效果条目
+            let a_ps_ptr = match es.particle_systems.get_mut(a_effect_id as usize) {
+                Some(ps) => ps as *mut crate::todlib::tod_particle::TodParticleSystem,
+                None => {
+                    i += 1;
+                    continue;
+                }
+            };
+            unsafe {
+                match the_cross_fade_name {
+                    Some(a_name) => {
+                        // 对应 C++: aParticleSystem->mIsAttachment = false; CrossFade(theCrossFadeName)
+                        (*a_ps_ptr).is_attachment = false;
+                        (*a_ps_ptr).cross_fade(a_name);
+                    }
+                    None => {
+                        (*a_ps_ptr).particle_system_die();
+                    }
+                }
+            }
+            // 对应 C++: memmove 前移并递减数量
+            let a_num_remaining = es.attachments[idx].num_effects as usize - i - 1;
+            if a_num_remaining > 0 {
+                for k in 0..a_num_remaining {
+                    es.attachments[idx].effect_array[i + k] = es.attachments[idx].effect_array[i + k + 1].clone();
+                }
+            }
+            es.attachments[idx].num_effects -= 1;
+            continue;
+        }
+        i += 1;
+    }
+    // 对应 C++: 效果清空后附件置死
+    if es.attachments[idx].num_effects == 0 {
+        es.attachments[idx].dead = true;
+        *the_attachment_id = ATTACHMENTID_NULL;
     }
 }

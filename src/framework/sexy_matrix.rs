@@ -105,6 +105,26 @@ impl SexyMatrix3 {
     pub fn as_float_array(&self) -> &[f32; 9] {
         unsafe { &*(self as *const SexyMatrix3 as *const [f32; 9]) }
     }
+
+    /// 矩阵求逆（对应 C++ SexyMatrix3Inverse，PvzpCommon.cpp:944）
+    pub fn inverse(&self) -> SexyMatrix3 {
+        let m = &self.m;
+        let a_det = (m[2][2] * m[1][1] - m[2][1] * m[1][2]) * m[0][0]
+            - (m[2][2] * m[1][0] - m[2][0] * m[1][2]) * m[0][1]
+            + (m[2][1] * m[1][0] - m[2][0] * m[1][1]) * m[0][2];
+        let a_inv_det = 1.0 / a_det;
+        let mut temp = SexyMatrix3::identity();
+        temp.m[0][0] = (m[2][2] * m[1][1] - m[2][1] * m[1][2]) * a_inv_det;
+        temp.m[0][1] = (m[0][2] * m[2][1] - m[2][2] * m[0][1]) * a_inv_det;
+        temp.m[0][2] = (m[1][2] * m[0][1] - m[0][2] * m[1][1]) * a_inv_det;
+        temp.m[1][0] = (m[2][0] * m[1][2] - m[2][2] * m[1][0]) * a_inv_det;
+        temp.m[1][1] = (m[0][0] * m[2][2] - m[0][2] * m[2][0]) * a_inv_det;
+        temp.m[1][2] = (m[0][2] * m[1][0] - m[1][2] * m[0][0]) * a_inv_det;
+        temp.m[2][0] = (m[2][1] * m[1][0] - m[2][0] * m[1][1]) * a_inv_det;
+        temp.m[2][1] = (m[2][0] * m[0][1] - m[2][1] * m[0][0]) * a_inv_det;
+        temp.m[2][2] = (m[0][0] * m[1][1] - m[1][0] * m[0][1]) * a_inv_det;
+        temp
+    }
 }
 
 impl Default for SexyMatrix3 {
