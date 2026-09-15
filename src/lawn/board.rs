@@ -1331,6 +1331,9 @@ impl Board {
             coin.base.app = Some(app);
         }
         self.coins.push(coin);
+        // 对应 C++ DataArrayGetID(this)：记录 coin 在数组中的 ID（Vec 索引）
+        let a_new_index = self.coins.len() - 1;
+        self.coins[a_new_index].coin_id = a_new_index as CoinID;
 
         // C++ 1989-1992: 首次冒险模式第 1 关提示点击阳光
         let first_time = self.app.map_or(false, |app| unsafe { (*app).is_first_time_adventure_mode() });
@@ -5472,7 +5475,8 @@ Spawn: {}
         match self.cursor_object.cursor_type {
             CursorType::PlantFromUsableCoin => {
                 // C++ 2027: mCoins.DataArrayTryToGet(mCursorObject->mCoinID)->DroppedUsableSeed();
-                // [TRANSLATION_NOTE]: C++ DataArray id 以 Vec 索引近似（Rust 侧 Coin 无 id 字段，coin_id 未接入赋值流程）
+                // [TRANSLATION_NOTE]: C++ DataArray id 以 Vec 索引近似；coin_id 由
+                // Board::add_coin 赋值、Coin::Collect 接线到 cursor_object（索引稳定性见 Coin::coin_id 注释）
                 if let Some(coin) = self.coins.get_mut(self.cursor_object.coin_id as usize) {
                     coin.dropped_usable_seed();
                 }

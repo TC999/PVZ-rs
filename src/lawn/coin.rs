@@ -45,6 +45,9 @@ pub struct Coin {
     pub collect_x: f32,
     pub collect_y: f32,
     pub attachment_id: AttachmentID,
+    /// 对应 C++ mCoinID（DataArray ID；Rust 以 Board::coins Vec 索引承载，
+    /// 由 Board::add_coin 在 push 后赋值；使用点在 Collect→RefreshSeedPacketFromCursor 间不经 retain，索引稳定）
+    pub coin_id: CoinID,
     pub needs_bouncy_arrow: bool,
     pub has_bouncy_arrow: bool,
     pub times_dropped: i32,
@@ -85,6 +88,7 @@ impl Coin {
             collect_x: 0.0,
             collect_y: 0.0,
             attachment_id: ATTACHMENTID_NULL,
+            coin_id: crate::lawn::game_enums::COINID_NULL,
             needs_bouncy_arrow: false,
             has_bouncy_arrow: false,
             times_dropped: 0,
@@ -987,7 +991,8 @@ impl Coin {
                 unsafe {
                     (*board).cursor_object.seed_type = self.usable_seed_type;
                     (*board).cursor_object.cursor_type = CursorType::PlantFromUsableCoin;
-                    // [TRANSLATION_NOTE]: mCoinID = DataArrayGetID(this) 未实现
+                    // 对应 C++ Coin.cpp:1252 mBoard->mCursorObject->mCoinID = DataArrayGetID(this)
+                    (*board).cursor_object.coin_id = self.coin_id;
                     self.ground_y = self.pos_y as i32 as f32;
                     self.fade_count = 0;
                 }
