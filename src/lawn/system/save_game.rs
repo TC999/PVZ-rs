@@ -2448,8 +2448,8 @@ fn sync_reanim_track_instance_portable(ctx: &mut PortableSaveContext, track: &mu
 
 /// 同步动画实例（对应 C++ SyncReanimationPortable，SaveGame.cpp:1140）
 /// [TRANSLATION_NOTE]: Rust m_definition 为指针且无 gReanimatorDefArray 反查表，def 索引以
-/// reanim_type 写入并在读取时丢弃；m_overlay_matrix/m_filter_effect Rust 无字段，占位保持格式；
-/// 轨道实例数不显式入档（C++ 由 def->mTracks.count 决定，Rust 同进程内与 m_track_instances 一致）
+/// reanim_type 写入并在读取时丢弃；轨道实例数不显式入档（C++ 由 def->mTracks.count 决定，
+/// Rust 同进程内与 m_track_instances 一致）
 fn sync_reanimation_portable(ctx: &mut PortableSaveContext, reanimation: &mut Reanimation) {
     // C++ SyncReanimationDefPortable（int32 定义索引）
     let mut def_index = reanimation.reanim_type as i32;
@@ -2465,9 +2465,12 @@ fn sync_reanimation_portable(ctx: &mut PortableSaveContext, reanimation: &mut Re
     ctx.sync_i32(&mut reanimation.m_frame_start);
     ctx.sync_i32(&mut reanimation.m_frame_count);
     ctx.sync_i32(&mut reanimation.m_frame_base_pose);
-    // C++ mOverlayMatrix——Rust 无字段，占位
-    let mut overlay_matrix = crate::framework::sexy_matrix::SexyMatrix3::identity();
+    // 对应 C++ mOverlayMatrix（Rust 字段已存在，直接同步）
+    let mut overlay_matrix = reanimation.m_overlay_matrix;
     sync_matrix_portable(ctx, &mut overlay_matrix);
+    if ctx.reading {
+        reanimation.m_overlay_matrix = overlay_matrix;
+    }
     sync_color_portable(ctx, &mut reanimation.m_color_override);
     ctx.sync_i32(&mut reanimation.m_loop_count);
     ctx.sync_bool(&mut reanimation.m_is_attachment);
@@ -2477,11 +2480,16 @@ fn sync_reanimation_portable(ctx: &mut PortableSaveContext, reanimation: &mut Re
     sync_color_portable(ctx, &mut reanimation.m_extra_overlay_color);
     ctx.sync_bool(&mut reanimation.m_enable_extra_overlay_draw);
     ctx.sync_f32(&mut reanimation.m_last_anim_time);
-    // C++ mFilterEffect——Rust 无字段（本地枚举），占位 i32
-    let mut filter_effect = 0i32;
+    // 对应 C++ mFilterEffect（Rust 字段已存在，按 i32 同步）
+    let mut filter_effect = reanimation.m_filter_effect as i32;
     ctx.sync_i32(&mut filter_effect);
     if ctx.reading {
-        let _ = filter_effect;
+        reanimation.m_filter_effect = match filter_effect {
+            0 => crate::todlib::filter_effect::FilterEffectType::WashedOut,
+            1 => crate::todlib::filter_effect::FilterEffectType::LessWashedOut,
+            2 => crate::todlib::filter_effect::FilterEffectType::White,
+            _ => crate::todlib::filter_effect::FilterEffectType::None,
+        };
     }
     // 轨道实例（C++: for aTrackIndex in 0..aDef->mTracks.count）
     let track_count = reanimation.m_track_instances.len();

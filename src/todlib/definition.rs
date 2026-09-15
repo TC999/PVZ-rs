@@ -12,6 +12,8 @@ use crate::framework::rect::Rect;
 pub struct ReanimatorDefinition {
     pub m_fps: f32,
     pub m_tracks: Vec<ReanimatorTrackDefinition>,
+    // 对应 C++ ReanimatorDefinition::mReanimAtlas（Reanimator.h:84）
+    pub m_reanim_atlas: Option<*mut crate::todlib::reanim_atlas::ReanimAtlas>,
 }
 
 #[derive(Debug, Clone)]
@@ -21,6 +23,9 @@ pub struct ReanimatorTrackDefinition {
     /// 每帧一个变换（对应 C++ ReanimatorTrack::mTransforms 数组）
     pub m_transforms: Vec<ReanimatorTransform>,
     pub m_shader: String,
+    /// 文本轨道字符串表（对应 C++ mText 指针指向定义内字符串；
+    /// ReanimatorTransform 保持 Copy，故文本以表索引存储，-1 表示无文本（等价空串））
+    pub m_texts: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy)]

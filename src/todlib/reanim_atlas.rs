@@ -7,6 +7,7 @@ use crate::framework::graphics::image::Image;
 use crate::framework::graphics::memory_image::MemoryImage;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::rect::Rect;
+use crate::todlib::definition::ReanimatorDefinition;
 
 /// 图集中的单张图像信息（对应 C++ ReanimAtlasImage）
 #[derive(Debug, Clone, Copy)]
@@ -183,10 +184,8 @@ impl ReanimAtlas {
         -1
     }
 
-    /// 创建图集纹理（对应 C++ ReanimAtlasCreate）
-    /// [TRANSLATION_NOTE]: C++ 中"从 ReanimatorDefinition 的 transform.mImage 收集图像"阶段
-    /// 依赖 Image* 资源映射（Rust 的 m_image 为资源 ID），图像由调用方经 add_image 预填充；
-    /// 此处执行 ArrangeImages + 空白纹理 + 绘制 + 边缘混合修复。
+    /// 创建图集纹理（对应 C++ ReanimAtlasCreate 的纹理生成阶段）
+    /// 由 create_from_definition 在收集/编码完成后调用：ArrangeImages + 空白纹理 + 绘制 + 边缘混合修复
     pub fn create(&mut self) {
         let mut a_atlas_width = 0;
         let mut a_atlas_height = 0;
@@ -211,5 +210,61 @@ impl ReanimAtlas {
         a_memory_image.fix_pixels_on_alpha_edge_for_blending();
 
         self.memory_image = Box::into_raw(Box::new(a_memory_image));
+    }
+
+    /// 从定义收集图像并编码句柄（对应 C++ ReanimAtlasCreate 的收集+编码阶段，
+    /// ReanimAtlas.cpp:10-37）：将 ≤254×254 的单列图加入图集，并把
+    /// transform.m_image 回写为编码索引（index+1，1..1000 范围内）
+    pub fn create_from_definition(def: &mut ReanimatorDefinition) -> Option<*mut ReanimAtlas> {
+        use crate::todlib::reanim_loader::{get_reanim_image_name, reanimator_get_image};
+        let mut a_atlas = ReanimAtlas::new();
+        // 第一遍：收集
+        for a_track in &def.m_tracks {
+            for a_key in &a_track.m_transforms {
+                let a_image_id = a_key.m_image;
+                if a_image_id < 0 {
+                    continue;
+                }
+                if let Some(a_image) = reanimator_get_image(a_image_id) {
+                    unsafe {
+                        if (*a_image).width <= 254
+                            && (*a_image).height <= 254
+                            && (*a_image).num_cols == 1
+                            && (*a_image).num_rows == 1
+                            && a_atlas.find_image(a_image) < 0
+                        {
+                            a_atlas.add_image(a_image);
+                        }
+                    }
+                }
+                let _ = get_reanim_image_name(a_image_id);
+            }
+        }
+        if a_atlas.image_array.is_empty() {
+            return None; // 无可用图集图（C++ 亦会创建空图集，此处等价跳过）
+        }
+        let mut a_atlas_width = 0;
+        let mut a_atlas_height = 0;
+        a_atlas.arrange_images(&mut a_atlas_width, &mut a_atlas_height);
+        // 第二遍：编码句柄回写（对应 C++ aImage = (Image*)(aImageIndex + 1)）
+        for a_track in &mut def.m_tracks {
+            for a_key in &mut a_track.m_transforms {
+                let a_image_id = a_key.m_image;
+                if a_image_id < 0 {
+                    continue;
+                }
+                if let Some(a_image) = reanimator_get_image(a_image_id) {
+                    let a_index = a_atlas.find_image(a_image);
+                    if a_index < 0 {
+                        continue; // 未入图集（如多列图）
+                    }
+                    // 编码索引 = index + 1，对应 get_encoded_reanim_atlas 的解码
+                    a_key.m_image = a_index + 1;
+                }
+            }
+        }
+        // 生成内存图集纹理
+        a_atlas.create();
+        Some(Box::into_raw(Box::new(a_atlas)))
     }
 }

@@ -2374,10 +2374,8 @@ impl Challenge {
         ];
         for reanim_id in reanim_ids {
             if let Some(reanim) = unsafe { (&mut *app_ptr).reanimation_get_mut(reanim_id) } {
-                // [TRANSLATION_NOTE]: C++ 中 aReanim->mFilterEffect = theFilterEffect；
-                // Rust 侧 Reanimation 无 m_filter_effect 字段（filter_effect 系统未接入），暂略
-                let _ = reanim;
-                let _ = filter_effect;
+                // 对应 C++ Challenge.cpp:4750-4753: aReanim->mFilterEffect = theFilterEffect
+                reanim.m_filter_effect = filter_effect;
             }
         }
     }

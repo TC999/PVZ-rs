@@ -178,6 +178,39 @@ pub fn resolve_reanim_image_name(name: &str) -> i32 {
     }
 }
 
+/// 全局字体名表（ReanimatorTransform.mFont 索引 ← 字体名）
+/// 对应 C++ ReanimatorTransform::mFont（_Font*）；字体对象解析在字体表接入后完成，
+/// 此处先登记名字索引，-1 表示无字体
+static mut REANIM_FONT_NAMES: Vec<String> = Vec::new();
+
+/// 把字体名登记到全局表，返回索引（-1 无字体）
+pub fn resolve_reanim_font_name(name: &str) -> i32 {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return -1;
+    }
+    unsafe {
+        if let Some(idx) = REANIM_FONT_NAMES.iter().position(|n| *n == name) {
+            return idx as i32;
+        }
+        REANIM_FONT_NAMES.push(name);
+        (REANIM_FONT_NAMES.len() - 1) as i32
+    }
+}
+
+/// 按索引取字体名（-1 返回 None）
+pub fn get_reanim_font_name(idx: i32) -> Option<&'static str> {
+    if idx < 0 {
+        return None;
+    }
+    unsafe {
+        REANIM_FONT_NAMES
+            .get(idx as usize)
+            .map(|s| s.as_str() as *const str)
+            .map(|p| unsafe { &*p })
+    }
+}
+
 /// 按索引取图片名（-1 返回 None）
 pub fn get_reanim_image_name(idx: i32) -> Option<&'static str> {
     if idx < 0 {
@@ -197,7 +230,7 @@ use crate::todlib::xml_parser::XmlNode;
 const FIELD_PLACEHOLDER: f32 = -10000.0;
 
 /// 解析单个 <t> 变换元素（对应 C++ ReanimatorTransform 的 DefMap 字段）
-fn parse_transform_node(node: &XmlNode) -> ReanimatorTransform {
+fn parse_transform_node(node: &XmlNode, track_texts: &mut Vec<String>) -> ReanimatorTransform {
     let mut t = ReanimatorTransform {
         m_trans_x: FIELD_PLACEHOLDER,
         m_trans_y: FIELD_PLACEHOLDER,
@@ -227,9 +260,18 @@ fn parse_transform_node(node: &XmlNode) -> ReanimatorTransform {
             "f" => t.m_frame = v.parse().unwrap_or(0.0),
             "a" => t.m_alpha = v.parse().unwrap_or(1.0),
             "i" => t.m_image = resolve_reanim_image_name(v),
-            "font" => t.m_font = -1, // [TRANSLATION_NOTE]: 字体解析未接入
+            "font" => {
+                // 对应 C++ mFont：以字体名查表；找不到保持 -1（无字体）
+                t.m_font = resolve_reanim_font_name(v);
+            }
             "text" => {
-                // [TRANSLATION_NOTE]: 文本字段暂存 extra_int 标记
+                // 对应 C++ mText：文本存入轨道文本表，m_text 存索引（-1 = 无文本）
+                if v.is_empty() {
+                    t.m_text = -1;
+                } else {
+                    track_texts.push(v.to_string());
+                    t.m_text = (track_texts.len() - 1) as i32;
+                }
             }
             _ => {}
         }
@@ -243,6 +285,8 @@ fn fill_in_missing_data(transforms: &mut [ReanimatorTransform]) {
     let (mut psx, mut psy) = (1.0, 1.0);
     let (mut pf, mut pa) = (0.0, 1.0);
     let mut pimg = -1;
+    let mut pfont = -1;
+    let mut ptext = -1;
     for t in transforms.iter_mut() {
         if t.m_trans_x == FIELD_PLACEHOLDER { t.m_trans_x = px; } else { px = t.m_trans_x; }
         if t.m_trans_y == FIELD_PLACEHOLDER { t.m_trans_y = py; } else { py = t.m_trans_y; }
@@ -253,6 +297,9 @@ fn fill_in_missing_data(transforms: &mut [ReanimatorTransform]) {
         if t.m_frame == FIELD_PLACEHOLDER { t.m_frame = pf; } else { pf = t.m_frame; }
         if t.m_alpha == FIELD_PLACEHOLDER { t.m_alpha = pa; } else { pa = t.m_alpha; }
         if t.m_image == -1 { t.m_image = pimg; } else { pimg = t.m_image; }
+        // 对应 C++ ReanimationFillInMissingData 的 font/text 继承
+        if t.m_font == -1 { t.m_font = pfont; } else { pfont = t.m_font; }
+        if t.m_text == -1 { t.m_text = ptext; } else { ptext = t.m_text; }
         t.m_visible = t.m_image != -1;
     }
 }
@@ -263,6 +310,7 @@ pub fn parse_reanim_xml(xml: &str) -> Option<ReanimatorDefinition> {
     let mut def = ReanimatorDefinition {
         m_fps: 12.0,
         m_tracks: Vec::new(),
+        m_reanim_atlas: None,
     };
     for node in &nodes {
         match node.name.as_str() {
@@ -272,10 +320,11 @@ pub fn parse_reanim_xml(xml: &str) -> Option<ReanimatorDefinition> {
                     m_parent_name: String::new(), // [TRANSLATION_NOTE]: XML 中无 parent 字段
                     m_transforms: Vec::new(),
                     m_shader: String::new(),
+                    m_texts: Vec::new(),
                 };
                 for child in &node.children {
                     if child.name == "t" {
-                        track.m_transforms.push(parse_transform_node(child));
+                        track.m_transforms.push(parse_transform_node(child, &mut track.m_texts));
                     }
                 }
                 fill_in_missing_data(&mut track.m_transforms);
@@ -368,7 +417,13 @@ fn load_reanim_image(name: &str) -> Option<Box<Image>> {
     let candidates = image_path_candidates(name);
     for path in candidates {
         // pak 查询用大写归一化，故此处大小写不敏感
-        let bytes = with_pak_interface(|pak| pak.load_file(&path))?;
+        // 对应 C++ DefinitionLoadImage 的 gDefLoadResPaths 多路径遍历：
+        // 单个候选不存在时继续尝试下一路径（不可用 ? 提前返回）
+        let bytes = with_pak_interface(|pak| pak.load_file(&path));
+        let bytes = match bytes {
+            Some(b) => b,
+            None => continue,
+        };
         if let Some(img) = decode_png_bytes(&bytes) {
             return Some(img);
         }

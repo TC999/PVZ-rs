@@ -76,6 +76,8 @@ pub struct Reanimation {
     pub m_frame_count: i32,
     // 对应 C++ mOverlayMatrix（轨道绘制时叠加的 3x3 矩阵，DrawRenderGroup 应用）
     pub m_overlay_matrix: crate::framework::sexy_matrix::SexyMatrix3,
+    // 对应 C++ mFilterEffect（Reanimator.h:210，轨道绘制前对图像应用滤镜）
+    pub m_filter_effect: crate::todlib::filter_effect::FilterEffectType,
     // 对应 C++ 的轨道图片覆盖表（trackName -> Image）
     pub m_image_overrides: Vec<(String, *mut Image)>,
 }
@@ -115,34 +117,117 @@ impl Reanimation {
             m_frame_start: 0,
             m_frame_count: 0,
             m_overlay_matrix: crate::framework::sexy_matrix::SexyMatrix3::identity(),
+            m_filter_effect: crate::todlib::filter_effect::FilterEffectType::None,
             m_image_overrides: Vec::new(),
         }
     }
 
-    /// 更新动画
+    /// 更新动画（对应 C++ Reanimation::Update，Reanimator.cpp:416）
+    /// m_anim_time 为 0~1 归一化时间；推进量 = SECONDS_PER_UPDATE * mAnimRate / mFrameCount
     pub fn update(&mut self) {
-        if self.m_paused { return; }
+        if self.m_frame_count == 0 || self.m_dead {
+            return;
+        }
         self.m_last_anim_time = self.m_anim_time;
-        self.m_anim_time += 1.0 / self.m_fps;
+        self.m_anim_time += SECONDS_PER_UPDATE as f32 * self.m_anim_rate / self.m_frame_count as f32;
 
-        // 检查是否到达结束
+        if self.m_anim_rate > 0.0 {
+            match self.m_loop_type {
+                ReanimLoopType::Loop | ReanimLoopType::LoopFullOffset => {
+                    while self.m_anim_time >= 1.0 {
+                        self.m_loop_count += 1;
+                        self.m_anim_time -= 1.0;
+                    }
+                }
+                ReanimLoopType::PlayOnceAndRemove | ReanimLoopType::PlayOnceFullLastFrame => {
+                    if self.m_anim_time >= 1.0 {
+                        self.m_loop_count = 1;
+                        self.m_anim_time = 1.0;
+                        self.m_dead = true;
+                    }
+                }
+                ReanimLoopType::PlayOnceAndHold | ReanimLoopType::PlayOnceFullLastFrameAndHold => {
+                    if self.m_anim_time >= 1.0 {
+                        self.m_loop_count = 1;
+                        self.m_anim_time = 1.0;
+                    }
+                }
+                // [TRANSLATION_NOTE]: C++ 当前版本无 REANIM_PLAY_ONCE_AND_RETURN_TO_ZERO；
+                // 保持既有 Rust 行为（播完停在末尾）
+                _ => {
+                    if self.m_anim_time >= 1.0 {
+                        self.m_loop_count = 1;
+                        self.m_anim_time = 1.0;
+                    }
+                }
+            }
+        } else if self.m_anim_rate < 0.0 {
+            match self.m_loop_type {
+                ReanimLoopType::Loop | ReanimLoopType::LoopFullOffset => {
+                    while self.m_anim_time < 0.0 {
+                        self.m_loop_count += 1;
+                        self.m_anim_time += 1.0;
+                    }
+                }
+                ReanimLoopType::PlayOnceAndRemove | ReanimLoopType::PlayOnceFullLastFrame => {
+                    if self.m_anim_time < 0.0 {
+                        self.m_loop_count = 1;
+                        self.m_anim_time = 0.0;
+                        self.m_dead = true;
+                    }
+                }
+                ReanimLoopType::PlayOnceAndHold | ReanimLoopType::PlayOnceFullLastFrameAndHold => {
+                    if self.m_anim_time < 0.0 {
+                        self.m_loop_count = 1;
+                        self.m_anim_time = 0.0;
+                    }
+                }
+                _ => {
+                    if self.m_anim_time < 0.0 {
+                        self.m_loop_count = 1;
+                        self.m_anim_time = 0.0;
+                    }
+                }
+            }
+        }
+
+        // 逐轨道更新（对应 C++ Reanimation::Update 后半段，Reanimator.cpp:494-515）
         if let Some(def) = self.m_definition {
             unsafe {
-                let total_time = (*def).m_fps;
-                if self.m_anim_time >= total_time {
-                    match self.m_loop_type {
-                        ReanimLoopType::Loop => {
-                            self.m_anim_time = 0.0;
-                            self.m_loop_count += 1;
-                        },
-                        ReanimLoopType::PlayOnceAndRemove => {
-                            // 标记移除
-                        },
-                        ReanimLoopType::PlayOnceAndReturnToZero => {
-                            self.m_anim_time = total_time;
-                        },
-                        _ => {
-                            self.m_anim_time = total_time;
+                let def_ref = &*def;
+                let track_count = def_ref.m_tracks.len();
+                for a_track_index in 0..track_count {
+                    let a_track_name = &def_ref.m_tracks[a_track_index].m_name;
+                    // 对应 C++: if (mBlendCounter > 0) mBlendCounter--;
+                    if let Some(a_track) = self.m_track_instances.get_mut(a_track_index) {
+                        if a_track.m_blend_count > 0.0 {
+                            a_track.m_blend_count -= 1.0;
+                        }
+                        // 对应 C++: if (mShakeOverride != 0) 随机化 shake
+                        if a_track.m_shake_override != 0.0 {
+                            a_track.m_shake_x = crate::todlib::tod_common::rand_range_float(
+                                -a_track.m_shake_override, a_track.m_shake_override);
+                            a_track.m_shake_y = crate::todlib::tod_common::rand_range_float(
+                                -a_track.m_shake_override, a_track.m_shake_override);
+                        }
+                    }
+                    // 对应 C++: if (strncasecmp(name, "attacher__", 10) == 0) UpdateAttacherTrack
+                    // （放 get_mut 借用之后，避免与 &mut self 冲突）
+                    if a_track_name.len() >= 10
+                        && a_track_name[..10].eq_ignore_ascii_case("attacher__")
+                    {
+                        self.update_attacher_track(a_track_index);
+                    }
+                    // 对应 C++: if (mAttachmentID != ATTACHMENTID_NULL)
+                    //   GetAttachmentOverlayMatrix + AttachmentUpdateAndSetMatrix
+                    if let Some(a_track) = self.m_track_instances.get(a_track_index) {
+                        if a_track.m_attachment_id != crate::lawn::game_enums::ATTACHMENTID_NULL {
+                            let mut a_attachment_id = a_track.m_attachment_id;
+                            let a_overlay_matrix = self.get_attachment_overlay_matrix(a_track_index as i32);
+                            crate::todlib::attachment::attachment_update_and_set_matrix(
+                                &mut a_attachment_id,
+                                &a_overlay_matrix,
+                            );
                         }
                     }
                 }
@@ -155,10 +240,13 @@ impl Reanimation {
         self.draw_render_group(g, 0); // RENDER_GROUP_NORMAL
     }
 
-    /// 按渲染组绘制（对应 C++ Reanimation::DrawRenderGroup）
-    /// 只绘制 mRenderGroup == theRenderGroup 的轨道；附加加法颜色覆盖通过颜色近似
+    /// 按渲染组绘制（对应 C++ Reanimation::DrawRenderGroup + DrawTrack，Reanimator.cpp:635-937）
+    /// 完整矩阵链：pivot 居中 → MatrixFromTransform → × mOverlayMatrix → 平移(shake + g 平移)
     pub fn draw_render_group(&self, g: &mut Graphics, the_render_group: i32) {
         let Some(def_ptr) = self.m_definition else { return };
+        if self.m_dead {
+            return;
+        }
         unsafe {
             let def = &*def_ptr;
             if def.m_tracks.is_empty() {
@@ -172,9 +260,6 @@ impl Reanimation {
                 if ti.m_render_group != the_render_group {
                     continue;
                 }
-                if !ti.m_last_visible {
-                    continue;
-                }
                 let frames = &track_def.m_transforms;
                 if frames.is_empty() {
                     continue;
@@ -184,46 +269,253 @@ impl Reanimation {
                 if !self.get_current_transform(i as i32, &mut a_transform) {
                     continue;
                 }
-                // C++ DrawTrack：blank frame（mFrame < 0）不绘制
-                if a_transform.m_frame < 0.0 {
+                // C++ DrawTrack：aImageFrame = FloatRoundToInt(mFrame)；< 0 不绘制
+                let a_image_frame = a_transform.m_frame.round() as i32;
+                if a_image_frame < 0 {
                     continue;
                 }
-                // C++ 矩阵链 MatrixFromTransform × mOverlayMatrix × 平移(shake + g 平移)
-                // [TRANSLATION_NOTE]: Graphics 无矩阵绘制接口，overlay 矩阵仅应用平移分量（m[0][2]/m[1][2]）；
-                // 其余分量（旋转/斜切/缩放叠加）需 PvzpBltMatrix 等价接口，暂未接入。
-                let px = self.m_x + a_transform.m_trans_x + self.m_overlay_matrix.m[0][2] + ti.m_shake_x;
-                let py = self.m_y + a_transform.m_trans_y + self.m_overlay_matrix.m[1][2] + ti.m_shake_y;
 
-                // 真实图片绘制：从图片名索引取标准 PNG 并绘制
-                // 对应 C++ Reanimation::DrawRenderGroup 的 SetImageTransform + DrawImage
-                let scale_x = self.m_override_scale_x * a_transform.m_scale_x;
-                let scale_y = self.m_override_scale_y * a_transform.m_scale_y;
-                if let Some(img_ptr) = crate::todlib::reanim_loader::reanimator_get_image(a_transform.m_image) {
-                    let img = unsafe { &*img_ptr };
-                    if img.width > 0 && img.height > 0 {
-                        // 设置透明度（通过颜色覆盖）
-                        let alpha = (a_transform.m_alpha * 255.0).clamp(0.0, 255.0) as u8;
-                        g.set_color(&crate::framework::color::Color::new(255, 255, 255, alpha));
-                        if (scale_x - 1.0).abs() > 0.001 || (scale_y - 1.0).abs() > 0.001 {
-                            let w = (img.width as f32 * scale_x).round() as i32;
-                            let h = (img.height as f32 * scale_y).round() as i32;
-                            g.set_scale(scale_x, scale_y, 0.0, 0.0);
-                            g.draw_image_f_xy(img, px, py);
-                            g.set_scale(1.0, 1.0, 0.0, 0.0);
-                        } else {
-                            g.draw_image_f_xy(img, px, py);
+                // 对应 C++: aColor = mTrackColor × mColorOverride（mIgnoreColorOverride 时不乘）
+                // ColorsMultiply：逐通道乘法（/255）
+                let colors_multiply = |a: &Color, b: &Color| -> Color {
+                    Color::new(
+                        ((a.r as u32 * b.r as u32) / 255) as u8,
+                        ((a.g as u32 * b.g as u32) / 255) as u8,
+                        ((a.b as u32 * b.b as u32) / 255) as u8,
+                        ((a.a as u32 * b.a as u32) / 255) as u8,
+                    )
+                };
+                let mut a_color = ti.m_track_color;
+                if !ti.m_ignore_color_override {
+                    a_color = colors_multiply(&a_color, &self.m_color_override);
+                }
+                if g.get_colorize_images() {
+                    a_color = colors_multiply(&a_color, g.get_color());
+                }
+                let a_image_alpha = (a_transform.m_alpha * a_color.a as f32).round().clamp(0.0, 255.0) as i32;
+                if a_image_alpha <= 0 {
+                    continue;
+                }
+                a_color.a = a_image_alpha as u8;
+
+                // 对应 C++: mEnableExtraAdditiveDraw / mEnableExtraOverlayDraw 附加色
+                let a_extra_additive_color;
+                if self.m_enable_extra_additive_draw {
+                    let mut c = self.m_extra_additive_color;
+                    c.a = ((c.a as u32 * a_image_alpha as u32) / 255) as u8;
+                    a_extra_additive_color = c;
+                } else {
+                    a_extra_additive_color = Color::BLACK;
+                }
+                let a_extra_overlay_color;
+                if self.m_enable_extra_overlay_draw {
+                    let mut c = self.m_extra_overlay_color;
+                    c.a = ((c.a as u32 * a_image_alpha as u32) / 255) as u8;
+                    a_extra_overlay_color = c;
+                } else {
+                    a_extra_overlay_color = Color::WHITE;
+                }
+
+                // 对应 C++: mIgnoreClipRect → 全屏裁剪；否则用 g 当前裁剪
+                let a_clip_rect = if ti.m_ignore_clip_rect {
+                    crate::framework::rect::Rect::new(0, 0, crate::lawn::game_enums::BOARD_WIDTH, crate::lawn::game_enums::BOARD_HEIGHT)
+                } else {
+                    g.clip_rect
+                };
+                // 对应 C++ DrawTrack: g->SetClipRect(aClipRect)（绘制后恢复）
+                let a_old_clip_rect = g.clip_rect;
+                if g.clip_rect != a_clip_rect {
+                    g.set_clip_rect(&a_clip_rect);
+                }
+                let restore_clip = g.clip_rect != a_old_clip_rect;
+
+                // 对应 C++: aImage（transform 图片 or mImageOverride），atlas 编码句柄解码
+                let mut a_image: *mut crate::framework::graphics::image::Image = std::ptr::null_mut();
+                let mut a_atlas_image: Option<crate::todlib::reanim_atlas::ReanimAtlasImage> = None;
+                let atlas_ptr: Option<*mut crate::todlib::reanim_atlas::ReanimAtlas> = def.m_reanim_atlas;
+                if atlas_ptr.is_some() {
+                    // 对应 C++: GetEncodedReanimAtlas(aImage) 解码 atlas 句柄
+                    if a_transform.m_image > 0 {
+                        let a_atlas = &*atlas_ptr.unwrap();
+                        a_atlas_image = a_atlas.get_encoded_reanim_atlas(a_transform.m_image).copied();
+                        if a_atlas_image.is_none() && a_transform.m_image <= 1000 {
+                            // Invalid encoded handle
+                        } else if a_atlas_image.is_none() {
+                            a_image = crate::todlib::reanim_loader::reanimator_get_image(a_transform.m_image)
+                                .unwrap_or(std::ptr::null_mut());
+                        }
+                    }
+                } else {
+                    a_image = crate::todlib::reanim_loader::reanimator_get_image(a_transform.m_image)
+                        .unwrap_or(std::ptr::null_mut());
+                }
+                if !ti.m_image_override.is_null() {
+                    a_image = ti.m_image_override;
+                    a_atlas_image = None;
+                }
+
+                // 对应 C++: 计算 pivot 矩阵（图片中心 / atlas 图中心 / font 文本）
+                let mut a_matrix = crate::framework::sexy_matrix::SexyMatrix3::identity();
+                let mut a_full_screen = false;
+                if let Some(a_pivot_atlas) = a_atlas_image {
+                    a_matrix = crate::framework::sexy_matrix::SexyMatrix3::new_from_values(
+                        1.0, 0.0, a_pivot_atlas.width as f32 * 0.5,
+                        0.0, 1.0, a_pivot_atlas.height as f32 * 0.5,
+                        0.0, 0.0, 1.0,
+                    );
+                } else if !a_image.is_null() {
+                    let a_img = &*a_image;
+                    let a_cel_width = a_img.get_cel_width();
+                    let a_cel_height = a_img.get_cel_height();
+                    a_matrix = crate::framework::sexy_matrix::SexyMatrix3::new_from_values(
+                        1.0, 0.0, a_cel_width as f32 * 0.5,
+                        0.0, 1.0, a_cel_height as f32 * 0.5,
+                        0.0, 0.0, 1.0,
+                    );
+                } else {
+                    // 无图无文本：仅 fullscreen 轨道继续（对应 C++: strcasecmp(name, "fullscreen") == 0）
+                    if !track_def.m_name.eq_ignore_ascii_case("fullscreen") {
+                        continue;
+                    }
+                    a_full_screen = true;
+                }
+
+                // 对应 C++: aTransformMatrix = MatrixFromTransform(aTransform)
+                // aMatrix = aMatrix × aTransformMatrix × mOverlayMatrix，再平移 shake + g 平移
+                let a_transform_matrix = Self::matrix_from_transform(&a_transform);
+                a_matrix = a_matrix.multiply(&a_transform_matrix);
+                a_matrix = a_matrix.multiply(&self.m_overlay_matrix);
+                // 对应 C++ SexyMatrix3Translation(aMatrix, mShakeX + g->mTransX, mShakeY + g->mTransY)
+                a_matrix.m[0][2] += ti.m_shake_x + g.trans_x as f32;
+                a_matrix.m[1][2] += ti.m_shake_y + g.trans_y as f32;
+                // 应用 m_override_scale（对应 C++ OverrideScale 语义；m_overlay_matrix 已含或单独叠加）
+                let a_scale_x = self.m_override_scale_x;
+                let a_scale_y = self.m_override_scale_y;
+                if (a_scale_x - 1.0).abs() > 0.001 || (a_scale_y - 1.0).abs() > 0.001 {
+                    a_matrix.m[0][0] *= a_scale_x;
+                    a_matrix.m[1][1] *= a_scale_y;
+                }
+
+                // 对应 C++: atlas 分支 — 从 atlas 内存图绘制源矩形
+                if let Some(a_atlas_img) = a_atlas_image {
+                    let a_src_rect = crate::framework::rect::Rect::new(
+                        a_atlas_img.x, a_atlas_img.y, a_atlas_img.width, a_atlas_img.height);
+                    let mut a_atlas_memory = (*atlas_ptr.unwrap()).memory_image;
+                    if !a_atlas_memory.is_null() {
+                        // 对应 C++: FilterEffectGetImage(aImage, mFilterEffect)
+                        let a_base = &mut (*a_atlas_memory).base as *mut crate::framework::graphics::image::Image;
+                        let a_effect_image = crate::todlib::filter_effect::filter_effect_get_image(
+                            a_base, self.m_filter_effect);
+                        g.set_color(&a_color);
+                        g.draw_image_matrix_src(
+                            unsafe { &*a_effect_image }, &a_matrix, &a_src_rect,
+                            0.0, 0.0,
+                        );
+                        if self.m_enable_extra_additive_draw && !ti.m_ignore_extra_additive_color {
+                            let a_old_mode = g.get_draw_mode();
+                            g.set_draw_mode(2); // DRAWMODE_ADDITIVE
+                            g.set_color(&a_extra_additive_color);
+                            g.draw_image_matrix_src(
+                                unsafe { &*a_effect_image }, &a_matrix, &a_src_rect,
+                                0.0, 0.0,
+                            );
+                            g.set_draw_mode(a_old_mode);
+                        }
+                        if self.m_enable_extra_overlay_draw {
+                            let a_white = crate::todlib::filter_effect::filter_effect_get_image(
+                                a_base, crate::todlib::filter_effect::FilterEffectType::White);
+                            g.set_color(&a_extra_overlay_color);
+                            g.draw_image_matrix_src(
+                                unsafe { &*a_white }, &a_matrix, &a_src_rect,
+                                0.0, 0.0,
+                            );
+                        }
+                        if restore_clip {
+                            g.set_clip_rect(&a_old_clip_rect);
                         }
                         continue;
                     }
                 }
 
-                // 图片缺失时的占位回退（按轨道索引着色，便于调试）
-                let w = (40.0 * scale_x).max(2.0) as i32;
-                let h = (40.0 * scale_y).max(2.0) as i32;
-                let alpha = (a_transform.m_alpha * 255.0).clamp(0.0, 255.0) as u8;
-                let hue = (i * 47) % 256;
-                g.set_color(&crate::framework::color::Color::new(hue as u8, 128, 255 - hue as u8, alpha));
-                g.fill_rect_xywh(px as i32, py as i32, w, h);
+                // 对应 C++: 普通图片分支
+                if !a_image.is_null() {
+                    let a_img = &*a_image;
+                    if a_img.width <= 0 || a_img.height <= 0 {
+                        if restore_clip {
+                            g.set_clip_rect(&a_old_clip_rect);
+                        }
+                        continue;
+                    }
+                    // 对应 C++: while (aImageFrame >= aImage->mNumCols) aImageFrame -= mNumCols
+                    let mut a_cel_frame = a_image_frame;
+                    let a_num_cols = a_img.num_cols.max(1);
+                    while a_cel_frame >= a_num_cols {
+                        a_cel_frame -= a_num_cols;
+                    }
+                    let a_cel_width = a_img.get_cel_width();
+                    let a_src_rect = crate::framework::rect::Rect::new(
+                        a_cel_frame * a_cel_width, 0, a_cel_width, a_img.get_cel_height());
+                    let a_effect_image = crate::todlib::filter_effect::filter_effect_get_image(
+                        a_image, self.m_filter_effect);
+                    g.set_color(&a_color);
+                    g.draw_image_matrix_src(
+                        unsafe { &*a_effect_image }, &a_matrix, &a_src_rect,
+                        0.0, 0.0,
+                    );
+                    if self.m_enable_extra_additive_draw && !ti.m_ignore_extra_additive_color {
+                        let a_old_mode = g.get_draw_mode();
+                        g.set_draw_mode(2); // DRAWMODE_ADDITIVE
+                        g.set_color(&a_extra_additive_color);
+                        g.draw_image_matrix_src(
+                            unsafe { &*a_effect_image }, &a_matrix, &a_src_rect,
+                            0.0, 0.0,
+                        );
+                        g.set_draw_mode(a_old_mode);
+                    }
+                    if self.m_enable_extra_overlay_draw {
+                        let a_white = crate::todlib::filter_effect::filter_effect_get_image(
+                            a_image, crate::todlib::filter_effect::FilterEffectType::White);
+                        g.set_color(&a_extra_overlay_color);
+                        g.draw_image_matrix_src(
+                            unsafe { &*a_white }, &a_matrix, &a_src_rect,
+                            0.0, 0.0,
+                        );
+                    }
+                    if restore_clip {
+                        g.set_clip_rect(&a_old_clip_rect);
+                    }
+                    continue;
+                }
+
+                // 对应 C++: font/text 分支（PvzpDrawStringMatrix）
+                if a_transform.m_font >= 0 {
+                    // [TRANSLATION_NOTE]: 字体矩阵绘制（PvzpDrawStringMatrix）依赖字体表接入，
+                    // 属第 5 项调用点接线范围；文本轨道暂以普通 draw_string 近似
+                    if a_transform.m_text >= 0 {
+                        let text_idx = a_transform.m_text as usize;
+                        if let Some(a_text) = track_def.m_texts.get(text_idx) {
+                            g.set_color(&a_color);
+                            g.draw_string(a_text, a_matrix.m[0][2] as i32, a_matrix.m[1][2] as i32);
+                        }
+                    }
+                    if restore_clip {
+                        g.set_clip_rect(&a_old_clip_rect);
+                    }
+                    continue;
+                }
+
+                // 对应 C++: fullscreen 轨道 — 全屏填色
+                if a_full_screen {
+                    let a_old_color = *g.get_color();
+                    g.set_color(&a_color);
+                    g.fill_rect_xywh(
+                        -g.trans_x as i32, -g.trans_y as i32,
+                        crate::lawn::game_enums::BOARD_WIDTH, crate::lawn::game_enums::BOARD_HEIGHT);
+                    g.set_color(&a_old_color);
+                }
+                if restore_clip {
+                    g.set_clip_rect(&a_old_clip_rect);
+                }
             }
         }
     }
@@ -261,37 +553,31 @@ impl Reanimation {
         None
     }
 
-    /// 获取当前帧的完整时间
+    /// 获取当前帧的完整时间（对应 C++ 归一化 mAnimTime，0~1）
     pub fn get_frame_time(&self) -> f32 {
-        if let Some(def) = self.m_definition {
-            unsafe {
-                let total = (*def).m_fps;
-                // 确保不超出总时间
-                if self.m_anim_time > total {
-                    match self.m_loop_type {
-                        ReanimLoopType::Loop => {
-                            return self.m_anim_time % total;
-                        },
-                        _ => {
-                            return self.m_anim_time.min(total);
-                        }
-                    }
-                }
-            }
-        }
         self.m_anim_time
     }
 
+    /// 动画是否已完全结束（对应 C++ EffectSystem::ProcessDeleteQueue 的 mDead 判据）
     pub fn is_completely_done(&self) -> bool {
         if self.m_dead {
             return true;
         }
         if let Some(def) = self.m_definition {
             unsafe {
-                return self.m_anim_time >= (*def).m_fps;
+                // 对应 C++ PlayOnce 类 loop 播完即 mDead；非循环类型在 m_anim_time 到 1.0 后
+                // 不再推进，判定为结束
+                if self.m_anim_rate > 0.0
+                    && (self.m_loop_type == ReanimLoopType::PlayOnceAndRemove
+                        || self.m_loop_type == ReanimLoopType::PlayOnceFullLastFrame)
+                    && self.m_anim_time >= 1.0
+                {
+                    return true;
+                }
+                let _ = def;
             }
         }
-        true
+        false
     }
 
     /// 设置位置（对应 C++ SetPosition）
@@ -316,26 +602,40 @@ impl Reanimation {
         false
     }
 
-    /// 按类型初始化动画（对应 C++ ReanimationInitializeType）
+    /// 按类型初始化动画（对应 C++ ReanimationInitializeType + ReanimationInitialize）
     pub fn reanimation_initialize_type(&mut self, x: f32, y: f32, reanim_type: ReanimationType) {
         let def_ptr = crate::todlib::reanim_loader::reanimator_get_definition(reanim_type);
         self.reanim_type = reanim_type;
         if let Some(def_ptr) = def_ptr {
             unsafe {
-                let def_ref = &*def_ptr;
+                let def_ref = &mut *def_ptr;
                 self.m_definition = Some(def_ptr);
                 self.m_fps = def_ref.m_fps;
                 self.m_anim_rate = def_ref.m_fps;
+                // 对应 C++ ReanimationInitialize: ReanimationCreateAtlas(theDefinition, mReanimationType)
+                // 仅在定义尚未创建图集时创建
+                if def_ref.m_reanim_atlas.is_none() {
+                    def_ref.m_reanim_atlas =
+                        crate::todlib::reanim_atlas::ReanimAtlas::create_from_definition(def_ref);
+                }
                 let track_count = def_ref.m_tracks.len();
                 self.m_track_instances = (0..track_count)
                     .map(|_| crate::todlib::definition::ReanimatorTrackInstance::new())
                     .collect();
+                // 对应 C++ ReanimationInitialize（Reanimator.cpp:400-413）：
+                // mFrameCount = tracks[0].mTransforms.count
+                self.m_frame_count = def_ref
+                    .m_tracks
+                    .first()
+                    .map_or(0, |t| t.m_transforms.len() as i32);
             }
         }
         self.m_x = x;
         self.m_y = y;
         self.m_anim_time = 0.0;
+        self.m_last_anim_time = -1.0;
         self.m_loop_count = 0;
+        self.m_dead = false;
     }
 
     /// 设置动画类型（从定义名称查找）（对应 C++ SetReanimType + ReanimationInitializeType）
@@ -343,29 +643,20 @@ impl Reanimation {
         self.reanimation_initialize_type(x, y, reanim_type);
     }
 
-    /// 播放指定轨道（对应 C++ Reanimation::PlayReanim）
+    /// 播放指定轨道（对应 C++ Reanimation::PlayReanim，Reanimator.cpp:1298）
     pub fn play_reanim(&mut self, track_name: &str, loop_type: ReanimLoopType, blend_time: i32, anim_rate: f32) {
-        let _ = blend_time;
-        self.m_loop_type = loop_type;
-        if anim_rate > 0.0 {
+        // 对应 C++: if (theBlendTime > 0) StartBlend(theBlendTime)
+        if blend_time > 0 {
+            self.start_blend(blend_time);
+        }
+        // 对应 C++: if (theAnimRate != 0) mAnimRate = theAnimRate
+        if anim_rate != 0.0 {
             self.m_anim_rate = anim_rate;
         }
-        // 记录当前播放轨道（通过 frame 归零近似）
-        self.m_anim_time = 0.0;
+        self.m_loop_type = loop_type;
         self.m_loop_count = 0;
-        // 查找轨道并重置其动画时间（简化：直接全局归零）
-        if let Some(def) = self.m_definition {
-            unsafe {
-                for (i, t) in (*def).m_tracks.iter().enumerate() {
-                    if t.m_name == track_name {
-                        if let Some(ti) = self.m_track_instances.get_mut(i) {
-                            ti.m_anim_time = 0.0;
-                        }
-                        break;
-                    }
-                }
-            }
-        }
+        // 对应 C++: SetFramesForLayer(theTrackName)
+        self.set_frames_for_layer(track_name);
     }
 
     /// 设置帧层（对应 C++ SetFramesForLayer）
@@ -447,7 +738,8 @@ impl Reanimation {
         }
     }
 
-    /// 轨道是否正在显示（对应 C++ IsTrackShowing：当前帧对应变换非空白）
+    /// 轨道是否正在显示（对应 C++ IsTrackShowing，Reanimator.cpp:1241：
+    /// 用 GetFrameTime 的 mAnimFrameAfterInt 判断下一帧是否非空白）
     pub fn is_track_showing(&self, track_name: &str) -> bool {
         let track_index = self.find_track_index(track_name);
         if track_index < 0 {
@@ -466,11 +758,10 @@ impl Reanimation {
             if a_track.m_transforms.is_empty() {
                 return false;
             }
-            // 对应 C++ GetFrameTime 的 mAnimFrameAfterInt：当前动画时间对应的整数帧
-            let total_time = if def_ref.m_fps > 0.0 { def_ref.m_fps } else { 1.0 };
-            let frame_idx =
-                ((self.get_frame_time() % total_time) / total_time * a_track.m_transforms.len() as f32) as usize;
-            let idx = frame_idx.min(a_track.m_transforms.len() - 1);
+            // 对应 C++ GetFrameTime(&aFrameTime) 的 mAnimFrameAfterInt
+            let a_frame_time = self.get_frame_time_frame();
+            let idx = (a_frame_time.anim_frame_after_int.max(0) as usize)
+                .min(a_track.m_transforms.len() - 1);
             a_track.m_transforms[idx].m_frame >= 0.0
         }
     }
@@ -597,31 +888,35 @@ impl Reanimation {
         self.m_image_overrides.push((track_name.to_string(), image));
     }
 
-    /// 触发定时事件判定（对应 C++ ShouldTriggerTimedEvent）
+    /// 触发定时事件判定（对应 C++ ShouldTriggerTimedEvent，Reanimator.cpp:1288）
     /// 判断动画时间是否在本帧内越过 theEventTime（0~1 归一化时间）
     pub fn should_trigger_timed_event(&self, event_time: f32) -> bool {
-        let _ = event_time;
-        if self.m_loop_count == 0 && self.m_last_anim_time <= 0.0 {
+        // 对应 C++: 无动画/反向播放/未播放 → false
+        if self.m_frame_count == 0 || self.m_last_anim_time <= 0.0 || self.m_anim_rate <= 0.0 {
             return false;
         }
-        if self.m_anim_rate <= 0.0 {
-            return false;
+        let a_last = self.m_last_anim_time;
+        let a_anim = self.m_anim_time;
+        if a_anim >= a_last {
+            // 对应 C++: 正常情况，触发区间 [mLastFrameTime, mAnimTime]
+            return event_time >= a_last && event_time < a_anim;
         }
-        let total_time = if let Some(def) = self.m_definition {
-            unsafe { (*def).m_fps }
-        } else { 1.0 };
-        if total_time <= 0.0 { return false; }
-        let cur = self.m_anim_time % total_time / total_time;
-        let last = self.m_last_anim_time % total_time / total_time;
-        if cur >= last {
-            return event_time >= last && event_time < cur;
-        }
-        event_time >= last || event_time < cur
+        // 对应 C++: 已回绕到下一循环，触发区间 [0, mAnimTime] ∪ [mLastFrameTime, 1]
+        event_time >= a_last || event_time < a_anim
     }
 
-    /// 销毁动画（对应 C++ ReanimationDie）
+    /// 销毁动画（对应 C++ Reanimation::ReanimationDie，Reanimator.cpp:1084）
+    /// 置 mDead 并遍历轨道调用 AttachmentDie 清理附件
     pub fn reanimation_die(&mut self) {
-        self.m_dead = true;
+        if !self.m_dead {
+            self.m_dead = true;
+            let attachment_ids: Vec<crate::lawn::game_enums::AttachmentID> =
+                self.m_track_instances.iter().map(|t| t.m_attachment_id).collect();
+            for mut a_attachment_id in attachment_ids {
+                // 对应 C++: AttachmentDie(mTrackInstances[aTrackIndex].mAttachmentID)
+                crate::todlib::attachment::attachment_die(&mut a_attachment_id);
+            }
+        }
     }
 
     /// 查找轨道索引（对应 C++ FindTrackIndex，找不到返回 -1）
@@ -766,7 +1061,8 @@ impl Reanimation {
         true
     }
 
-    /// 获取轨道速度（对应 C++ GetTrackVelocity，基于相邻帧 x 位移 * 帧时长 * 速率）
+    /// 获取轨道速度（对应 C++ GetTrackVelocity，Reanimator.cpp:1229：
+    /// 用 GetFrameTime 的 before/after 整数帧 x 位移 × SECONDS_PER_UPDATE × mAnimRate）
     pub fn get_track_velocity(&self, track_name: &str) -> f32 {
         const SECONDS_PER_UPDATE: f32 = 0.02; // C++ SECONDS_PER_UPDATE
         let track_index = self.find_track_index(track_name);
@@ -777,11 +1073,11 @@ impl Reanimation {
                 if track_index as usize >= def_ref.m_tracks.len() { return 0.0; }
                 let track = &def_ref.m_tracks[track_index as usize];
                 if track.m_transforms.len() < 2 { return 0.0; }
-                let total_time = if def_ref.m_fps > 0.0 { def_ref.m_fps } else { 1.0 };
-                let frame_time = self.get_frame_time();
-                let f = (frame_time % total_time) / total_time * track.m_transforms.len() as f32;
-                let after = (f as usize).min(track.m_transforms.len() - 1);
-                let before = if after == 0 { track.m_transforms.len() - 1 } else { after - 1 };
+                let a_frame_time = self.get_frame_time_frame();
+                let after = (a_frame_time.anim_frame_after_int.max(0) as usize)
+                    .min(track.m_transforms.len() - 1);
+                let before = (a_frame_time.anim_frame_before_int.max(0) as usize)
+                    .min(track.m_transforms.len() - 1);
                 let a_dis = track.m_transforms[after].m_trans_x - track.m_transforms[before].m_trans_x;
                 return a_dis * SECONDS_PER_UPDATE * self.m_anim_rate;
             }
@@ -897,6 +1193,20 @@ impl Reanimation {
         }
     }
 
+    /// 获取轨道附件叠加矩阵（对应 C++ Reanimation::GetAttachmentOverlayMatrix，Reanimator.cpp:1007）
+    /// 当前变换矩阵 × overlay × 基础姿态矩阵的逆
+    pub fn get_attachment_overlay_matrix(&self, track_index: i32) -> crate::framework::sexy_matrix::SexyMatrix3 {
+        let mut a_transform = ReanimatorTransform::default();
+        self.get_current_transform(track_index, &mut a_transform);
+        let a_transform_matrix = Self::matrix_from_transform(&a_transform);
+        // 对应 C++: SexyMatrix3Multiply(aTransformMatrix, mOverlayMatrix, aTransformMatrix)
+        let a_transform_matrix = a_transform_matrix.multiply(&self.m_overlay_matrix);
+        let a_base_pose_matrix = self.get_track_base_pose_matrix(track_index);
+        let a_base_pose_matrix_inv = a_base_pose_matrix.inverse();
+        // 对应 C++: theOverlayMatrix = aTransformMatrix * aBasePoseMatrixInv
+        a_transform_matrix.multiply(&a_base_pose_matrix_inv)
+    }
+
     /// 获取当前轨道图片（对应 C++ GetCurrentTrackImage）
     pub fn get_current_track_image(&self, track_name: &str) -> *mut Image {
         let a_track_index = self.find_track_index(track_name);
@@ -911,10 +1221,23 @@ impl Reanimation {
         }
         let mut a_transform = ReanimatorTransform::default();
         if self.get_current_transform(a_track_index, &mut a_transform) {
-            // [TRANSLATION_NOTE]: C++ 中 aTransform.mImage 为 Image* 且 atlas 编码图会清空；
-            // Rust ReanimatorTransform.m_image 为资源 ID（i32）且 mReanimAtlas 为 stub，
-            // 无 ID→Image* 映射，此处返回空指针等效于 atlas 编码图清空分支
-            let _a_image_id = a_transform.m_image;
+            // 对应 C++: atlas 编码句柄不映射稳定源图指针 → 返回空
+            let a_atlas = self
+                .m_definition
+                .map(|def| unsafe { (*def).m_reanim_atlas })
+                .flatten();
+            if let Some(atlas_ptr) = a_atlas {
+                unsafe {
+                    let a_atlas = &*atlas_ptr;
+                    if a_transform.m_image > 0
+                        && a_atlas.get_encoded_reanim_atlas(a_transform.m_image).is_some()
+                    {
+                        return std::ptr::null_mut();
+                    }
+                }
+            }
+            return crate::todlib::reanim_loader::reanimator_get_image(a_transform.m_image)
+                .unwrap_or(std::ptr::null_mut());
         }
         std::ptr::null_mut()
     }
@@ -924,6 +1247,190 @@ impl Reanimation {
         let idx = self.find_track_index(track_name);
         if idx < 0 { return None; }
         self.m_track_instances.get_mut(idx as usize)
+    }
+
+    /// 解析附着器轨道（对应 C++ ParseAttacherTrack，Reanimator.cpp:1311）
+    /// attacher 轨道名格式：attacher__REANIMNAME__TRACKNAME[TAG1][TAG2]...
+    /// m_text 为文本表索引（-1 无文本）；此处经定义表取文本后解析
+    pub fn parse_attacher_track(&self, track_index: i32, out: &mut crate::todlib::attachment::AttacherInfo) {
+        out.reanim_name = String::new();
+        out.track_name = String::new();
+        out.anim_rate = 12.0;
+        out.loop_type = crate::lawn::game_enums::ReanimLoopType::Loop;
+        let def = match self.m_definition {
+            Some(d) => d,
+            None => return,
+        };
+        unsafe {
+            let def_ref = &*def;
+            if track_index < 0 || track_index as usize >= def_ref.m_tracks.len() {
+                return;
+            }
+            let a_track_def = &def_ref.m_tracks[track_index as usize];
+            let mut a_transform = crate::todlib::definition::ReanimatorTransform::default();
+            if !self.get_current_transform(track_index, &mut a_transform) {
+                return;
+            }
+            // 对应 C++: if (mFrame == -1.0f) return（空白帧）
+            if a_transform.m_frame == -1.0 {
+                return;
+            }
+            // 从文本表取 mText 字符串
+            let a_text = if a_transform.m_text >= 0 {
+                a_track_def.m_texts.get(a_transform.m_text as usize).map(|s| s.as_str()).unwrap_or("")
+            } else {
+                ""
+            };
+            if a_text.is_empty() {
+                return;
+            }
+            // 对应 C++: strstr(mText, "__") — 找 reanim 名前分隔符
+            let a_reanim_name = a_text.find("__");
+            let a_reanim_name = match a_reanim_name {
+                Some(i) => i,
+                None => return,
+            };
+            let a_rest = &a_text[a_reanim_name + 2..];
+            // 对应 C++: strstr(aReanimName + 2, "[") 与 strstr(aReanimName + 2, "__")
+            let a_tags = a_rest.find('[');
+            let a_track_name = a_rest.find("__");
+            if let (Some(a_tags), Some(a_track_name)) = (a_tags, a_track_name) {
+                if a_tags < a_track_name {
+                    return; // "__" 在 "[" 之后 → 无效
+                }
+            }
+            if let Some(a_track_name) = a_track_name {
+                // track name defined
+                out.reanim_name = a_rest[..a_track_name].to_string();
+                if let Some(a_tags) = a_tags {
+                    out.track_name = a_rest[a_track_name + 2..a_tags].to_string();
+                } else {
+                    out.track_name = a_rest[a_track_name + 2..].to_string();
+                }
+            } else if let Some(a_tags) = a_tags {
+                out.reanim_name = a_rest[..a_tags].to_string();
+            } else {
+                out.reanim_name = a_rest.to_string();
+            }
+            // 读取标签（对应 C++ while (aTags) 循环）
+            let mut a_tag_abs: Option<usize> = a_tags;
+            while let Some(a_tag_start) = a_tag_abs {
+                let a_after = &a_rest[a_tag_start + 1..];
+                let a_tag_end = match a_after.find(']') {
+                    Some(e) => e,
+                    None => break, // 无闭合 "]"
+                };
+                let a_code = &a_after[..a_tag_end];
+                // 对应 C++: sscanf(aCode, "%f") 成功 → anim rate
+                if let Ok(a_rate) = a_code.trim().parse::<f32>() {
+                    out.anim_rate = a_rate;
+                } else if a_code.eq_ignore_ascii_case("hold") {
+                    out.loop_type = crate::lawn::game_enums::ReanimLoopType::PlayOnceAndHold;
+                } else if a_code.eq_ignore_ascii_case("once") {
+                    out.loop_type = crate::lawn::game_enums::ReanimLoopType::PlayOnce;
+                }
+                // 找下一个 "["
+                let a_next = a_after[a_tag_end + 1..].find('[');
+                a_tag_abs = a_next.map(|i| a_tag_start + 1 + a_tag_end + 1 + i);
+            }
+        }
+    }
+
+    /// 更新附着器轨道（对应 C++ UpdateAttacherTrack，Reanimator.cpp:1311）
+    /// 按轨道文本解析出的 reanim 名查找类型并附着/同步动画
+    pub fn update_attacher_track(&mut self, track_index: usize) {
+        let mut a_attacher_info = crate::todlib::attachment::AttacherInfo::default();
+        self.parse_attacher_track(track_index as i32, &mut a_attacher_info);
+
+        // 对应 C++: 由文件名反查 ReanimationType（gReanimationParamArray 遍历）
+        let mut a_reanimation_type: ReanimationType = ReanimationType::None;
+        if !a_attacher_info.reanim_name.is_empty() {
+            let a_reanim_file_name = format!("reanim/{}.reanim", a_attacher_info.reanim_name);
+            let app = crate::lawn::lawn_app::LawnApp::instance();
+            if let Some(app) = app {
+                // 遍历全部 reanim 类型，找文件名匹配
+                for t in 0..crate::lawn::game_enums::ReanimationType::NumReanims as i32 {
+                    let t_enum = unsafe { std::mem::transmute::<i32, ReanimationType>(t) };
+                    if let Some(path) = crate::todlib::reanim_loader::get_reanim_file_path(t_enum) {
+                        if path.eq_ignore_ascii_case(&a_reanim_file_name) {
+                            a_reanimation_type = t_enum;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if a_reanimation_type == ReanimationType::None {
+            // 对应 C++: 无匹配 → AttachmentDie + return
+            let mut a_attachment_id = self.m_track_instances[track_index].m_attachment_id;
+            crate::todlib::attachment::attachment_die(&mut a_attachment_id);
+            self.m_track_instances[track_index].m_attachment_id = a_attachment_id;
+            return;
+        }
+
+        // 对应 C++: FindReanimAttachment + 类型不匹配 → 重新分配
+        let mut a_track_attachment_id = self.m_track_instances[track_index].m_attachment_id;
+        let mut a_attach_reanim = crate::todlib::attachment::find_reanim_attachment(&mut a_track_attachment_id);
+        let mut a_attach_reanim: Option<*mut Reanimation> =
+            a_attach_reanim.map(|p| p as *mut Reanimation);
+        let a_need_alloc = match a_attach_reanim {
+            Some(r) => unsafe { (*r).reanim_type != a_reanimation_type },
+            None => true,
+        };
+        if a_need_alloc {
+            crate::todlib::attachment::attachment_die(&mut a_track_attachment_id);
+            let a_new_reanim = crate::lawn::lawn_app::LawnApp::instance().and_then(|app| {
+                let mut app = app;
+                unsafe { (&mut *app).add_reanimation(0.0, 0.0, 0, a_reanimation_type as i32) }
+            });
+            if let Some(a_new_reanim) = a_new_reanim {
+                unsafe {
+                    let a_new = &mut *a_new_reanim;
+                    a_new.m_loop_type = match a_attacher_info.loop_type {
+                        crate::lawn::game_enums::ReanimLoopType::Loop => ReanimLoopType::Loop,
+                        crate::lawn::game_enums::ReanimLoopType::LoopFullLastFrame => ReanimLoopType::LoopFullOffset,
+                        crate::lawn::game_enums::ReanimLoopType::PlayOnce => ReanimLoopType::PlayOnceAndRemove,
+                        crate::lawn::game_enums::ReanimLoopType::PlayOnceAndHold => ReanimLoopType::PlayOnceAndHold,
+                        crate::lawn::game_enums::ReanimLoopType::PlayOnceFullLastFrame => ReanimLoopType::PlayOnceFullLastFrame,
+                        crate::lawn::game_enums::ReanimLoopType::PlayOnceAndHoldFullLastFrame => ReanimLoopType::PlayOnceFullLastFrameAndHold,
+                    };
+                    a_new.m_anim_rate = a_attacher_info.anim_rate;
+                    crate::todlib::attachment::attach_reanim(
+                        &mut a_track_attachment_id,
+                        a_new as *mut Reanimation as *mut std::ffi::c_void,
+                        0.0,
+                        0.0,
+                    );
+                }
+                // 对应 C++: mFrameBasePose = NO_BASE_POSE（附着后无基础姿态帧）
+                self.m_frame_base_pose = NO_BASE_POSE;
+                a_attach_reanim = Some(a_new_reanim);
+            }
+        }
+        self.m_track_instances[track_index].m_attachment_id = a_track_attachment_id;
+
+        // 对应 C++: track name 非空时同步轨道播放
+        if !a_attacher_info.track_name.is_empty() {
+            if let Some(a_attach_reanim) = a_attach_reanim {
+                unsafe {
+                    let a_attach = &mut *a_attach_reanim;
+                    let (a_anim_frame_start, a_anim_frame_count) = a_attach.get_frames_for_layer(&a_attacher_info.track_name);
+                    if a_attach.m_frame_start != a_anim_frame_start || a_attach.m_frame_count != a_anim_frame_count {
+                        a_attach.start_blend(20);
+                        a_attach.set_frames_for_layer(&a_attacher_info.track_name);
+                    }
+                    a_attach.m_anim_rate = a_attacher_info.anim_rate;
+                    a_attach.m_loop_type = match a_attacher_info.loop_type {
+                        crate::lawn::game_enums::ReanimLoopType::Loop => ReanimLoopType::Loop,
+                        crate::lawn::game_enums::ReanimLoopType::LoopFullLastFrame => ReanimLoopType::LoopFullOffset,
+                        crate::lawn::game_enums::ReanimLoopType::PlayOnce => ReanimLoopType::PlayOnceAndRemove,
+                        crate::lawn::game_enums::ReanimLoopType::PlayOnceAndHold => ReanimLoopType::PlayOnceAndHold,
+                        crate::lawn::game_enums::ReanimLoopType::PlayOnceFullLastFrame => ReanimLoopType::PlayOnceFullLastFrame,
+                        crate::lawn::game_enums::ReanimLoopType::PlayOnceAndHoldFullLastFrame => ReanimLoopType::PlayOnceFullLastFrameAndHold,
+                    };
+                }
+            }
+        }
     }
 }
 
