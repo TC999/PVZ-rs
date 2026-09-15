@@ -307,7 +307,14 @@ impl Plant {
                 self.plant_health = 400;
             }
             SeedType::GoldMagnet | SeedType::Magnetshroom => {
-                // SetTruncateDisappearingFrames — stub
+                // 对应 C++ Plant.cpp:456-458: aBodyReanim->SetTruncateDisappearingFrames()
+                if let Some(app) = self.base.app {
+                    unsafe {
+                        if let Some(a_body) = (*app).reanimation_get_mut(self.body_reanim_id) {
+                            a_body.set_truncate_disappearing_frames(None, true);
+                        }
+                    }
+                }
             }
             SeedType::Imitater => {
                 self.set_body_reanim_rate(25.0 + RandFloat(5.0));
@@ -382,7 +389,17 @@ impl Plant {
                 }
             }
             SeedType::Kernelpult => {
-                // AssignRenderGroupToPrefix("Cornpult_butter", RENDER_GROUP_HIDDEN) — stub
+                // 对应 C++ Plant.cpp:452-454: aBodyReanim->AssignRenderGroupToPrefix("Cornpult_butter", RENDER_GROUP_HIDDEN)
+                if let Some(app) = self.base.app {
+                    unsafe {
+                        if let Some(a_body) = (*app).reanimation_get_mut(self.body_reanim_id) {
+                            a_body.assign_render_group_to_prefix(
+                                "Cornpult_butter",
+                                crate::todlib::reanimator::RENDER_GROUP_HIDDEN,
+                            );
+                        }
+                    }
+                }
             }
             SeedType::Spikerock => {
                 self.plant_health = 450;
@@ -400,7 +417,14 @@ impl Plant {
                 }
             }
             SeedType::Tanglekelp => {
-                // SetTruncateDisappearingFrames — stub
+                // 对应 C++ Plant.cpp:479-481: aBodyReanim->SetTruncateDisappearingFrames()
+                if let Some(app) = self.base.app {
+                    unsafe {
+                        if let Some(a_body) = (*app).reanimation_get_mut(self.body_reanim_id) {
+                            a_body.set_truncate_disappearing_frames(None, true);
+                        }
+                    }
+                }
             }
             _ => {}
         }
@@ -739,37 +763,102 @@ impl Plant {
             return false;
         }
 
-        // 对应 C++：有 anim_shooting 动画轨道的植物设置 mShootingCounter 节拍并播放动画，
-        // 子弹由 UpdateShooting 在计数到 1 时发射；
-        // [TRANSLATION_NOTE]: EndBlink/StartBlend/SetFramesForLayer 依赖 reanim 完整实现（当前 stub），
-        // 仅保留 mShootingCounter 数值决策，轨道存在性按种子类型近似（C++ Plant.cpp:731-820）。
-        self.shooting_counter = match self.seed_type {
-            SeedType::Splitpea if weapon == PlantWeapon::Secondary => 26,
-            SeedType::Repeater | SeedType::Splitpea | SeedType::Leftpeater => 26,
-            SeedType::Gatlingpea => 100,
-            SeedType::Cactus if self.state == PlantState::CactusHigh => 23,
-            SeedType::Gloomshroom => 200,
-            SeedType::Cattail => 50,
-            SeedType::Fumeshroom => 50,
-            SeedType::Puffshroom => 29,
-            SeedType::Scaredyshroom => 25,
-            SeedType::Cabbagepult => 32,
-            SeedType::Melonpult | SeedType::Wintermelon => 36,
-            SeedType::Kernelpult => {
-                // 对应 C++: Kernelpult 有 1/4 概率转 butter 模式（渲染组切换依赖 reanim stub）
-                if RandRange(4) == 0 {
-                    self.state = PlantState::KernelpultButter;
-                }
-                30
-            }
-            // 对应 C++ body track 的 SEED_CACTUS case
-            SeedType::Cactus => 35,
-            // 无 anim_shooting 轨道的植物直接开火（对应 C++ else 分支：Fire + return true）
-            _ => {
-                self.fire(target_zombie_id, the_row, weapon);
-                return true;
-            }
+        // 对应 C++ Plant::FindTargetAndFire（Plant.cpp:731-820）
+        self.end_blink();
+        let app = match self.base.app {
+            Some(a) => a,
+            None => return false,
         };
+
+        if self.seed_type == SeedType::Splitpea && weapon == PlantWeapon::Secondary {
+            // 对应 C++: aHeadReanim2->StartBlend(20); PlayOnceAndHold; 35fps;
+            // SetFramesForLayer("anim_splitpea_shooting"); mShootingCounter = 26
+            unsafe {
+                if let Some(a_head2) = (*app).reanimation_get_mut(self.head_reanim_id2) {
+                    a_head2.start_blend(20);
+                    a_head2.m_loop_type = ReanimLoopType::PlayOnceAndHold;
+                    a_head2.m_anim_rate = 35.0;
+                    a_head2.set_frames_for_layer("anim_splitpea_shooting");
+                }
+            }
+            self.shooting_counter = 26;
+        } else if unsafe { (*app).reanimation_get(self.head_reanim_id) }
+            .map_or(false, |r| r.track_exists("anim_shooting"))
+        {
+            // 对应 C++: aHeadReanim->StartBlend(20); PlayOnceAndHold; 35fps; SetFramesForLayer("anim_shooting")
+            unsafe {
+                if let Some(a_head) = (*app).reanimation_get_mut(self.head_reanim_id) {
+                    a_head.start_blend(20);
+                    a_head.m_loop_type = ReanimLoopType::PlayOnceAndHold;
+                    a_head.m_anim_rate = 35.0;
+                    a_head.set_frames_for_layer("anim_shooting");
+                }
+            }
+            self.shooting_counter = 33;
+            if self.seed_type == SeedType::Repeater
+                || self.seed_type == SeedType::Splitpea
+                || self.seed_type == SeedType::Leftpeater
+            {
+                // 对应 C++: aHeadReanim->mAnimRate = 45; mShootingCounter = 26
+                unsafe {
+                    if let Some(a_head) = (*app).reanimation_get_mut(self.head_reanim_id) {
+                        a_head.m_anim_rate = 45.0;
+                    }
+                }
+                self.shooting_counter = 26;
+            } else if self.seed_type == SeedType::Gatlingpea {
+                // 对应 C++: aHeadReanim->mAnimRate = 38; mShootingCounter = 100
+                unsafe {
+                    if let Some(a_head) = (*app).reanimation_get_mut(self.head_reanim_id) {
+                        a_head.m_anim_rate = 38.0;
+                    }
+                }
+                self.shooting_counter = 100;
+            }
+        } else if self.state == PlantState::CactusHigh {
+            // 对应 C++: PlayBodyReanim("anim_shootinghigh", PLAY_ONCE_AND_HOLD, 20, 35); mShootingCounter = 23
+            self.play_body_reanim("anim_shootinghigh", ReanimLoopType::PlayOnceAndHold, 20, 35.0);
+            self.shooting_counter = 23;
+        } else if self.seed_type == SeedType::Gloomshroom {
+            // 对应 C++: PlayBodyReanim("anim_shooting", ..., 14fps); mShootingCounter = 200
+            self.play_body_reanim("anim_shooting", ReanimLoopType::PlayOnceAndHold, 20, 14.0);
+            self.shooting_counter = 200;
+        } else if self.seed_type == SeedType::Cattail {
+            // 对应 C++: PlayBodyReanim("anim_shooting", ..., 30fps); mShootingCounter = 50
+            self.play_body_reanim("anim_shooting", ReanimLoopType::PlayOnceAndHold, 20, 30.0);
+            self.shooting_counter = 50;
+        } else if unsafe { (*app).reanimation_get(self.body_reanim_id) }
+            .map_or(false, |r| r.track_exists("anim_shooting"))
+        {
+            // 对应 C++: PlayBodyReanim("anim_shooting", PLAY_ONCE_AND_HOLD, 20, 35)
+            self.play_body_reanim("anim_shooting", ReanimLoopType::PlayOnceAndHold, 20, 35.0);
+            self.shooting_counter = match self.seed_type {
+                SeedType::Fumeshroom => 50,
+                SeedType::Puffshroom => 29,
+                SeedType::Scaredyshroom => 25,
+                SeedType::Cabbagepult => 32,
+                SeedType::Melonpult | SeedType::Wintermelon => 36,
+                SeedType::Kernelpult => {
+                    // 对应 C++: Rand(4) == 0 → 切换 butter 渲染组
+                    if RandRange(4) == 0 {
+                        unsafe {
+                            if let Some(a_body) = (*app).reanimation_get_mut(self.body_reanim_id) {
+                                a_body.assign_render_group_to_prefix("Cornpult_butter", crate::todlib::reanimator::RENDER_GROUP_NORMAL);
+                                a_body.assign_render_group_to_prefix("Cornpult_kernal", crate::todlib::reanimator::RENDER_GROUP_HIDDEN);
+                            }
+                        }
+                        self.state = PlantState::KernelpultButter;
+                    }
+                    30
+                }
+                SeedType::Cactus => 35,
+                _ => 29,
+            };
+        } else {
+            // 对应 C++: else Fire(aZombie, theRow, thePlantWeapon)
+            self.fire(target_zombie_id, the_row, weapon);
+            return true;
+        }
         true
     }
 
