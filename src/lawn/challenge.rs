@@ -1180,15 +1180,65 @@ impl Challenge {
     }
 
     pub fn init_level(&mut self) {
-        // [TRANSLATION_NOTE]: 完整逻辑涉及多个 Board 未翻译字段（m_zombie_count_down_start, m_level, m_seed_bank.add_seed 等）
-        // 当前仅保留状态转换逻辑
+        // 对应 C++ Challenge::InitLevel（Challenge.cpp:372-437）
+        if self.get_app().game_mode == GameMode::ChallengeRainingSeeds {
+            // C++: mChallengeStateCounter = 100; mApp->PlayFoley(FOLEY_RAIN)
+            self.challenge_state_counter = 100;
+            self.get_app().play_foley(crate::todlib::tod_foley::FoleyType::Rain as i32);
+        }
         if self.get_app().is_stormy_night_level() {
             self.challenge_state = ChallengeState::StormFlash2;
             self.challenge_state_counter = 100;
+            self.get_app().play_foley(crate::todlib::tod_foley::FoleyType::Rain as i32);
+        }
+        if self.get_app().is_final_boss_level() {
+            // C++: mBoard->mSeedBank->AddSeed(SEED_CABBAGEPULT) 等（传送带）
+            let board = self.get_board();
+            board.add_seed(SeedType::Cabbagepult, false);
+            board.add_seed(SeedType::Jalapeno, false);
+            board.add_seed(SeedType::Cabbagepult, false);
+            board.add_seed(SeedType::Iceshroom, false);
+            self.conveyor_belt_counter = 1000;
+        }
+        if self.get_app().game_mode == GameMode::ChallengeZenGarden {
+            // [TRANSLATION_NOTE]: mZenGarden->mGardenType/mZenGardenInitLevel 依赖 zen_garden 完整实现，暂略
+        }
+        if self.get_app().game_mode == GameMode::ChallengeColumns {
+            // C++: mBoard->mSeedBank->AddSeed 六连（传送带）
+            let board = self.get_board();
+            board.add_seed(SeedType::PotatoMine, false);
+            board.add_seed(SeedType::Tallnut, false);
+            board.add_seed(SeedType::Melonpult, false);
+            board.add_seed(SeedType::Magnetshroom, false);
+            board.add_seed(SeedType::InstantCoffee, false);
+            board.add_seed(SeedType::Melonpult, false);
+            self.conveyor_belt_counter = 1000;
+        }
+        if self.get_app().game_mode == GameMode::ChallengeInvisighoul {
+            let board = self.get_board();
+            board.add_seed(SeedType::Peashooter, false);
+            board.add_seed(SeedType::Iceshroom, false);
+            self.conveyor_belt_counter = 1000;
+        }
+        if self.get_app().is_izombie_level() {
+            // [TRANSLATION_NOTE]: IZombieInitLevel 依赖 i_zombie 完整实现，暂略
+        }
+        if self.get_app().is_scary_potter_level() {
+            // [TRANSLATION_NOTE]: ScaryPotterPopulate 依赖 scary_potter 完整实现，暂略
+        }
+        if self.get_app().is_first_time_adventure_mode() && self.get_board().level == 5 {
+            // C++: NewPlant 三棵豌豆射手（第 5 关新手引导）
+            let board = self.get_board();
+            board.new_plant(5, 1, SeedType::Peashooter, SeedType::None);
+            board.new_plant(7, 2, SeedType::Peashooter, SeedType::None);
+            board.new_plant(6, 3, SeedType::Peashooter, SeedType::None);
         }
         if self.get_app().game_mode == GameMode::ChallengeBeghouledTwist {
             self.challenge_grid_x = -1;
             self.challenge_grid_y = -1;
+        }
+        if self.get_app().game_mode == GameMode::ChallengeTreeOfWisdom {
+            // [TRANSLATION_NOTE]: TreeOfWisdomInit 依赖 tree_of_wisdom 完整实现，暂略
         }
     }
 
@@ -3157,7 +3207,9 @@ impl Challenge {
             let board = self.get_board();
             board.add_coin(pos_x as f32, pos_y as f32, coin_type, CoinMotion::Coin);
         } else {
-            // FadeOutLevel() 尚未在 Board 中翻译
+            // 对应 C++ Challenge.cpp:4115 mBoard->FadeOutLevel()
+            let board = self.get_board();
+            board.fade_out_level();
         }
     }
 

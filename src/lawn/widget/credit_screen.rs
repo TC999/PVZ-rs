@@ -391,7 +391,12 @@ impl CreditScreen {
             let menu_over = self.main_menu_button.map_or(false, |p| unsafe { (&*p).is_over });
             let replay_over = self.replay_button.map_or(false, |p| unsafe { (&*p).is_over });
             if !menu_over && !replay_over {
-                // [TRANSLATION_NOTE]: C++ 中 SetCursor(CURSOR_POINTER)
+                // 对应 C++: SetCursor(CURSOR_POINTER)
+                if let Some(app) = self.app {
+                    unsafe {
+                        (*app).base.set_cursor(crate::lawn::game_enums::CURSOR_POINTER);
+                    }
+                }
             }
         }
         // [TRANSLATION_NOTE]: C++ 中 !IsInDemoMode() && mDrawCount == 0 时暂停；Rust 侧无 demo 模式

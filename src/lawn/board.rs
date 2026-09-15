@@ -7172,8 +7172,13 @@ Spawn: {}
     pub fn clear_cursor(&mut self) {
         self.cursor_object.deactivate();
         self.m_advice = AdviceType::None;
-        // C++ 4549: mApp->SetCursor(CURSOR_POINTER) — Rust 无 set_cursor 方法（框架光标 API 未接入）
-        // C++ 4550: mChallenge->ClearCursor();
+        // 对应 C++ 4549: mApp->SetCursor(CURSOR_POINTER)
+        if let Some(app) = self.app {
+            unsafe {
+                (*app).base.set_cursor(crate::lawn::game_enums::CURSOR_POINTER);
+            }
+        }
+        // 对应 C++ 4550: mChallenge->ClearCursor();
         if let Some(ch) = self.challenge.as_mut() {
             ch.clear_cursor();
         }

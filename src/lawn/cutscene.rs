@@ -2182,8 +2182,10 @@ impl CutScene {
                 let store_over = (*board).store_button.map_or(false, |p| unsafe { (*p).is_over });
                 if !menu_over && !store_over {
                     if let Some(app) = self.app {
-                        // [TRANSLATION_NOTE]: C++ 中 mApp->SetCursor(CURSOR_POINTER)；Rust 侧基类光标未接入
-                        let _ = app;
+                        // 对应 C++: mApp->SetCursor(CURSOR_POINTER)
+                        unsafe {
+                            (*app).base.set_cursor(crate::lawn::game_enums::CURSOR_POINTER);
+                        }
                     }
                 }
             }

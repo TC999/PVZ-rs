@@ -1973,3 +1973,21 @@ pub const NUM_SEED_TYPES: usize = 53;
 pub const NUM_MOWER_TYPES: usize = 4;
 /// 对应 C++ ZombieType::NUM_CACHED_ZOMBIE_TYPES（= ZOMBIE_CACHED_POLEVAULTER_WITH_POLE 34 + 1）
 pub const NUM_CACHED_ZOMBIE_TYPES: usize = 35;
+
+// ============================================================
+// 光标常量（对应 C++ SexyAppBase.h:85-97 匿名枚举）
+// ============================================================
+pub const CURSOR_POINTER: i32 = 0;
+pub const CURSOR_HAND: i32 = 1;
+pub const CURSOR_DRAGGING: i32 = 2;
+pub const CURSOR_TEXT: i32 = 3;
+pub const CURSOR_CIRCLE_SLASH: i32 = 4;
+pub const CURSOR_SIZEALL: i32 = 5;
+pub const CURSOR_SIZENESW: i32 = 6;
+pub const CURSOR_SIZENS: i32 = 7;
+pub const CURSOR_SIZENWSE: i32 = 8;
+pub const CURSOR_SIZEWE: i32 = 9;
+pub const CURSOR_WAIT: i32 = 10;
+pub const CURSOR_NONE: i32 = 11;
+pub const CURSOR_CUSTOM: i32 = 12;
+pub const NUM_CURSORS: i32 = 13;
