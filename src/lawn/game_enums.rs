@@ -310,51 +310,55 @@ pub enum SeedType {
     Cobcannon = 47,
     Imitater = 48,
     ExplodeONut = 49,
+    // [TRANSLATION_NOTE]: C++ 的 NUM_SEEDS_IN_CHOOSER = 49 与 SEED_EXPLODE_O_NUT 同值，
+    // Rust 枚举不允许重复判别值（E0081），故不放入枚举（Rust 以 const 承载计数常量）。
     GiantWallnut = 50,
     Sprout = 51,
     Leftpeater = 52,
+    /// 对应 C++ NUM_SEED_TYPES（枚举内占位常量，使后续变体编号与 C++ 一致）
+    NumSeedTypes = 53,
     /// 对应 C++ SEED_BEGHOULED_BUTTON_SHUFFLE
-    BeghouledButtonShuffle = 53,
+    BeghouledButtonShuffle = 54,
     /// 对应 C++ SEED_BEGHOULED_BUTTON_CRATER
-    BeghouledButtonCrater = 54,
+    BeghouledButtonCrater = 55,
     /// 对应 C++ SEED_SLOT_MACHINE_SUN
-    SlotMachineSun = 55,
+    SlotMachineSun = 56,
     /// 对应 C++ SEED_SLOT_MACHINE_DIAMOND
-    SlotMachineDiamond = 56,
+    SlotMachineDiamond = 57,
     /// 对应 C++ SEED_ZOMBIQUARIUM_SNORKLE
-    ZombiquariumSnorkle = 57,
+    ZombiquariumSnorkle = 58,
     /// 对应 C++ SEED_ZOMBIQUARIUM_TROPHY
-    ZombiquariumTrophy = 58,
+    ZombiquariumTrophy = 59,
     /// 对应 C++ SEED_ZOMBIE_NORMAL
-    ZombieNormal = 59,
+    ZombieNormal = 60,
     /// 对应 C++ SEED_ZOMBIE_TRAFFIC_CONE
-    ZombieTrafficCone = 60,
+    ZombieTrafficCone = 61,
     /// 对应 C++ SEED_ZOMBIE_POLEVAULTER
-    ZombiePolevaulter = 61,
+    ZombiePolevaulter = 62,
     /// 对应 C++ SEED_ZOMBIE_PAIL
-    ZombiePail = 62,
+    ZombiePail = 63,
     /// 对应 C++ SEED_ZOMBIE_LADDER
-    ZombieLadder = 63,
+    ZombieLadder = 64,
     /// 对应 C++ SEED_ZOMBIE_DIGGER
-    ZombieDigger = 64,
+    ZombieDigger = 65,
     /// 对应 C++ SEED_ZOMBIE_BUNGEE
-    ZombieBungee = 65,
+    ZombieBungee = 66,
     /// 对应 C++ SEED_ZOMBIE_FOOTBALL
-    ZombieFootball = 66,
+    ZombieFootball = 67,
     /// 对应 C++ SEED_ZOMBIE_BALLOON
-    ZombieBalloon = 67,
+    ZombieBalloon = 68,
     /// 对应 C++ SEED_ZOMBIE_SCREEN_DOOR
-    ZombieScreenDoor = 68,
+    ZombieScreenDoor = 69,
     /// 对应 C++ SEED_ZOMBONI
-    Zomboni = 69,
+    Zomboni = 70,
     /// 对应 C++ SEED_ZOMBIE_POGO
-    ZombiePogo = 70,
+    ZombiePogo = 71,
     /// 对应 C++ SEED_ZOMBIE_DANCER
-    ZombieDancer = 71,
+    ZombieDancer = 72,
     /// 对应 C++ SEED_ZOMBIE_GARGANTUAR
-    ZombieGargantuar = 72,
+    ZombieGargantuar = 73,
     /// 对应 C++ SEED_ZOMBIE_IMP
-    ZombieImp = 73,
+    ZombieImp = 74,
     None = -1,
 }
 
@@ -394,10 +398,14 @@ pub enum ZombieType {
     GatlingHead,
     SquashHead,
     TallnutHead,
-    RedeEyeGargantuar,
+    RedeEyeGargantuar = 32,
+    /// 对应 C++ NUM_ZOMBIE_TYPES（枚举内占位常量，使后续变体编号与 C++ 一致）
+    NumZombieTypes = 33,
     /// 对应 C++ ZOMBIE_CACHED_POLEVAULTER_WITH_POLE（= NUM_ZOMBIE_TYPES 33 + 1），
     /// 仅用于 ReanimatorCache 缓存带杆撑杆跳僵尸帧，不作为实际出场僵尸类型
-    CachedPolevaulterWithPole,
+    CachedPolevaulterWithPole = 34,
+    /// 对应 C++ NUM_CACHED_ZOMBIE_TYPES
+    NumCachedZombieTypes = 35,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
