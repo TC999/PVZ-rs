@@ -83,6 +83,9 @@ pub struct Challenge {
     pub tree_of_wisdom_talk_index: i32,
 }
 
+/// 对应 C++ I_ZOMBIE_WINNING_SCORE（Challenge.cpp:61）
+const I_ZOMBIE_WINNING_SCORE: i32 = 5;
+
 impl Challenge {
     pub fn new() -> Self {
         Challenge {
@@ -810,6 +813,60 @@ impl Challenge {
                 && item.grid_y == the_zombie.base.row
                 && item.grid_item_state != GridItemState::BrainSquished
         })
+    }
+
+    /// 对应 C++ Challenge::IZombieSquishBrain（Challenge.cpp:4866-4873）
+    pub fn izombie_squish_brain(&mut self, the_brain_idx: usize) {
+        // theBrain->mRenderOrder = MakeRenderOrder(RENDER_LAYER_GRAVE_STONE, mGridY, 0);
+        // theBrain->mGridItemState = BRAIN_SQUISHED; theBrain->mGridItemCounter = 500;
+        let (a_grid_y, a_pos_x, a_pos_y) = {
+            let a_board = match self.board {
+                Some(b) => unsafe { &mut *b },
+                None => return,
+            };
+            match a_board.grid_items.get_mut(the_brain_idx) {
+                Some(a_brain) => {
+                    a_brain.render_order = crate::lawn::board::make_render_order(
+                        RENDER_LAYER_GRAVE_STONE, a_brain.grid_y, 0);
+                    a_brain.grid_item_state = GridItemState::BrainSquished;
+                    a_brain.counter = 500;
+                    (a_brain.grid_y, a_brain.pos_x as i32, a_brain.pos_y as i32)
+                }
+                None => return,
+            }
+        };
+        // C++: theBrain->mApp->PlayFoley(FOLEY_SQUISH)
+        if let Some(a_app) = self.app {
+            unsafe { (*a_app).play_foley(crate::todlib::tod_foley::FoleyType::Squish as i32); }
+        }
+        self.izombie_score_brain(a_grid_y, a_pos_x, a_pos_y);
+    }
+
+    /// 对应 C++ Challenge::IZombieScoreBrain（Challenge.cpp:4812-4834）
+    pub fn izombie_score_brain(&mut self, grid_y: i32, pos_x: i32, pos_y: i32) {
+        self.challenge_score += 1;
+        let a_score = self.challenge_score;
+        let a_width = crate::todlib::tod_common::tod_animate_curve(
+            0, I_ZOMBIE_WINNING_SCORE, a_score, 0,
+            crate::lawn::board::PROGRESS_METER_COUNTER, TodCurves::Linear,
+        );
+        self.get_board().m_progress_meter_width = a_width;
+
+        if a_score == I_ZOMBIE_WINNING_SCORE {
+            let a_endless = self.app.map_or(false, |a| unsafe {
+                (*a).is_endless_izombie((*a).game_mode)
+            });
+            if a_endless {
+                self.puzzle_phase_complete(0, grid_y);
+            } else {
+                self.spawn_level_award(0, grid_y);
+            }
+        }
+
+        // C++: if (mChallengeScore != I_ZOMBIE_WINNING_SCORE || !PuzzleIsAwardStage())
+        if a_score != I_ZOMBIE_WINNING_SCORE || self.puzzle_is_award_stage() == 0 {
+            self.get_board().drop_loot_piece(pos_x + 40, pos_y - 50, 12);
+        }
     }
 
     pub fn can_plant_at(&self, grid_x: i32, grid_y: i32, seed_type: SeedType) -> PlantingReason {

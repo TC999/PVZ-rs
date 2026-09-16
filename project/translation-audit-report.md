@@ -211,3 +211,56 @@ find cpp/src -name "*.cpp" -o -name "*.h" | xargs wc -l | tail -1  # 194270
 4. **`ReanimLoopType` 补齐**：加入 `REANIM_PLAY_ONCE_AND_RETURN_TO_ZERO` / `REANIM_LOOP_FULL_LAST_FRAME` 两个变体并接线消费点。
 5. **函数体内部简化回查**：按热点模块（plant → zombie → board/lawn_app → save_game）逐函数回查数值与状态机（§5 未覆盖区域）。
 6. **widget 层标注回查**：seed_chooser_screen/store_screen/message_widget/new_options_dialog/user_dialog 等（§5 未覆盖）。
+
+---
+
+## 八、本轮执行结果（§七 建议的落地情况）
+
+> 基线：`5ceba1f`。本轮共 **15 个提交**，`cargo check` 全程 **0 error**，警告数由 758 降至 **756**。
+
+### 8.1 §七 第 1–4 项（原报告 §3 缺口）—— 已全部完成
+
+| 项 | 状态 | 说明 |
+|---|---|---|
+| 1. `PvzpCurveEvaluate` + 双层求值 | ✅ | 新增 `pvzp_curve_evaluate` 族（13 种曲线，逐行对照 `PvzpCommon.cpp:242-382`），`FloatParameterTrack::evaluate` 改为节点内 `distribution` + 段间 `curve_type` 的双层求值（`Definition.cpp:1336-1359`）；数值以脚本对照 C++ 手算全通过 |
+| 2. `tod_string_translate` 查表 | ✅ | 新增 `pvzp_string_list_find`，检测 `[name]` → 查 `LawnApp::instance().base.m_string_properties`，未命中返回 `<Missing 名称>` |
+| 3. `apply_music_volume` | ✅ | 按 `PvzpFoley.cpp:381-386` 接线（`sfx<1e-6` → 0，否则 `music/sfx`），对实例句柄调 `set_volume` |
+| 4. `ReanimLoopType` 补齐 | ⚠️ **报告与源码不符** | C++ `ConstEnums.h:966-974` 只有 **6 值**，全库无 `RETURN_TO_ZERO`；`REANIM_LOOP_FULL_LAST_FRAME` 在 Rust 已对应 `LoopFullOffset`。真实缺陷是 `get_frame_time_frame` 漏判 `LoopFullOffset`（已修），且 Rust 反而多出 2 个 C++ 不存在的变体（已删） |
+
+### 8.2 §七 第 5–6 项（函数体 / widget 层回查）—— 部分完成
+
+已回查并修复：`plant.rs`(`UpdateShooting`)、`grid_item.rs`(Update/Portal/ScaryPot/Rake)、`zombie.rs`(地形簇 3 处公式错误 / `squish_all_in_square` 三处差异 / `remove_*` / `IZombie` 啃脑)、`board.rs`(教程推进 / `IsFlying` / `RefreshSeedPacket`)、`save_game.rs`(9 个存档字段 + `PottedPlant::mFutureAttribute`)、widget 层(`new_user_dialog`/`continue_dialog`/`user_dialog`/`almanac_dialog`/`new_options_dialog`/`message_widget`/`credit_screen`/`game_selector`/`award_screen`/`challenge_screen`/`game_button`)。
+
+**规律**：这些区域中大量「依赖 reanim/粒子/字符串系统故暂略」的标注其**前提已失效**——对应系统早已实现，标注未更新。
+
+### 8.3 本轮新增发现（原报告未记录）
+
+**A. 枚举与 C++ 系统性错位（8 个已修正）**
+
+以脚本解析两侧枚举逐值对比 52 个同名枚举，发现并修正：
+
+| 枚举 | 修正前 | 修正后 | 问题性质 |
+|---|---|---|---|
+| `TutorialState` | 57 | 31 | 变体集不同 + 编号错位，含 26 个 C++ 不存在变体 |
+| `GridItemType` | 17（两套定义） | 13 | 重复定义 + 编号错位（`PlantStinky` 6 vs C++ `BRAIN` 6） |
+| `SeedType` | 75 | 76 | C++ 的 `NUM_SEED_TYPES=53` 未占位 → 53+ 全部小 1 |
+| `ZombieType` | 35 | 37 | 同上，`CACHED_POLEVAULTER_WITH_POLE` 33 vs C++ 34 |
+| `Dialogs` | 52 | 54 | 缺 `ZOMBATAR_TOS`/`ZOMBATAR_DELETE` |
+| `PlantPriority` | 13 | 10 | 顺序错位（`Any` 4 vs C++ 5）+ 3 个多余变体 |
+| `PlantingReason` | 18 | 14 | 顺序错位（`NeedsPot` 7 vs C++ 5）+ 4 个多余变体 |
+| `RenderObjectType` | 26 | 25 | 顺序完全不同（`Plant` 2 vs C++ 5） |
+| `GameObjectType` | 40 | 22 | 误并入 18 个 RenderObjectType/UI 变体 |
+| `GridItemState` | 55 | 30 | 变体集几乎完全不同 |
+
+共删除 ~110 个 C++ 不存在的多余变体。**影响**：这些枚举的数值语义与 C++ 不符，凡按编号序列化的数据（存档）会错位。
+
+**B. 两处 Rust 语言限制（无法 100% 对齐）**
+- `AdviceType`：C++ 的 `NUM_ADVICE_TYPES=66` 是枚举内常量，Rust 以 `const` 承载（值 0-65 一致）
+- `SeedType`：C++ 的 `NUM_SEEDS_IN_CHOOSER=49` 与 `SEED_EXPLODE_O_NUT=49` **同值**，Rust 枚举不允许重复判别值（`E0081`），故不入枚举
+
+**C. §5 未覆盖区域现状**：`zombie.rs` 的 `stub` 标注由 15 降至 4（余者均确属贴图/粒子/附着系统依赖）；widget 层剩余标注高度集中于**控件树/WidgetManager 架构差异**（按钮未注册、`MarkDirty` 缺失、滑块/复选框控件不存在）与**合理的图片降级**。
+
+### 8.4 仍未完成
+1. **运行期验证**：本轮 15 个提交全部只经过静态对照 + `cargo check`，从未启动游戏。
+2. `zombie.rs` 剩余 4 处 `stub` 与 ~22 处「资源类未接入」中属逻辑的项。
+3. `save_game.rs` 的 `m_image_override`/emitter 数据等（依赖 Rust 未实现的资源反查，非可低成本修复）。

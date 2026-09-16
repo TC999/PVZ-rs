@@ -2132,9 +2132,23 @@ impl Zombie {
             self.squish_all_in_square(squish_x, squish_y, attack_type);
         }
 
-        // 对应 C++: if (mApp->IsIZombieLevel()) { GridItem* aBrain = mBoard->mChallenge->IZombieGetBrainTarget(this);
-        //          if (aBrain) mBoard->mChallenge->IZombieSquishBrain(aBrain); }
-        // [TRANSLATION_NOTE]: Challenge 的 IZombieGetBrainTarget / IZombieSquishBrain 尚未接入，暂缺
+        // 对应 C++ Zombie::CheckSquish（Zombie.cpp:6577-6585）: IZombie 关卡下碾碎脑目标
+        if let Some(a_app) = self.base.get_app() {
+            if unsafe { (*a_app).is_izombie_level() } {
+                let a_brain_idx = self.base.get_board().and_then(|b| {
+                    b.challenge
+                        .as_ref()
+                        .and_then(|ch| ch.izombie_get_brain_target(self))
+                });
+                if let Some(a_idx) = a_brain_idx {
+                    if let Some(a_board) = self.base.get_board_mut() {
+                        if let Some(ch) = a_board.challenge.as_mut() {
+                            ch.izombie_squish_brain(a_idx);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// 更新小鬼僵尸（对应 C++ UpdateZombieImp）
