@@ -126,11 +126,29 @@ impl GridItem {
         self.pos_y = (80 + grid_y * 100) as f32;
     }
 
-    /// 更新（对应 C++ GridItem::Update）
+    /// 更新（对应 C++ GridItem::Update，GridItem.cpp:559-589）
     pub fn update(&mut self) {
         if self.dead { return; }
 
-        // [TRANSLATION_NOTE]: Reanimation/Particle 更新暂未实现
+        // 对应 C++: Reanimation* aGridItemReanim = mApp->ReanimationTryToGet(mGridItemReanimID);
+        //          if (aGridItemReanim) aGridItemReanim->Update();
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(a_reanim) = (*app).reanimation_get_mut(self.grid_item_reanim_id) {
+                    a_reanim.update();
+                }
+            }
+        }
+
+        // 对应 C++: PvzpParticleSystem* aGridItemParticle = mApp->ParticleTryToGet(mGridItemParticleID);
+        //          if (aGridItemParticle) aGridItemParticle->Update();
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(a_particle) = (*app).particle_try_to_get(self.grid_item_particle_id) {
+                    a_particle.update();
+                }
+            }
+        }
 
         match self.grid_item_type {
             GridItemType::PortalCrystalBall | GridItemType::PortalSquare => {
@@ -152,24 +170,100 @@ impl GridItem {
     /// 更新恐怖罐子（对应 C++ UpdateScaryPot）
     /// 灯笼植物（Plantern）靠近时使罐子半透明，显示内部内容
     pub fn update_scary_pot(&mut self) {
-        // [TRANSLATION_NOTE]: 作弊键 Shift 加速透明暂未实现
+        // 对应 C++: if (mApp->mCheatKeys && mApp->mWidgetManager->mKeyDown[KEYCODE_SHIFT])
+        let a_shift_down = self.app.map_or(false, |app| unsafe {
+            (*app).m_cheat_keys_used
+                && (*app).base.widget_manager.map_or(false, |wm| {
+                    (&(*wm).key_down)[crate::framework::key_codes::KEYCODE_SHIFT as usize]
+                })
+        });
+        if a_shift_down {
+            if self.transparent_counter < 50 {
+                self.transparent_counter += 1;
+            }
+            return;
+        }
 
-        // 附近有灯笼植物时变为半透明
-        // [TRANSLATION_NOTE]: 遍历植物检测 Plantern 暂未实现
+        // 对应 C++: 遍历植物，若有未死亡的 Plantern 且切比雪夫距离 <= 1 则累计透明
+        if let Some(board) = self.board {
+            unsafe {
+                for a_plant in (*board).plants.iter() {
+                    if a_plant.dead {
+                        continue;
+                    }
+                    if a_plant.seed_type == SeedType::Plantern && !a_plant.not_on_ground() {
+                        let a_diff_x = (a_plant.plant_col - self.grid_x).abs();
+                        let a_diff_y = (a_plant.base.row - self.grid_y).abs();
+                        if a_diff_x.max(a_diff_y) <= 1 {
+                            if self.transparent_counter < 50 {
+                                self.transparent_counter += 1;
+                            }
+                            return;
+                        }
+                    }
+                }
+            }
+        }
 
         if self.transparent_counter > 0 {
             self.transparent_counter -= 1;
         }
     }
 
-    /// 更新传送门（对应 C++ UpdatePortal）
+    /// 更新传送门（对应 C++ UpdatePortal，GridItem.cpp:477-504）
     /// 关闭动画完成后消亡，开启动画完成后进入脉冲循环+粒子效果
     pub fn update_portal(&mut self) {
+        // 对应 C++: Reanimation* aPortalReanim = mApp->ReanimationGet(mGridItemReanimID);
+        let (a_loop_count, a_loop_type) = self
+            .app
+            .and_then(|app| unsafe { (*app).reanimation_get(self.grid_item_reanim_id) })
+            .map_or((-1, None), |r| (r.m_loop_count, Some(r.m_loop_type)));
+
         if self.grid_item_state == GridItemState::PortalClosed {
-            // [TRANSLATION_NOTE]: mLoopCount > 0 检测暂未实现
-            // self.grid_item_die();
+            // 对应 C++: if (aPortalReanim->mLoopCount > 0) GridItemDie();
+            if a_loop_count > 0 {
+                self.grid_item_die();
+            }
+        } else if a_loop_type == Some(crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold)
+            && a_loop_count > 0
+        {
+            // 对应 C++: aPortalReanim->PlayReanim("anim_pulse", REANIM_LOOP, 0, 12.0f);
+            if let Some(app) = self.app {
+                unsafe {
+                    if let Some(a_portal_reanim) =
+                        (*app).reanimation_get_mut(self.grid_item_reanim_id)
+                    {
+                        a_portal_reanim.play_reanim(
+                            "anim_pulse",
+                            crate::todlib::reanimator::ReanimLoopType::Loop,
+                            0,
+                            12.0,
+                        );
+                    }
+                }
+            }
+
+            // 对应 C++: 生成传送门粒子（PARTICLE_PORTAL_CIRCLE / PARTICLE_PORTAL_SQUARE）
+            let mut a_effect = crate::lawn::game_enums::ParticleEffect::PortalCircle;
+            let mut a_x_pos = self.grid_x as f32 * 80.0 + 13.0;
+            let mut a_y_pos = self.board.map_or(0.0, |board| unsafe {
+                (*board).grid_to_pixel_y(0, self.grid_y) as f32
+            }) - 39.0;
+            if self.grid_item_type == GridItemType::PortalSquare {
+                a_effect = crate::lawn::game_enums::ParticleEffect::PortalSquare;
+                a_x_pos -= 8.0;
+                a_y_pos += 15.0;
+            }
+
+            if let Some(app) = self.app {
+                unsafe {
+                    let a_particle = (*app).add_tod_particle(a_x_pos, a_y_pos, 0, a_effect as i32);
+                    if let Some(a_particle_ptr) = a_particle {
+                        self.grid_item_particle_id = (*app).particle_get_id(a_particle_ptr);
+                    }
+                }
+            }
         }
-        // [TRANSLATION_NOTE]: 开启动画完成后切换到脉冲循环+粒子效果暂未实现
     }
 
     /// 更新大脑（对应 C++ UpdateBrain）- I, Zombie 模式
@@ -190,15 +284,49 @@ impl GridItem {
     pub fn update_rake(&mut self) {
         if self.grid_item_state == GridItemState::RakeAttracting || self.grid_item_state == GridItemState::RakeWaiting {
             if self.rake_find_zombie().is_some() {
+                // 对应 C++: aRakeReanim->mAnimRate = 20.0f;
+                if let Some(app) = self.app {
+                    unsafe {
+                        if let Some(a_rake_reanim) =
+                            (*app).reanimation_get_mut(self.grid_item_reanim_id)
+                        {
+                            a_rake_reanim.m_anim_rate = 20.0;
+                        }
+                    }
+                }
                 self.counter = 200;
                 self.grid_item_state = GridItemState::RakeTriggered;
-                // [TRANSLATION_NOTE]: PlayFoley(FOLEY_SWING) 暂未实现
+                // 对应 C++: mApp->PlayFoley(FOLEY_SWING);
+                if let Some(app) = self.app {
+                    unsafe {
+                        (*app).play_foley(crate::todlib::tod_foley::FoleyType::Swing as i32);
+                    }
+                }
             }
         } else if self.grid_item_state == GridItemState::RakeTriggered {
-            if let Some(zombie_idx) = self.rake_find_zombie() {
-                // [TRANSLATION_NOTE]: ShouldTriggerTimedEvent(0.8f) + TakeDamage(1800, 0) 暂未实现
-                let _ = zombie_idx;
+            // 对应 C++: if (aRakeReanim && aRakeReanim->ShouldTriggerTimedEvent(0.8f))
+            let a_should_trigger = self
+                .app
+                .and_then(|app| unsafe { (*app).reanimation_get(self.grid_item_reanim_id) })
+                .map_or(false, |r| r.should_trigger_timed_event(0.8));
+            if a_should_trigger {
+                if let Some(zombie_idx) = self.rake_find_zombie() {
+                    // 对应 C++: aZombie->TakeDamage(1800, 0U); mApp->PlayFoley(FOLEY_BONK);
+                    if let Some(board) = self.board {
+                        unsafe {
+                            if let Some(a_zombie) = (&mut (*board).zombies).get_mut(zombie_idx) {
+                                a_zombie.take_damage(1800, 0);
+                            }
+                        }
+                    }
+                    if let Some(app) = self.app {
+                        unsafe {
+                            (*app).play_foley(crate::todlib::tod_foley::FoleyType::Bonk as i32);
+                        }
+                    }
+                }
             }
+
             self.counter -= 1;
             if self.counter == 0 {
                 self.grid_item_die();

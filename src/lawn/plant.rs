@@ -2291,13 +2291,47 @@ impl Plant {
     /// 更新射击（对应 C++ UpdateShooting）
     pub fn update_shooting(&mut self) {
         // 对应 C++: if (NotOnGround() || mShootingCounter == 0) return;
-        // [TRANSLATION_NOTE]: C++ NotOnGround() 依赖 mPlantHeight 等字段，Rust 暂无对应，跳过。
-        if self.shooting_counter == 0 { return; }
+        if self.not_on_ground() || self.shooting_counter == 0 {
+            return;
+        }
 
         self.shooting_counter -= 1;
 
-        // 对应 C++: Gloomshroom 冒烟粒子时刻（粒子系统 stub，仅保留 Fire 时刻）
+        // 对应 C++: Fumeshroom 喷烟粒子（mShootingCounter == 15）
+        if self.seed_type == SeedType::Fumeshroom && self.shooting_counter == 15 {
+            let a_render_position = crate::lawn::board::make_render_order(
+                crate::lawn::game_enums::RENDER_LAYER_PARTICLE,
+                self.base.row,
+                0,
+            );
+            self.add_attached_particle(
+                self.pos_x as i32 + 85,
+                self.pos_y as i32 + 31,
+                a_render_position,
+                ParticleEffect::Fumecloud,
+            );
+        }
+
         if self.seed_type == SeedType::Gloomshroom {
+            // 对应 C++: Gloomshroom 喷烟粒子（136/108/80/52）
+            if self.shooting_counter == 136
+                || self.shooting_counter == 108
+                || self.shooting_counter == 80
+                || self.shooting_counter == 52
+            {
+                let a_render_position = crate::lawn::board::make_render_order(
+                    crate::lawn::game_enums::RENDER_LAYER_PARTICLE,
+                    self.base.row,
+                    0,
+                );
+                self.add_attached_particle(
+                    self.pos_x as i32 + 40,
+                    self.pos_y as i32 + 40,
+                    a_render_position,
+                    ParticleEffect::Gloomcloud,
+                );
+            }
+            // 对应 C++: Gloomshroom 四次实际发射（126/98/70/42）
             if self.shooting_counter == 126
                 || self.shooting_counter == 98
                 || self.shooting_counter == 70
@@ -2317,41 +2351,248 @@ impl Plant {
         } else if self.seed_type == SeedType::Cattail {
             // 对应 C++: Cattail 计数 19 时瞄准当前目标发射
             if self.shooting_counter == 19 {
-                let a_target = self.find_target_zombie(self.base.row, PlantWeapon::Primary);
-                self.fire(a_target, self.base.row, PlantWeapon::Primary);
+                // 对应 C++: if (aZombie) Fire(aZombie, mRow, WEAPON_PRIMARY)
+                let a_zombie = self.find_target_zombie(self.base.row, PlantWeapon::Primary);
+                if a_zombie.is_some() {
+                    self.fire(a_zombie, self.base.row, PlantWeapon::Primary);
+                }
             }
         } else if self.shooting_counter == 1 {
             // 对应 C++ mShootingCounter == 1 分支
-            // [TRANSLATION_NOTE]: Threepeater/Splitpea 的头部 reanim 动画判定依赖
-            // reanim 完整实现（当前 stub），简化为直接发射，数值节奏一致。
-            if self.state == PlantState::CactusLow {
+            if self.seed_type == SeedType::Threepeater {
+                // 对应 C++: 三个头部按各自 mLoopType 判定发射（下/中/上三行）
+                let a_row_above = self.base.row - 1;
+                let a_row_below = self.base.row + 1;
+                let (a_head1_loop_type, a_head2_loop_type, a_head3_loop_type) =
+                    match self.base.get_app() {
+                        Some(app) => (
+                            app.reanimation_get(self.head_reanim_id).map(|r| r.m_loop_type),
+                            app.reanimation_get(self.head_reanim_id2).map(|r| r.m_loop_type),
+                            app.reanimation_get(self.head_reanim_id3).map(|r| r.m_loop_type),
+                        ),
+                        None => (None, None, None),
+                    };
+                if a_head1_loop_type == Some(ReanimLoopType::PlayOnceAndHold) {
+                    self.fire(None, a_row_below, PlantWeapon::Primary);
+                }
+                if a_head2_loop_type == Some(ReanimLoopType::PlayOnceAndHold) {
+                    self.fire(None, self.base.row, PlantWeapon::Primary);
+                }
+                if a_head3_loop_type == Some(ReanimLoopType::PlayOnceAndHold) {
+                    self.fire(None, a_row_above, PlantWeapon::Primary);
+                }
+            } else if self.seed_type == SeedType::Splitpea {
+                // 对应 C++: 前头（mHeadReanimID）需 mLaunchCounter > 25，后头（mHeadReanimID2）
+                let (a_head_front_loop_type, a_head_back_loop_type) =
+                    match self.base.get_app() {
+                        Some(app) => (
+                            app.reanimation_get(self.head_reanim_id).map(|r| r.m_loop_type),
+                            app.reanimation_get(self.head_reanim_id2).map(|r| r.m_loop_type),
+                        ),
+                        None => (None, None),
+                    };
+                if a_head_front_loop_type == Some(ReanimLoopType::PlayOnceAndHold)
+                    && self.launch_counter > 25
+                {
+                    self.fire(None, self.base.row, PlantWeapon::Primary);
+                }
+                if a_head_back_loop_type == Some(ReanimLoopType::PlayOnceAndHold) {
+                    self.fire(None, self.base.row, PlantWeapon::Secondary);
+                }
+            } else if self.state == PlantState::CactusLow {
                 self.fire(None, self.base.row, PlantWeapon::Secondary);
             } else if self.seed_type == SeedType::Cabbagepult
                 || self.seed_type == SeedType::Kernelpult
                 || self.seed_type == SeedType::Melonpult
                 || self.seed_type == SeedType::Wintermelon
             {
-                // 对应 C++ pult 分支：Kernelpult butter 判定切换弹种（渲染组切换依赖 reanim stub）
-                let a_plant_weapon = if self.seed_type == SeedType::Kernelpult
-                    && self.state == PlantState::KernelpultButter
-                {
+                // 对应 C++ pult 分支：Kernelpult 处于黄油状态时切换渲染组与弹种
+                let mut a_plant_weapon = PlantWeapon::Primary;
+                if self.state == PlantState::KernelpultButter {
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                            a_body_reanim.assign_render_group_to_prefix(
+                                "Cornpult_butter",
+                                crate::todlib::reanimator::RENDER_GROUP_HIDDEN,
+                            );
+                            a_body_reanim.assign_render_group_to_prefix(
+                                "Cornpult_kernal",
+                                crate::todlib::reanimator::RENDER_GROUP_NORMAL,
+                            );
+                        }
+                    }
                     self.state = PlantState::NotReady;
-                    PlantWeapon::Secondary
-                } else {
-                    PlantWeapon::Primary
-                };
-                let a_target = self.find_target_zombie(self.base.row, a_plant_weapon);
-                self.fire(a_target, self.base.row, a_plant_weapon);
+                    a_plant_weapon = PlantWeapon::Secondary;
+                }
+
+                let a_zombie = self.find_target_zombie(self.base.row, a_plant_weapon);
+                self.fire(a_zombie, self.base.row, a_plant_weapon);
             } else {
                 self.fire(None, self.base.row, PlantWeapon::Primary);
             }
             return;
         }
 
-        if self.shooting_counter != 0 { return; }
+        if self.shooting_counter != 0 {
+            return;
+        }
 
-        // 对应 C++ mShootingCounter == 0：头部/身体动画复位为 idle，计数器保活为 1。
-        // [TRANSLATION_NOTE]: StartBlend/SetFramesForLayer 依赖 reanim 完整实现（当前 stub），仅保留计数逻辑。
+        // 对应 C++ mShootingCounter == 0 分支（Plant.cpp:3310-3414）：
+        // 依据各头部/身体 reanim 的 mLoopCount 复位到 idle 循环
+        let a_body_loop_count = self
+            .base
+            .get_app()
+            .and_then(|app| app.reanimation_get(self.body_reanim_id))
+            .map_or(-1, |r| r.m_loop_count);
+        let a_body_fps = self
+            .base
+            .get_app()
+            .and_then(|app| app.reanimation_get(self.body_reanim_id))
+            .and_then(|r| r.m_definition)
+            .map_or(0.0, |d| unsafe { (*d).m_fps });
+        let a_body_anim_rate = self
+            .base
+            .get_app()
+            .and_then(|app| app.reanimation_get(self.body_reanim_id))
+            .map_or(0.0, |r| r.m_anim_rate);
+        let a_body_anim_time = self
+            .base
+            .get_app()
+            .and_then(|app| app.reanimation_get(self.body_reanim_id))
+            .map_or(0.0, |r| r.m_anim_time);
+        let a_head_exists = self
+            .base
+            .get_app()
+            .map_or(false, |app| app.reanimation_get(self.head_reanim_id).is_some());
+        let a_head_loop_count = self
+            .base
+            .get_app()
+            .and_then(|app| app.reanimation_get(self.head_reanim_id))
+            .map_or(-1, |r| r.m_loop_count);
+
+        if self.seed_type == SeedType::Threepeater {
+            let (a_head2_loop_count, a_head1_loop_type, a_head3_loop_type) =
+                match self.base.get_app() {
+                    Some(app) => (
+                        app.reanimation_get(self.head_reanim_id2)
+                            .map_or(-1, |r| r.m_loop_count),
+                        app.reanimation_get(self.head_reanim_id).map(|r| r.m_loop_type),
+                        app.reanimation_get(self.head_reanim_id3).map(|r| r.m_loop_type),
+                    ),
+                    None => (-1, None, None),
+                };
+
+            if a_head2_loop_count > 0 {
+                if a_head1_loop_type == Some(ReanimLoopType::PlayOnceAndHold) {
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_head) = app.reanimation_get_mut(self.head_reanim_id) {
+                            a_head.start_blend(20);
+                            a_head.m_loop_type = ReanimLoopType::Loop;
+                            a_head.set_frames_for_layer("anim_head_idle1");
+                            a_head.m_anim_rate = a_body_anim_rate;
+                            a_head.m_anim_time = a_body_anim_time;
+                        }
+                    }
+                }
+
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_head2) = app.reanimation_get_mut(self.head_reanim_id2) {
+                        a_head2.start_blend(20);
+                        a_head2.m_loop_type = ReanimLoopType::Loop;
+                        a_head2.set_frames_for_layer("anim_head_idle2");
+                        a_head2.m_anim_rate = a_body_anim_rate;
+                        a_head2.m_anim_time = a_body_anim_time;
+                    }
+                }
+
+                if a_head3_loop_type == Some(ReanimLoopType::PlayOnceAndHold) {
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_head3) = app.reanimation_get_mut(self.head_reanim_id3) {
+                            a_head3.start_blend(20);
+                            a_head3.m_loop_type = ReanimLoopType::Loop;
+                            a_head3.set_frames_for_layer("anim_head_idle3");
+                            a_head3.m_anim_rate = a_body_anim_rate;
+                            a_head3.m_anim_time = a_body_anim_time;
+                        }
+                    }
+                }
+
+                return;
+            }
+        } else if self.seed_type == SeedType::Splitpea {
+            let a_head2_loop_count = self
+                .base
+                .get_app()
+                .and_then(|app| app.reanimation_get(self.head_reanim_id2))
+                .map_or(-1, |r| r.m_loop_count);
+
+            if a_head_loop_count > 0 {
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_head) = app.reanimation_get_mut(self.head_reanim_id) {
+                        a_head.start_blend(20);
+                        a_head.m_loop_type = ReanimLoopType::Loop;
+                        a_head.set_frames_for_layer("anim_head_idle");
+                        a_head.m_anim_rate = a_body_anim_rate;
+                        a_head.m_anim_time = a_body_anim_time;
+                    }
+                }
+            }
+
+            if a_head2_loop_count > 0 {
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_head2) = app.reanimation_get_mut(self.head_reanim_id2) {
+                        a_head2.start_blend(20);
+                        a_head2.m_loop_type = ReanimLoopType::Loop;
+                        a_head2.set_frames_for_layer("anim_splitpea_idle");
+                        a_head2.m_anim_rate = a_body_anim_rate;
+                        a_head2.m_anim_time = a_body_anim_time;
+                    }
+                }
+            }
+
+            return;
+        } else if self.state == PlantState::CactusHigh {
+            if a_body_loop_count > 0 {
+                self.play_body_reanim("anim_idlehigh", ReanimLoopType::Loop, 20, 0.0);
+                let a_is_izombie = self
+                    .base
+                    .get_app()
+                    .map_or(false, |app| app.is_izombie_level());
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                        a_body_reanim.m_anim_rate = a_body_fps;
+                        if a_is_izombie {
+                            a_body_reanim.m_anim_rate = 0.0;
+                        }
+                    }
+                }
+                return;
+            }
+        } else if a_head_exists {
+            if a_head_loop_count > 0 {
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_head) = app.reanimation_get_mut(self.head_reanim_id) {
+                        a_head.start_blend(20);
+                        a_head.m_loop_type = ReanimLoopType::Loop;
+                        a_head.set_frames_for_layer("anim_head_idle");
+                        a_head.m_anim_rate = a_body_anim_rate;
+                        a_head.m_anim_time = a_body_anim_time;
+                    }
+                }
+                return;
+            }
+        } else if self.seed_type == SeedType::Cobcannon {
+            if a_body_loop_count > 0 {
+                self.state = PlantState::CobcannonArming;
+                self.state_countdown = 3000;
+                self.play_body_reanim("anim_unarmed_idle", ReanimLoopType::Loop, 20, a_body_fps);
+                return;
+            }
+        } else if a_body_loop_count > 0 {
+            self.play_idle_anim(a_body_fps);
+            return;
+        }
+
         self.shooting_counter = 1;
     }
 

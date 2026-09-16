@@ -1230,10 +1230,10 @@ impl Zombie {
         }
     }
 
-    /// 检查僵尸脚步声（对应 C++ CheckForZombieStep）
+    /// 检查僵尸脚步声（对应 C++ Zombie::CheckForZombieStep，Zombie.cpp:4243-4249）
     pub fn check_for_zombie_step(&mut self) {
         if (self.zombie_type == ZombieType::Zamboni || self.zombie_type == ZombieType::Catapult) && !self.flat_tires {
-            // CheckSquish(ATTACKTYPE_DRIVE_OVER) — stub
+            self.check_squish(ZombieAttackType::DriveOver);
         }
     }
 
@@ -1268,45 +1268,114 @@ impl Zombie {
         }
     }
 
-    /// 移除冰陷阱（对应 C++ RemoveIceTrap，stub）
+    /// 移除冰陷阱（对应 C++ Zombie::RemoveIceTrap，Zombie.cpp:8372-8383）
     pub fn remove_ice_trap(&mut self) {
         self.ice_trap_counter = 0;
-        if self.zombie_type == ZombieType::Balloon { /* BalloonPropellerHatSpin(true); */ }
+        if self.zombie_type == ZombieType::Balloon {
+            self.balloon_propeller_hat_spin(true);
+        }
         self.update_anim_speed();
         self.start_zombie_sound();
     }
 
-    /// 移除黄油（对应 C++ RemoveButter，stub）
+    /// 移除黄油（对应 C++ Zombie::RemoveButter，Zombie.cpp:8485-8513）
     pub fn remove_butter(&mut self) {
-        if self.zombie_type == ZombieType::Balloon { /* BalloonPropellerHatSpin(true); */ }
+        if self.zombie_type == ZombieType::Balloon {
+            self.balloon_propeller_hat_spin(true);
+        }
+
+        // 对应 C++: IsZombotany(mZombieType) 时按头部动画调整特殊头部 reanim 速率
+        if Self::is_zombotany(self.zombie_type) {
+            let a_head_anim_rate = self
+                .base
+                .get_app()
+                .and_then(|app| app.reanimation_get(self.special_head_reanim_id))
+                .map(|a_head_reanim| {
+                    if self.zombie_type == ZombieType::PeaHead
+                        && a_head_reanim.is_anim_playing("anim_shooting")
+                    {
+                        35.0
+                    } else if self.zombie_type == ZombieType::GatlingHead
+                        && a_head_reanim.is_anim_playing("anim_shooting")
+                    {
+                        38.0
+                    } else {
+                        15.0
+                    }
+                });
+            if let Some(a_rate) = a_head_anim_rate {
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_head_reanim) = app.reanimation_get_mut(self.special_head_reanim_id)
+                    {
+                        a_head_reanim.m_anim_rate = a_rate;
+                    }
+                }
+            }
+        }
+
         self.buttered_counter = 0;
         self.update_anim_speed();
         self.start_zombie_sound();
     }
 
-    /// 检查进入泳池（对应 C++ CheckForPool，stub）
+    /// 检查进入泳池（对应 C++ Zombie::CheckForPool，Zombie.cpp:6920-6957）
     pub fn check_for_pool(&mut self) {
-        if self.zombie_height != ZombieHeight::Normal || self.is_flying() { return; }
-        if self.zombie_type == ZombieType::DolphinRider || self.zombie_type == ZombieType::Snorkel { return; }
-        if self.in_pool { return; }
-        if let Some(b) = self.base.get_board() {
-            let gx = b.pixel_to_grid_x(self.pos_x as i32 + 75, self.pos_y as i32);
-            let gy = b.pixel_to_grid_x(self.pos_x as i32 + 45, self.pos_y as i32);
-            if b.is_pool_square(gx, self.base.row) && b.is_pool_square(gy, self.base.row) && self.pos_x < 680.0 {
-                self.in_pool = true;
+        if !Self::zombie_type_can_go_in_pool(self.zombie_type) || self.is_flying() {
+            return;
+        }
+        if self.zombie_type == ZombieType::DolphinRider || self.zombie_type == ZombieType::Snorkel {
+            return;
+        }
+        if self.zombie_height == ZombieHeight::InToPool
+            || self.zombie_height == ZombieHeight::OutOfPool
+        {
+            return;
+        }
+
+        // 对应 C++: IsPoolSquare(PixelToGridX(mX + 75, mY)) && IsPoolSquare(PixelToGridX(mX + 45, mY)) && mX < 680
+        let a_is_pool_square = if let Some(b) = self.base.get_board() {
+            let a_grid_x_left = b.pixel_to_grid_x(self.pos_x as i32 + 75, self.pos_y as i32);
+            let a_grid_x_right = b.pixel_to_grid_x(self.pos_x as i32 + 45, self.pos_y as i32);
+            b.is_pool_square(a_grid_x_left, self.base.row)
+                && b.is_pool_square(a_grid_x_right, self.base.row)
+                && self.pos_x < 680.0
+        } else {
+            false
+        };
+
+        if !self.in_pool && a_is_pool_square {
+            let a_ice_trap_counter = self.base.get_board().map_or(0, |b| b.m_ice_trap_counter);
+            if a_ice_trap_counter > 0 {
+                // 对应 C++: mIceTrapCounter = mBoard->mIceTrapCounter; ApplyChill(true);
+                self.ice_trap_counter = a_ice_trap_counter;
+                self.apply_chill(true);
+            } else {
+                // 对应 C++: mZombieHeight = HEIGHT_IN_TO_POOL; mInPool = true; PoolSplash(true);
                 self.zombie_height = ZombieHeight::InToPool;
+                self.in_pool = true;
+                self.pool_splash(true);
             }
+        } else if self.in_pool && !a_is_pool_square {
+            // 对应 C++: mZombieHeight = HEIGHT_OUT_OF_POOL; StartWalkAnim(0); PoolSplash(false);
+            self.zombie_height = ZombieHeight::OutOfPool;
+            self.start_walk_anim(0);
+            self.pool_splash(false);
         }
     }
 
-    /// 检查屋顶高台（对应 C++ CheckForHighGround，stub）
+    /// 检查屋顶高台（对应 C++ Zombie::CheckForHighGround，Zombie.cpp:6967-6983）
     pub fn check_for_high_ground(&mut self) {
-        if self.zombie_height != ZombieHeight::Normal || self.zombie_type == ZombieType::Bungee { return; }
-        if let Some(b) = self.base.get_board() {
-            if b.stage_has_roof() {
-                self.zombie_height = ZombieHeight::UpToHighGround;
-                self.on_high_ground = true;
-            }
+        if self.zombie_height != ZombieHeight::Normal || self.zombie_type == ZombieType::Bungee {
+            return;
+        }
+
+        // 对应 C++: IsOnHighGround() 基于 grid square type，可双向升降
+        let a_is_high_ground = self.is_on_high_ground();
+        if !self.on_high_ground && a_is_high_ground {
+            self.zombie_height = ZombieHeight::UpToHighGround;
+            self.on_high_ground = true;
+        } else if self.on_high_ground && !a_is_high_ground {
+            self.zombie_height = ZombieHeight::DownOffHighGround;
         }
     }
 
@@ -1333,7 +1402,7 @@ impl Zombie {
         }
     }
 
-    /// 更新泳池僵尸（对应 C++ UpdateZombiePool，stub）
+    /// 更新泳池僵尸（对应 C++ Zombie::UpdateZombiePool，Zombie.cpp:3261-3293）
     pub fn update_zombie_pool(&mut self) {
         if self.zombie_height == ZombieHeight::OutOfPool {
             self.altitude += 1.0;
@@ -1341,34 +1410,53 @@ impl Zombie {
             if self.altitude >= 0.0 { self.altitude = 0.0; self.zombie_height = ZombieHeight::Normal; self.in_pool = false; }
         } else if self.zombie_height == ZombieHeight::InToPool {
             self.altitude -= 1.0;
-            if self.altitude <= -40.0 { self.altitude = -40.0; self.zombie_height = ZombieHeight::Normal; }
+            // 对应 C++: int aDepth = -40 * mScaleZombie;
+            let a_depth = -40.0 * self.scale_zombie;
+            if self.altitude <= a_depth {
+                self.altitude = a_depth;
+                self.zombie_height = ZombieHeight::Normal;
+                self.start_walk_anim(0);
+            }
+        } else if self.zombie_height == ZombieHeight::DraggedUnder {
+            // 对应 C++: HEIGHT_DRAGGED_UNDER 仅下沉
+            self.altitude -= 1.0;
         }
     }
 
-    /// 更新屋顶高台僵尸（对应 C++ UpdateZombieHighGround，stub）
+    /// 更新屋顶高台僵尸（对应 C++ Zombie::UpdateZombieHighGround，Zombie.cpp:3295-3319）
     pub fn update_zombie_high_ground(&mut self) {
         if self.zombie_type == ZombieType::Pogo { return; }
         if self.zombie_height == ZombieHeight::UpToHighGround {
             self.altitude += 1.0;
-            if self.altitude >= 50.0 { self.altitude = 50.0; self.zombie_height = ZombieHeight::Normal; }
+            if self.altitude >= HIGH_GROUND_HEIGHT { self.altitude = HIGH_GROUND_HEIGHT; self.zombie_height = ZombieHeight::Normal; }
         } else if self.zombie_height == ZombieHeight::DownOffHighGround {
             self.altitude -= 1.0;
             if self.altitude <= 0.0 { self.altitude = 0.0; self.zombie_height = ZombieHeight::Normal; self.on_high_ground = false; }
         }
     }
 
-    /// 更新掉落僵尸（对应 C++ UpdateZombieFalling，stub）
+    /// 更新掉落僵尸（对应 C++ Zombie::UpdateZombieFalling，Zombie.cpp:3321-3337）
     pub fn update_zombie_falling(&mut self) {
         self.altitude -= 1.0;
         if self.zombie_phase == ZombiePhase::PolevaulterPreVault { self.altitude -= 1.0; }
-        if self.altitude <= 0.0 { self.altitude = 0.0; self.zombie_height = ZombieHeight::Normal; }
+
+        // 对应 C++: 高台上时落点高度为 HIGH_GROUND_HEIGHT
+        let mut a_ground_height = 0.0;
+        if self.is_on_high_ground() {
+            a_ground_height = HIGH_GROUND_HEIGHT;
+        }
+        if self.altitude <= a_ground_height { self.altitude = a_ground_height; self.zombie_height = ZombieHeight::Normal; }
     }
 
-    /// 更新烟囱僵尸（对应 C++ UpdateZombieChimney，stub）
+    /// 更新烟囱僵尸（对应 C++ Zombie::UpdateZombieChimney，Zombie.cpp:9625-9631）
     pub fn update_zombie_chimney(&mut self) {
         if let Some(b) = self.base.get_board() {
             if b.m_background_type == BackgroundType::Roof || b.m_background_type == BackgroundType::Boss {
-                self.altitude = 200.0 - (0 - 4000).max(0) as f32 * 200.0 / 1000.0;
+                // 对应 C++: mAltitude = PvzpAnimateCurve(4000, 5000, mBoard->mCutScene->mCutsceneTime, 200, 0, CURVE_EASE_IN);
+                let a_cutscene_time = b.m_cut_scene.map_or(0, |cs| unsafe { (*cs).m_cutscene_time });
+                self.altitude = crate::todlib::tod_common::tod_animate_curve(
+                    4000, 5000, a_cutscene_time, 200, 0, TodCurves::EaseIn,
+                ) as f32;
             }
         }
     }
@@ -2002,17 +2090,19 @@ impl Zombie {
         -1
     }
 
-    /// 碾压某格子内的所有僵尸/植物（对应 C++ SquishAllInSquare，stub）
+    /// 碾压某格子内的植物（对应 C++ Zombie::SquishAllInSquare，Zombie.cpp:6476-6498）
     pub fn squish_all_in_square(&mut self, x: i32, y: i32, attack_type: ZombieAttackType) {
         if let Some(board) = self.base.get_board_mut() {
             let idxs: Vec<usize> = board.plants.iter().enumerate()
-                .filter(|(_, p)| !p.dead && p.base.row == y && p.plant_col == x 
-                    && !(attack_type == ZombieAttackType::DriveOver && p.seed_type == SeedType::Spikeweed)
+                .filter(|(_, p)| !p.dead && p.base.row == y && p.plant_col == x
+                    && !(attack_type == ZombieAttackType::DriveOver && p.is_spiky())
                     && p.seed_type != SeedType::Spikerock)
                 .map(|(i, _)| i)
                 .collect();
             for idx in idxs {
-                board.plants[idx].die();
+                // 对应 C++: mBoard->mPlantsEaten++; aPlant->Squish();
+                board.m_plants_eaten += 1;
+                board.plants[idx].squish();
             }
         }
     }
@@ -2041,6 +2131,10 @@ impl Zombie {
         if squish_x != -1 {
             self.squish_all_in_square(squish_x, squish_y, attack_type);
         }
+
+        // 对应 C++: if (mApp->IsIZombieLevel()) { GridItem* aBrain = mBoard->mChallenge->IZombieGetBrainTarget(this);
+        //          if (aBrain) mBoard->mChallenge->IZombieSquishBrain(aBrain); }
+        // [TRANSLATION_NOTE]: Challenge 的 IZombieGetBrainTarget / IZombieSquishBrain 尚未接入，暂缺
     }
 
     /// 更新小鬼僵尸（对应 C++ UpdateZombieImp）
@@ -2400,7 +2494,7 @@ impl Zombie {
         }
     }
 
-    /// 更新 Boss（对应 C++ UpdateBoss，stub）
+    /// 更新 Boss（对应 C++ Zombie::UpdateBoss，Zombie.cpp:10219-10472）
     pub fn update_boss(&mut self) {
         // C++ UpdateBoss：mPhaseCounter 由主 Update 递减，这里不重复
         let a_game_scene = self.base.get_app().map_or(crate::lawn::lawn_app::GameScenes::Playing, |app| app.game_scene);
@@ -5416,21 +5510,11 @@ impl Zombie {
                     a_head_reanim.set_position(self.pos_x + 6.0 + a_dest_x as f32 - self.pos_x, self.pos_y - 21.0 + a_pos_y as f32);
                 }
             }
-            // C++: mPhaseCounter == 2 时 SquishAllInSquare(PixelToGridXKeepOnBoard(mX, mY), mRow, ATTACKTYPE_CHEW)
+            // 对应 C++ Zombie.cpp:2584/2587: SquishAllInSquare(PixelToGridXKeepOnBoard(mX, mY), mRow, ATTACKTYPE_CHEW)
             if self.phase_counter == 2 {
                 let a_grid_x = unsafe { (*board).pixel_to_grid_x_keep_on_board(self.base.x, self.base.y) };
                 let a_row = self.base.row;
-                if let Some(board) = self.base.get_board_mut() {
-                    for plant in &mut board.plants {
-                        if plant.dead { continue; }
-                        if plant.base.row == a_row && plant.plant_col == a_grid_x {
-                            if plant.seed_type != SeedType::Spikerock {
-                                board.m_plants_eaten += 1;
-                                plant.squish();
-                            }
-                        }
-                    }
-                }
+                self.squish_all_in_square(a_grid_x, a_row, ZombieAttackType::Chew);
             }
             if self.phase_counter == 0 {
                 self.zombie_phase = ZombiePhase::SquashDoneFalling;
