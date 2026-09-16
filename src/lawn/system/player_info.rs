@@ -34,6 +34,8 @@ pub struct PottedPlant {
     pub last_need_fulfilled_time: i64,
     pub last_fertilized_time: i64,
     pub last_chocolate_time: i64,
+    /// 对应 C++ PottedPlant::mFutureAttribute[1]（PlayerInfo.h:62，保留字段；此前存档以占位读写会丢值）
+    pub m_future_attribute: i64,
 }
 
 impl PottedPlant {
@@ -53,6 +55,7 @@ impl PottedPlant {
             last_need_fulfilled_time: 0,
             last_fertilized_time: 0,
             last_chocolate_time: 0,
+            m_future_attribute: 0,
         }
     }
 
