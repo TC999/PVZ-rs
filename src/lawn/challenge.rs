@@ -784,6 +784,34 @@ impl Challenge {
         }
     }
 
+    /// 对应 C++ Challenge::IZombieGetBrainTarget（Challenge.cpp:4792-4810）
+    /// 返回目标脑在 Board::grid_items 中的索引（以索引代替 C++ 的 GridItem*）
+    pub fn izombie_get_brain_target(&self, the_zombie: &Zombie) -> Option<usize> {
+        if the_zombie.zombie_type == ZombieType::Bungee || the_zombie.is_walking_backwards() {
+            return None;
+        }
+
+        let mut a_zombie_rect = the_zombie.get_zombie_attack_rect();
+        if the_zombie.zombie_phase == ZombiePhase::PolevaulterPreVault {
+            a_zombie_rect = Rect::new(50 + the_zombie.base.x, 0, 20, 115);
+        }
+        if the_zombie.zombie_type == ZombieType::Balloon {
+            a_zombie_rect.x += 25;
+        }
+        if a_zombie_rect.x > 20 {
+            return None;
+        }
+
+        let a_board_ptr = self.board?;
+        let a_board = unsafe { &*a_board_ptr };
+        a_board.grid_items.iter().position(|item| {
+            item.grid_item_type == crate::lawn::grid_item::GridItemType::Brain
+                && item.grid_x == 0
+                && item.grid_y == the_zombie.base.row
+                && item.grid_item_state != GridItemState::BrainSquished
+        })
+    }
+
     pub fn can_plant_at(&self, grid_x: i32, grid_y: i32, seed_type: SeedType) -> PlantingReason {
         let app = self.get_app();
         if app.is_wallnut_bowling_level() {

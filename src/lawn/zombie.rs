@@ -5298,7 +5298,22 @@ impl Zombie {
             return;
         }
 
-        // [TRANSLATION_NOTE]: C++ IsIZombieLevel 时 IZombieGetBrainTarget 的透明计数未接入
+        // 对应 C++ Zombie::AnimateChewEffect（Zombie.cpp:4884-4892）:
+        // IZombie 关卡下优先对脑目标累计透明，命中则直接返回
+        let a_brain_idx = self.base.get_board().and_then(|b| {
+            b.challenge
+                .as_ref()
+                .and_then(|ch| ch.izombie_get_brain_target(self))
+        });
+        if let Some(a_idx) = a_brain_idx {
+            if let Some(a_board) = self.base.get_board_mut() {
+                if let Some(a_brain) = a_board.grid_items.get_mut(a_idx) {
+                    a_brain.transparent_counter = a_brain.transparent_counter.max(25);
+                }
+            }
+            return;
+        }
+
         let plant_idx = self.find_plant_target_index(ZombieAttackType::Chew);
         if let Some(idx) = plant_idx {
             if let Some(board) = self.base.get_board_mut() {
