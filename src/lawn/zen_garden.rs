@@ -743,7 +743,7 @@ impl ZenGarden {
                     if item_type == crate::lawn::grid_item::GridItemType::ZenTool {
                         let item_ptr = &mut b.grid_items[i] as *mut GridItem;
                         self.zen_tool_update(unsafe { &mut *item_ptr });
-                    } else if item_type == crate::lawn::grid_item::GridItemType::PlantStinky {
+                    } else if item_type == crate::lawn::grid_item::GridItemType::Stinky {
                         let item_ptr = &mut b.grid_items[i] as *mut GridItem;
                         self.stinky_update(unsafe { &mut *item_ptr });
                     }
@@ -2401,7 +2401,7 @@ impl ZenGarden {
         if let Some(board_ptr) = self.board {
             let board = unsafe { &mut *board_ptr };
             for item in board.grid_items.iter_mut() {
-                if !item.dead && item.grid_item_type == crate::lawn::grid_item::GridItemType::PlantStinky {
+                if !item.dead && item.grid_item_type == crate::lawn::grid_item::GridItemType::Stinky {
                     return Some(item as *mut GridItem);
                 }
             }
@@ -2686,7 +2686,7 @@ impl ZenGarden {
                         let tool = &mut b.grid_items[i];
                         self.do_feeding_tool(tool.pos_x as i32, tool.pos_y as i32, tool.grid_item_state);
                         tool.grid_item_die();
-                    } else if item_type == crate::lawn::grid_item::GridItemType::PlantStinky {
+                    } else if item_type == crate::lawn::grid_item::GridItemType::Stinky {
                         if let Some(app) = self.app {
                             unsafe {
                                 if let Some(info) = (*app).player_info.as_mut() {

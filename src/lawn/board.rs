@@ -1190,7 +1190,7 @@ impl Board {
             if item.dead {
                 continue;
             }
-            if item.grid_item_type != GridItemType::Grave || item.counter < 100 {
+            if item.grid_item_type != GridItemType::Gravestone || item.counter < 100 {
                 continue;
             }
             // C++: if (mApp->mGameMode == GAMEMODE_CHALLENGE_GRAVE_DANGER && Rand(mNumWaves) > mCurrentWave) continue;
@@ -1436,7 +1436,7 @@ impl Board {
 
     /// 获取墓碑（对应 C++ GetGraveStoneAt）
     pub fn get_grave_stone_at(&self, grid_x: i32, grid_y: i32) -> Option<&GridItem> {
-        self.get_grid_item_at(GridItemType::Grave, grid_x, grid_y)
+        self.get_grid_item_at(GridItemType::Gravestone, grid_x, grid_y)
     }
 
     /// 获取弹坑（对应 C++ GetCraterAt）
@@ -2624,7 +2624,7 @@ Spawn: {}
         }
         !self.grid_items.iter().any(|item| {
             item.grid_x == grid_x && item.grid_y == grid_y && 
-            (item.grid_item_type == GridItemType::Grave 
+            (item.grid_item_type == GridItemType::Gravestone 
              || item.grid_item_type == GridItemType::Crater 
              || item.grid_item_type == GridItemType::Ladder)
         })
@@ -3089,7 +3089,7 @@ Spawn: {}
             });
 
             // C++: 禅园臭鼬 → RENDER_ITEM_GRID_ITEM_OVERLAY
-            if app_mode == GameMode::ChallengeZenGarden && grid_item.grid_item_type == GridItemType::PlantStinky {
+            if app_mode == GameMode::ChallengeZenGarden && grid_item.grid_item_type == GridItemType::Stinky {
                 a_render_list.push(RenderItem {
                     render_object_type: RenderObjectType::GridItemOverlay,
                     z_pos: make_render_order(RENDER_LAYER_PARTICLE, 0, (grid_item.pos_y - 30.0) as i32),
@@ -4982,7 +4982,7 @@ Spawn: {}
 
     /// 获取墓碑数量（对应 C++ GetGraveStoneCount）
     pub fn get_grave_stone_count(&self) -> i32 {
-        self.grid_items.iter().filter(|item| item.grid_item_type == GridItemType::Grave).count() as i32
+        self.grid_items.iter().filter(|item| item.grid_item_type == GridItemType::Gravestone).count() as i32
     }
 
     /// 统计某种硬币的数量（对应 C++ CountCoinByType）
@@ -5177,7 +5177,7 @@ Spawn: {}
             }
             // 墓碑计数推进（出现动画）
             if self.m_enable_grave_stones
-                && item.grid_item_type == GridItemType::Grave
+                && item.grid_item_type == GridItemType::Gravestone
                 && item.counter < 100
             {
                 item.counter += 1;
@@ -5206,14 +5206,14 @@ Spawn: {}
     /// 添加一个墓碑（对应 C++ AddAGraveStone）
     pub fn add_grave_stone(&mut self, grid_x: i32, grid_y: i32) {
         let mut grave = GridItem::new();
-        grave.grid_item_initialize(GridItemType::Grave, grid_x, grid_y);
+        grave.grid_item_initialize(GridItemType::Gravestone, grid_x, grid_y);
         self.grid_items.push(grave);
     }
 
     /// 获取墓碑数量（对应 C++ GetGraveStonesCount）
     pub fn get_grave_stones_count(&self) -> i32 {
         self.grid_items.iter().filter(|item| {
-            !item.dead && item.grid_item_type == GridItemType::Grave
+            !item.dead && item.grid_item_type == GridItemType::Gravestone
         }).count() as i32
     }
 
@@ -8866,7 +8866,7 @@ Spawn: {}
     pub fn pick_special_grave_stone(&mut self) {
         // 收集所有墓碑的索引
         let picks: Vec<usize> = self.grid_items.iter().enumerate()
-            .filter(|(_, item)| item.grid_item_type == GridItemType::Grave)
+            .filter(|(_, item)| item.grid_item_type == GridItemType::Gravestone)
             .map(|(i, _)| i)
             .collect();
 

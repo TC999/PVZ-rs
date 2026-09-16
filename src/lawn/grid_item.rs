@@ -38,25 +38,26 @@ impl Default for MotionTrailFrame {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum GridItemType {
+    // [TRANSLATION_NOTE]: 与 C++ ConstEnums.h:499-513 的 13 值一一对应。
+    // 原实现有 17 个变体且编号与 C++ 错位（如 PlantStinky=6 vs C++ BRAIN=6），
+    // 本次删除 4 个 C++ 不存在的零引用变体（Stone/WaterPlant/TreeOfWisdom/Cart）
+    // 并对齐编号，同时按 C++ 名重命名 4 个变体（Grave→Gravestone 等）。
     None = 0,
-    Grave,
-    Crater,
-    Ladder,
-    PortalCrystalBall,
-    PortalSquare,
-    PlantStinky,
-    ScaryPot,
-    DanceEggplant,
-    Stone,
-    WaterPlant,
-    TreeOfWisdom,
-    ZenTool,
-    Cart,
-    Rake,
-    /// 松鼠（对应 C++ GRIDITEM_SQUIRREL）
-    Squirrel,
-    /// 大脑（对应 C++ GRIDITEM_BRAIN / GRIDITEM_IZOMBIE_BRAIN）
-    Brain,
+    Gravestone = 1,
+    Crater = 2,
+    Ladder = 3,
+    PortalCircle = 4,
+    PortalSquare = 5,
+    /// 对应 C++ GRIDITEM_BRAIN（Zen Garden 的脑）
+    Brain = 6,
+    ScaryPot = 7,
+    Squirrel = 8,
+    ZenTool = 9,
+    /// 对应 C++ GRIDITEM_STINKY（臭臭花盆，原名 PlantStinky）
+    Stinky = 10,
+    Rake = 11,
+    /// 对应 C++ GRIDITEM_IZOMBIE_BRAIN（I,Zombie 的脑，原名 DanceEggplant）
+    IZombieBrain = 12,
 }
 
 /// 格子物品（地形元素等）
@@ -151,7 +152,7 @@ impl GridItem {
         }
 
         match self.grid_item_type {
-            GridItemType::PortalCrystalBall | GridItemType::PortalSquare => {
+            GridItemType::PortalCircle | GridItemType::PortalSquare => {
                 self.update_portal();
             }
             GridItemType::ScaryPot => {
@@ -160,7 +161,7 @@ impl GridItem {
             GridItemType::Rake => {
                 self.update_rake();
             }
-            GridItemType::DanceEggplant => {
+            GridItemType::IZombieBrain => {
                 self.update_brain();
             }
             _ => {}
@@ -356,10 +357,10 @@ impl GridItem {
     /// 绘制（对应 C++ GridItem::DrawGridItem + DrawGridItemOverlay 入口）
     pub fn draw(&self, g: &mut Graphics) {
         match self.grid_item_type {
-            GridItemType::Grave => self.draw_grave_stone(g),
+            GridItemType::Gravestone => self.draw_grave_stone(g),
             GridItemType::Crater => self.draw_crater(g),
             GridItemType::Ladder => self.draw_ladder(g),
-            GridItemType::PortalCrystalBall => {}
+            GridItemType::PortalCircle => {}
             GridItemType::PortalSquare => {}
             GridItemType::ZenTool => {}
             GridItemType::Rake => {}
@@ -368,7 +369,7 @@ impl GridItem {
             GridItemType::ScaryPot => self.draw_scary_pot(g),
             // C++ 注释：松鼠在原版中不可见
             GridItemType::Squirrel => {}
-            GridItemType::PlantStinky => self.draw_stinky(g),
+            GridItemType::Stinky => self.draw_stinky(g),
             _ => {}
         }
 
@@ -387,7 +388,7 @@ impl GridItem {
     /// 绘制叠加层（对应 C++ GridItem::DrawGridItemOverlay）
     /// 臭鼬 + 巧克力光标时显示对话气泡与巧克力
     pub fn draw_grid_item_overlay(&self, g: &mut Graphics) {
-        if self.grid_item_type != GridItemType::PlantStinky {
+        if self.grid_item_type != GridItemType::Stinky {
             return;
         }
         let show_chocolate = self.board.map_or(false, |b| {
@@ -569,7 +570,7 @@ impl GridItem {
 
         // C++: 高亮时附加加法绘制
         let mut a_draw_highlight = false;
-        if self.grid_item_type == GridItemType::PlantStinky && self.highlighted {
+        if self.grid_item_type == GridItemType::Stinky && self.highlighted {
             a_draw_highlight = true;
         }
         if a_draw_highlight {
@@ -774,7 +775,7 @@ impl GridItem {
     /// Rust 的 PortalCrystalBall = C++ GRIDITEM_PORTAL_CIRCLE
     pub fn is_open_portal(&self) -> bool {
         self.grid_item_state == GridItemState::PortalOpen
-            && (self.grid_item_type == GridItemType::PortalCrystalBall
+            && (self.grid_item_type == GridItemType::PortalCircle
                 || self.grid_item_type == GridItemType::PortalSquare)
     }
 }

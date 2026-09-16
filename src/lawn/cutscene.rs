@@ -909,7 +909,7 @@ impl CutScene {
         if let Some(board) = self.get_board_mut() {
             for item in &mut board.grid_items {
                 if item.dead { continue; }
-                if item.grid_item_type == crate::lawn::grid_item::GridItemType::Grave {
+                if item.grid_item_type == crate::lawn::grid_item::GridItemType::Gravestone {
                     // item.add_grave_stone_particles() — 待 GridItem 翻译后接入
                 }
             }

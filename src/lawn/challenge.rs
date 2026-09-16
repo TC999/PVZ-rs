@@ -1284,7 +1284,7 @@ impl Challenge {
         let board = self.get_board();
         board.m_enable_grave_stones = true;
         let mut stone = crate::lawn::grid_item::GridItem::new();
-        stone.grid_item_type = crate::lawn::grid_item::GridItemType::Grave;
+        stone.grid_item_type = crate::lawn::grid_item::GridItemType::Gravestone;
         stone.grid_x = grid_x;
         stone.grid_y = grid_y;
         board.grid_items.push(stone);

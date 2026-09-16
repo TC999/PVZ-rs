@@ -1463,24 +1463,9 @@ pub enum GameObjectType {
     Stinky,
 }
 
-/// GridItemType — 网格物品类型
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(i32)]
-pub enum GridItemType {
-    None = 0,
-    Gravestone,
-    Crater,
-    Ladder,
-    PortalCircle,
-    PortalSquare,
-    ScaryPot,
-    Squirrel,
-    ZenGardenPlant,
-    GraveStone2,
-    GraveStone3,
-    GraveStone4,
-    GraveStone5,
-}
+/// [TRANSLATION_NOTE]: 此处原有一个与 src/lawn/grid_item.rs 同名、零引用的 GridItemType
+/// （13 个变体，其编号同样与 C++ 不一致），已在本次对齐中删除——实际使用的定义见
+/// crate::lawn::grid_item::GridItemType。
 
 /// GridItemState — 网格物品状态
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
