@@ -190,10 +190,10 @@ impl MessageWidget {
                 let a_board_counter = crate::lawn::lawn_app::LawnApp::instance()
                     .and_then(|app| app.board)
                     .map_or(0i32, |b| unsafe { (*b).m_main_counter as i32 });
-                // [TRANSLATION_NOTE]: C++ CURVE_BOUNCE_SLOW_MIDDLE；Rust TodCurves 以 Bounce 近似
+                // 对应 C++: CURVE_BOUNCE_SLOW_MIDDLE（Rust TodCurves::BounceSlowMiddle，此前误用 Bounce）
                 let a_alpha = crate::todlib::tod_common::tod_animate_curve(
                     75, 0, a_board_counter % 75, a_min_alpha, 255,
-                    crate::lawn::game_enums::TodCurves::Bounce,
+                    crate::lawn::game_enums::TodCurves::BounceSlowMiddle,
                 );
                 a_color.a = a_alpha as u8;
                 a_outline_color.a = a_color.a;

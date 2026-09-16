@@ -225,8 +225,15 @@ impl UserDialog {
         d.id = DIALOG_USERDIALOG;
         d.is_modal = true;
         // C++: theApp->GetString("WHO_ARE_YOU", "WHO ARE YOU?")
-        // [TRANSLATION_NOTE]: LawnApp::GetString 未实现，用 C++ fallback 文案。
-        d.dialog_header = "WHO ARE YOU?".to_string();
+        // 对应 SexyAppBase::get_string_default（= C++ GetString(theId, theDefault)）
+        d.dialog_header = app.map_or_else(
+            || "WHO ARE YOU?".to_string(),
+            |app| unsafe {
+                (*app)
+                    .base
+                    .get_string_default("WHO_ARE_YOU", "WHO ARE YOU?")
+            },
+        );
         // C++: 第 5、6 参为空字符串（无正文、无 footer）
         d.dialog_lines = String::new();
         d.dialog_footer = String::new();

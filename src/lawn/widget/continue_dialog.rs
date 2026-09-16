@@ -104,8 +104,15 @@ impl ContinueDialog {
         d.id = Dialogs::Continue as i32;
         d.is_modal = true;
         // C++: theApp->GetString("CONTINUE_GAME_HEADER", "CONTINUE GAME?")
-        // [TRANSLATION_NOTE]: LawnApp::GetString 未实现，用 C++ fallback 文案。
-        d.dialog_header = "CONTINUE GAME?".to_string();
+        // 对应 SexyAppBase::get_string_default（= C++ GetString(theId, theDefault)）
+        d.dialog_header = app.map_or_else(
+            || "CONTINUE GAME?".to_string(),
+            |app| unsafe {
+                (*app)
+                    .base
+                    .get_string_default("CONTINUE_GAME_HEADER", "CONTINUE GAME?")
+            },
+        );
         // C++: 构造函数第 5 参为空字符串；mDialogLines 后续按模式设置
         d.dialog_lines = String::new();
         // C++: "[DIALOG_BUTTON_CANCEL]"
@@ -267,11 +274,22 @@ impl ContinueDialog {
     pub fn resize(&mut self, the_x: i32, the_y: i32, the_width: i32, the_height: i32) {
         LawnDialog::resize(&mut self.dialog, the_x, the_y, the_width, the_height);
 
-        // [TRANSLATION_NOTE]: IMAGE_BUTTON 图片宽度占位（待资源接线后替换为真实值）
-        const BTN_LEFT_W: i32 = 36;
-        const BTN_MID_W: i32 = 18;
-        const BTN_RIGHT_W: i32 = 36;
-        let a_btn_width = BTN_LEFT_W + BTN_MID_W * 3 + BTN_RIGHT_W;
+        // 对应 C++ ContinueDialog::Resize:
+        // aBtnWidth = IMAGE_BUTTON_LEFT->mWidth + IMAGE_BUTTON_MIDDLE->mWidth*3 + IMAGE_BUTTON_RIGHT->mWidth
+        // 图片未接入时回退到原来的占位尺寸（36 / 18 / 36）
+        let a_btn_left_w = self
+            .dialog
+            .get_image("IMAGE_BUTTON_LEFT")
+            .map_or(36, |img| img.get_width());
+        let a_btn_mid_w = self
+            .dialog
+            .get_image("IMAGE_BUTTON_MIDDLE")
+            .map_or(18, |img| img.get_width());
+        let a_btn_right_w = self
+            .dialog
+            .get_image("IMAGE_BUTTON_RIGHT")
+            .map_or(36, |img| img.get_width());
+        let a_btn_width = a_btn_left_w + a_btn_mid_w * 3 + a_btn_right_w;
 
         // C++: int aBtnHeight = mLawnYesButton->mHeight;
         let a_btn_height = if let Some(yes_btn) = self.lawn_yes_button {

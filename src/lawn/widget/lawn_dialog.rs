@@ -367,7 +367,7 @@ impl LawnDialog {
     }
 
     /// 按小写 id 获取对话框图片（经 resource_manager）
-    fn get_image(&self, id: &str) -> Option<&crate::framework::graphics::image::Image> {
+    pub(crate) fn get_image(&self, id: &str) -> Option<&crate::framework::graphics::image::Image> {
         let app = self.app?;
         let app_ref = unsafe { &*app };
         let rm = app_ref.base.resource_manager?;
