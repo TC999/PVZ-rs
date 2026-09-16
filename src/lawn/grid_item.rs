@@ -37,6 +37,7 @@ impl Default for MotionTrailFrame {
 /// 用于 board.rs 中的实际游戏逻辑
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
+#[allow(dead_code)] // 部分变体（如 Brain/IZombieBrain）与 C++ 对齐但 Rust 侧尚无构造点
 pub enum GridItemType {
     // [TRANSLATION_NOTE]: 与 C++ ConstEnums.h:499-513 的 13 值一一对应。
     // 原实现有 17 个变体且编号与 C++ 错位（如 PlantStinky=6 vs C++ BRAIN=6），

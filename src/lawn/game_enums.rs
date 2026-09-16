@@ -803,33 +803,34 @@ pub enum ChallengeState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum RenderObjectType {
+    // [TRANSLATION_NOTE]: 与 C++ ConstEnums.h 的 25 值一一对应。
+    // 原实现顺序与 C++ 完全不同（如 Plant=2 而非 5、Mower 排 22），且含 1 个 C++ 不存在的
+    // 零引用变体（LawnMower，语义与 Mower 重复），已一并修正编号并删除。
     Coin = 0,
     Projectile = 1,
-    Plant = 2,
-    Zombie = 3,
-    LawnMower = 4,
-    Particle = 5,
-    GridItem = 6,
-    /// 以下为 C++ ConstEnums.h 中额外定义的值
-    ZombieShadow = 7,
-    ZombieBungeeTarget = 8,
-    PlantOverlay = 9,
-    PlantMagnetItems = 10,
-    CursorPreview = 11,
-    Reanimation = 12,
-    Ice = 13,
-    TopUi = 14,
-    Fog = 15,
-    Storm = 16,
-    BottomUi = 17,
-    Backdrop = 18,
-    DoorMask = 19,
-    CoinBank = 20,
-    ProjectileShadow = 21,
-    Mower = 22,
-    ScreenFade = 23,
-    BossPart = 24,
-    GridItemOverlay = 25,
+    Zombie = 2,
+    ZombieShadow = 3,
+    ZombieBungeeTarget = 4,
+    Plant = 5,
+    PlantOverlay = 6,
+    PlantMagnetItems = 7,
+    CursorPreview = 8,
+    Particle = 9,
+    Reanimation = 10,
+    Ice = 11,
+    TopUi = 12,
+    Fog = 13,
+    Storm = 14,
+    BottomUi = 15,
+    Backdrop = 16,
+    DoorMask = 17,
+    CoinBank = 18,
+    ProjectileShadow = 19,
+    Mower = 20,
+    ScreenFade = 21,
+    BossPart = 22,
+    GridItem = 23,
+    GridItemOverlay = 24,
 }
 
 // ============================================================
@@ -1252,50 +1253,47 @@ pub enum NotRecommend {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PlantPriority {
+    // [TRANSLATION_NOTE]: 与 C++ ConstEnums.h 的 10 值一一对应。
+    // 原实现的 ZenToolOrder 排在 Any 之后导致编号错位（Any 4 而非 5），且含 3 个
+    // C++ 不存在的变体（TopPlantOnly 与 OnlyNormalPosition 同义、OnlyAbovePlant/OnlyVulnerable 零引用），
+    // 已一并修正编号并删除多余变体。
     EatingOrder = 0,
-    DiggingOrder,
-    BungeeOrder,
-    CatapultOrder,
-    /// 对应 C++ TOPPLANT_ANY（Bungee/Catapult/Any 同一分支）
-    Any,
-    ZenToolOrder,
-    /// 对应 C++ TOPPLANT_ONLY_NORMAL_POSITION
-    OnlyNormalPosition,
-    /// 对应 C++ TOPPLANT_ONLY_FLYING
-    OnlyFlying,
-    TopPlantOnly,
-    OnlyPumpkin,
-    OnlyUnderPlant,
-    OnlyAbovePlant,
-    OnlyVulnerable,
+    DiggingOrder = 1,
+    BungeeOrder = 2,
+    CatapultOrder = 3,
+    ZenToolOrder = 4,
+    Any = 5,
+    OnlyNormalPosition = 6,
+    OnlyFlying = 7,
+    OnlyPumpkin = 8,
+    OnlyUnderPlant = 9,
 }
 
 /// PlantingReason — 种植原因/结果
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PlantingReason {
+    // [TRANSLATION_NOTE]: 与 C++ ConstEnums.h 的 14 值一一对应。
+    // 原实现的编号与 C++ 错位（如 NeedsPot 7 而非 5），且含 4 个 C++ 不存在的零引用变体
+    //（OnlyOnHighGround/OnlyOnLawnMower/OnlyOnLilypad/OnlyOnFlowerpot），已一并修正/删除。
     Ok = 0,
-    NotHere,
-    OnlyOnGraves,
-    OnlyInPool,
-    OnlyOnGround,
-    OnlyOnHighGround,
-    OnlyOnLawnMower,
-    NeedsPot,
-    NotOnGrave,
-    NotOnCrater,
-    NotOnWater,
-    OnlyOnLilypad,
-    OnlyOnFlowerpot,
-    NotPassedLine,
+    NotHere = 1,
+    OnlyOnGraves = 2,
+    OnlyInPool = 3,
+    OnlyOnGround = 4,
+    NeedsPot = 5,
     /// 对应 C++ PLANTING_NOT_ON_ART
-    NotOnArt,
-    /// 对应 C++ PLANTING_NEEDS_SLEEPING
-    NeedsSleeping,
+    NotOnArt = 6,
+    NotPassedLine = 7,
     /// 对应 C++ PLANTING_NEEDS_UPGRADE
-    NeedsUpgrade,
+    NeedsUpgrade = 8,
+    NotOnGrave = 9,
+    NotOnCrater = 10,
+    NotOnWater = 11,
     /// 对应 C++ PLANTING_NEEDS_GROUND
-    NeedsGround,
+    NeedsGround = 12,
+    /// 对应 C++ PLANTING_NEEDS_SLEEPING
+    NeedsSleeping = 13,
 }
 
 /// PlantRowType — 植物行类型
@@ -1639,8 +1637,12 @@ pub enum Dialogs {
     ZenSell,
     Message,
     Imitater,
-    PurchasePacketSlot,
-    NumDialogs,
+    PurchasePacketSlot = 50,
+    /// 对应 C++ DIALOG_ZOMBATAR_TOS
+    ZombatarTos = 51,
+    /// 对应 C++ DIALOG_ZOMBATAR_DELETE
+    ZombatarDelete = 52,
+    NumDialogs = 53,
 }
 
 /// 数值到 Dialogs 枚举的转换（对应 C++ int↔Dialogs 隐式转换）

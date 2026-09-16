@@ -6440,7 +6440,7 @@ Spawn: {}
                     .or(a_plant_on_lawn.normal_plant)
                     .or(a_plant_on_lawn.under_plant)
             }
-            PlantPriority::OnlyNormalPosition | PlantPriority::TopPlantOnly => a_plant_on_lawn.normal_plant,
+            PlantPriority::OnlyNormalPosition => a_plant_on_lawn.normal_plant,
             PlantPriority::OnlyFlying => a_plant_on_lawn.flying_plant,
             PlantPriority::OnlyPumpkin => a_plant_on_lawn.pumpkin_plant,
             PlantPriority::OnlyUnderPlant => a_plant_on_lawn.under_plant,
