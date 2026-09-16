@@ -137,7 +137,16 @@ impl AlmanacDialog {
                     crate::lawn::seed_packet::draw_seed_packet(
                         g, a_pos_x as f32, a_pos_y as f32, a_seed_type, SeedType::None, 0.0, 255, true, false,
                     );
-                    // [TRANSLATION_NOTE]: 鼠标命中亮框 IMAGE_SEEDPACKETFLASH 依赖命中检测，暂略
+                    // 对应 C++ AlmanacDialog.cpp:291,307: 鼠标命中该种子时叠加 IMAGE_SEEDPACKETFLASH
+                    let (a_mouse_x, a_mouse_y) = self.app.map_or((0, 0), |app| unsafe {
+                        match (*app).base.widget_manager {
+                            Some(w) => ((*w).last_mouse_x, (*w).last_mouse_y),
+                            None => (0, 0),
+                        }
+                    });
+                    if a_seed_type == self.seed_hit_test(a_mouse_x, a_mouse_y) {
+                        draw_almanac_image(g, "IMAGE_SEEDPACKETFLASH", a_pos_x, a_pos_y);
+                    }
                 }
             }
         }

@@ -436,10 +436,15 @@ impl NewOptionsDialog {
         }
     }
 
-    /// 对应 C++ NewOptionsDialog::GetPreferredHeight
+    /// 对应 C++ NewOptionsDialog::GetPreferredHeight（NewOptionsDialog.cpp:129）
     pub fn get_preferred_height(&self) -> i32 {
-        // C++: return IMAGE_OPTIONS_MENUBACK->mWidth；图片资源未接入，返回 0
-        0
+        // C++: return IMAGE_OPTIONS_MENUBACK->mWidth;（C++ 原样返回宽度）
+        let a_img = self.get_resource_image("IMAGE_OPTIONS_MENUBACK");
+        if a_img.is_null() {
+            0
+        } else {
+            unsafe { (*a_img).get_width() }
+        }
     }
 
     /// 对应 C++ NewOptionsDialog::ButtonDepress
