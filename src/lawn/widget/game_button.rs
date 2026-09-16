@@ -362,13 +362,21 @@ impl LawnStoneButton {
         }
         let is_down = (self.dialog_button.is_down && self.dialog_button.is_over && !self.dialog_button.disabled)
             ^ self.dialog_button.inverted;
-        // [TRANSLATION_NOTE]: C++ 在此使用全局 IMAGE_BUTTON_* 图片；Rust 图片资源未接入，传空指针
+        // 对应 C++: 使用全局 IMAGE_BUTTON_* 九宫格图（GameButton.cpp:289 起的 LawnStoneButton::Draw）
+        let get_image = |a_key: &str| -> *mut Image {
+            crate::lawn::lawn_app::LawnApp::instance().map_or(std::ptr::null_mut(), |app| {
+                match app.base.resource_manager {
+                    Some(a_rm) => unsafe { (*a_rm).get_image(a_key).as_image_ptr() },
+                    None => std::ptr::null_mut(),
+                }
+            })
+        };
         draw_stone_button(
             g,
             0, 0, self.dialog_button.width, self.dialog_button.height,
             is_down, self.dialog_button.is_over, &self.dialog_button.label,
-            std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut(),
-            std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut(),
+            get_image("IMAGE_BUTTON_LEFT"), get_image("IMAGE_BUTTON_MIDDLE"), get_image("IMAGE_BUTTON_RIGHT"),
+            get_image("IMAGE_BUTTON_DOWN_LEFT"), get_image("IMAGE_BUTTON_DOWN_MIDDLE"), get_image("IMAGE_BUTTON_DOWN_RIGHT"),
         );
     }
 

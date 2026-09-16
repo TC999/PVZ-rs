@@ -250,7 +250,16 @@ impl AwardScreen {
             }
         }
 
-        // [TRANSLATION_NOTE]: C++ mStartButton/mMenuButton/mContinueButton->Draw(g)；Rust 按钮绘制未接入
+        // 对应 C++ AwardScreen.cpp:421-423: mStartButton/mMenuButton/mContinueButton->Draw(g)
+        if let Some(a_btn) = self.start_button {
+            unsafe { (*a_btn).draw(g); }
+        }
+        if let Some(a_btn) = self.menu_button {
+            unsafe { (*a_btn).draw(g); }
+        }
+        if let Some(a_btn) = self.continue_button {
+            unsafe { (*a_btn).draw(g); }
+        }
 
         // C++: fade-in 遮罩（便条黑 / 否则白）
         let a_fade_in_alpha = crate::todlib::tod_common::tod_animate_curve(180, 0, self.fade_in_counter, 255, 0, TodCurves::Linear);
@@ -294,8 +303,29 @@ impl AwardScreen {
                 }
             }
         }
-        // [TRANSLATION_NOTE]: C++ 其余部分（GetDialogCount 短路、mStartButton/MenuButton/ContinueButton
-        // 的 Update、SetCursor 手型/指针、MarkDirty）依赖 Widget 树/光标系统，Rust 未接入
+        // 对应 C++ AwardScreen::Update 尾部（AwardScreen.cpp:448-454）
+        // （GetDialogCount 短路与 MarkDirty 依赖 Widget 树，Rust 暂无对应）
+        if let Some(a_btn) = self.start_button {
+            unsafe { (*a_btn).update(); }
+        }
+        if let Some(a_btn) = self.menu_button {
+            unsafe { (*a_btn).update(); }
+        }
+        if let Some(a_btn) = self.continue_button {
+            unsafe { (*a_btn).update(); }
+        }
+        let a_any_over = [self.start_button, self.menu_button, self.continue_button]
+            .iter()
+            .any(|b| b.map_or(false, |p| unsafe { (*p).is_over }));
+        if let Some(app) = self.app {
+            unsafe {
+                (*app).base.set_cursor(if a_any_over {
+                    crate::lawn::game_enums::CURSOR_HAND
+                } else {
+                    crate::lawn::game_enums::CURSOR_POINTER
+                });
+            }
+        }
     }
 
     pub fn key_char(&mut self, _c: char) {
