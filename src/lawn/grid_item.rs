@@ -763,8 +763,10 @@ impl GridItem {
     }
 
     /// 打开传送门（对应 C++ GridItem::OpenPortal）
+    /// [TRANSLATION_NOTE]: C++ 的 OpenPortal 不设置 mGridItemState（仅创建 reanim），
+    /// 由 IsOpenPortal 以「state != PORTAL_CLOSED」判断；此处对齐为置回 Normal。
     pub fn open_portal(&mut self) {
-        self.grid_item_state = GridItemState::PortalOpen;
+        self.grid_item_state = GridItemState::Normal;
     }
 
     /// 关闭传送门（对应 C++ GridItem::ClosePortal）
@@ -775,7 +777,8 @@ impl GridItem {
     /// 是否为打开的传送门（对应 C++ GridItem::IsOpenPortal）
     /// Rust 的 PortalCrystalBall = C++ GRIDITEM_PORTAL_CIRCLE
     pub fn is_open_portal(&self) -> bool {
-        self.grid_item_state == GridItemState::PortalOpen
+        // 对应 C++ GridItem::IsOpenPortal: mGridItemState != GRIDITEM_STATE_PORTAL_CLOSED && ...
+        self.grid_item_state != GridItemState::PortalClosed
             && (self.grid_item_type == GridItemType::PortalCircle
                 || self.grid_item_type == GridItemType::PortalSquare)
     }

@@ -1410,63 +1410,33 @@ pub enum UnlockingState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum GameObjectType {
+    // [TRANSLATION_NOTE]: 与 C++ ConstEnums.h 的 22 值一一对应。
+    // 原实现把 RenderObjectType/UI 层的概念（Zombie/LawnMower/GridItem/Particle/Attachment/
+    // Reanimation/Effect/Trail/CursorPreview/CoinBank/ScreenFade/TopUi/ScrollWidget/Dialog/
+    // StoreScreen/ChallengeScreen/TitleScreen/AlmanacScreen 共 18 个，全部零引用）混入本枚举，
+    // 且既有变体的编号与 C++ 不一致（如 Shovel=25 而非 5），本次一并修正。
     None = 0,
-    Plant,
-    Projectile,
-    Coin,
-    SeedPacket,
-    Zombie,
-    LawnMower,
-    GridItem,
-    Particle,
-    Attachment,
-    Reanimation,
-    Effect,
-    Trail,
-    CursorPreview,
-    CoinBank,
-    ScreenFade,
-    TopUi,
-    ScrollWidget,
-    Dialog,
-    StoreScreen,
-    ChallengeScreen,
-    TitleScreen,
-    AlmanacScreen,
-    /// 对应 C++ OBJECT_TYPE_TREE_OF_WISDOM
-    TreeOfWisdom,
-    /// 对应 C++ OBJECT_TYPE_SLOT_MACHINE_HANDLE
-    SlotMachineHandle,
-    /// 对应 C++ OBJECT_TYPE_SHOVEL
-    Shovel,
-    /// 对应 C++ OBJECT_TYPE_WATERING_CAN
-    WateringCan,
-    /// 对应 C++ OBJECT_TYPE_FERTILIZER
-    Fertilizer,
-    /// 对应 C++ OBJECT_TYPE_BUG_SPRAY
-    BugSpray,
-    /// 对应 C++ OBJECT_TYPE_PHONOGRAPH
-    Phonograph,
-    /// 对应 C++ OBJECT_TYPE_CHOCOLATE
-    Chocolate,
-    /// 对应 C++ OBJECT_TYPE_GLOVE
-    Glove,
-    /// 对应 C++ OBJECT_TYPE_MONEY_SIGN
-    MoneySign,
-    /// 对应 C++ OBJECT_TYPE_WHEELBARROW
-    Wheelbarrow,
-    /// 对应 C++ OBJECT_TYPE_TREE_FOOD
-    TreeFood,
-    /// 对应 C++ OBJECT_TYPE_NEXT_GARDEN
-    NextGarden,
-    /// 对应 C++ OBJECT_TYPE_MENU_BUTTON
-    MenuButton,
-    /// 对应 C++ OBJECT_TYPE_STORE_BUTTON
-    StoreButton,
-    /// 对应 C++ OBJECT_TYPE_SCARY_POT
-    ScaryPot,
-    /// 对应 C++ OBJECT_TYPE_STINKY
-    Stinky,
+    Plant = 1,
+    Projectile = 2,
+    Coin = 3,
+    SeedPacket = 4,
+    Shovel = 5,
+    WateringCan = 6,
+    Fertilizer = 7,
+    BugSpray = 8,
+    Phonograph = 9,
+    Chocolate = 10,
+    Glove = 11,
+    MoneySign = 12,
+    Wheelbarrow = 13,
+    TreeFood = 14,
+    NextGarden = 15,
+    MenuButton = 16,
+    StoreButton = 17,
+    SlotMachineHandle = 18,
+    ScaryPot = 19,
+    Stinky = 20,
+    TreeOfWisdom = 21,
 }
 
 /// [TRANSLATION_NOTE]: 此处原有一个与 src/lawn/grid_item.rs 同名、零引用的 GridItemType
@@ -1477,84 +1447,46 @@ pub enum GameObjectType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum GridItemState {
+    // [TRANSLATION_NOTE]: 与 C++ ConstEnums.h 的 30 值一一对应。
+    // 原实现有 55 个变体且编号与 C++ 错位（如 ScaryPotQuestion=3 后的自造变体挤占了 C++ 的
+    // SCARY_POT_ZOMBIE=5 等位置），并含 25 个 C++ 不存在的变体（CraterOld/Ladder*/PortalOpen/
+    // Gravestone*/SquirrelComing|Eating|Leaving|Taken/ZenGardenPlant*/ScaryPotShaking|Open），
+    // 其中仅 PortalOpen 有使用点（已改为按 C++ 的「state != PORTAL_CLOSED」语义判断），其余零引用。
     Normal = 0,
-    GravestoneSpecial,
-    PortalClosed,
-    ScaryPotQuestion,
-    ScaryPotLeaf,
-    ScaryPotShaking,
-    ScaryPotOpen,
-    CraterOld,
-    LadderDown,
-    LadderUp,
-    LadderCarried,
-    PortalOpen,
-    GravestoneAppearing,
-    GravestoneSinking,
-    GravestoneSunk,
-    GravestoneRising,
-    GravestoneDestroying,
-    SquirrelComing,
-    SquirrelEating,
-    SquirrelLeaving,
-    SquirrelTaken,
-    ZenGardenPlantSprout,
-    ZenGardenPlantGrowing,
-    ZenGardenPlantMature,
-    ZenGardenPlantFertilized,
-    ZenGardenPlantWatered,
-    ZenGardenPlantBugsprayed,
-    ZenGardenPlantPhonograph,
-    ZenGardenPlantHappy,
-    ZenGardenPlantDead,
+    GravestoneSpecial = 1,
+    PortalClosed = 2,
+    ScaryPotQuestion = 3,
+    ScaryPotLeaf = 4,
+    ScaryPotZombie = 5,
+    SquirrelWaiting = 6,
+    SquirrelPeeking = 7,
+    SquirrelRunningUp = 8,
+    SquirrelRunningDown = 9,
+    SquirrelRunningLeft = 10,
+    SquirrelRunningRight = 11,
+    SquirrelCaught = 12,
+    SquirrelZombie = 13,
+    ZenToolWateringCan = 14,
+    ZenToolFertilizer = 15,
+    ZenToolBugSpray = 16,
+    ZenToolPhonograph = 17,
+    ZenToolGoldWateringCan = 18,
+    StinkyWalkingLeft = 19,
+    StinkyTurningLeft = 20,
+    StinkyWalkingRight = 21,
+    StinkyTurningRight = 22,
+    StinkySleeping = 23,
+    StinkyFallingAsleep = 24,
+    StinkyWakingUp = 25,
     /// 耙子正在吸引僵尸（对应 C++ GRIDITEM_STATE_RAKE_ATTRACTING）
-    RakeAttracting,
+    RakeAttracting = 26,
     /// 耙子等待触发（对应 C++ GRIDITEM_STATE_RAKE_WAITING）
-    RakeWaiting,
+    RakeWaiting = 27,
     /// 耙子已触发（对应 C++ GRIDITEM_STATE_RAKE_TRIGGERED）
-    RakeTriggered,
+    RakeTriggered = 28,
     /// 脑子被碾碎（对应 C++ GRIDITEM_STATE_BRAIN_SQUISHED）
-    BrainSquished,
-    /// 恐怖罐子中为僵尸（对应 C++ GRIDITEM_STATE_SCARY_POT_ZOMBIE）
-    ScaryPotZombie,
-    /// 松鼠等待（对应 C++ GRIDITEM_STATE_SQUIRREL_WAITING）
-    SquirrelWaiting,
-    /// 松鼠偷看（对应 C++ GRIDITEM_STATE_SQUIRREL_PEEKING）
-    SquirrelPeeking,
-    /// 松鼠向上跑（对应 C++ GRIDITEM_STATE_SQUIRREL_RUNNING_UP）
-    SquirrelRunningUp,
-    /// 松鼠向下跑（对应 C++ GRIDITEM_STATE_SQUIRREL_RUNNING_DOWN）
-    SquirrelRunningDown,
-    /// 松鼠向左跑（对应 C++ GRIDITEM_STATE_SQUIRREL_RUNNING_LEFT）
-    SquirrelRunningLeft,
-    /// 松鼠向右跑（对应 C++ GRIDITEM_STATE_SQUIRREL_RUNNING_RIGHT）
-    SquirrelRunningRight,
-    /// 松鼠被捕获（对应 C++ GRIDITEM_STATE_SQUIRREL_CAUGHT）
-    SquirrelCaught,
-    /// 松鼠僵尸（对应 C++ GRIDITEM_STATE_SQUIRREL_ZOMBIE）
-    SquirrelZombie,
-    /// 智慧树肥料（对应 C++ GRIDITEM_STATE_ZEN_TOOL_FERTILIZER）
-    ZenToolFertilizer,
-    /// 臭鼬向左走（对应 C++ GRIDITEM_STINKY_WALKING_LEFT）
-    StinkyWalkingLeft,
-    /// 臭鼬向左转（对应 C++ GRIDITEM_STINKY_TURNING_LEFT）
-    StinkyTurningLeft,
-    /// 臭鼬向右走（对应 C++ GRIDITEM_STINKY_WALKING_RIGHT）
-    StinkyWalkingRight,
-    /// 臭鼬向右转（对应 C++ GRIDITEM_STINKY_TURNING_RIGHT）
-    StinkyTurningRight,
-    /// 臭鼬睡觉（对应 C++ GRIDITEM_STINKY_SLEEPING）
-    StinkySleeping,
-    /// 臭鼬入睡（对应 C++ GRIDITEM_STINKY_FALLING_ASLEEP）
-    StinkyFallingAsleep,
-    /// 臭鼬醒来（对应 C++ GRIDITEM_STINKY_WAKING_UP）
-    StinkyWakingUp,
-    /// [TRANSLATION_NOTE]: 以下 4 个为追加变体（对应 C++ GRIDITEM_STATE_ZEN_TOOL_*，C++ 数值为 14-18，
-    /// 因 Rust 侧 GridItemState 整体未对齐 C++ 数值，此处追加到末尾保持既有变体不变）
-    ZenToolWateringCan,
-    ZenToolBugSpray,
-    ZenToolPhonograph,
-    ZenToolGoldWateringCan,
+    BrainSquished = 29,
+
 }
 
 /// MessageStyle — 消息样式
