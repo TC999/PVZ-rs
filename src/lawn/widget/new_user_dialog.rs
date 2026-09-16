@@ -110,13 +110,22 @@ impl NewUserDialog {
         };
         // C++: isRename ? theApp->GetString("RENAME_USER", "RENAME USER")
         //             : theApp->GetString("NEW_USER", "NEW USER")
-        // [TRANSLATION_NOTE]: LawnApp::GetString 未实现，直接使用 C++ fallback 文案。
-        let header = if is_rename {
-            "RENAME USER"
-        } else {
-            "NEW USER"
-        };
-        let lines = "Please enter your name:";
+        // 对应 SexyAppBase::get_string_default（= C++ GetString(theId, theDefault)）
+        let a_header_key = if is_rename { "RENAME_USER" } else { "NEW_USER" };
+        let a_header_default = if is_rename { "RENAME USER" } else { "NEW USER" };
+        let header = app.map_or_else(
+            || a_header_default.to_string(),
+            |app| unsafe { (*app).base.get_string_default(a_header_key, a_header_default) },
+        );
+        // C++: theApp->GetString("PLEASE_ENTER_NAME", "Please enter your name:")
+        let lines = app.map_or_else(
+            || "Please enter your name:".to_string(),
+            |app| unsafe {
+                (*app)
+                    .base
+                    .get_string_default("PLEASE_ENTER_NAME", "Please enter your name:")
+            },
+        );
 
         // 装配 LawnDialog 基类字段（不通过 Box::new，避免与 wrapper 循环借用）
         let mut d = LawnDialog::new();

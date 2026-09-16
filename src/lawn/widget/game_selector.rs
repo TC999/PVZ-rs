@@ -188,6 +188,8 @@ pub struct GameSelectorImpl {
     pub selector_state: SelectorAnimState,
     /// 对应 C++ mSelectorReanimID（选择器动画）
     pub selector_reanim_id: ReanimationID,
+    /// 对应 C++ GameSelector::mTrophyParticleID（奖杯闪光粒子）
+    pub m_trophy_particle_id: crate::lawn::game_enums::ParticleSystemID,
 
     // ---- 工具提示 ----
     pub tool_tip: ToolTipWidget,
@@ -245,6 +247,7 @@ impl GameSelectorImpl {
             overlay_widget: None,
             synced: false,
             selector_reanim_id: REANIMATIONID_NULL,
+            m_trophy_particle_id: crate::lawn::game_enums::PARTICLESYSTEMID_NULL,
         };
 
         // 创建按钮（位置为近似值，实际坐标由 update_button_positions 修正）
@@ -481,6 +484,14 @@ impl GameSelectorImpl {
 
         let earned_trophy = app.has_finished_adventure() && !app.is_trial_stage_locked();
         self.has_trophy = earned_trophy;
+
+        // 对应 C++ GameSelector.cpp:498-503: 同步时销毁既有奖杯粒子并清空 ID
+        if let Some(a_trophy_particle) =
+            unsafe { (*self.app).particle_try_to_get(self.m_trophy_particle_id) }
+        {
+            a_trophy_particle.particle_system_die();
+            self.m_trophy_particle_id = crate::lawn::game_enums::PARTICLESYSTEMID_NULL;
+        }
 
         self.sync_buttons();
     }
@@ -733,6 +744,13 @@ impl GameSelectorImpl {
                         self.offset_x + 12, self.offset_y + 345, cel);
                 }
             }
+
+            // 对应 C++ GameSelector.cpp:703-705: 绘制奖杯闪光粒子
+            if let Some(a_trophy_particle) =
+                unsafe { (*self.app).particle_try_to_get(self.m_trophy_particle_id) }
+            {
+                a_trophy_particle.draw(g);
+            }
         }
     }
 }
@@ -874,6 +892,13 @@ impl WidgetImpl for GameSelectorImpl {
                     btn.disabled = self.starting_game_counter % 20 >= 10;
                 }
             }
+        }
+
+        // 对应 C++ GameSelector.cpp:764-766: 更新奖杯闪光粒子
+        if let Some(a_trophy_particle) =
+            unsafe { (*self.app).particle_try_to_get(self.m_trophy_particle_id) }
+        {
+            a_trophy_particle.update();
         }
     }
 
@@ -1152,10 +1177,20 @@ impl GameSelectorImpl {
         };
     }
 
-    /// [TRANSLATION_NOTE]: C++ GameSelector::AddTrophySparkle
+    /// 对应 C++ GameSelector::AddTrophySparkle（GameSelector.cpp:478-483）
     pub fn add_trophy_sparkle(&mut self) {
         // C++: AddPvzpParticle(85.0f, 330.0f, RENDER_LAYER_TOP, PARTICLE_TROPHY_SPARKLE) + ParticleGetID
-        // [TRANSLATION_NOTE]: Rust 侧 PvzpParticle 系统未接入，暂占位
+        if let Some(app) = unsafe { self.app.as_mut() } {
+            let a_trophy_particle = app.add_tod_particle(
+                85.0,
+                330.0,
+                crate::lawn::game_enums::RENDER_LAYER_TOP,
+                crate::lawn::game_enums::ParticleEffect::TrophySparkle as i32,
+            );
+            if let Some(a_particle_ptr) = a_trophy_particle {
+                self.m_trophy_particle_id = app.particle_get_id(a_particle_ptr);
+            }
+        }
     }
 
     /// [TRANSLATION_NOTE]: C++ GameSelector::ShowAchievementsScreen
@@ -1249,10 +1284,16 @@ impl GameSelectorImpl {
                 }
             }
             103 => { // GameSelector_Options
-                // C++: mApp->DoNewOptions(true) —— Rust 侧未实现，保留调用点
+                // C++: mApp->DoNewOptions(true)
+                if let Some(app) = unsafe { self.app.as_mut() } {
+                    (*app).do_new_options(true);
+                }
             }
             106 => { // GameSelector_ChangeUser
-                // C++: mApp->DoUserDialog() —— Rust 侧未实现，保留调用点
+                // C++: mApp->DoUserDialog()
+                if let Some(app) = unsafe { self.app.as_mut() } {
+                    (*app).do_user_dialog();
+                }
             }
             107 => { // GameSelector_Store
                 if let Some(app) = unsafe { self.app.as_mut() } {

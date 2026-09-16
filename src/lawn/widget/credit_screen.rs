@@ -559,8 +559,19 @@ impl CreditScreen {
         // C++ 中 PlayReanim(3) 或 PlayReanim(phase+1) 返回动画
         let _reanim = self.play_reanim(if the_phase == CreditsPhase::End { 3 } else { (the_phase as i32) + 1 });
 
-        // [TRANSLATION_NOTE]: C++ 中 aFrameFactor = 1/(轨道数-1)；Rust 侧轨道计数未接入，以 1/384 近似
-        let a_frame_factor = 1.0f32 / 384.0f32;
+        // 对应 C++ CreditScreen::JumpToFrame（CreditScreen.cpp:1537）:
+        // aFrameFactor = 1.0f / (aReanim->mDefinition->mTracks.tracks->mTransforms.count - 1)
+        // 即「第一轨道的变换数 - 1」的倒数（原实现以 1/384 近似，且注释误作「轨道数」）
+        let a_frame_factor = match _reanim {
+            Some(a_reanim) => unsafe {
+                let a_frame_count = (*a_reanim)
+                    .m_definition
+                    .and_then(|d| (*d).m_tracks.first().map(|t| t.m_transforms.len() as f32))
+                    .map_or(384.0, |n| n - 1.0);
+                1.0 / a_frame_count
+            },
+            None => 1.0 / 384.0,
+        };
         let mut a_music_offset = the_frame * 12142.0;
         let mut a_jump_milliseconds = the_frame * 1000.0 / 7.0;
         if the_phase == CreditsPhase::Main1 {
@@ -607,11 +618,46 @@ impl CreditScreen {
         }
 
         self.blink_countdown = 700;
-        // [TRANSLATION_NOTE]: C++ 中 FindSubReanim(REANIM_SUNFLOWER) 查找子动画并
-        // 创建眨眼动画 AttachToAnotherReanimation；Rust 侧 FindSubReanim/
-        // AttachToAnotherReanimation 未接入，仅推进计数
+        // 对应 C++ CreditScreen::UpdateBlink（CreditScreen.cpp:1101-1121）
         if let Some(app) = self.app {
-            let _ = unsafe { (*app).add_reanimation(0.0, 0.0, 0, ReanimationType::Sunflower as i32) };
+            unsafe {
+                // 先取裸指针（Copy），避免与后续 add_reanimation 的可变借用冲突
+                let a_credits_reanim_ptr: Option<*mut crate::todlib::reanimator::Reanimation> =
+                    (*app)
+                        .reanimation_get(self.credits_reanim_id)
+                        .map(|r| r as *const _ as *mut _);
+                let a_sunflower_reanim = match a_credits_reanim_ptr {
+                    Some(r) => self.find_sub_reanim(r, ReanimationType::Sunflower),
+                    None => None,
+                };
+                if let Some(a_sunflower) = a_sunflower_reanim {
+                    // C++: MAIN3 阶段且 mAnimTime 超过 aFrameFactor*200 时不创建眨眼动画
+                    if self.credits_phase == CreditsPhase::Main3 {
+                        if let Some(a_credits_ptr) = a_credits_reanim_ptr {
+                            let a_frame_count = (*a_credits_ptr)
+                                .m_definition
+                                .and_then(|d| {
+                                    (*d).m_tracks.first().map(|t| t.m_transforms.len() as f32)
+                                })
+                                .map_or(0.0, |n| n - 1.0);
+                            let a_frame_factor = 1.0 / a_frame_count;
+                            if (*a_credits_ptr).m_anim_time > a_frame_factor * 200.0 {
+                                return;
+                            }
+                        }
+                    }
+
+                    let a_blink_reanim =
+                        (*app).add_reanimation(0.0, 0.0, 0, ReanimationType::Sunflower as i32);
+                    if let Some(a_blink) = a_blink_reanim {
+                        (*a_blink).set_frames_for_layer("anim_blink");
+                        (*a_blink).m_anim_rate = 15.0;
+                        (*a_blink).m_loop_type =
+                            crate::todlib::reanimator::ReanimLoopType::PlayOnceFullLastFrame;
+                        (*a_blink).attach_to_another_reanimation(&mut *a_sunflower, "anim_idle");
+                    }
+                }
+            }
         }
     }
     pub fn draw_final_credits(&self, g: &mut Graphics) {
@@ -650,7 +696,11 @@ impl CreditScreen {
                     // mPoolEffect->PoolEffectUpdate()；Rust 侧 effect_system 由外部更新
                     let _ = r;
                 }
-                // [TRANSLATION_NOTE]: C++ 中 TurnOffTongues(aCreditsReanim, 0)；Rust 侧未接入
+                // 对应 C++ CreditScreen.cpp:1207: TurnOffTongues(aCreditsReanim, 0)
+                if let Some(r) = (*app).reanimation_get(self.credits_reanim_id) {
+                    let a_reanim_ptr = r as *const _ as *mut crate::todlib::reanimator::Reanimation;
+                    self.turn_off_tongues(a_reanim_ptr, 0);
+                }
             }
         }
 
