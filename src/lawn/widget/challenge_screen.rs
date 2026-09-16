@@ -262,14 +262,26 @@ impl ChallengeScreen {
         }
     }
 
-    pub fn added_to_manager(&mut self, _manager: &mut WidgetManager) {
-        // C++ 中 AddWidget(mBackButton) + 所有页签/挑战按钮
-        // [TRANSLATION_NOTE]: Rust 侧 ButtonWidget 未接入 WidgetManager::add_widget，暂略
+    pub fn added_to_manager(&mut self, manager: &mut WidgetManager) {
+        // 对应 C++ ChallengeScreen::AddedToManager（ChallengeScreen.cpp:631-637）
+        // mBackButton 可接线（DialogButton 内嵌 Widget 基座）
+        if let Some(a_back) = self.back_button {
+            unsafe {
+                manager.add_widget(&mut (*a_back).widget as *mut _);
+            }
+        }
+        // [TRANSLATION_NOTE]: mPageButton/mChallengeButtons 为平铺式 ButtonWidget（不含 Widget 基座），
+        // 无法传入 WidgetManager::add_widget；待其改为内嵌 Widget 后再接线
     }
 
-    pub fn removed_from_manager(&mut self, _manager: &mut WidgetManager) {
-        // C++ 中 RemoveWidget(mBackButton) + 所有页签/挑战按钮
-        // [TRANSLATION_NOTE]: Rust 侧 ButtonWidget 未接入 WidgetManager，暂略
+    pub fn removed_from_manager(&mut self, manager: &mut WidgetManager) {
+        // 对应 C++ ChallengeScreen::RemovedFromManager（ChallengeScreen.cpp:639-645）
+        if let Some(a_back) = self.back_button {
+            unsafe {
+                manager.remove_widget(&mut (*a_back).widget as *mut _);
+            }
+        }
+        // [TRANSLATION_NOTE]: mPageButton/mChallengeButtons 同上，平铺结构无法移除
     }
 
     pub fn button_press(&mut self, _id: i32) {

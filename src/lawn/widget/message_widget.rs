@@ -289,9 +289,29 @@ impl MessageWidget {
             let ch = self.label[a_byte_pos] as char;
             a_byte_pos += 1;
 
-            // [TRANSLATION_NOTE]: C++ 在此创建文字 reanim（AddReanimation + PlayReanim("anim_enter")）
-            // 并记录 mTextReanimID[aCharIdx] = ReanimationGetID；reanim 系统未接入，仅记录偏移
-            self.text_reanim_id[a_char_idx] = REANIMATIONID_NULL;
+            // 对应 C++ MessageWidget::LayoutReanimText（MessageWidget.cpp:216-221）:
+            // AddReanimation + mIsAttachment = true + PlayReanim("anim_enter") + ReanimationGetID
+            self.text_reanim_id[a_char_idx] = if let Some(app) = self.app {
+                let a_new = unsafe {
+                    (*app).add_reanimation(a_cur_pos_x, a_cur_pos_y, 0, self.reanim_type as i32)
+                };
+                if let Some(a_reanim_ptr) = a_new {
+                    unsafe {
+                        (*a_reanim_ptr).m_is_attachment = true;
+                        (*a_reanim_ptr).play_reanim(
+                            "anim_enter",
+                            crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,
+                            0,
+                            0.0,
+                        );
+                        (*app).reanimation_get_id(a_reanim_ptr)
+                    }
+                } else {
+                    REANIMATIONID_NULL
+                }
+            } else {
+                REANIMATIONID_NULL
+            };
             self.text_reanim_byte_offset[a_char_idx] = a_char_start;
 
             // aCurPosX += aFont->CharWidth(aChar) — 按每字符 10 像素近似
@@ -319,8 +339,8 @@ impl MessageWidget {
                 break;
             }
             if self.text_reanim_id[a_char_idx] == REANIMATIONID_NULL {
-                // [TRANSLATION_NOTE]: C++ 中 ReanimationTryToGet 返回 nullptr 时 break；reanim 未接入
-                continue;
+                // 对应 C++ MessageWidget::DrawReanimatedText: ReanimationTryToGet 返回 nullptr 时 break
+                break;
             }
             // C++ 取 GetCurrentTransform(2, &aTransform)，按 aTransform.mAlpha 计算最终 alpha，
             // 用 aByteStart/aByteEnd 从 label 中切出单个字母，经 PvzpDrawStringMatrix 矩阵绘制。
