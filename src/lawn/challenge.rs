@@ -207,7 +207,7 @@ impl Challenge {
         }
         if self.get_app().is_slot_machine_level() {
             // C++ L518-L521: TUTORIAL_SLOT_MACHINE_PULL
-            self.get_board().set_tutorial_state(TutorialState::SlotMachinePullTut);
+            self.get_board().set_tutorial_state(TutorialState::SlotMachinePull);
         }
         if a_game_mode == GameMode::ChallengeBeghouled || a_game_mode == GameMode::ChallengeBeghouledTwist {
             // C++ L522-L538

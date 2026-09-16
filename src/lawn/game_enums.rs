@@ -661,89 +661,58 @@ pub enum TodCurves {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum TutorialState {
+    // [TRANSLATION_NOTE]: 与 C++ ConstEnums.h:1187-1220 的 31 值一一对应。
+    // 原实现含 26 个 C++ 不存在的自造变体（ZombieAppears/FirstWin/BobsledBonanza 等）且编号错位
+    // （如旧 ShovelDig=38 vs C++ 16），导致存档 mTutorialState 语义与 C++ 不兼容，本次重构删除多余变体并对齐编号。
     Off = 0,
     Level1PickUpPeashooter = 1,
-    Level1PickUpSunflower = 2,
-    Level1PlantPeashooter = 3,
-    Level1PlantSunflower = 4,
-    Level1RefreshPeashooter = 5,
-    Level1RefreshSunflower = 6,
-    Level1Completed = 7,
-    MoreSunflowers = 8,
-    MorePeashooters = 9,
-    ZombieAppears = 10,
-    ZombieDying = 11,
-    ClickOnSun = 12,
-    ZombieHead = 13,
-    FirstWin = 14,
-    SecondWin = 15,
-    ThirdWin = 16,
-    FirstLost = 17,
-    SecondLost = 18,
-    ThirdLost = 19,
-    ZombieAppears2 = 20,
-    Conveyor = 21,
-    SlotMachine = 22,
-    Zombiquarium = 23,
-    Beghouled = 24,
-    Twist = 25,
-    PortalCombat = 26,
-    ZombieNimble = 27,
-    WhackAZombie = 28,
-    LastStand = 29,
-    BobsledBonanza = 30,
-    /// 对应 C++ TUTORIAL_ZOMBIQUARIUM_BUY_SNORKEL
-    ZombiquariumBuySnorkel = 31,
-    /// 对应 C++ TUTORIAL_ZOMBIQUARIUM_BOUGHT_SNORKEL
-    ZombiquariumBoughtSnorkel = 32,
-    /// 对应 C++ TUTORIAL_ZOMBIQUARIUM_CLICK_TROPHY
-    ZombiquariumClickTrophy = 33,
-    /// 对应 C++ TUTORIAL_WHACK_A_ZOMBIE_BEFORE_PICK_SEED
-    WhackAZombieBeforePickSeed = 34,
-    /// 对应 C++ TUTORIAL_WHACK_A_ZOMBIE_PICK_SEED
-    WhackAZombiePickSeed = 35,
-    /// 对应 C++ TUTORIAL_WHACK_A_ZOMBIE_COMPLETED
-    WhackAZombieCompleted = 36,
-    /// 对应 C++ TUTORIAL_SHOVEL_PICKUP
-    ShovelPickup = 37,
-    /// 对应 C++ TUTORIAL_SHOVEL_DIG
-    ShovelDig = 38,
-    /// 对应 C++ TUTORIAL_SHOVEL_KEEP_DIGGING
-    ShovelKeepDigging = 39,
-    /// 对应 C++ TUTORIAL_LEVEL_2_PICK_UP_SUNFLOWER
-    Level2PickUpSunflower = 40,
-    /// 对应 C++ TUTORIAL_LEVEL_2_PLANT_SUNFLOWER
-    Level2PlantSunflower = 41,
-    /// 对应 C++ TUTORIAL_LEVEL_2_REFRESH_SUNFLOWER
-    Level2RefreshSunflower = 42,
-    /// 对应 C++ TUTORIAL_LEVEL_2_COMPLETED
-    Level2Completed = 43,
-    /// 对应 C++ TUTORIAL_MORESUN_PICK_UP_SUNFLOWER
-    MoreSunPickUpSunflower = 44,
-    /// 对应 C++ TUTORIAL_MORESUN_PLANT_SUNFLOWER
-    MoreSunPlantSunflower = 45,
-    /// 对应 C++ TUTORIAL_MORESUN_REFRESH_SUNFLOWER
-    MoreSunRefreshSunflower = 46,
-    /// 对应 C++ TUTORIAL_MORESUN_COMPLETED
-    MoreSunCompleted = 47,
-    /// 对应 C++ TUTORIAL_SLOT_MACHINE_PULL
-    SlotMachinePullTut = 48,
+    Level1PlantPeashooter = 2,
+    Level1RefreshPeashooter = 3,
+    Level1Completed = 4,
+    Level2PickUpSunflower = 5,
+    Level2PlantSunflower = 6,
+    Level2RefreshSunflower = 7,
+    Level2Completed = 8,
+    MoreSunPickUpSunflower = 9,
+    MoreSunPlantSunflower = 10,
+    MoreSunRefreshSunflower = 11,
+    MoreSunCompleted = 12,
+    /// 对应 C++ TUTORIAL_SLOT_MACHINE_PULL（原 Rust 名 SlotMachinePullTut）
+    SlotMachinePull = 13,
     /// 对应 C++ TUTORIAL_SLOT_MACHINE_COMPLETED
-    SlotMachineCompleted = 49,
+    SlotMachineCompleted = 14,
+    /// 对应 C++ TUTORIAL_SHOVEL_PICKUP
+    ShovelPickup = 15,
+    /// 对应 C++ TUTORIAL_SHOVEL_DIG
+    ShovelDig = 16,
+    /// 对应 C++ TUTORIAL_SHOVEL_KEEP_DIGGING
+    ShovelKeepDigging = 17,
     /// 对应 C++ TUTORIAL_SHOVEL_COMPLETED
-    ShovelCompleted = 50,
+    ShovelCompleted = 18,
+    /// 对应 C++ TUTORIAL_ZOMBIQUARIUM_BUY_SNORKEL
+    ZombiquariumBuySnorkel = 19,
+    /// 对应 C++ TUTORIAL_ZOMBIQUARIUM_BOUGHT_SNORKEL
+    ZombiquariumBoughtSnorkel = 20,
+    /// 对应 C++ TUTORIAL_ZOMBIQUARIUM_CLICK_TROPHY
+    ZombiquariumClickTrophy = 21,
     /// 对应 C++ TUTORIAL_ZEN_GARDEN_PICKUP_WATER
-    ZenGardenPickupWater = 51,
+    ZenGardenPickupWater = 22,
     /// 对应 C++ TUTORIAL_ZEN_GARDEN_WATER_PLANT
-    ZenGardenWaterPlant = 52,
+    ZenGardenWaterPlant = 23,
     /// 对应 C++ TUTORIAL_ZEN_GARDEN_KEEP_WATERING
-    ZenGardenKeepWatering = 53,
+    ZenGardenKeepWatering = 24,
     /// 对应 C++ TUTORIAL_ZEN_GARDEN_VISIT_STORE
-    ZenGardenVisitStore = 54,
+    ZenGardenVisitStore = 25,
     /// 对应 C++ TUTORIAL_ZEN_GARDEN_FERTILIZE_PLANTS
-    ZenGardenFertilizePlants = 55,
+    ZenGardenFertilizePlants = 26,
     /// 对应 C++ TUTORIAL_ZEN_GARDEN_COMPLETED
-    ZenGardenCompleted = 56,
+    ZenGardenCompleted = 27,
+    /// 对应 C++ TUTORIAL_WHACK_A_ZOMBIE_BEFORE_PICK_SEED
+    WhackAZombieBeforePickSeed = 28,
+    /// 对应 C++ TUTORIAL_WHACK_A_ZOMBIE_PICK_SEED
+    WhackAZombiePickSeed = 29,
+    /// 对应 C++ TUTORIAL_WHACK_A_ZOMBIE_COMPLETED
+    WhackAZombieCompleted = 30,
 }
 
 // ============================================================

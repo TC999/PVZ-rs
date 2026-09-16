@@ -396,6 +396,15 @@ pub struct Board {
     pub m_catapult_plants_used: bool,
     pub m_mushroom_and_coffee_beans_only: bool,
     pub m_mushrooms_used: bool,
+    // 存档往返字段（对应 C++ Board.h 同名成员；此前以 tmp_ 占位读写导致往返丢数据）
+    pub m_bonus_lawn_mowers_remaining: i32,
+    pub m_last_bungee_wave: i32,
+    pub m_play_time_active_level: u32,
+    pub m_play_time_inactive_level: u32,
+    pub m_max_sun_plants: i32,
+    pub m_gargantuars_kills_by_corn_cob: u32,
+    pub m_preload_time: i32,
+    pub m_game_id: i64,
 
     // 模式标志
     pub m_mustache_mode: bool,
@@ -600,6 +609,15 @@ impl Board {
             m_catapult_plants_used: false,
             m_mushroom_and_coffee_beans_only: false,
             m_mushrooms_used: false,
+            m_bonus_lawn_mowers_remaining: 0,
+            m_last_bungee_wave: 0,
+            m_play_time_active_level: 0,
+            m_play_time_inactive_level: 0,
+            m_max_sun_plants: 0,
+            m_gargantuars_kills_by_corn_cob: 0,
+            m_preload_time: 0,
+            // C++ Board::Board() 为 mGameID = mApp->GetNowTime()；Rust SexyAppBase 尚无 GetNowTime，保持 0
+            m_game_id: 0,
             m_mustache_mode: false,
             m_future_mode: false,
             m_pinata_mode: false,
@@ -940,7 +958,7 @@ impl Board {
             || self.app.map_or(false, |app| unsafe { (*app).is_scary_potter_level() })
             || self.app.map_or(false, |app| unsafe { (*app).is_squirrel_level() })
             || self.has_conveyor_belt_seed_bank()
-            || self.m_tutorial_state == TutorialState::SlotMachine
+            || self.m_tutorial_state == TutorialState::SlotMachinePull
         {
             return;
         }
@@ -1380,6 +1398,13 @@ impl Board {
                     ch.plant_added(plant);
                 }
             }
+        }
+
+        // 对应 C++ Board.cpp:2106-2110: 记录阳光植物峰值（阳光菇 + 向日葵）
+        let a_sun_plants_count = self.count_plant_by_type(SeedType::Sunshroom)
+            + self.count_plant_by_type(SeedType::Sunflower);
+        if a_sun_plants_count > self.m_max_sun_plants {
+            self.m_max_sun_plants = a_sun_plants_count;
         }
     }
 
@@ -5353,7 +5378,7 @@ Spawn: {}
                 self.m_zombie_count_down = 99;
                 self.m_zombie_count_down_start = self.m_zombie_count_down;
             }
-            TutorialState::Level2PickUpSunflower | TutorialState::MoreSunflowers => {
+            TutorialState::Level2PickUpSunflower | TutorialState::MoreSunPickUpSunflower => {
                 if let Some(packet) = self.seed_bank.get(1) {
                     let pos_x = packet.x;
                     let pos_y = packet.y;
@@ -5418,7 +5443,10 @@ Spawn: {}
             } else if self.m_zombie_count_down == 750 && self.m_current_wave == 0 {
                 self.display_advice("[ADVICE_PLANT_SUNFLOWER3]", 0, AdviceType::None);
             }
-        } else if matches!(self.m_tutorial_state, TutorialState::MoreSunflowers) {
+        } else if matches!(self.m_tutorial_state,
+            TutorialState::MoreSunPickUpSunflower
+                | TutorialState::MoreSunPlantSunflower
+                | TutorialState::MoreSunRefreshSunflower) {
             if self.m_tutorial_timer == 0 {
                 self.display_advice("[ADVICE_PLANT_SUNFLOWER5]", 0, AdviceType::None);
                 self.m_tutorial_timer = -1;
@@ -5436,7 +5464,7 @@ Spawn: {}
         {
             self.display_advice("[ADVICE_PLANT_SUNFLOWER4]", 0, AdviceType::None);
             unsafe { crate::lawn::board::G_SHOWN_MORE_SUN_TUTORIAL = true; }
-            self.set_tutorial_state(TutorialState::MoreSunflowers);
+            self.set_tutorial_state(TutorialState::MoreSunPickUpSunflower);
             self.m_tutorial_timer = 500;
         }
     }
@@ -6957,9 +6985,9 @@ Spawn: {}
     /// 手持植物点击（对应 C++ MouseDownWithPlant L3689 完整版）
     /// 验证种植条件、扣除阳光、执行种植、更新教程状态
     pub fn mouse_down_with_plant(&mut self, x: i32, y: i32, click_count: i32) {
-        // 右击取消
+        // 右击取消（对应 C++ Board::MouseDownWithPlant: RefreshSeedPacketFromCursor(); return;）
         if click_count < 0 {
-            // RefreshSeedPacketFromCursor 暂略
+            self.refresh_seed_packet_from_cursor();
             return;
         }
 
@@ -7014,9 +7042,53 @@ Spawn: {}
         // 执行种植
         self.add_plant(grid_x, grid_y, seed_type, self.cursor_object.imitater_type);
 
-        // 更新教程状态
+        // 对应 C++ Board.cpp:3915-3963: 种植后教程状态推进
+        let a_packet_2_can_pick_up = self.seed_bank.get(1).map_or(false, |p| p.can_pick_up());
         if self.m_tutorial_state == TutorialState::Level1PlantPeashooter {
-            self.m_tutorial_state = TutorialState::Level1Completed;
+            self.set_tutorial_state(if self.plants.len() >= 2 {
+                TutorialState::Level1Completed
+            } else {
+                TutorialState::Level1RefreshPeashooter
+            });
+        } else if self.m_tutorial_state == TutorialState::Level2PlantSunflower {
+            let a_sun_flowers_count = self.count_sun_flowers();
+            if seed_type == SeedType::Sunflower && a_sun_flowers_count == 2 {
+                self.display_advice(
+                    "[ADVICE_MORE_SUNFLOWERS]",
+                    crate::lawn::game_enums::MessageStyle::TutorialLevel2 as i32,
+                    AdviceType::None,
+                );
+                if !a_packet_2_can_pick_up {
+                    self.set_tutorial_state(TutorialState::Level2RefreshSunflower);
+                } else {
+                    self.set_tutorial_state(TutorialState::Level2PickUpSunflower);
+                }
+            } else if a_sun_flowers_count >= 3 {
+                self.set_tutorial_state(TutorialState::Level2Completed);
+            } else if !a_packet_2_can_pick_up {
+                self.set_tutorial_state(TutorialState::Level2RefreshSunflower);
+            } else {
+                self.set_tutorial_state(TutorialState::Level2PickUpSunflower);
+            }
+        } else if self.m_tutorial_state == TutorialState::MoreSunPlantSunflower {
+            if self.count_sun_flowers() >= 3 {
+                self.set_tutorial_state(TutorialState::MoreSunCompleted);
+                self.display_advice(
+                    "[ADVICE_PLANT_SUNFLOWER5]",
+                    crate::lawn::game_enums::MessageStyle::TutorialLater as i32,
+                    AdviceType::PlantSunflower5,
+                );
+                self.m_tutorial_timer = -1;
+            } else if !a_packet_2_can_pick_up {
+                self.set_tutorial_state(TutorialState::MoreSunRefreshSunflower);
+            } else {
+                self.set_tutorial_state(TutorialState::MoreSunPickUpSunflower);
+            }
+        }
+
+        // 对应 C++ Board.cpp:3965-3970: 保龄球关卡播放音效
+        if self.app.map_or(false, |app| unsafe { (*app).is_wallnut_bowling_level() }) {
+            // [TRANSLATION_NOTE]: C++ 此处 PlaySample(Sexy::SOUND_BOWLING)；Rust 资源表无 SOUND_BOWLING，暂缺
         }
 
         // 清除光标状态
@@ -7186,7 +7258,30 @@ Spawn: {}
         if let Some(ch) = self.challenge.as_mut() {
             ch.clear_cursor();
         }
-        // [TRANSLATION_NOTE]: C++ 4552+ 教程状态推进（TUTORIAL_LEVEL_1_PLANT_PEASHOOTER 等）依赖 SetTutorialState，暂略
+
+        // 对应 C++ Board.cpp:4552-4582: 种植后教程状态推进
+        let a_packet_2_can_pick_up = self.seed_bank.get(1).map_or(false, |p| p.can_pick_up());
+        if self.m_tutorial_state == TutorialState::Level1PlantPeashooter {
+            self.set_tutorial_state(TutorialState::Level1PickUpPeashooter);
+        } else if self.m_tutorial_state == TutorialState::Level2PlantSunflower
+            || self.m_tutorial_state == TutorialState::Level2RefreshSunflower
+        {
+            if !a_packet_2_can_pick_up {
+                self.set_tutorial_state(TutorialState::Level2RefreshSunflower);
+            } else {
+                self.set_tutorial_state(TutorialState::Level2PickUpSunflower);
+            }
+        } else if self.m_tutorial_state == TutorialState::MoreSunPlantSunflower
+            || self.m_tutorial_state == TutorialState::MoreSunRefreshSunflower
+        {
+            if !a_packet_2_can_pick_up {
+                self.set_tutorial_state(TutorialState::MoreSunRefreshSunflower);
+            } else {
+                self.set_tutorial_state(TutorialState::MoreSunPickUpSunflower);
+            }
+        } else if self.m_tutorial_state == TutorialState::ShovelDig {
+            self.set_tutorial_state(TutorialState::ShovelPickup);
+        }
     }
 
     /// 更新鼠标位置（对应 C++ UpdateMousePosition 简化版）
@@ -8353,7 +8448,7 @@ Spawn: {}
         if self.m_tutorial_state == TutorialState::Level1PickUpPeashooter
             || self.m_tutorial_state == TutorialState::Level1PlantPeashooter
             || self.m_tutorial_state == TutorialState::Level1RefreshPeashooter
-            || self.m_tutorial_state == TutorialState::SlotMachine
+            || self.m_tutorial_state == TutorialState::SlotMachinePull
         {
             return;
         }
@@ -8629,7 +8724,7 @@ Spawn: {}
             if self.level == 1 {
                 self.set_tutorial_state(TutorialState::Level1PickUpPeashooter);
             } else if self.level == 2 {
-                self.set_tutorial_state(TutorialState::Level1PickUpSunflower);
+                self.set_tutorial_state(TutorialState::Level2PickUpSunflower);
                 self.display_advice("[ADVICE_PLANT_SUNFLOWER1]", MessageStyle::TutorialLevel2 as i32, AdviceType::None);
                 self.m_tutorial_timer = 500;
             }
@@ -9920,8 +10015,12 @@ Spawn: {}
                     return;
                 }
 
-                // 飞行植物直接播放种植音效
-                // 注：Plant::IsFlying 暂未翻译，暂时跳过
+                // 对应 C++ Board.cpp:2082-2086: 飞行植物（InstantCoffee）直接播放种植音效
+                if crate::lawn::plant::Plant::is_flying(seed_type) {
+                    (*app).play_foley(crate::todlib::tod_foley::FoleyType::Plant as i32);
+                    return;
+                }
+
                 if self.is_pool_square(grid_x, grid_y) {
                     (*app).play_foley(crate::todlib::tod_foley::FoleyType::PlantWater as i32);
                     (*app).add_tod_particle(
