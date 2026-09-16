@@ -346,11 +346,26 @@ impl TodFoley {
         sound_system_cancel_paused_foley(self as *const TodFoley as *mut TodFoley);
     }
 
-    /// 应用音乐音量（对应 C++ PvzpFoley::ApplyMusicVolume，:386）
+    /// 应用音乐音量（对应 C++ PvzpFoley::ApplyMusicVolume，PvzpFoley.cpp:381-386）
+    /// `mInstance->SetVolume(mMusicVolume / mSfxVolume)`：使拟音在 Sfx 音量叠加后
+    /// 实际音量等于音乐音量；Sfx 音量近零时分母保护取 0。
     pub fn apply_music_volume(&self, foley_instance: &FoleyInstance) {
-        // [TRANSLATION_NOTE]: C++ 中 SetVolume(mMusicVolume / mSfxVolume) 使音量与音乐一致；
-        // Rust 音频层暂无实例级音量，具体等声音系统恢复
-        let _ = foley_instance;
+        let a_volume = {
+            let app = match crate::lawn::lawn_app::LawnApp::instance() {
+                Some(app) => app,
+                None => return,
+            };
+            if app.base.sfx_volume < 1e-6 {
+                0.0
+            } else {
+                app.base.music_volume / app.base.sfx_volume
+            }
+        };
+        if let Some(a_instance) = foley_instance.instance {
+            unsafe {
+                (*a_instance).set_volume(a_volume);
+            }
+        }
     }
 
     /// 重挂钩音乐音量的拟音（对应 C++ PvzpFoley::RehookupSoundWithMusicVolume，:395）

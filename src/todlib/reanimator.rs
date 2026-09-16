@@ -19,13 +19,15 @@ pub use crate::lawn::game_enums::ReanimationType;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum ReanimLoopType {
+    // 与 C++ ConstEnums.h:966-974 ReanimLoopType 六值一一对应：
+    // PlayOnceAndHold←REANIM_PLAY_ONCE_AND_HOLD、PlayOnceAndRemove←REANIM_PLAY_ONCE、
+    // Loop←REANIM_LOOP、LoopFullOffset←REANIM_LOOP_FULL_LAST_FRAME、
+    // PlayOnceFullLastFrame←REANIM_PLAY_ONCE_FULL_LAST_FRAME、
+    // PlayOnceFullLastFrameAndHold←REANIM_PLAY_ONCE_FULL_LAST_FRAME_AND_HOLD
     PlayOnceAndHold = 0,
     PlayOnceAndRemove,
     Loop,
     LoopFullOffset,
-    PlayOnceAndReturnToZero,
-    PlayOnceAndReturnToZeroHoldLastFrame,
-    // C++ ConstEnums.h ReanimLoopType 追加（Boss 火焰球等使用）
     PlayOnceFullLastFrame,
     PlayOnceFullLastFrameAndHold,
 }
@@ -152,14 +154,8 @@ impl Reanimation {
                         self.m_anim_time = 1.0;
                     }
                 }
-                // [TRANSLATION_NOTE]: C++ 当前版本无 REANIM_PLAY_ONCE_AND_RETURN_TO_ZERO；
-                // 保持既有 Rust 行为（播完停在末尾）
-                _ => {
-                    if self.m_anim_time >= 1.0 {
-                        self.m_loop_count = 1;
-                        self.m_anim_time = 1.0;
-                    }
-                }
+                // 对应 C++ `default: PVZP_ASSERT(false); break;`（Reanimator.cpp:456）：
+                // C++ ReanimLoopType 的六个取值已全部覆盖，Rust 枚举穷尽，无未知值分支
             }
         } else if self.m_anim_rate < 0.0 {
             match self.m_loop_type {
@@ -182,12 +178,8 @@ impl Reanimation {
                         self.m_anim_time = 0.0;
                     }
                 }
-                _ => {
-                    if self.m_anim_time < 0.0 {
-                        self.m_loop_count = 1;
-                        self.m_anim_time = 0.0;
-                    }
-                }
+                // 对应 C++ `default: PVZP_ASSERT(false); break;`（Reanimator.cpp:493）：
+                // C++ ReanimLoopType 的六个取值已全部覆盖，Rust 枚举穷尽，无未知值分支
             }
         }
 
@@ -946,9 +938,11 @@ impl Reanimation {
                 if self.m_frame_count <= 0 {
                     return a_frame_time;
                 }
-                // 对应 C++: 完整末帧类型不减少帧数；其余类型减一（mFrameCount - 1）
-                // [TRANSLATION_NOTE]: C++ 的 REANIM_LOOP_FULL_LAST_FRAME 在 Rust ReanimLoopType 中不存在
+                // 对应 C++ Reanimation::GetFrameTime（Reanimator.cpp:896-901）：
+                // REANIM_PLAY_ONCE_FULL_LAST_FRAME / REANIM_LOOP_FULL_LAST_FRAME /
+                // REANIM_PLAY_ONCE_FULL_LAST_FRAME_AND_HOLD 三类使用完整帧数，其余减一
                 let a_frame_count = if self.m_loop_type == ReanimLoopType::PlayOnceFullLastFrame
+                    || self.m_loop_type == ReanimLoopType::LoopFullOffset
                     || self.m_loop_type == ReanimLoopType::PlayOnceFullLastFrameAndHold
                 {
                     self.m_frame_count

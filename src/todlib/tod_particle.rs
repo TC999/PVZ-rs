@@ -20,6 +20,7 @@ use crate::framework::rect::Rect;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
 use crate::framework::common::{SexyVector2, RandFloat, RandRange};
+use crate::todlib::tod_common::pvzp_curve_evaluate;
 use crate::todlib::tod_list::TodList;
 use crate::todlib::data_array::DataArray;
 
@@ -212,34 +213,56 @@ impl FloatParameterTrack {
         }
     }
 
-    /// 评估轨道在指定时间点的值（对应 C++ 内联计算）
-    pub fn evaluate(&self, time: f32, _rand: f32) -> f32 {
-        if self.nodes.is_empty() { return 0.0; }
-        if self.nodes.len() == 1 { return self.nodes[0].low_value; }
-        // 查找当前时间对应的阶段
-        let mut idx = 0;
-        for i in 0..self.nodes.len() - 1 {
-            if time >= self.nodes[i].time && time < self.nodes[i + 1].time {
-                idx = i;
-                break;
+    /// 评估轨道在指定时间点的值（对应 C++ FloatTrackEvaluate，Definition.cpp:1336-1359）
+    /// 双层曲线求值：节点内按 distribution 在 [low, high] 范围取值，段间按 curve_type 过渡
+    pub fn evaluate(&self, the_time_value: f32, the_interp: f32) -> f32 {
+        if self.nodes.is_empty() {
+            return 0.0;
+        }
+        if the_time_value < self.nodes[0].time {
+            let a_node = &self.nodes[0];
+            return pvzp_curve_evaluate(
+                the_interp,
+                a_node.low_value,
+                a_node.high_value,
+                a_node.distribution,
+            );
+        }
+        for i in 1..self.nodes.len() {
+            let a_node_nxt = &self.nodes[i];
+            if the_time_value <= a_node_nxt.time {
+                let a_node_cur = &self.nodes[i - 1];
+                // the_time_value 从当前节点推进到下一节点的进度
+                let a_time_fraction =
+                    (the_time_value - a_node_cur.time) / (a_node_nxt.time - a_node_cur.time);
+                let a_left_value = pvzp_curve_evaluate(
+                    the_interp,
+                    a_node_cur.low_value,
+                    a_node_cur.high_value,
+                    a_node_cur.distribution,
+                );
+                let a_right_value = pvzp_curve_evaluate(
+                    the_interp,
+                    a_node_nxt.low_value,
+                    a_node_nxt.high_value,
+                    a_node_nxt.distribution,
+                );
+                return pvzp_curve_evaluate(
+                    a_time_fraction,
+                    a_left_value,
+                    a_right_value,
+                    a_node_cur.curve_type,
+                );
             }
-            idx = self.nodes.len() - 2;
         }
-        let node = &self.nodes[idx];
-        let next_node = &self.nodes[idx + 1];
-        let t = if next_node.time != node.time {
-            (time - node.time) / (next_node.time - node.time)
-        } else {
-            0.0
-        };
-        // 简化：线性插值
-        let v = node.low_value + (next_node.low_value - node.low_value) * t;
-        // 应用分布（简化：取中间值）
-        if node.high_value > node.low_value {
-            node.low_value + (v - node.low_value) // 保持
-        } else {
-            v
-        }
+        // the_time_value 已越过末节点
+        let a_last_node = &self.nodes[self.nodes.len() - 1];
+        pvzp_curve_evaluate(
+            the_interp,
+            a_last_node.low_value,
+            a_last_node.high_value,
+            a_last_node.distribution,
+        )
     }
 }
 

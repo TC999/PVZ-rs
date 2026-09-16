@@ -76,6 +76,98 @@ pub fn evaluate_curve(curve: TodCurves, start: f32, end: f32, time: f32) -> f32 
     start + (end - start) * v
 }
 
+// ============================================================
+// PvzpCurve 曲线求值（对应 C++ PvzpLib/PvzpCommon.cpp:242-378）
+// ============================================================
+
+/// 二次曲线（对应 C++ PvzpCurveQuad，PvzpCommon.cpp:242）
+#[inline]
+fn pvzp_curve_quad(the_time: f32) -> f32 {
+    the_time * the_time
+}
+
+/// 反二次曲线（对应 C++ PvzpCurveInvQuad，PvzpCommon.cpp:247）
+#[inline]
+fn pvzp_curve_inv_quad(the_time: f32) -> f32 {
+    2.0 * the_time - the_time * the_time
+}
+
+/// S 型曲线（对应 C++ PvzpCurveS，PvzpCommon.cpp:252）
+#[inline]
+fn pvzp_curve_s(the_time: f32) -> f32 {
+    3.0 * the_time * the_time - 2.0 * the_time * the_time * the_time
+}
+
+/// 反二次 S 型曲线（对应 C++ PvzpCurveInvQuadS，PvzpCommon.cpp:257）
+#[inline]
+fn pvzp_curve_inv_quad_s(the_time: f32) -> f32 {
+    if the_time <= 0.5 {
+        pvzp_curve_inv_quad(the_time * 2.0) * 0.5
+    } else {
+        pvzp_curve_quad((the_time - 0.5) * 2.0) * 0.5 + 0.5
+    }
+}
+
+/// 弹跳曲线（对应 C++ PvzpCurveBounce，PvzpCommon.cpp:269）
+#[inline]
+fn pvzp_curve_bounce(the_time: f32) -> f32 {
+    1.0 - (2.0 * the_time - 1.0).abs()
+}
+
+/// 曲线求值（对应 C++ PvzpCurveEvaluate，PvzpCommon.cpp:336-357）
+/// 13 种缓动曲线的原始求值实现；TodCurves::WeakFastInOut 为 C++
+/// `CURVE_WEAK_FAST_IN_OUT`（deprecated，无 case 分支），落入 C++ 的 default。
+pub fn pvzp_curve_evaluate(
+    the_time: f32,
+    the_position_start: f32,
+    the_position_end: f32,
+    the_curve: TodCurves,
+) -> f32 {
+    let a_warped_time: f32 = match the_curve {
+        TodCurves::Constant => 0.0,
+        TodCurves::Linear => the_time,
+        TodCurves::EaseIn => pvzp_curve_quad(the_time),
+        TodCurves::EaseOut => pvzp_curve_inv_quad(the_time),
+        TodCurves::EaseInOut => pvzp_curve_s(pvzp_curve_s(the_time)),
+        TodCurves::EaseInOutWeak => pvzp_curve_s(the_time),
+        TodCurves::FastInOut => pvzp_curve_inv_quad_s(pvzp_curve_inv_quad_s(the_time)),
+        TodCurves::FastInOutWeak => pvzp_curve_inv_quad_s(the_time),
+        TodCurves::Bounce => pvzp_curve_bounce(the_time),
+        TodCurves::BounceFastMiddle => pvzp_curve_quad(pvzp_curve_bounce(the_time)),
+        TodCurves::BounceSlowMiddle => pvzp_curve_inv_quad(pvzp_curve_bounce(the_time)),
+        TodCurves::SinWave => (2.0 * std::f32::consts::PI * the_time).sin(),
+        TodCurves::EaseSinWave => (2.0 * std::f32::consts::PI * pvzp_curve_s(the_time)).sin(),
+        // 对应 C++ `default: PVZP_ASSERT(false); break;` —— 未定义/废弃曲线不改变时间
+        _ => 0.0,
+    };
+    (the_position_end - the_position_start) * a_warped_time + the_position_start
+}
+
+/// 曲线求值（带边界夹取，对应 C++ PvzpCurveEvaluateClamped，PvzpCommon.cpp:359-382）
+pub fn pvzp_curve_evaluate_clamped(
+    the_time: f32,
+    the_position_start: f32,
+    the_position_end: f32,
+    the_curve: TodCurves,
+) -> f32 {
+    if the_time <= 0.0 {
+        return the_position_start;
+    }
+    if the_time >= 1.0 {
+        if the_curve == TodCurves::Bounce
+            || the_curve == TodCurves::BounceFastMiddle
+            || the_curve == TodCurves::BounceSlowMiddle
+            || the_curve == TodCurves::SinWave
+            || the_curve == TodCurves::EaseSinWave
+        {
+            return the_position_start;
+        } else {
+            return the_position_end;
+        }
+    }
+    pvzp_curve_evaluate(the_time, the_position_start, the_position_end, the_curve)
+}
+
 /// 计算角度向量
 pub fn angle_to_vector(angle: f32) -> (f32, f32) {
     (angle.cos(), angle.sin())
@@ -131,11 +223,25 @@ pub fn tod_animate_curve(
     tod_animate_curve_float(time_start, time_end, time_age, pos_start as f32, pos_end as f32, curve) as i32
 }
 
-/// 字符串翻译（简化版，对应 C++ TodStringTranslate）
-/// 根据语言字符串查找翻译。如果未找到返回原文。
+/// 字符串列表查找（对应 C++ PvzpStringListFind，PvzpStringFile.cpp:162）
+/// 命中返回 mStringProperties 中的值，未命中返回 `<Missing 名称>`
+pub fn pvzp_string_list_find(the_name: &str) -> String {
+    if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
+        if let Some(a_value) = app.base.m_string_properties.get(the_name) {
+            return a_value.clone();
+        }
+    }
+    format!("<Missing {}>", the_name)
+}
+
+/// 字符串翻译（对应 C++ PvzpStringTranslate，PvzpStringFile.cpp:174）
+/// 检测 `[name]` 格式 → 查 mStringProperties 表；否则原样返回
 pub fn tod_string_translate(text: &str) -> String {
-    // 从全局字符串文件查找翻译
-    // 当前简化实现：直接返回原文
+    if text.len() >= 3 && text.as_bytes()[0] == b'[' {
+        if let Some(a_name) = text.get(1..text.len() - 1) {
+            return pvzp_string_list_find(a_name);
+        }
+    }
     text.to_string()
 }
 
