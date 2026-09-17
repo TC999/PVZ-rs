@@ -3119,7 +3119,7 @@ impl Plant {
             if let Some(reanim) = app.reanimation_get_mut(reanim_id) {
                 // C++: if (theBlendTime > 0) aBodyReanim->StartBlend(theBlendTime)
                 if blend_time > 0 {
-                    // [TRANSLATION_NOTE]: StartBlend 未在 Rust Reanimation 中实现
+                    reanim.start_blend(blend_time);
                 }
                 if anim_rate > 0.0 {
                     reanim.m_anim_rate = anim_rate;
