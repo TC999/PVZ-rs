@@ -570,7 +570,7 @@ impl ZombatarWidget {
         }
         if let Some(app) = self.app {
             unsafe {
-                if let Some(pi) = (*app).player_info.as_ref() {
+                if let Some(pi) = (*app).player_info.as_mut() {
                     pi.save_details();
                 }
             }
@@ -609,7 +609,7 @@ impl ZombatarWidget {
         }
         if let Some(app) = self.app {
             unsafe {
-                if let Some(pi) = (*app).player_info.as_ref() {
+                if let Some(pi) = (*app).player_info.as_mut() {
                     pi.save_details();
                 }
             }

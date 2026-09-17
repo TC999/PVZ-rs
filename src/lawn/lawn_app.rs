@@ -2746,7 +2746,7 @@ impl LawnApp {
     }
 
 pub fn write_to_registry(&mut self) {
-        if let Some(player_info) = &self.player_info {
+        if let Some(player_info) = &mut self.player_info {
             // C++: RegistryWriteString("CurUser", mPlayerInfo->mName) — 注册表写入未接入
             // C++: mPlayerInfo->SaveDetails() — 接入 PlayerInfo 存档 IO
             player_info.save_details();
@@ -2760,7 +2760,7 @@ pub fn write_to_registry(&mut self) {
     pub fn write_current_user_config(&mut self) -> bool {
         // 对应 C++ LawnApp::WriteCurrentUserConfig：mPlayerInfo->SaveDetails() 持久化用户档案
         // （Rust 侧 PlayerInfo::save_details 已实现：序列化并写入 userdata/user{id}.dat）
-        if let Some(player_info) = &self.player_info {
+        if let Some(player_info) = &mut self.player_info {
             player_info.save_details();
         }
         true

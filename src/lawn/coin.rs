@@ -92,7 +92,13 @@ impl Coin {
             needs_bouncy_arrow: false,
             has_bouncy_arrow: false,
             times_dropped: 0,
-            potted_plant_spec: crate::lawn::system::player_info::PottedPlant::new(),
+            potted_plant_spec: {
+                // C++ Coin.cpp:72: mPottedPlantSpec.InitializePottedPlant(SeedType::SEED_NONE);
+                // 该调用会消耗两次 RandRangeInt，必须保留以维持 RNG 序列与 C++ 一致
+                let mut a_potted_plant_spec = crate::lawn::system::player_info::PottedPlant::new();
+                a_potted_plant_spec.initialize_potted_plant(SeedType::None);
+                a_potted_plant_spec
+            },
             usable_seed_type: SeedType::None,
         }
     }

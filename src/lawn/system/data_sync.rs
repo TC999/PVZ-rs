@@ -12,6 +12,12 @@ use std::path::Path;
 pub struct DataReader {
     data: Vec<u8>,
     pos: usize,
+    /// 对应 C++ `DataReaderException` 的「已抛出」状态。
+    ///
+    /// C++ 的 `ReadBytes` 一旦越界就 `throw`，异常立即中止当前 `try` 块并传播到最近的 `catch`；
+    /// Rust 没有异常，改为置位本标志（读取返回 0，位置与 C++ 一样已经前移），
+    /// 由「catch 点」在事后用 `has_error()` / `clear_error()` 复现同样的中止语义。
+    m_error: bool,
 }
 
 impl DataReader {
@@ -19,6 +25,7 @@ impl DataReader {
         DataReader {
             data: Vec::new(),
             pos: 0,
+            m_error: false,
         }
     }
 
@@ -27,12 +34,12 @@ impl DataReader {
         let mut file = File::open(path).ok()?;
         let mut data = Vec::new();
         file.read_to_end(&mut data).ok()?;
-        Some(DataReader { data, pos: 0 })
+        Some(DataReader { data, pos: 0, m_error: false })
     }
 
     /// 从内存打开
     pub fn open_memory(data: Vec<u8>) -> Self {
-        DataReader { data, pos: 0 }
+        DataReader { data, pos: 0, m_error: false }
     }
 
     /// 关闭
@@ -41,12 +48,30 @@ impl DataReader {
         self.pos = 0;
     }
 
+    /// 是否发生过越界读取（对应 C++ 已抛出 `DataReaderException`）
+    pub fn has_error(&self) -> bool {
+        self.m_error
+    }
+
+    /// 取走读取错误标志并清除（对应 C++ `catch` 块入口）
+    pub fn clear_error(&mut self) -> bool {
+        let a_error = self.m_error;
+        self.m_error = false;
+        a_error
+    }
+
     /// 读取字节
+    ///
+    /// 对应 C++ `DataReader::ReadBytes`（DataSync.cpp:94-110）：**先推进位置，再判断是否越界**；
+    /// 越界时 C++ 抛异常且不执行 `memcpy`（目标缓冲区保持原值），此处同样不改动 `mem`。
     pub fn read_bytes(&mut self, mem: &mut [u8]) {
-        let end = (self.pos + mem.len()).min(self.data.len());
-        let len = end - self.pos;
-        mem[..len].copy_from_slice(&self.data[self.pos..end]);
-        self.pos = end;
+        self.pos += mem.len();
+        if self.pos > self.data.len() {
+            self.m_error = true;
+            return;
+        }
+        let start = self.pos - mem.len();
+        mem.copy_from_slice(&self.data[start..self.pos]);
     }
 
     /// 后退指定字节数
@@ -73,13 +98,10 @@ impl DataReader {
     }
 
     pub fn read_u8(&mut self) -> u8 {
-        if self.pos < self.data.len() {
-            let val = self.data[self.pos];
-            self.pos += 1;
-            val
-        } else {
-            0
-        }
+        // 对应 C++ DataReader::ReadUInt8：同样经 ReadBytes，越界即抛出（此处置错误标志）
+        let mut buf = [0u8; 1];
+        self.read_bytes(&mut buf);
+        buf[0]
     }
 
     pub fn read_bool(&mut self) -> bool {
@@ -288,6 +310,19 @@ impl DataSync {
 
     pub fn get_writer_mut(&mut self) -> Option<&mut DataWriter> {
         self.writer.as_mut()
+    }
+
+    /// 读取侧是否已发生越界（对应 C++ 的 `DataReaderException` 已抛出）
+    pub fn had_reader_error(&self) -> bool {
+        self.reader.as_ref().map_or(false, |r| r.has_error())
+    }
+
+    /// 取走并清除读取侧错误标志（对应 C++ `catch` 块入口）；返回此前是否已出错
+    pub fn take_reader_error(&mut self) -> bool {
+        match self.reader.as_mut() {
+            Some(r) => r.clear_error(),
+            None => false,
+        }
     }
 
     /// 同步字节（读取或写入）

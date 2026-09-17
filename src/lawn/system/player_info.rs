@@ -6,8 +6,17 @@ use crate::lawn::system::data_sync::DataReaderException;
 use std::fs;
 use std::path::Path;
 
-/// 最大盆栽植物数量（对应 C++ MAX_POTTED_PLANTS）
-pub const MAX_POTTED_PLANTS: usize = 48;
+/// 最大盆栽植物数量（对应 C++ MAX_POTTED_PLANTS == 200，PlayerInfo.h:25）
+pub const MAX_POTTED_PLANTS: usize = 200;
+
+/// 对应 C++ `sizeof(PottedPlant)`：PlayerInfo.h:46-62 的字段偏移合计为 0x58
+pub const POTTED_PLANT_SIZE: usize = 0x58;
+
+/// 对应 C++ ZOMBATAR_RECORD_SIZE（PlayerInfo.h:27）
+pub const ZOMBATAR_RECORD_SIZE: usize = 0x48;
+
+/// 对应 C++ MAX_ZOMBATAR_HEADS（PlayerInfo.h:28）
+pub const MAX_ZOMBATAR_HEADS: u32 = 100;
 
 /// 盆栽植物面朝方向
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,12 +34,16 @@ pub struct PottedPlant {
     pub x: i32,
     pub y: i32,
     pub facing: FacingDirection,
+    /// 对应 C++ PottedPlant::mPadding1（PlayerInfo.h:51，显式对齐占位，存档按原值往返）
+    pub m_padding1: u32,
     pub last_watered_time: i64,
     pub draw_variation: DrawVariation,
     pub plant_age: PottedPlantAge,
     pub times_fed: i32,
     pub feedings_per_grow: i32,
     pub plant_need: PottedPlantNeed,
+    /// 对应 C++ PottedPlant::mPadding2（PlayerInfo.h:58，显式对齐占位，存档按原值往返）
+    pub m_padding2: u32,
     pub last_need_fulfilled_time: i64,
     pub last_fertilized_time: i64,
     pub last_chocolate_time: i64,
@@ -38,20 +51,98 @@ pub struct PottedPlant {
     pub m_future_attribute: i64,
 }
 
+// ======== 存档原始字节 → 枚举的还原（对应 C++ 把字节直接 reinterpret 成枚举）========
+// C++ 的 PottedPlantFromLE 直接对内存中的枚举字段做字节换算，非法判别值属 UB；
+// Rust 的 #[repr(i32)] 枚举只允许合法判别值，故先做判别值区间检查，
+// 越界值（只可能来自损坏存档）退化为各枚举的 0 号变体以避免 UB。
+
+fn facing_direction_from_i32(v: i32) -> FacingDirection {
+    if (0..=1).contains(&v) {
+        unsafe { std::mem::transmute::<i32, FacingDirection>(v) }
+    } else {
+        FacingDirection::Right
+    }
+}
+
+fn garden_type_from_i32(v: i32) -> GardenType {
+    if (0..=3).contains(&v) {
+        unsafe { std::mem::transmute::<i32, GardenType>(v) }
+    } else {
+        GardenType::Main
+    }
+}
+
+fn draw_variation_from_i32(v: i32) -> DrawVariation {
+    // DrawVariation 的 0..=16（Normal..Aquarium）为连续判别值
+    if (0..=16).contains(&v) {
+        unsafe { std::mem::transmute::<i32, DrawVariation>(v) }
+    } else {
+        DrawVariation::Normal
+    }
+}
+
+fn potted_plant_age_from_i32(v: i32) -> PottedPlantAge {
+    if (0..=3).contains(&v) {
+        unsafe { std::mem::transmute::<i32, PottedPlantAge>(v) }
+    } else {
+        PottedPlantAge::Sprout
+    }
+}
+
+fn potted_plant_need_from_i32(v: i32) -> PottedPlantNeed {
+    if (0..=4).contains(&v) {
+        unsafe { std::mem::transmute::<i32, PottedPlantNeed>(v) }
+    } else {
+        PottedPlantNeed::None
+    }
+}
+
+fn seed_type_from_i32(v: i32) -> SeedType {
+    if v == -1 {
+        return SeedType::None;
+    }
+    // C++ SeedType 的 0..=74（SEED_PEASHOOTER..SEED_ZOMBIE_IMP）为连续判别值
+    if (0..=74).contains(&v) {
+        unsafe { std::mem::transmute::<i32, SeedType>(v) }
+    } else {
+        SeedType::None
+    }
+}
+
+fn rd_i32(b: &[u8], off: usize) -> i32 {
+    i32::from_le_bytes([b[off], b[off + 1], b[off + 2], b[off + 3]])
+}
+
+fn rd_u32(b: &[u8], off: usize) -> u32 {
+    u32::from_le_bytes([b[off], b[off + 1], b[off + 2], b[off + 3]])
+}
+
+fn rd_i64(b: &[u8], off: usize) -> i64 {
+    i64::from_le_bytes([
+        b[off], b[off + 1], b[off + 2], b[off + 3],
+        b[off + 4], b[off + 5], b[off + 6], b[off + 7],
+    ])
+}
+
 impl PottedPlant {
+    /// 对应 C++ 中 `PottedPlant` 的零值：`InitializePottedPlant` 首步的
+    /// `memset(this, 0, sizeof(PottedPlant))`（PlayerInfo.cpp:315）。
     pub fn new() -> Self {
         PottedPlant {
-            seed_type: SeedType::None,
+            // C++ memset 0 后 mSeedType 的位模式为 0，即 (SeedType)0 == SEED_PEASHOOTER
+            seed_type: SeedType::Peashooter,
             which_zen_garden: GardenType::Main,
             x: 0,
             y: 0,
             facing: FacingDirection::Right,
+            m_padding1: 0,
             last_watered_time: 0,
             draw_variation: DrawVariation::Normal,
             plant_age: PottedPlantAge::Sprout,
             times_fed: 0,
-            feedings_per_grow: 5,
+            feedings_per_grow: 0,
             plant_need: PottedPlantNeed::None,
+            m_padding2: 0,
             last_need_fulfilled_time: 0,
             last_fertilized_time: 0,
             last_chocolate_time: 0,
@@ -59,8 +150,75 @@ impl PottedPlant {
         }
     }
 
+    /// 对应 C++ PottedPlant::InitializePottedPlant（PlayerInfo.cpp:313-328）
     pub fn initialize_potted_plant(&mut self, the_seed_type: SeedType) {
+        *self = PottedPlant::new(); // 对应 memset(this, 0, sizeof(PottedPlant))
         self.seed_type = the_seed_type;
+        self.draw_variation = DrawVariation::Normal;
+        self.last_watered_time = 0;
+        // C++: mFacing = (FacingDirection)RandRangeInt(FACING_RIGHT, FACING_LEFT)
+        // RandRangeInt 恒调用 Rand()，此处同样消耗一次随机数
+        self.facing = facing_direction_from_i32(crate::todlib::tod_common::rand_range_int(
+            FacingDirection::Right as i32,
+            FacingDirection::Left as i32,
+        ));
+        self.plant_age = PottedPlantAge::Sprout;
+        self.times_fed = 0;
+        self.which_zen_garden = GardenType::Main;
+        self.feedings_per_grow = crate::todlib::tod_common::rand_range_int(3, 5);
+        self.plant_need = PottedPlantNeed::None;
+        self.last_need_fulfilled_time = 0;
+        self.last_fertilized_time = 0;
+        self.last_chocolate_time = 0;
+    }
+
+    /// 按 C++ 内存布局写出 `sizeof(PottedPlant)` 字节。
+    ///
+    /// 对应 `PottedPlantToLE(mPottedPlant[i])` + `DataSync::SyncBytes`（PlayerInfo.cpp:126-128）；
+    /// `PottedPlantToLE` 在小端机上为 no-op，故即结构体的原始字节。
+    pub fn to_bytes_le(&self) -> [u8; POTTED_PLANT_SIZE] {
+        let mut b = [0u8; POTTED_PLANT_SIZE];
+        b[0x00..0x04].copy_from_slice(&(self.seed_type as i32).to_le_bytes());
+        b[0x04..0x08].copy_from_slice(&(self.which_zen_garden as i32).to_le_bytes());
+        b[0x08..0x0C].copy_from_slice(&self.x.to_le_bytes());
+        b[0x0C..0x10].copy_from_slice(&self.y.to_le_bytes());
+        b[0x10..0x14].copy_from_slice(&(self.facing as i32).to_le_bytes());
+        b[0x14..0x18].copy_from_slice(&self.m_padding1.to_le_bytes());
+        b[0x18..0x20].copy_from_slice(&self.last_watered_time.to_le_bytes());
+        b[0x20..0x24].copy_from_slice(&(self.draw_variation as i32).to_le_bytes());
+        b[0x24..0x28].copy_from_slice(&(self.plant_age as i32).to_le_bytes());
+        b[0x28..0x2C].copy_from_slice(&self.times_fed.to_le_bytes());
+        b[0x2C..0x30].copy_from_slice(&self.feedings_per_grow.to_le_bytes());
+        b[0x30..0x34].copy_from_slice(&(self.plant_need as i32).to_le_bytes());
+        b[0x34..0x38].copy_from_slice(&self.m_padding2.to_le_bytes());
+        b[0x38..0x40].copy_from_slice(&self.last_need_fulfilled_time.to_le_bytes());
+        b[0x40..0x48].copy_from_slice(&self.last_fertilized_time.to_le_bytes());
+        b[0x48..0x50].copy_from_slice(&self.last_chocolate_time.to_le_bytes());
+        b[0x50..0x58].copy_from_slice(&self.m_future_attribute.to_le_bytes());
+        b
+    }
+
+    /// 从 C++ 内存布局的 `sizeof(PottedPlant)` 字节还原。
+    ///
+    /// 对应 `DataSync::SyncBytes` + `PottedPlantFromLE(mPottedPlant[i])`（PlayerInfo.cpp:128-129）。
+    pub fn from_bytes_le(&mut self, b: &[u8]) {
+        self.seed_type = seed_type_from_i32(rd_i32(b, 0x00));
+        self.which_zen_garden = garden_type_from_i32(rd_i32(b, 0x04));
+        self.x = rd_i32(b, 0x08);
+        self.y = rd_i32(b, 0x0C);
+        self.facing = facing_direction_from_i32(rd_i32(b, 0x10));
+        self.m_padding1 = rd_u32(b, 0x14);
+        self.last_watered_time = rd_i64(b, 0x18);
+        self.draw_variation = draw_variation_from_i32(rd_i32(b, 0x20));
+        self.plant_age = potted_plant_age_from_i32(rd_i32(b, 0x24));
+        self.times_fed = rd_i32(b, 0x28);
+        self.feedings_per_grow = rd_i32(b, 0x2C);
+        self.plant_need = potted_plant_need_from_i32(rd_i32(b, 0x30));
+        self.m_padding2 = rd_u32(b, 0x34);
+        self.last_need_fulfilled_time = rd_i64(b, 0x38);
+        self.last_fertilized_time = rd_i64(b, 0x40);
+        self.last_chocolate_time = rd_i64(b, 0x48);
+        self.m_future_attribute = rd_i64(b, 0x50);
     }
 }
 
@@ -339,10 +497,37 @@ impl PlayerInfo {
         the_sync.sync_u32(&mut a_num_potted);
         self.m_num_potted_plants = a_num_potted as i32;
 
-        // [TRANSLATION_NOTE]: C++ 用 SyncBytes(&mPottedPlant[i], sizeof(PottedPlant)) 同步原始字节；
-        // Rust 侧 PottedPlant 为逻辑结构，字节级序列化未接入，仅同步数量
+        // 盆栽植物逐项字节同步（对应 C++ PlayerInfo.cpp:123-130）
+        //
+        // C++ 的 mPottedPlant 是定长数组，本文件沿用既有的「紧凑列表」约定
+        // （m_potted_plant.len() == m_num_potted_plants，见 zen_garden.rs 的 push/remove 用法），
+        // 因此逐项同步等价于 C++ 对数组前 mNumPottedPlants 项的同步。
         if is_reader {
             self.m_potted_plant.clear();
+        }
+        // C++: PVZP_ASSERT(mNumPottedPlants <= MAX_POTTED_PLANTS);
+        for i in 0..self.m_num_potted_plants {
+            // 写入侧对应 PottedPlantToLE(mPottedPlant[i]) 之后的内存字节（小端机 ToLE 为 no-op）
+            let mut a_bytes: [u8; POTTED_PLANT_SIZE] = if is_reader {
+                [0u8; POTTED_PLANT_SIZE]
+            } else if (i as usize) < self.m_potted_plant.len() {
+                self.m_potted_plant[i as usize].to_bytes_le()
+            } else {
+                // C++ 中此处为数组越界（UB）；Rust 以零值兜底，绝不 panic
+                PottedPlant::new().to_bytes_le()
+            };
+            the_sync.sync_bytes(&mut a_bytes);
+            if is_reader {
+                if the_sync.had_reader_error() {
+                    // 对应 C++ 越界抛出 DataReaderException：异常传播到 LoadDetails 的 catch，
+                    // 后续项不再读取（位置已由 read_bytes 前移到越界点，与 C++ 一致）
+                    break;
+                }
+                // 对应 PottedPlantFromLE(mPottedPlant[i])
+                let mut a_plant = PottedPlant::new();
+                a_plant.from_bytes_le(&a_bytes);
+                self.m_potted_plant.push(a_plant);
+            }
         }
 
         // 成就：20 个 uint16（对应 C++ 存档格式）
@@ -357,65 +542,115 @@ impl PlayerInfo {
 
         // Zombatar 段（对应 C++ SyncDetails 中 reader 的 try/catch 与 writer 分支）
         if is_reader {
-            // [TRANSLATION_NOTE]: C++ 中读取异常（DataReaderException）时重置 Zombatar 字段；
-            // Rust DataReader 的 read 不抛异常，结构上保留读取
-            let mut a_zombatar_accepted: u8 = 0;
-            the_sync.sync_u8(&mut a_zombatar_accepted);
-            self.m_zombatar_accepted = a_zombatar_accepted;
-            let mut a_head_count: u32 = 0;
-            the_sync.sync_u32(&mut a_head_count);
-            if a_head_count > 100 { a_head_count = 0; }
-            self.m_zombatar_head_count = a_head_count;
-            let data_len = (a_head_count as usize) * 0x48usize;
-            self.m_zombatar_data = vec![0u8; data_len];
-            if data_len > 0 {
-                the_sync.sync_bytes(&mut self.m_zombatar_data);
+            // C++（PlayerInfo.cpp:144-182）：
+            //     try { 读 accepted / headCount / data / miniGameFlags / createdBefore }
+            //     catch (DataReaderException&) { 重置 4 个 Zombatar 字段 }  然后 return;
+            //
+            // 「进入本段时是否已经出错」必须先记下：若错误发生在更前面的字段上，
+            // C++ 的异常早已传播到 LoadDetails 的 catch，不会执行本段（更不会执行本段的 catch）。
+            let a_pre_error = the_sync.had_reader_error();
+            if !a_pre_error {
+                let mut a_zombatar_accepted: u8 = 0;
+                the_sync.sync_u8(&mut a_zombatar_accepted);
+                if !the_sync.had_reader_error() {
+                    // C++: mZombatarAccepted = aZombatarAccepted ? 1 : 0
+                    self.m_zombatar_accepted = if a_zombatar_accepted != 0 { 1 } else { 0 };
+
+                    let mut a_head_count: u32 = 0;
+                    the_sync.sync_u32(&mut a_head_count);
+                    // C++: if (aZombatarHeadCount > MAX_ZOMBATAR_HEADS) throw DataReaderException();
+                    if !the_sync.had_reader_error() && a_head_count <= MAX_ZOMBATAR_HEADS {
+                        self.m_zombatar_head_count = a_head_count;
+                        let a_data_len = (a_head_count as usize) * ZOMBATAR_RECORD_SIZE;
+                        self.m_zombatar_data = vec![0u8; a_data_len];
+                        if a_data_len > 0 {
+                            the_sync.sync_bytes(&mut self.m_zombatar_data);
+                        }
+                        if !the_sync.had_reader_error() {
+                            // 0x14 字节 mini-game flags（读取后丢弃，对应 C++ 存档兼容）
+                            let mut a_mini_game_flags = [0u8; 0x14];
+                            the_sync.sync_bytes(&mut a_mini_game_flags);
+                            if !the_sync.had_reader_error() {
+                                let mut a_created_before: u8 = 0;
+                                the_sync.sync_u8(&mut a_created_before);
+                                if !the_sync.had_reader_error() {
+                                    // C++: mZombatarCreatedBefore = aZombatarCreatedBefore ? 1 : 0
+                                    self.m_zombatar_created_before = if a_created_before != 0 { 1 } else { 0 };
+                                }
+                            }
+                        }
+                    }
+                }
             }
-            // 0x14 字节 mini-game flags（读取后丢弃，对应 C++ 存档兼容）
-            let mut a_mini_game_flags = [0u8; 0x14];
-            the_sync.sync_bytes(&mut a_mini_game_flags);
-            let mut a_created_before: u8 = 0;
-            the_sync.sync_u8(&mut a_created_before);
-            self.m_zombatar_created_before = a_created_before;
-        } else {
-            let mut a_zombatar_accepted = self.m_zombatar_accepted;
-            the_sync.sync_u8(&mut a_zombatar_accepted);
-            let mut a_head_count = self.m_zombatar_head_count;
-            the_sync.sync_u32(&mut a_head_count);
-            let data_len = (a_head_count as usize) * 0x48usize;
-            let mut a_data = self.m_zombatar_data.clone();
-            a_data.resize(data_len, 0);
-            if data_len > 0 {
-                the_sync.sync_bytes(&mut a_data);
+            if !a_pre_error && the_sync.take_reader_error() {
+                // 对应 catch (DataReaderException&)：重置 4 个 Zombatar 字段。
+                // 该异常在此被吞掉，故 LoadDetails 不会再 Reset 整个档案（与 C++ 一致）。
+                self.m_zombatar_accepted = 0;
+                self.m_zombatar_head_count = 0;
+                self.m_zombatar_data.clear();
+                self.m_zombatar_created_before = 0;
             }
+            return;
+        }
+
+        // 写入侧（对应 PlayerInfo.cpp:184-211）
+        let mut a_zombatar_accepted: u8 = if self.m_zombatar_accepted != 0 { 1 } else { 0 };
+        the_sync.sync_u8(&mut a_zombatar_accepted);
+        self.m_zombatar_accepted = a_zombatar_accepted;
+
+        // C++: mZombatarHeadCount = mZombatarData.size() / ZOMBATAR_RECORD_SIZE，再 clamp 到上限并 resize
+        self.m_zombatar_head_count = (self.m_zombatar_data.len() / ZOMBATAR_RECORD_SIZE) as u32;
+        if self.m_zombatar_head_count > MAX_ZOMBATAR_HEADS {
+            self.m_zombatar_head_count = MAX_ZOMBATAR_HEADS;
+            self.m_zombatar_data.resize((self.m_zombatar_head_count as usize) * ZOMBATAR_RECORD_SIZE, 0);
+        }
+        let a_data_bytes = (self.m_zombatar_head_count as usize) * ZOMBATAR_RECORD_SIZE;
+        let mut a_head_count = self.m_zombatar_head_count;
+        the_sync.sync_u32(&mut a_head_count);
+        if a_data_bytes > 0 {
+            // C++ 只写出 aZombatarDataBytes 字节；mZombatarData 尾部非整记录的残留不写出
+            the_sync.sync_bytes(&mut self.m_zombatar_data[..a_data_bytes]);
+        }
+        {
+            // C++: aMiniGameFlags[i] = mChallengeRecords[i + 0x0F] > 0 ? 1 : 0（i < 20）
             let mut a_mini_game_flags = [0u8; 0x14];
-            for i in 0..0x14 {
+            for i in 0..20 {
                 a_mini_game_flags[i] = if i + 0x0F < self.m_challenge_records.len() && self.m_challenge_records[i + 0x0F] > 0 { 1 } else { 0 };
             }
             the_sync.sync_bytes(&mut a_mini_game_flags);
-            let mut a_created_before = self.m_zombatar_created_before;
-            the_sync.sync_u8(&mut a_created_before);
         }
+
+        let mut a_created_before: u8 = if self.m_zombatar_created_before != 0 { 1 } else { 0 };
+        the_sync.sync_u8(&mut a_created_before);
+        self.m_zombatar_created_before = a_created_before;
     }
 
-    /// 加载档案详情（对应 C++ LoadDetails）
+    /// 加载档案详情（对应 C++ PlayerInfo::LoadDetails，PlayerInfo.cpp:214-235）
     pub fn load_details(&mut self) {
         let a_file_name = format!("userdata/user{}.dat", self.m_id);
+        // C++: if (!gSexyAppBase->ReadBufferFromFile(aFileName, &aBuffer, false)) return;
+        // 文件不存在时直接返回、不 Reset（与 C++ 一致）
         match DataReader::open_file(Path::new(&a_file_name)) {
             Some(reader) => {
                 let mut a_sync = DataSync::from_reader(reader);
                 self.sync_details(&mut a_sync);
+                // catch (DataReaderException&) { PvzpTrace(...); Reset(); }
+                if a_sync.had_reader_error() {
+                    eprintln!("Failed to player data, resetting it");
+                    self.reset();
+                }
             }
             None => {}
         }
     }
 
-    /// 保存档案详情（对应 C++ SaveDetails）
-    pub fn save_details(&self) {
+    /// 保存档案详情（对应 C++ PlayerInfo::SaveDetails，PlayerInfo.cpp:237-247）
+    ///
+    /// C++ 的 SaveDetails 是非 const 方法：SyncDetails 的写入分支会回写
+    /// mZombatarAccepted / mZombatarHeadCount / mZombatarData，故此处同样取 &mut self。
+    pub fn save_details(&mut self) {
         let mut a_sync = DataSync::from_writer(DataWriter::open_memory(0x20));
-        // 借用：临时可变副本用于 sync_details（保持写入布局一致）
-        let mut a_copy = self.clone_for_sync();
-        a_copy.sync_details(&mut a_sync);
+        self.sync_details(&mut a_sync);
 
         let _ = fs::create_dir_all("userdata");
         let a_file_name = format!("userdata/user{}.dat", self.m_id);

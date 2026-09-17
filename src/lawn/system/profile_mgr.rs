@@ -52,9 +52,12 @@ impl ProfileMgr {
     pub fn get_profile(&mut self, name: &str) -> Option<&mut PlayerInfo> {
         // 使用不区分大小写的查找
         let key = self.find_key(name)?;
-        let profile = self.m_profile_map.get_mut(&key)?;
-        profile.m_use_seq = self.m_next_profile_use_seq;
+        // C++ ProfileMgr.cpp:185-187: aProfile->LoadDetails(); aProfile->mUseSeq = mNextProfileUseSeq++;
+        let a_use_seq = self.m_next_profile_use_seq;
         self.m_next_profile_use_seq += 1;
+        let profile = self.m_profile_map.get_mut(&key)?;
+        profile.load_details();
+        profile.m_use_seq = a_use_seq;
         Some(profile)
     }
 
@@ -87,9 +90,12 @@ impl ProfileMgr {
 
         // 获取第一个档案（BTreeMap 迭代顺序为键的字母序）
         let first_key = self.m_profile_map.keys().next().cloned()?;
-        let profile = self.m_profile_map.get_mut(&first_key)?;
-        profile.m_use_seq = self.m_next_profile_use_seq;
+        // C++ ProfileMgr.cpp:35-37: aPlayerInfo->LoadDetails(); aPlayerInfo->mUseSeq = mNextProfileUseSeq++;
+        let a_use_seq = self.m_next_profile_use_seq;
         self.m_next_profile_use_seq += 1;
+        let profile = self.m_profile_map.get_mut(&first_key)?;
+        profile.load_details();
+        profile.m_use_seq = a_use_seq;
         Some(profile)
     }
 
@@ -141,13 +147,17 @@ impl ProfileMgr {
     }
 
     /// 加载档案（从持久化存储）
-    /// 对应 C++ Load() — 从 userdata/users.dat 读取 DataSync 数据
+    /// 对应 C++ ProfileMgr::Load()（ProfileMgr.cpp:90-109）
     pub fn load(&mut self) {
         let a_file_name = "userdata/users.dat";
         match DataReader::open_file(Path::new(a_file_name)) {
             Some(reader) => {
                 let mut a_sync = DataSync::from_reader(reader);
                 self.sync_state(&mut a_sync);
+                // C++: try { ... SyncState(aSync); } catch (DataReaderException&) { Clear(); }
+                if a_sync.had_reader_error() {
+                    self.clear();
+                }
             }
             None => {}
         }
