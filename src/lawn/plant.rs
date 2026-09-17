@@ -1727,8 +1727,8 @@ impl Plant {
                 a_body_reanim.m_enable_extra_overlay_draw = false;
             }
 
-            // [TRANSLATION_NOTE]: C++ 末尾 aBodyReanim->PropogateColorToAttachments()
-            // （把颜色覆盖传播给附件 reanim）；Rust 附件颜色传播未接入
+            // 对应 C++ 末尾 aBodyReanim->PropogateColorToAttachments()（把颜色覆盖传播给附件 reanim）
+            a_body_reanim.propogate_color_to_attachments();
         }
     }
 
@@ -2896,11 +2896,14 @@ impl Plant {
             let a_render_order = self.base.render_order + 2;
             if let Some(app) = self.base.get_app_mut() {
                 if let Some(a_sleep_reanim) = app.add_reanimation(a_pos_x, a_pos_y, a_render_order, ReanimationType::Sleeping as i32) {
-                    // [TRANSLATION_NOTE]: C++ 设置 mLoopType/mAnimRate/mAnimTime — Rust 侧指针访问受限，
-                    // 通过 reanimation_get_id 记录后由 reanim 系统更新
+                    // 对应 C++ Plant.cpp:545-548：mLoopType = REANIM_LOOP; mAnimRate = RandRangeFloat(6, 8); mAnimTime = RandRangeFloat(0, 0.9)
+                    unsafe {
+                        (*a_sleep_reanim).m_loop_type = ReanimLoopType::Loop;
+                        (*a_sleep_reanim).m_anim_rate = crate::todlib::tod_common::rand_range_float(6.0, 8.0);
+                        (*a_sleep_reanim).m_anim_time = crate::todlib::tod_common::rand_range_float(0.0, 0.9);
+                    }
                     self.sleeping_reanim_id = app.reanimation_get_id(a_sleep_reanim);
                 }
-                // [TRANSLATION_NOTE]: 上述 reanim 字段（LOOP、RandRangeFloat(6,8)、RandRangeFloat(0,0.9)）未接入
             }
         } else {
             if let Some(app) = self.base.get_app_mut() {
@@ -4185,9 +4188,21 @@ impl Plant {
                 self.state = PlantState::Ready;
             }
         } else if self.state == PlantState::MagnetshroomSucking {
-            // [TRANSLATION_NOTE]: ShouldTriggerTimedEvent(0.4) → GoldMagnetFindTargets + FOLEY_MAGNETSHROOM；mLoopCount → 回充
-            self.gold_magnet_find_targets();
-            if !a_is_sucking_coin {
+            // 对应 C++ Plant.cpp:2286-2298：ShouldTriggerTimedEvent(0.4) → FOLEY_MAGNETSHROOM + GoldMagnetFindTargets；mLoopCount → 回充
+            let a_triggered = self.base.get_app().map_or(false, |app| {
+                app.reanimation_get(self.body_reanim_id)
+                    .map_or(false, |r| r.should_trigger_timed_event(0.4))
+            });
+            if a_triggered {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Magnetshroom as i32);
+                }
+                self.gold_magnet_find_targets();
+            }
+            let a_loop_done = self.base.get_app().map_or(false, |app| {
+                app.reanimation_get(self.body_reanim_id).map_or(false, |r| r.m_loop_count > 0)
+            });
+            if a_loop_done && !a_is_sucking_coin {
                 self.play_idle_anim(14.0);
                 self.state = PlantState::MagnetshroomCharging;
                 self.state_countdown = 200 + RandRange(101);  // RandRangeInt(200, 300)
