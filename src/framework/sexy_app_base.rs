@@ -26,6 +26,40 @@ use crate::framework::sound::sound_manager::SoundManager;
 use crate::framework::sound::music_interface::MusicInterface;
 use crate::framework::resource_manager::ResourceManager;
 use crate::framework::paklib::{init_pak_interface, with_pak_interface_mut, set_resource_folder};
+use crate::framework::buffer::Buffer;
+
+/// 对应 C++ `DEMO_FILE_ID`（SexyAppBase.cpp:83）
+pub const DEMO_FILE_ID: u32 = 0x42BEEF78;
+/// 对应 C++ `DEMO_VERSION`（SexyAppBase.cpp:84；v6：文本输入以 UTF-8 记录的 DEMO_KEY_TEXT）
+pub const DEMO_VERSION: u32 = 6;
+
+// ---- 对应 C++ SexyAppBase.h:102-130 的匿名枚举（demo 命令号）----
+pub const DEMO_MOUSE_POSITION: i32 = 0;
+pub const DEMO_ACTIVATE_APP: i32 = 1;
+pub const DEMO_SIZE: i32 = 2;
+pub const DEMO_KEY_DOWN: i32 = 3;
+pub const DEMO_KEY_UP: i32 = 4;
+pub const DEMO_KEY_CHAR: i32 = 5;
+pub const DEMO_CLOSE: i32 = 6;
+pub const DEMO_MOUSE_ENTER: i32 = 7;
+pub const DEMO_MOUSE_EXIT: i32 = 8;
+pub const DEMO_LOADING_COMPLETE: i32 = 9;
+pub const DEMO_REGISTRY_GETSUBKEYS: i32 = 10;
+pub const DEMO_REGISTRY_READ: i32 = 11;
+pub const DEMO_REGISTRY_WRITE: i32 = 12;
+pub const DEMO_REGISTRY_ERASE: i32 = 13;
+pub const DEMO_FILE_EXISTS: i32 = 14;
+pub const DEMO_FILE_READ: i32 = 15;
+pub const DEMO_FILE_WRITE: i32 = 16;
+pub const DEMO_HTTP_RESULT: i32 = 17;
+pub const DEMO_SYNC: i32 = 18;
+pub const DEMO_ASSERT_STRING_EQUAL: i32 = 19;
+pub const DEMO_ASSERT_INT_EQUAL: i32 = 20;
+pub const DEMO_MOUSE_WHEEL: i32 = 21;
+pub const DEMO_HANDLE_COMPLETE: i32 = 22;
+pub const DEMO_VIDEO_DATA: i32 = 23;
+pub const DEMO_KEY_TEXT: i32 = 24;
+pub const DEMO_IDLE: i32 = 31;
 
 /// 应用基类
 pub static mut G_SEXY_APP: Option<*mut SexyAppBase> = None;
@@ -143,6 +177,80 @@ pub struct SexyAppBase {
     pub product_version: String,
     pub demo_prefix: String,
     pub demo_file_name: String,
+
+    // ---- Demo 录制/回放（对应 C++ SexyAppBase.h:294-319）----
+    /// 对应 C++ mRecordingDemoBuffer
+    pub m_recording_demo_buffer: bool,
+    /// 对应 C++ mPlayingDemoBuffer
+    pub m_playing_demo_buffer: bool,
+    /// 对应 C++ mHasCustomDemoFile（显式文件名参数覆盖自动选择）
+    pub m_has_custom_demo_file: bool,
+    /// 对应 C++ mDemoRecordFileLimit
+    pub m_demo_record_file_limit: u32,
+    /// 对应 C++ mDemoPlayIndex（-playnum：按时间戳/名称排序的录制列表下标）
+    pub m_demo_play_index: usize,
+    /// 对应 C++ mDemoBuffer
+    pub m_demo_buffer: Buffer,
+    /// 对应 C++ mLastDemoMouseX / mLastDemoMouseY
+    pub m_last_demo_mouse_x: i32,
+    pub m_last_demo_mouse_y: i32,
+    /// 对应 C++ mLastDemoUpdateCnt
+    pub m_last_demo_update_cnt: i32,
+    /// 对应 C++ mDemoStartTime（会话开始的墙上时钟，作为 demo 同步时钟基准）
+    pub m_demo_start_time: u64,
+    /// 对应 C++ mDemoTimeZoneOffset（录制者本地时间与 UTC 的秒差）
+    pub m_demo_time_zone_offset: i32,
+    /// 对应 C++ mDemoNeedsCommand
+    pub m_demo_needs_command: bool,
+    /// 对应 C++ mDemoIsShortCmd
+    pub m_demo_is_short_cmd: bool,
+    /// 对应 C++ mDemoCmdNum
+    pub m_demo_cmd_num: i32,
+    /// 对应 C++ mDemoCmdBitPos
+    pub m_demo_cmd_bit_pos: i32,
+    /// 对应 C++ mDemoCmdUpdateCnt（当前命令头被读取前的 update tick）
+    pub m_demo_cmd_update_cnt: i32,
+    /// 对应 C++ mDemoQueuedSince（游戏逻辑持有的命令被排队的 tick）
+    pub m_demo_queued_since: i32,
+    /// 对应 C++ mDemoCommandQueued
+    pub m_demo_command_queued: bool,
+    /// 对应 C++ mDemoLoadingComplete
+    pub m_demo_loading_complete: bool,
+    /// 对应 C++ mDemoMarkerList（`std::list<std::pair<std::string, uint32_t>>`）
+    pub m_demo_marker_list: Vec<(String, u32)>,
+    /// 对应 C++ mFastForwardToMarker
+    pub m_fast_forward_to_marker: bool,
+    /// 对应 C++ mDemoMute / mDemoMusicVolume / mDemoSfxVolume
+    pub m_demo_mute: bool,
+    pub m_demo_music_volume: f64,
+    pub m_demo_sfx_volume: f64,
+    /// 对应 C++ mSyncRefreshRate（DEMO_VIDEO_DATA 回放时设置）
+    pub m_sync_refresh_rate: u8,
+    /// 对应 C++ mManualShutdown（手动关闭期间 demo 同步不再读取）
+    pub m_manual_shutdown: bool,
+    /// 对应 C++ mMouseIn
+    pub m_mouse_in: bool,
+
+    // ---- 静音计数与 URL 打开状态（对应 C++ mMuteCount 等，ProcessDemo 分支使用）----
+    /// 对应 C++ mMuteCount
+    pub m_mute_count: i32,
+    /// 对应 C++ mAutoMuteCount
+    pub m_auto_mute_count: i32,
+    /// 对应 C++ mMuteOnLostFocus
+    pub m_mute_on_lost_focus: bool,
+    /// 对应 C++ mIsOpeningURL
+    pub m_is_opening_url: bool,
+    /// 对应 C++ mOpeningURL
+    pub m_opening_url: String,
+    /// 对应 C++ mShutdownOnURLOpen
+    pub m_shutdown_on_url_open: bool,
+    /// 对应 C++ mSEHOccured（EnforceCursor 用）
+    pub m_seh_occurred: bool,
+    /// 对应 C++ mAllowAltEnter（录制时过滤 Alt+Enter 屏幕模式切换）
+    pub m_allow_alt_enter: bool,
+    /// 对应 C++ mLastUserInputTick / mLastTimerTime
+    pub m_last_user_input_tick: i32,
+    pub m_last_timer_time: i32,
 }
 
 /// 将 SDL2 Keycode（C 风格的 int）转换为框架 KeyCode（Windows VK 兼容）
@@ -203,6 +311,110 @@ fn sdl_keycode_to_keycode(sdl_key: i32) -> KeyCode {
     }
 }
 
+/// 对应 C++ `SDLSynthesizeAsciiCharFromKeyDown()`（Input.cpp:256-330）：
+/// 从 KeyDown 合成最小 ASCII 字符流，让旧式 `KeyChar` 热键仍然可用。
+fn sdl_synthesize_ascii_char_from_key_down(
+    the_sym: i32,
+    the_mods: sdl2::keyboard::Mod,
+    the_text_input_active: bool,
+) -> Option<u8> {
+    use sdl2::keyboard::Mod;
+
+    // SDL2 keycode 常量（SDL_keycode.h）。
+    // 可打印键即为 ASCII 值；小键盘等扫描码键为 `SDL_SCANCODE_TO_KEYCODE(X) = X | (1 << 30)`。
+    const SDLK_KP_DIVIDE: i32 = 0x4000_0000 | 84;
+    const SDLK_KP_MULTIPLY: i32 = 0x4000_0000 | 85;
+    const SDLK_KP_MINUS: i32 = 0x4000_0000 | 86;
+    const SDLK_KP_PLUS: i32 = 0x4000_0000 | 87;
+    const SDLK_KP_1: i32 = 0x4000_0000 | 89;
+    const SDLK_KP_2: i32 = 0x4000_0000 | 90;
+    const SDLK_KP_3: i32 = 0x4000_0000 | 91;
+    const SDLK_KP_4: i32 = 0x4000_0000 | 92;
+    const SDLK_KP_5: i32 = 0x4000_0000 | 93;
+    const SDLK_KP_6: i32 = 0x4000_0000 | 94;
+    const SDLK_KP_7: i32 = 0x4000_0000 | 95;
+    const SDLK_KP_8: i32 = 0x4000_0000 | 96;
+    const SDLK_KP_9: i32 = 0x4000_0000 | 97;
+    const SDLK_KP_0: i32 = 0x4000_0000 | 98;
+    const SDLK_KP_PERIOD: i32 = 0x4000_0000 | 99;
+    const SDLK_KP_EQUALS: i32 = 0x4000_0000 | 103;
+    const SDLK_A: i32 = b'a' as i32;
+
+    let a_has_ctrl = the_mods.intersects(Mod::LCTRLMOD | Mod::RCTRLMOD);
+    let a_has_alt = the_mods.intersects(Mod::LALTMOD | Mod::RALTMOD);
+    let a_has_gui = the_mods.intersects(Mod::LGUIMOD | Mod::RGUIMOD);
+    let a_has_shift = the_mods.intersects(Mod::LSHIFTMOD | Mod::RSHIFTMOD);
+
+    if a_has_alt || a_has_gui {
+        return None;
+    }
+
+    if the_sym >= SDLK_A && the_sym <= SDLK_A + 25 {
+        if a_has_ctrl {
+            // Ctrl+字母 -> 控制码；SDL_TEXTINPUT 不保证覆盖 Ctrl 组合
+            return Some((the_sym - SDLK_A + 1) as u8);
+        }
+
+        if the_text_input_active {
+            return None;
+        }
+
+        return Some(if a_has_shift {
+            (the_sym - SDLK_A + 'A' as i32) as u8
+        } else {
+            the_sym as u8
+        });
+    }
+
+    if a_has_ctrl || the_text_input_active {
+        return None;
+    }
+
+    let a_char: u8 = match the_sym {
+        SDLK_KP_1 => b'1',
+        SDLK_KP_2 => b'2',
+        SDLK_KP_3 => b'3',
+        SDLK_KP_4 => b'4',
+        SDLK_KP_5 => b'5',
+        SDLK_KP_6 => b'6',
+        SDLK_KP_7 => b'7',
+        SDLK_KP_8 => b'8',
+        SDLK_KP_9 => b'9',
+        SDLK_KP_0 => b'0',
+        SDLK_KP_PLUS => b'+',
+        SDLK_KP_MINUS => b'-',
+        SDLK_KP_MULTIPLY => b'*',
+        SDLK_KP_DIVIDE => b'/',
+        SDLK_KP_PERIOD => b'.',
+        SDLK_KP_EQUALS => b'=',
+        49 => if a_has_shift { b'!' } else { b'1' },  // SDLK_1
+        50 => if a_has_shift { b'@' } else { b'2' },  // SDLK_2
+        51 => if a_has_shift { b'#' } else { b'3' },  // SDLK_3
+        52 => if a_has_shift { b'$' } else { b'4' },  // SDLK_4
+        53 => if a_has_shift { b'%' } else { b'5' },  // SDLK_5
+        54 => if a_has_shift { b'^' } else { b'6' },  // SDLK_6
+        55 => if a_has_shift { b'&' } else { b'7' },  // SDLK_7
+        56 => if a_has_shift { b'*' } else { b'8' },  // SDLK_8
+        57 => if a_has_shift { b'(' } else { b'9' },  // SDLK_9
+        48 => if a_has_shift { b')' } else { b'0' },  // SDLK_0
+        45 => if a_has_shift { b'_' } else { b'-' },  // SDLK_MINUS
+        61 => if a_has_shift { b'+' } else { b'=' },  // SDLK_EQUALS
+        91 => if a_has_shift { b'{' } else { b'[' },  // SDLK_LEFTBRACKET
+        93 => if a_has_shift { b'}' } else { b']' },  // SDLK_RIGHTBRACKET
+        92 => if a_has_shift { b'|' } else { b'\\' }, // SDLK_BACKSLASH
+        59 => if a_has_shift { b':' } else { b';' },  // SDLK_SEMICOLON
+        39 => if a_has_shift { b'"' } else { b'\'' }, // SDLK_QUOTE
+        44 => if a_has_shift { b'<' } else { b',' },  // SDLK_COMMA
+        46 => if a_has_shift { b'>' } else { b'.' },  // SDLK_PERIOD
+        47 => if a_has_shift { b'?' } else { b'/' },  // SDLK_SLASH
+        96 => if a_has_shift { b'~' } else { b'`' },  // SDLK_BACKQUOTE
+        32 => b' ',                                   // SDLK_SPACE
+        _ => return None,
+    };
+
+    Some(a_char)
+}
+
 impl SexyAppBase {
     pub fn new() -> Self {
         // 初始化 SDL2（对应 C++ 构造函数中的 SDL_Init）
@@ -254,6 +466,45 @@ impl SexyAppBase {
             product_version: String::from("1.0"),
             demo_prefix: String::from("pvzp"),
             demo_file_name: String::from("pvzp.dmo"),
+            // ---- 对应 C++ SexyAppBase.cpp:374-393 的 demo 字段初始化 ----
+            m_recording_demo_buffer: false,
+            m_playing_demo_buffer: false,
+            m_has_custom_demo_file: false,
+            m_demo_record_file_limit: 0,
+            m_demo_play_index: 0,
+            m_demo_buffer: Buffer::new(),
+            m_last_demo_mouse_x: 0,
+            m_last_demo_mouse_y: 0,
+            m_last_demo_update_cnt: 0,
+            m_demo_start_time: 0,
+            m_demo_time_zone_offset: 0,
+            // C++: mDemoNeedsCommand = true
+            m_demo_needs_command: true,
+            m_demo_is_short_cmd: false,
+            m_demo_cmd_num: 0,
+            m_demo_cmd_bit_pos: 0,
+            m_demo_cmd_update_cnt: 0,
+            m_demo_queued_since: 0,
+            m_demo_command_queued: false,
+            m_demo_loading_complete: false,
+            m_demo_marker_list: Vec::new(),
+            m_fast_forward_to_marker: false,
+            m_demo_mute: false,
+            m_demo_music_volume: 0.0,
+            m_demo_sfx_volume: 0.0,
+            m_sync_refresh_rate: 0,
+            m_manual_shutdown: false,
+            m_mouse_in: false,
+            m_mute_count: 0,
+            m_auto_mute_count: 0,
+            m_mute_on_lost_focus: false,
+            m_is_opening_url: false,
+            m_opening_url: String::new(),
+            m_shutdown_on_url_open: false,
+            m_seh_occurred: false,
+            m_allow_alt_enter: false,
+            m_last_user_input_tick: 0,
+            m_last_timer_time: 0,
             cursor_num: 0,
             memory_image_set: Vec::new(),
             update_app_state: 0,
@@ -455,8 +706,17 @@ impl SexyAppBase {
     }
 
     /// 主循环单步（对应 C++ UpdateApp 的简化版本）
-    /// 包含: 事件处理 → 更新游戏逻辑 → 绘制
+    /// 包含: 回放 demo → 事件处理 → 更新游戏逻辑 → 绘制
     pub fn update_app(&mut self) -> bool {
+        // 0. 回放 demo 命令流
+        // 对应 C++ UpdateApp 中 UPDATESTATE_MESSAGES 阶段的 ProcessDemo()（SexyAppBase.cpp:2912），
+        // 位置在 ProcessDeferredMessages 之前
+        self.process_demo();
+
+        if self.m_shutdown_flag {
+            return false;
+        }
+
         // 1. 处理 SDL 事件（对应 C++ ProcessDeferredMessages）
         if !self.process_deferred_messages(true) {
             return false;
@@ -658,6 +918,50 @@ impl SexyAppBase {
         let events: Vec<Event> = pump.poll_iter().collect();
 
         for event in events {
+            // 对应 C++ ProcessDeferredMessages：录制时把事件写进 demo 流
+            if self.m_recording_demo_buffer && !self.m_shutdown_flag {
+                self.record_demo_event(&event);
+            }
+
+            // 对应 C++：回放模式下输入由 demo 流重放，这里只处理窗口管理事件
+            if self.m_playing_demo_buffer {
+                match &event {
+                    Event::Quit { .. } => {
+                        self.m_shutdown_flag = true;
+                        return false;
+                    }
+                    Event::Window { win_event, .. } => match win_event {
+                        WindowEvent::Close => {
+                            self.m_shutdown_flag = true;
+                            return false;
+                        }
+                        WindowEvent::Resized(w, h) | WindowEvent::SizeChanged(w, h) => {
+                            self.width = *w;
+                            self.height = *h;
+                            if let Some(gl) = self.gl_interface.as_mut() {
+                                unsafe {
+                                    (**gl).width = self.width;
+                                    (**gl).height = self.height;
+                                    (**gl).update_viewport();
+                                }
+                            }
+                            if let Some(wm) = self.widget_manager {
+                                unsafe {
+                                    (*wm).resize(
+                                        Rect::new(0, 0, self.width, self.height),
+                                        Rect::new(0, 0, self.width, self.height),
+                                    );
+                                    (*wm).mark_all_dirty();
+                                }
+                            }
+                        }
+                        _ => {}
+                    },
+                    _ => {}
+                }
+                continue;
+            }
+
             match event {
                 Event::Quit { .. } => {
                     self.m_shutdown_flag = true;
@@ -815,6 +1119,10 @@ impl SexyAppBase {
         self.window = None;
         self.event_pump = None;
         self.sdl_context = None;
+
+        // 对应 C++ Shutdown 末尾的 WriteDemoBuffer()（SexyAppBase.cpp:450）：
+        // 录制模式下落盘 demo 文件（并做自动命名录制的保留清理）
+        self.write_demo_buffer();
     }
 
     /// 初始化 GL 接口
@@ -1111,6 +1419,891 @@ impl SexyAppBase {
         // 在合并后的 Rust 结构中，此方法直接调用 base 的对应功能
         // 当前的 update 循环由外部引擎驱动
     }
+
+    // ==================== Demo 录制/回放 ====================
+    // 对应 C++ SexyAppBase.cpp:472-800（文件格式与同步辅助）/ 2060-2280（时序与回放）/ 4193（刷新率）
+
+    /// 对应 C++ `SexyAppBase::IsInDemoMode()`（SexyAppBase.h:399）
+    pub fn is_in_demo_mode(&self) -> bool {
+        self.m_recording_demo_buffer || self.m_playing_demo_buffer
+    }
+
+    /// 对应 C++ `SexyAppBase::GetNowTime()`（SexyAppBase.h:402-407）
+    ///
+    /// demo 会话期间用「会话起始墙上时钟 + update tick / 100」派生，保证回放时间可复现。
+    pub fn demo_now_time(&self) -> i64 {
+        if self.is_in_demo_mode() {
+            return self.m_demo_start_time as i64 + (self.m_update_count as i64) / 100;
+        }
+
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0)
+    }
+
+    /// 对应 C++ `SexyAppBase::WriteDemoTimingBlock()`（SexyAppBase.cpp:2060-2076）
+    ///
+    /// 把距上次记录的 update tick 增量写进 demo 流；超过 15 时拆成多个 15 并以 DEMO_IDLE 填充。
+    pub fn write_demo_timing_block(&mut self) {
+        // C++: DBG_ASSERTE(IsOnPrimaryThread());
+        while self.m_update_count - self.m_last_demo_update_cnt > 15 {
+            self.m_demo_buffer.write_num_bits(15, 4);
+            self.m_last_demo_update_cnt += 15;
+
+            self.m_demo_buffer.write_num_bits(0, 1);
+            self.m_demo_buffer.write_num_bits(DEMO_IDLE, 5);
+        }
+
+        self.m_demo_buffer
+            .write_num_bits(self.m_update_count - self.m_last_demo_update_cnt, 4);
+        self.m_last_demo_update_cnt = self.m_update_count;
+    }
+
+    /// 对应 C++ `SexyAppBase::PrepareDemoCommand()`（SexyAppBase.cpp:2083-2107）
+    ///
+    /// 读取一条 demo 命令头（4 bit 时间增量 + 1 bit 短命令标志 + 1/5 bit 命令号）。
+    pub fn prepare_demo_command(&mut self, required: bool) -> bool {
+        if self.m_demo_needs_command {
+            self.m_demo_cmd_bit_pos = self.m_demo_buffer.read_bit_pos;
+            self.m_demo_cmd_update_cnt = self.m_last_demo_update_cnt;
+            if required {
+                // 游戏逻辑的调用点认领了排队的命令
+                self.m_demo_command_queued = false;
+            }
+
+            self.m_last_demo_update_cnt += self.m_demo_buffer.read_num_bits(4, false);
+
+            self.m_demo_is_short_cmd = self.m_demo_buffer.read_num_bits(1, false) == 1;
+
+            if self.m_demo_is_short_cmd {
+                self.m_demo_cmd_num = self.m_demo_buffer.read_num_bits(1, false);
+            } else {
+                self.m_demo_cmd_num = self.m_demo_buffer.read_num_bits(5, false);
+            }
+
+            self.m_demo_needs_command = false;
+        }
+
+        // C++: DBG_ASSERTE((mUpdateCount >= mLastDemoUpdateCnt) || (!required));
+        self.m_update_count >= self.m_last_demo_update_cnt
+    }
+
+    /// 对应 C++ `SexyAppBase::DemoSyncBuffer()`（SexyAppBase.cpp:700-727）
+    pub fn demo_sync_buffer(&mut self, the_buffer: &mut Buffer) {
+        if self.m_playing_demo_buffer {
+            if self.m_manual_shutdown {
+                return;
+            }
+
+            self.prepare_demo_command(true);
+            self.m_demo_needs_command = true;
+
+            // C++: DBG_ASSERTE(!mDemoIsShortCmd); DBG_ASSERTE(mDemoCmdNum == DEMO_SYNC);
+            let a_len = self.m_demo_buffer.read_u32();
+
+            the_buffer.clear();
+            for _ in 0..(a_len as i32) {
+                let a_byte = self.m_demo_buffer.read_byte();
+                the_buffer.write_byte(a_byte);
+            }
+        } else if self.m_recording_demo_buffer {
+            self.write_demo_timing_block();
+            self.m_demo_buffer.write_num_bits(0, 1);
+            self.m_demo_buffer.write_num_bits(DEMO_SYNC, 5);
+            self.m_demo_buffer
+                .write_u32(the_buffer.get_data_len() as u32);
+
+            let a_len = the_buffer.get_data_len() as usize;
+            let a_data = the_buffer.data()[..a_len].to_vec();
+            self.m_demo_buffer.write_bytes(&a_data);
+        }
+    }
+
+    /// 对应 C++ `SexyAppBase::DemoSyncString()`（SexyAppBase.cpp:729-735）
+    pub fn demo_sync_string(&mut self, the_string: &mut String) {
+        let mut a_buffer = Buffer::new();
+        a_buffer.write_string(the_string);
+        self.demo_sync_buffer(&mut a_buffer);
+        *the_string = a_buffer.read_string();
+    }
+
+    /// 对应 C++ `SexyAppBase::DemoSyncInt()`（SexyAppBase.cpp:737-743）
+    pub fn demo_sync_int(&mut self, the_int: &mut i32) {
+        let mut a_buffer = Buffer::new();
+        a_buffer.write_i32(*the_int);
+        self.demo_sync_buffer(&mut a_buffer);
+        *the_int = a_buffer.read_i32();
+    }
+
+    /// 对应 C++ `SexyAppBase::DemoSyncBool()`（SexyAppBase.cpp:745-751）
+    pub fn demo_sync_bool(&mut self, the_bool: &mut bool) {
+        let mut a_buffer = Buffer::new();
+        a_buffer.write_boolean(*the_bool);
+        self.demo_sync_buffer(&mut a_buffer);
+        *the_bool = a_buffer.read_boolean();
+    }
+
+    /// 对应 C++ `SexyAppBase::DemoAssertStringEqual()`（SexyAppBase.cpp:753-776）
+    pub fn demo_assert_string_equal(&mut self, the_string: &str) {
+        if self.m_playing_demo_buffer {
+            if self.m_manual_shutdown {
+                return;
+            }
+
+            self.prepare_demo_command(true);
+            self.m_demo_needs_command = true;
+
+            // C++: DBG_ASSERTE(!mDemoIsShortCmd); DBG_ASSERTE(mDemoCmdNum == DEMO_ASSERT_STRING_EQUAL);
+            let a_string = self.m_demo_buffer.read_string();
+            // C++: DBG_ASSERTE(aString == theString); —— Release 下仅记录，不中断
+            let _ = a_string == the_string;
+        } else if self.m_recording_demo_buffer {
+            self.write_demo_timing_block();
+            self.m_demo_buffer.write_num_bits(0, 1);
+            self.m_demo_buffer.write_num_bits(DEMO_ASSERT_STRING_EQUAL, 5);
+            self.m_demo_buffer.write_string(the_string);
+        }
+    }
+
+    /// 对应 C++ `SexyAppBase::DemoAssertIntEqual()`（SexyAppBase.cpp:790-814）
+    pub fn demo_assert_int_equal(&mut self, the_int: i32) {
+        if self.m_playing_demo_buffer {
+            if self.m_manual_shutdown {
+                return;
+            }
+
+            self.prepare_demo_command(true);
+            self.m_demo_needs_command = true;
+
+            // C++: DBG_ASSERTE(!mDemoIsShortCmd); DBG_ASSERTE(mDemoCmdNum == DEMO_ASSERT_INT_EQUAL);
+            let an_int = self.m_demo_buffer.read_i32();
+            // C++: (void)anInt; DBG_ASSERTE(anInt == theInt); —— Release 下未使用
+            let _ = an_int == the_int;
+        } else if self.m_recording_demo_buffer {
+            self.write_demo_timing_block();
+            self.m_demo_buffer.write_num_bits(0, 1);
+            self.m_demo_buffer.write_num_bits(DEMO_ASSERT_INT_EQUAL, 5);
+            self.m_demo_buffer.write_i32(the_int);
+        }
+    }
+
+    /// 对应 C++ `SexyAppBase::DemoAddMarker()`（SexyAppBase.cpp:778-788）
+    pub fn demo_add_marker(&mut self, the_string: &str) {
+        if self.m_playing_demo_buffer {
+            self.m_fast_forward_to_marker = false;
+        } else if self.m_recording_demo_buffer {
+            self.m_demo_marker_list
+                .push((the_string.to_string(), self.m_update_count as u32));
+        }
+    }
+
+    /// 对应 C++ `SexyAppBase::DemoSyncRefreshRate()`（SexyAppBase.cpp:4193-4206）
+    pub fn demo_sync_refresh_rate(&mut self) {
+        // C++: mSyncRefreshRate = mGLInterface->mRefreshRate;
+        // [TRANSLATION_NOTE]: Rust 侧 GLInterface 未接入 mRefreshRate，此处保持 m_sync_refresh_rate 现值
+        if self.m_recording_demo_buffer {
+            self.write_demo_timing_block();
+            self.m_demo_buffer.write_num_bits(0, 1);
+            self.m_demo_buffer.write_num_bits(DEMO_VIDEO_DATA, 5);
+            self.m_demo_buffer.write_boolean(self.is_windowed);
+            let a_byte = self.m_sync_refresh_rate;
+            self.m_demo_buffer.write_byte(a_byte);
+        }
+    }
+
+    /// 对应 C++ `RecordDemoMousePosition()`（Input.cpp:338-369）
+    ///
+    /// 流中坐标是无符号 12 bit；位移小于 32 时走短命令（1 bit 短标志 + 1 bit 命令号 0 + 6 bit 有符号增量 ×2）。
+    fn record_demo_mouse_position(&mut self, the_x: i32, the_y: i32) {
+        let a_x = the_x & 4095;
+        let a_y = the_y & 4095;
+
+        let a_diff_x = a_x - self.m_last_demo_mouse_x;
+        let a_diff_y = a_y - self.m_last_demo_mouse_y;
+
+        if a_diff_x.abs() < 32 && a_diff_y.abs() < 32 {
+            if a_diff_x != 0 || a_diff_y != 0 {
+                self.write_demo_timing_block();
+                self.m_demo_buffer.write_num_bits(1, 1);
+                self.m_demo_buffer.write_num_bits(0, 1);
+                self.m_demo_buffer.write_num_bits(a_diff_x, 6);
+                self.m_demo_buffer.write_num_bits(a_diff_y, 6);
+            }
+        } else {
+            self.write_demo_timing_block();
+            self.m_demo_buffer.write_num_bits(0, 1);
+            self.m_demo_buffer.write_num_bits(DEMO_MOUSE_POSITION, 5);
+            self.m_demo_buffer.write_num_bits(a_x, 12);
+            self.m_demo_buffer.write_num_bits(a_y, 12);
+        }
+
+        self.m_last_demo_mouse_x = a_x;
+        self.m_last_demo_mouse_y = a_y;
+    }
+
+    /// 鼠标坐标重映射（对应 C++ `mWidgetManager->RemapMouse(x, y)`）
+    fn remap_demo_mouse_point(&self, x: i32, y: i32) -> (i32, i32) {
+        if let Some(wm) = self.widget_manager {
+            unsafe { (*wm).remap_mouse(x, y) }
+        } else {
+            (x, y)
+        }
+    }
+
+    /// 鼠标尚未进入窗口时补一条 `DEMO_MOUSE_ENTER`（对应 C++ `if (!mMouseIn) {...}`）
+    fn record_demo_mouse_enter_if_needed(&mut self) {
+        if !self.m_mouse_in {
+            self.write_demo_timing_block();
+            self.m_demo_buffer.write_num_bits(0, 1);
+            self.m_demo_buffer.write_num_bits(DEMO_MOUSE_ENTER, 5);
+        }
+    }
+
+    /// 对应 C++ `RecordDemoEvent()`（Input.cpp:372-490）：把输入事件写进 demo 流，
+    /// 格式与 `ProcessDemo` 读取的一致。
+    fn record_demo_event(&mut self, the_event: &Event) {
+        match the_event {
+            Event::Window { win_event, .. } => match win_event {
+                WindowEvent::Minimized | WindowEvent::Restored => {
+                    self.write_demo_timing_block();
+                    self.m_demo_buffer.write_num_bits(0, 1);
+                    self.m_demo_buffer.write_num_bits(DEMO_SIZE, 5);
+                    self.m_demo_buffer
+                        .write_boolean(matches!(win_event, WindowEvent::Minimized));
+                }
+                WindowEvent::FocusGained | WindowEvent::FocusLost => {
+                    self.write_demo_timing_block();
+                    self.m_demo_buffer.write_num_bits(0, 1);
+                    self.m_demo_buffer.write_num_bits(DEMO_ACTIVATE_APP, 5);
+                    self.m_demo_buffer.write_num_bits(
+                        if matches!(win_event, WindowEvent::FocusGained) { 1 } else { 0 },
+                        1,
+                    );
+                }
+                _ => {}
+            },
+
+            Event::MouseMotion { x, y, .. } => {
+                let (a_x, a_y) = self.remap_demo_mouse_point(*x, *y);
+                self.record_demo_mouse_position(a_x, a_y);
+                self.record_demo_mouse_enter_if_needed();
+            }
+
+            Event::MouseButtonDown { mouse_btn, x, y, clicks, .. } => {
+                let (a_x, a_y) = self.remap_demo_mouse_point(*x, *y);
+                self.record_demo_mouse_position(a_x, a_y);
+
+                let mut a_btn_num = match mouse_btn {
+                    MouseButton::Left => 1,
+                    MouseButton::Right => -1,
+                    _ => 3,
+                };
+                if *clicks == 2 {
+                    a_btn_num = match mouse_btn {
+                        MouseButton::Left => 2,
+                        MouseButton::Right => -2,
+                        _ => a_btn_num,
+                    };
+                }
+
+                self.write_demo_timing_block();
+                self.m_demo_buffer.write_num_bits(1, 1);
+                self.m_demo_buffer.write_num_bits(1, 1);
+                self.m_demo_buffer.write_num_bits(1, 1);
+                self.m_demo_buffer.write_num_bits(a_btn_num, 3);
+
+                self.record_demo_mouse_enter_if_needed();
+            }
+
+            Event::MouseButtonUp { mouse_btn, x, y, .. } => {
+                let (a_x, a_y) = self.remap_demo_mouse_point(*x, *y);
+                self.record_demo_mouse_position(a_x, a_y);
+
+                let a_btn_num = match mouse_btn {
+                    MouseButton::Left => 1,
+                    MouseButton::Right => -1,
+                    _ => 3,
+                };
+
+                self.write_demo_timing_block();
+                self.m_demo_buffer.write_num_bits(1, 1);
+                self.m_demo_buffer.write_num_bits(1, 1);
+                self.m_demo_buffer.write_num_bits(0, 1);
+                self.m_demo_buffer.write_num_bits(a_btn_num, 3);
+
+                self.record_demo_mouse_enter_if_needed();
+            }
+
+            Event::MouseWheel { y, .. } => {
+                self.write_demo_timing_block();
+                self.m_demo_buffer.write_num_bits(0, 1);
+                self.m_demo_buffer.write_num_bits(DEMO_MOUSE_WHEEL, 5);
+                self.m_demo_buffer.write_num_bits((*y).clamp(-128, 127), 8);
+            }
+
+            Event::KeyDown { keycode, keymod, repeat, .. } => {
+                let Some(kc) = keycode else { return };
+
+                let a_key_sym: i32 = (*kc).into();
+
+                // SDLK_RETURN=13；SDLK_KP_ENTER 为扫描码键 88 | (1<<30)
+                const SDLK_RETURN: i32 = 13;
+                const SDLK_KP_ENTER: i32 = 0x4000_0000 | 88;
+
+                if self.m_allow_alt_enter
+                    && !*repeat
+                    && (a_key_sym == SDLK_RETURN || a_key_sym == SDLK_KP_ENTER)
+                    && keymod.intersects(sdl2::keyboard::Mod::LALTMOD | sdl2::keyboard::Mod::RALTMOD)
+                {
+                    // 屏幕模式切换，不发给 widget manager，也不记录
+                    return;
+                }
+
+                self.write_demo_timing_block();
+                self.m_demo_buffer.write_num_bits(0, 1);
+                self.m_demo_buffer.write_num_bits(DEMO_KEY_DOWN, 5);
+                self.m_demo_buffer
+                    .write_num_bits(sdl_keycode_to_keycode(a_key_sym), 8);
+
+                // 对应 C++ `SDL_IsTextInputActive()`（返回 SDL_bool 枚举，非整数）
+                let a_text_input_active =
+                    unsafe { sdl2::sys::SDL_IsTextInputActive() as i32 != 0 };
+                if let Some(a_char) =
+                    sdl_synthesize_ascii_char_from_key_down(a_key_sym, *keymod, a_text_input_active)
+                {
+                    self.write_demo_timing_block();
+                    self.m_demo_buffer.write_num_bits(0, 1);
+                    self.m_demo_buffer.write_num_bits(DEMO_KEY_CHAR, 5);
+                    self.m_demo_buffer.write_num_bits(0, 1);
+                    self.m_demo_buffer.write_num_bits(a_char as i32, 8);
+                }
+            }
+
+            Event::KeyUp { keycode, .. } => {
+                let Some(kc) = keycode else { return };
+                let a_key_sym: i32 = (*kc).into();
+
+                self.write_demo_timing_block();
+                self.m_demo_buffer.write_num_bits(0, 1);
+                self.m_demo_buffer.write_num_bits(DEMO_KEY_UP, 5);
+                self.m_demo_buffer
+                    .write_num_bits(sdl_keycode_to_keycode(a_key_sym), 8);
+            }
+
+            // C++: if (theEvent.text.text[0] != 0) —— 经由 KeyText 派发，故录制整个 UTF-8 串
+            Event::TextInput { text, .. } => {
+                if !text.is_empty() {
+                    self.write_demo_timing_block();
+                    self.m_demo_buffer.write_num_bits(0, 1);
+                    self.m_demo_buffer.write_num_bits(DEMO_KEY_TEXT, 5);
+                    self.m_demo_buffer.write_string(text);
+                }
+            }
+
+            _ => {}
+        }
+    }
+
+    /// 对应 C++ `SexyAppBase::ReadDemoBuffer()`（SexyAppBase.cpp:472-596）
+    pub fn read_demo_buffer(&mut self) -> Result<(), String> {
+        let a_file = match std::fs::read(&self.demo_file_name) {
+            Ok(b) => b,
+            Err(_) => {
+                return Err(format!("Demo file not found: {}", self.demo_file_name));
+            }
+        };
+
+        let mut pos = 0usize;
+        // C++ 用 std::ifstream 顺序读取，任何一段读不满都直接 return false（此即 Err）
+        macro_rules! take {
+            ($n:expr) => {{
+                let n: usize = $n;
+                if pos + n > a_file.len() {
+                    return Err(String::from("Invalid demo file."));
+                }
+                let s = &a_file[pos..pos + n];
+                pos += n;
+                s
+            }};
+        }
+
+        let a_file_id = u32::from_le_bytes(take!(4).try_into().unwrap());
+        // C++: DBG_ASSERTE(aFileID == DEMO_FILE_ID); if (aFileID != DEMO_FILE_ID) return false;
+        if a_file_id != DEMO_FILE_ID {
+            return Err(String::from("Invalid demo file."));
+        }
+
+        let a_version = u32::from_le_bytes(take!(4).try_into().unwrap());
+        if a_version != DEMO_VERSION {
+            return Err(String::from("Incompatible demo file version."));
+        }
+
+        self.rand_seed = u32::from_le_bytes(take!(4).try_into().unwrap());
+        common::srand(self.rand_seed);
+
+        self.m_demo_start_time = u64::from_le_bytes(take!(8).try_into().unwrap());
+
+        let a_time_zone_offset = u32::from_le_bytes(take!(4).try_into().unwrap());
+        self.m_demo_time_zone_offset = a_time_zone_offset as i32;
+
+        // 记录的程序版本（旧文件为空）；未知或不匹配仅告警
+        let a_str_len = u16::from_le_bytes(take!(2).try_into().unwrap()) as usize;
+        let a_recorded_version =
+            String::from_utf8_lossy(take!(a_str_len)).to_string();
+        if a_recorded_version.is_empty() {
+            eprintln!("Demo has no program version tag; replay may diverge.");
+        } else if self.product_version != a_recorded_version {
+            eprintln!(
+                "Demo was recorded with a different program version (recorded: {}, current: {}); replay may diverge.",
+                a_recorded_version, self.product_version
+            );
+        }
+
+        let mut a_bytes_left = a_file.len() as i32 - pos as i32;
+
+        // 读取 marker 列表（v2 起）
+        if a_version >= 2 {
+            let a_size_raw = i32::from_le_bytes(take!(4).try_into().unwrap());
+            a_bytes_left -= 4;
+
+            if a_size_raw < 0 || a_size_raw >= a_bytes_left {
+                return Err(String::from("Invalid demo file."));
+            }
+
+            let a_size = a_size_raw as usize;
+            let a_marker_bytes = take!(a_size).to_vec();
+
+            let mut a_marker_buffer = Buffer::from_bytes(&a_marker_bytes);
+            a_marker_buffer.seek_front();
+
+            let a_num_items = a_marker_buffer.read_u32();
+            let mut i: u32 = 0;
+            while i < a_num_items && !a_marker_buffer.at_end() {
+                let a_first = a_marker_buffer.read_string();
+                let a_second = a_marker_buffer.read_u32();
+                self.m_demo_marker_list.push((a_first, a_second));
+                i += 1;
+            }
+
+            if i != a_num_items {
+                return Err(String::from("Invalid demo file."));
+            }
+
+            a_bytes_left -= a_size as i32;
+        }
+
+        // 读取 demo 命令流
+        // C++: 这个长度回放不使用，只用于保持流对齐
+        let _a_demo_length = u32::from_le_bytes(take!(4).try_into().unwrap());
+        a_bytes_left -= 4;
+
+        if a_bytes_left <= 0 {
+            return Err(String::from("Invalid demo file."));
+        }
+
+        let a_commands = take!(a_bytes_left as usize).to_vec();
+        self.m_demo_buffer.write_bytes(&a_commands);
+        self.m_demo_buffer.seek_front();
+
+        Ok(())
+    }
+
+    /// 对应 C++ `SexyAppBase::WriteDemoBuffer()`（SexyAppBase.cpp:641-698）
+    pub fn write_demo_buffer(&mut self) {
+        if !self.m_recording_demo_buffer {
+            return;
+        }
+
+        let mut out: Vec<u8> = Vec::new();
+
+        // Demo 文件为小端格式（C++ ToLE* 在小端机上为 no-op）
+        out.extend_from_slice(&DEMO_FILE_ID.to_le_bytes());
+        out.extend_from_slice(&DEMO_VERSION.to_le_bytes());
+        out.extend_from_slice(&self.rand_seed.to_le_bytes());
+        out.extend_from_slice(&self.m_demo_start_time.to_le_bytes());
+        out.extend_from_slice(&(self.m_demo_time_zone_offset as u32).to_le_bytes());
+
+        let a_version_bytes = self.product_version.as_bytes();
+        out.extend_from_slice(&(a_version_bytes.len() as u16).to_le_bytes());
+        out.extend_from_slice(a_version_bytes);
+
+        let mut a_marker_buffer = Buffer::new();
+        a_marker_buffer.write_u32(self.m_demo_marker_list.len() as u32);
+        for (a_name, a_cnt) in self.m_demo_marker_list.iter() {
+            a_marker_buffer.write_string(a_name);
+            a_marker_buffer.write_u32(*a_cnt);
+        }
+        let a_marker_size = a_marker_buffer.get_data_len();
+        out.extend_from_slice(&(a_marker_size as u32).to_le_bytes());
+        out.extend_from_slice(&a_marker_buffer.data()[..a_marker_size as usize]);
+
+        out.extend_from_slice(&(self.m_update_count as u32).to_le_bytes());
+
+        let a_demo_len = self.m_demo_buffer.get_data_len() as usize;
+        out.extend_from_slice(&self.m_demo_buffer.data()[..a_demo_len]);
+
+        let a_written = std::fs::write(&self.demo_file_name, &out).is_ok();
+
+        // 仅清理符合自动命名模式的录制；显式指定的目标文件不触发保留策略
+        if a_written
+            && self.m_demo_record_file_limit != 0
+            && !self.m_has_custom_demo_file
+            && is_stamped_demo_file_name(&self.demo_prefix, &self.demo_file_name)
+        {
+            let a_demo_files = find_demo_files(&self.demo_prefix, true);
+            for i in (self.m_demo_record_file_limit as usize)..a_demo_files.len() {
+                let _ = std::fs::remove_file(&a_demo_files[i]);
+            }
+        }
+    }
+
+    // ==================== Demo 回放依赖的辅助方法 ====================
+
+    /// 对应 C++ `SexyAppBase::IsMuted()`（SexyAppBase.cpp:4088-4091）
+    pub fn is_muted(&self) -> bool {
+        self.m_mute_count > 0
+    }
+
+    /// 对应 C++ `SexyAppBase::Mute()`（SexyAppBase.cpp:4092-4100）
+    pub fn mute(&mut self, auto_mute: bool) {
+        self.m_mute_count += 1;
+        if auto_mute {
+            self.m_auto_mute_count += 1;
+        }
+
+        self.set_music_volume(self.music_volume);
+        self.set_sfx_volume(self.sfx_volume);
+    }
+
+    /// 对应 C++ `SexyAppBase::Unmute()`（SexyAppBase.cpp:4102-4114）
+    pub fn unmute(&mut self, auto_mute: bool) {
+        if self.m_mute_count > 0 {
+            self.m_mute_count -= 1;
+            if auto_mute {
+                self.m_auto_mute_count -= 1;
+            }
+        }
+
+        self.set_music_volume(self.music_volume);
+        self.set_sfx_volume(self.sfx_volume);
+    }
+
+    /// 对应 C++ `SexyAppBase::URLOpenSucceeded()`（SexyAppBase.cpp:965-973）
+    pub fn url_open_succeeded(&mut self, the_url: &str) {
+        let _ = the_url;
+        self.m_is_opening_url = false;
+
+        if self.m_shutdown_on_url_open {
+            self.shutdown();
+        }
+    }
+
+    /// 对应 C++ `SexyAppBase::RehupFocus()`（SexyAppBase.cpp:2020-2047）
+    pub fn rehup_focus(&mut self) {
+        let a_want_has_focus = self.active && !self.minimized;
+
+        if a_want_has_focus != self.has_focus {
+            self.has_focus = a_want_has_focus;
+
+            if self.has_focus {
+                if self.m_mute_on_lost_focus {
+                    self.unmute(true);
+                }
+
+                if let Some(wm) = self.widget_manager {
+                    unsafe { (*wm).got_focus(); }
+                }
+                // C++: GotFocus(); —— SexyAppBase 的虚函数，Rust 侧无覆写者
+            } else {
+                if self.m_mute_on_lost_focus {
+                    self.mute(true);
+                }
+
+                if let Some(wm) = self.widget_manager {
+                    unsafe {
+                        (*wm).lost_focus();
+                        (*wm).do_mouse_ups();
+                    }
+                }
+                // C++: LostFocus(); —— SexyAppBase 的虚函数，Rust 侧无覆写者
+            }
+        }
+    }
+
+    /// 对应 C++ `SexyAppBase::EnforceCursor()`（SexyAppBase.cpp:2484-2530）
+    pub fn enforce_cursor(&mut self) {
+        // C++: int aCursorNum = mSEHOccured ? CURSOR_POINTER : mCursorNum;
+        let mut a_cursor_num = self.cursor_num;
+        if self.m_seh_occurred {
+            a_cursor_num = 0; // CURSOR_POINTER
+        }
+        if a_cursor_num < 0 {
+            a_cursor_num = 0;
+        }
+
+        // [TRANSLATION_NOTE]: C++ 此处按 cursorNum 设置 SDL_Cursor / mCursorImages；
+        // Rust 侧未接入光标图像系统，仅保留游标号归一化
+        self.cursor_num = a_cursor_num;
+    }
+
+    /// 对应 C++ `SexyAppBase::ProcessDemo()`（SexyAppBase.cpp:2109-2280）
+    ///
+    /// 回放 demo 命令流：把流中的鼠标/键盘/窗口命令重放到 `WidgetManager`。
+    pub fn process_demo(&mut self) {
+        if !self.m_playing_demo_buffer {
+            return;
+        }
+
+        // C++: 没有以 DEMO_CLOSE 结束的录制，把流结束视作 demo 结束
+        if self.m_demo_buffer.at_end() {
+            self.shutdown();
+            return;
+        }
+
+        while !self.m_shutdown_flag
+            && self.m_update_count >= self.m_last_demo_update_cnt
+            && !self.m_demo_buffer.at_end()
+        {
+            if self.prepare_demo_command(false) {
+                self.m_demo_needs_command = true;
+
+                if self.m_demo_is_short_cmd {
+                    match self.m_demo_cmd_num {
+                        // 短命令 0：相对鼠标移动（6 bit 有符号增量 ×2）
+                        0 => {
+                            let a_delta_x = self.m_demo_buffer.read_num_bits(6, true);
+                            let a_delta_y = self.m_demo_buffer.read_num_bits(6, true);
+                            self.m_last_demo_mouse_x += a_delta_x;
+                            self.m_last_demo_mouse_y += a_delta_y;
+
+                            if let Some(wm) = self.widget_manager {
+                                unsafe {
+                                    (*wm).mouse_move(self.m_last_demo_mouse_x, self.m_last_demo_mouse_y);
+                                }
+                            }
+                        }
+                        // 短命令 1：鼠标按下/抬起（1 bit down + 3 bit 有符号按钮号）
+                        1 => {
+                            let down = self.m_demo_buffer.read_num_bits(1, false) != 0;
+                            let a_btn_count = self.m_demo_buffer.read_num_bits(3, true);
+
+                            if let Some(wm) = self.widget_manager {
+                                unsafe {
+                                    if down {
+                                        (*wm).mouse_down(self.m_last_demo_mouse_x, self.m_last_demo_mouse_y, a_btn_count);
+                                    } else {
+                                        (*wm).mouse_up(self.m_last_demo_mouse_x, self.m_last_demo_mouse_y, a_btn_count);
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                } else {
+                    match self.m_demo_cmd_num {
+                        DEMO_MOUSE_POSITION => {
+                            self.m_last_demo_mouse_x = self.m_demo_buffer.read_num_bits(12, false);
+                            self.m_last_demo_mouse_y = self.m_demo_buffer.read_num_bits(12, false);
+
+                            if let Some(wm) = self.widget_manager {
+                                unsafe {
+                                    (*wm).mouse_move(self.m_last_demo_mouse_x, self.m_last_demo_mouse_y);
+                                }
+                            }
+                        }
+                        DEMO_ACTIVATE_APP => {
+                            self.active = self.m_demo_buffer.read_num_bits(1, false) != 0;
+
+                            self.rehup_focus();
+
+                            if self.active && !self.is_windowed {
+                                if let Some(wm) = self.widget_manager {
+                                    unsafe { (*wm).mark_all_dirty(); }
+                                }
+                            }
+
+                            if self.m_is_opening_url && !self.active {
+                                let a_url = self.m_opening_url.clone();
+                                self.url_open_succeeded(&a_url);
+                            }
+                        }
+                        DEMO_SIZE => {
+                            let is_minimized = self.m_demo_buffer.read_boolean();
+
+                            if !self.m_shutdown_flag && is_minimized != self.minimized {
+                                self.minimized = is_minimized;
+
+                                // 最小化期间不应有任何声音（或音乐）播放
+                                if self.minimized {
+                                    self.mute(true);
+                                } else {
+                                    self.unmute(true);
+                                    if let Some(wm) = self.widget_manager {
+                                        unsafe { (*wm).mark_all_dirty(); }
+                                    }
+                                }
+                            }
+
+                            self.rehup_focus();
+                        }
+                        DEMO_MOUSE_WHEEL => {
+                            let a_scroll = self.m_demo_buffer.read_num_bits(8, true);
+                            if let Some(wm) = self.widget_manager {
+                                unsafe { (*wm).mouse_wheel(a_scroll); }
+                            }
+                        }
+                        DEMO_KEY_DOWN => {
+                            let a_key_code = self.m_demo_buffer.read_num_bits(8, false);
+                            if let Some(wm) = self.widget_manager {
+                                unsafe { (*wm).key_down(a_key_code); }
+                            }
+                        }
+                        DEMO_KEY_UP => {
+                            let a_key_code = self.m_demo_buffer.read_num_bits(8, false);
+                            if let Some(wm) = self.widget_manager {
+                                unsafe { (*wm).key_up(a_key_code); }
+                            }
+                        }
+                        DEMO_KEY_CHAR => {
+                            // 1 表示单字节，2 表示双字节
+                            let size_mult = self.m_demo_buffer.read_num_bits(1, false) + 1;
+                            let a_char = self.m_demo_buffer.read_num_bits(8 * size_mult, false) as u8;
+                            if let Some(wm) = self.widget_manager {
+                                unsafe { (*wm).key_char(a_char); }
+                            }
+                        }
+                        DEMO_KEY_TEXT => {
+                            let a_text = self.m_demo_buffer.read_string();
+                            if !a_text.is_empty() {
+                                if let Some(wm) = self.widget_manager {
+                                    unsafe { (*wm).key_text(&a_text); }
+                                }
+                            }
+                        }
+                        DEMO_CLOSE => {
+                            self.shutdown();
+                        }
+                        DEMO_MOUSE_ENTER => {
+                            self.m_mouse_in = true;
+                            self.enforce_cursor();
+                        }
+                        DEMO_MOUSE_EXIT => {
+                            if let Some(wm) = self.widget_manager {
+                                unsafe {
+                                    (*wm).mouse_exit(self.m_last_demo_mouse_x, self.m_last_demo_mouse_y);
+                                }
+                            }
+                            self.m_mouse_in = false;
+                            self.enforce_cursor();
+                        }
+                        DEMO_LOADING_COMPLETE => {
+                            self.m_demo_loading_complete = true;
+                        }
+                        DEMO_VIDEO_DATA => {
+                            self.is_windowed = self.m_demo_buffer.read_boolean();
+                            self.m_sync_refresh_rate = self.m_demo_buffer.read_byte();
+                        }
+                        DEMO_IDLE => {}
+                        DEMO_REGISTRY_GETSUBKEYS
+                        | DEMO_REGISTRY_READ
+                        | DEMO_REGISTRY_WRITE
+                        | DEMO_REGISTRY_ERASE
+                        | DEMO_FILE_EXISTS
+                        | DEMO_FILE_READ
+                        | DEMO_FILE_WRITE
+                        | DEMO_SYNC
+                        | DEMO_ASSERT_STRING_EQUAL
+                        | DEMO_ASSERT_INT_EQUAL => {
+                            // 跨 tick 仍未被游戏逻辑认领 ⇒ 回放已经跑偏
+                            if self.m_demo_command_queued && self.m_update_count != self.m_demo_queued_since {
+                                self.shutdown();
+                                return;
+                            }
+                            self.m_demo_queued_since = self.m_update_count;
+                            self.m_demo_command_queued = true;
+                            // 回退读取游标，把命令留给游戏逻辑的调用点去消费
+                            self.m_demo_buffer.read_bit_pos = self.m_demo_cmd_bit_pos;
+                            self.m_last_demo_update_cnt = self.m_demo_cmd_update_cnt;
+                            self.m_demo_needs_command = true;
+                            return;
+                        }
+                        // C++: default: DBG_ASSERTE("Invalid Demo Command" == 0); break;
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// 对应 C++ `IsStampedDemoFileName()`（SexyAppBase.cpp:599-614）
+///
+/// 匹配保留的自动命名模式：`theDemoPrefix + "-YYYYMMDD-HHMMSS[-N].dmo"`。
+fn is_stamped_demo_file_name(the_demo_prefix: &str, the_name: &str) -> bool {
+    let a_prefix = the_demo_prefix.as_bytes();
+    let a_name = the_name.as_bytes();
+    let a_stamp_len = a_prefix.len() + 16; // "-YYYYMMDD-HHMMSS"
+
+    if a_name.len() < a_stamp_len + 4
+        || !a_name.starts_with(a_prefix)
+        || !a_name.ends_with(b".dmo")
+    {
+        return false;
+    }
+
+    let a_digits = |s: &[u8]| !s.is_empty() && s.iter().all(|c| c.is_ascii_digit());
+
+    let a_stamp = &a_name[a_prefix.len()..a_prefix.len() + 16];
+    if a_stamp[0] != b'-' || a_stamp[9] != b'-' || !a_digits(&a_stamp[1..9]) || !a_digits(&a_stamp[10..16]) {
+        return false;
+    }
+
+    let a_suffix = &a_name[a_stamp_len..a_name.len() - 4];
+    a_suffix.is_empty() || (a_suffix[0] == b'-' && a_digits(&a_suffix[1..]))
+}
+
+/// 对应 C++ `FindDemoFiles()`（SexyAppBase.cpp:616-639）
+///
+/// 按「时间戳降序 → 名称更长（带后缀）优先 → 字典序」排序。
+fn find_demo_files(the_demo_prefix: &str, the_stamped_only: bool) -> Vec<String> {
+    let mut a_files: Vec<String> = Vec::new();
+
+    let a_filter = format!("{}-", the_demo_prefix);
+    if let Ok(a_entries) = std::fs::read_dir(".") {
+        for an_entry in a_entries.flatten() {
+            let a_path = an_entry.path();
+            if !a_path.is_file() {
+                continue;
+            }
+            let a_name = match a_path.file_name() {
+                Some(n) => n.to_string_lossy().to_string(),
+                None => continue,
+            };
+            if a_name.starts_with(&a_filter)
+                && a_name.ends_with(".dmo")
+                && (!the_stamped_only || is_stamped_demo_file_name(the_demo_prefix, &a_name))
+            {
+                a_files.push(a_name);
+            }
+        }
+    }
+
+    let a_stamp_len = the_demo_prefix.len() + 16; // "-YYYYMMDD-HHMMSS"
+    let a_key = |s: &str| -> (Vec<u8>, usize, String) {
+        let b = s.as_bytes();
+        let a_stamp: Vec<u8> = if b.len() >= a_stamp_len {
+            b[..a_stamp_len].to_vec()
+        } else {
+            b.to_vec()
+        };
+        (a_stamp, b.len(), s.to_string())
+    };
+
+    // C++ 按 aKeyOf(a) > aKeyOf(b) 排序（降序）
+    a_files.sort_by(|a, b| a_key(b).cmp(&a_key(a)));
+
+    a_files
 }
 
 // ---- DialogListener / ButtonListener 实现 ----

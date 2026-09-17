@@ -363,6 +363,18 @@ impl Widget {
         }
     }
 
+    /// 文本输入。
+    ///
+    /// 对应 C++ `Widget::KeyText`（Widget.cpp:240-245）：旧式控件通过 `KeyChar` 收到 ASCII，
+    /// 非 ASCII 需要子类覆写。
+    pub fn key_text(&mut self, the_text: &str) {
+        for &a_char in the_text.as_bytes() {
+            if a_char >= 32 && a_char < 128 {
+                self.key_char(a_char);
+            }
+        }
+    }
+
     pub fn key_down(&mut self, the_key: KeyCode, wm: &mut WidgetManager) {
         if the_key == KEYCODE_TAB {
             let shift_idx = KEYCODE_SHIFT as usize;

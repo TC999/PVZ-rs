@@ -65,6 +65,9 @@ pub struct WidgetManager {
     pub mouse_dest_rect: Rect,
     pub mouse_src_rect: Rect,
 
+    /// 对应 C++ mHasFocus（GotFocus/LostFocus 维护）
+    pub m_has_focus: bool,
+
     // 更新计数
     pub update_cnt: i32,
 }
@@ -96,6 +99,7 @@ impl WidgetManager {
             widget_manager_rect: Rect::ZERO,
             mouse_dest_rect: Rect::ZERO,
             mouse_src_rect: Rect::ZERO,
+            m_has_focus: false,
             update_cnt: 0,
         }
     }
@@ -432,6 +436,105 @@ impl WidgetManager {
     pub fn key_char(&mut self, c: u8) -> bool {
         if let Some(w) = self.focus_widget { unsafe { (*w).key_char(c); } return true; }
         false
+    }
+
+    /// 文本输入（对应 C++ WidgetManager::KeyText，WidgetManager.cpp:763-769）
+    pub fn key_text(&mut self, the_text: &str) -> bool {
+        if let Some(w) = self.focus_widget { unsafe { (*w).key_text(the_text); } }
+        true
+    }
+
+    /// 鼠标移出（对应 C++ WidgetManager::MouseExit，WidgetManager.cpp:721-733）
+    pub fn mouse_exit(&mut self, x: i32, y: i32) -> bool {
+        let _ = (x, y);
+
+        self.mouse_in = false;
+
+        if let Some(w) = self.over_widget {
+            unsafe { (*w).mouse_leave(); }
+            self.over_widget = None;
+        }
+
+        true
+    }
+
+    /// 标记全部控件为脏。
+    ///
+    /// 对应 C++ `WidgetContainer::MarkAllDirty`（WidgetContainer.cpp:212）——
+    /// C++ 中 WidgetManager 继承自 WidgetContainer，故 `mWidgetManager->MarkAllDirty()` 可用。
+    pub fn mark_all_dirty(&mut self) {
+        let a_list = self.widget_list.clone();
+        for w in a_list {
+            unsafe { (*w).mark_all_dirty(); }
+        }
+    }
+
+    /// 对应 C++ `WidgetManager::RemapMouse`（WidgetManager.cpp:215-219）
+    pub fn remap_mouse(&self, x: i32, y: i32) -> (i32, i32) {
+        let a_x = (x - self.mouse_src_rect.x) * self.mouse_dest_rect.width / self.mouse_src_rect.width
+            + self.mouse_dest_rect.x;
+        let a_y = (y - self.mouse_src_rect.y) * self.mouse_dest_rect.height / self.mouse_src_rect.height
+            + self.mouse_dest_rect.y;
+        (a_x, a_y)
+    }
+
+    /// 对应 C++ `WidgetManager::DoMouseUps(Widget*, ulong)`（WidgetManager.cpp:202-213）
+    fn do_mouse_ups_widget(&mut self, the_widget: *mut Widget, the_down_code: i32) {
+        const A_CLICK_COUNT_TABLE: [i32; 3] = [1, -1, 3];
+
+        for i in 0..3 {
+            if (the_down_code & (1 << i)) != 0 {
+                unsafe {
+                    (*the_widget).is_down = false;
+                    (*the_widget).mouse_up_ext(
+                        self.last_mouse_x - (*the_widget).x,
+                        self.last_mouse_y - (*the_widget).y,
+                        A_CLICK_COUNT_TABLE[i],
+                    );
+                }
+            }
+        }
+    }
+
+    /// 对应 C++ `WidgetManager::DoMouseUps()`（WidgetManager.cpp:139-147）
+    pub fn do_mouse_ups(&mut self) {
+        if self.last_down_widget.is_some() && self.m_down_buttons != 0 {
+            let a_widget = self.last_down_widget.unwrap();
+            let a_down_buttons = self.m_down_buttons;
+            self.do_mouse_ups_widget(a_widget, a_down_buttons);
+            self.m_down_buttons = 0;
+            self.last_down_widget = None;
+        }
+    }
+
+    /// 对应 C++ `WidgetManager::GotFocus()`（WidgetManager.cpp:357-366）
+    pub fn got_focus(&mut self) {
+        if !self.m_has_focus {
+            self.m_has_focus = true;
+
+            if let Some(w) = self.focus_widget {
+                unsafe { (*w).got_focus(); }
+            }
+        }
+    }
+
+    /// 对应 C++ `WidgetManager::LostFocus()`（WidgetManager.cpp:368-384）
+    pub fn lost_focus(&mut self) {
+        if self.m_has_focus {
+            self.m_actual_down_buttons = 0;
+
+            for a_key_num in 0..0xFFi32 {
+                if self.key_down.get(a_key_num as usize).copied().unwrap_or(false) {
+                    self.key_up(a_key_num);
+                }
+            }
+
+            self.m_has_focus = false;
+
+            if let Some(w) = self.focus_widget {
+                unsafe { (*w).lost_focus(); }
+            }
+        }
     }
 
     /// 调整大小
