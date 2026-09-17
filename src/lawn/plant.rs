@@ -4123,8 +4123,14 @@ impl Plant {
                 if !plant.not_on_ground() && plant.seed_type == SeedType::GoldMagnet
                     && plant.state == PlantState::MagnetshroomSucking
                 {
-                    // [TRANSLATION_NOTE]: C++ 检查 aBodyReanim->mAnimTime < 0.5f — reanim 未接入
-                    return true;
+                    // 对应 C++ Plant.cpp:2226-2230：aBodyReanim->mAnimTime < 0.5f
+                    if let Some(app) = self.base.get_app() {
+                        if let Some(a_body_reanim) = app.reanimation_get(plant.body_reanim_id) {
+                            if a_body_reanim.m_anim_time < 0.5 {
+                                return true;
+                            }
+                        }
+                    }
                 }
             }
         }
