@@ -366,11 +366,17 @@ impl GridItem {
             GridItemType::ZenTool => {}
             GridItemType::Rake => {}
             // C++: g->DrawImageF(IMAGE_BRAIN, mPosX, mPosY)
-            GridItemType::Brain => self.draw_i_zombie_brain(g),
+            GridItemType::Brain => {
+                if let Some(img) = self.get_grid_image("brain") {
+                    g.draw_image_f_xy(img, self.pos_x, self.pos_y);
+                }
+            }
             GridItemType::ScaryPot => self.draw_scary_pot(g),
             // C++ 注释：松鼠在原版中不可见
             GridItemType::Squirrel => {}
             GridItemType::Stinky => self.draw_stinky(g),
+            // C++: DrawIZombieBrain(g)（带闪烁/透明/压扁状态的复杂绘制）
+            GridItemType::IZombieBrain => self.draw_i_zombie_brain(g),
             _ => {}
         }
 

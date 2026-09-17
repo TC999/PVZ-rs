@@ -434,8 +434,13 @@ impl LawnApp {
         }
     }
 
-    /// 更新应用单步（对应 C++ UpdateAppStep）
+    /// 更新应用单步（对应 C++ LawnApp::UpdateAppStep，LawnApp.cpp:2266-2274）
     pub fn update_app_step(&mut self, _updated: Option<&mut bool>) -> bool {
+        // C++: if (mCloseRequest) { Shutdown(); return false; }
+        if self.m_close_request {
+            self.base.shutdown();
+            return false;
+        }
         self.update_frames();
         true
     }
@@ -2272,6 +2277,78 @@ impl LawnApp {
             G_FAST_MO = !G_FAST_MO;
         }
     }
+    /// 窗口获得焦点（对应 C++ LawnApp::GotFocus，LawnApp.cpp:387-389，C++ 为空实现）
+    pub fn got_focus(&mut self) {
+    }
+
+    /// 窗口失去焦点（对应 C++ LawnApp::LostFocus，LawnApp.cpp:391-399）
+    /// C++ 仅在 Android/iOS 平台弹出暂停对话框；桌面平台为空实现
+    pub fn lost_focus(&mut self) {
+        // [TRANSLATION_NOTE]: C++ 的 #if (__ANDROID__ || __IPHONEOS__) 分支调用
+        // DoPauseDialog()；Rust 目标为桌面平台，同 C++ 桌面分支保持空实现
+    }
+
+    /// 模态对话框打开（对应 C++ LawnApp::ModalOpen，LawnApp.cpp:1163-1169）
+    pub fn modal_open(&mut self) {
+        if self.board.is_some() && self.need_pause_game() {
+            unsafe { (*self.board.unwrap()).pause(true); }
+        }
+    }
+
+    /// 初始化钩子（对应 C++ LawnApp::InitHook，LawnApp.cpp:3192-3195）
+    pub fn init_hook(&mut self) {
+        self.m_trial_type = TrialType::None;
+    }
+
+    /// 游戏时长统计（对应 C++ LawnApp::UpdatePlayTimeStats，LawnApp.cpp:1560-1611）
+    pub fn update_play_time_stats(&mut self) {
+        // C++ 中 aLastTime 为函数内 static 局部变量（毫秒级 SDL_GetTicks）；
+        // Rust 用函数内 static 近似，时间源为 UNIX 毫秒时间戳
+        static mut A_LAST_TIME: i64 = -1;
+        let a_tick_count = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_millis() as i64);
+        let a_session = ((a_tick_count - unsafe { A_LAST_TIME }) / 1000) as i32;
+
+        // C++: if (mPlayerInfo && !mPlayerInfo->mHasUsedCheatKeys && !mDebugKeysEnabled && mCheatKeys)
+        if let Some(player_info) = self.player_info.as_mut() {
+            if !player_info.m_has_used_cheat_keys && !self.m_debug_keys_enabled && self.m_cheat_keys_used {
+                player_info.m_has_used_cheat_keys = true;
+            }
+        }
+
+        if unsafe { A_LAST_TIME } == -1 {
+            unsafe { A_LAST_TIME = a_tick_count; }
+            return;
+        }
+
+        if a_session > 0 {
+            unsafe { A_LAST_TIME = a_tick_count; }
+
+            // C++: (mBoard == nullptr || !mBoard->mPaused) && mHasFocus && mLastTimerTime - mLastUserInputTick <= 10000
+            // [TRANSLATION_NOTE]: Rust 无 mHasFocus/mLastTimerTime/mLastUserInputTick 字段，
+            // 以「Board 未暂停」作为活跃判定（mHasFocus 恒真近似）
+            let a_is_active = self.board.map_or(true, |b| unsafe { !(*b).m_paused });
+            if a_is_active {
+                self.m_play_time_active_session += a_session;
+                if let Some(board_ptr) = self.board {
+                    unsafe { (*board_ptr).m_play_time_active_level += a_session as u32; }
+                }
+                if let Some(player_info) = self.player_info.as_mut() {
+                    player_info.m_play_time_active_player += a_session as u32;
+                }
+            } else {
+                self.m_play_time_inactive_session += a_session;
+                if let Some(board_ptr) = self.board {
+                    unsafe { (*board_ptr).m_play_time_inactive_level += a_session as u32; }
+                }
+                if let Some(player_info) = self.player_info.as_mut() {
+                    player_info.m_play_time_inactive_player += a_session as u32;
+                }
+            }
+        }
+    }
+
     pub fn need_pause_game(&self) -> bool { false }
     pub fn need_register(&self) -> bool { false }
 
@@ -2303,15 +2380,191 @@ impl LawnApp {
         false
     }
 
-    /// 关闭模式对话框（对应 C++ ModalClose）
+    /// 关闭模式对话框（对应 C++ LawnApp::ModalClose，LawnApp.cpp:1171-1177）
     /// 恢复游戏暂停状态
     pub fn modal_close(&mut self) {
-        if let Some(board) = self.board.as_mut() {
-            unsafe {
-                // C++: mBoard->Pause(false);
-                let _ = &**board;
+        if self.board.is_some() && !self.need_pause_game() {
+            unsafe { (*self.board.unwrap()).pause(false); }
+        }
+    }
+
+    /// 确认返回主菜单对话框（对应 C++ LawnApp::DoConfirmBackToMain，LawnApp.cpp:686-701）
+    pub fn do_confirm_back_to_main(&mut self) {
+        self.do_dialog(
+            Dialogs::ConfirmBackToMain as i32,
+            true,
+            "Leave Game?",
+            "Do you want to return\nto the main menu?\n\nYour game will be saved.",
+            "",
+            crate::framework::widget::dialog::BUTTONS_YES_NO,
+        );
+        // [TRANSLATION_NOTE]: C++ 中 aDialog->mLawnYesButton->mLabel = PvzpStringTranslate("[LEAVE_BUTTON]")、
+        // aDialog->mLawnNoButton->mLabel = PvzpStringTranslate("[DIALOG_BUTTON_CANCEL]")；Rust Dialog 无按钮标签
+        // 字段，按钮文本由 do_dialog 的 footer/按钮模式驱动，标签定制暂略。
+    }
+
+    /// 确认出售对话框（对应 C++ LawnApp::DoConfirmSellDialog，LawnApp.cpp:1098-1101）
+    pub fn do_confirm_sell_dialog(&mut self, the_message: &str) {
+        self.do_dialog(
+            Dialogs::ZenSell as i32,
+            true,
+            "[ZEN_SELL_HEADER]",
+            the_message,
+            "",
+            crate::framework::widget::dialog::BUTTONS_YES_NO,
+        );
+    }
+
+    /// 通用消息框（对应 C++ LawnApp::LawnMessageBox，LawnApp.cpp:775-795）
+    pub fn lawn_message_box(&mut self, the_dialog_id: Dialogs, the_header_name: &str, the_lines_name: &str, the_button1_name: &str, _the_button2_name: &str, the_button_mode: i32) -> i32 {
+        // [TRANSLATION_NOTE]: C++ 中 mWidgetManager->SetFocus(aDialog)/SetFocus(aOldFocus) 与
+        // aDialog->mLawnYesButton/mLawnNoButton 标签设置依赖 widget 焦点系统与 LawnDialog 按钮字段，
+        // Rust 侧未接入；按钮1文本经 do_dialog 的 footer 参数传入（同 C++ DoDialog 的 theDialogFooter）。
+        let a_dialog = self.do_dialog(
+            the_dialog_id as i32,
+            true,
+            the_header_name,
+            the_lines_name,
+            the_button1_name,
+            the_button_mode,
+        );
+        if let Some(d) = a_dialog {
+            unsafe { (*d).wait_for_result(true) }
+        } else {
+            0x7FFFFFFF
+        }
+    }
+
+    /// 执行注册（对应 C++ LawnApp::DoRegister，LawnApp.cpp:3305-3308，C++ 为空实现）
+    pub fn do_register(&mut self) {
+    }
+
+    /// 注册错误（对应 C++ LawnApp::DoRegisterError，LawnApp.cpp:3310-3313，C++ 为空实现）
+    pub fn do_register_error(&mut self) {
+    }
+
+    /// 需要注册对话框（对应 C++ LawnApp::DoNeedRegisterDialog，LawnApp.cpp:3320-3323，C++ 为空实现）
+    pub fn do_need_register_dialog(&mut self) {
+    }
+
+    /// Zombatar 服务条款对话框（对应 C++ LawnApp::ShowZombatarTOS，LawnApp.cpp:713-719）
+    pub fn show_zombatar_tos(&mut self) {
+        // C++: ZombatarTOS* aDialog = new ZombatarTOS(this); CenterDialog(aDialog, mWidth, mHeight);
+        //      AddDialog(DIALOG_ZOMBATAR_TOS, aDialog); mWidgetManager->SetFocus(aDialog)
+        // [TRANSLATION_NOTE]: ZombatarTOS 为独立 widget 类，Rust 的 dialog_map 仅接受 framework Dialog 且
+        // widget_manager 焦点系统未接入；此处构造并居中后由 Box 持有至函数结束（控件交互链待 widget 系统接入）。
+        let mut a_dialog = Box::new(crate::lawn::widget::zombatar_tos::ZombatarTOS::new(Some(self as *mut LawnApp)));
+        a_dialog.x = (BOARD_WIDTH - a_dialog.width) / 2;
+        a_dialog.y = (BOARD_HEIGHT - a_dialog.height) / 2;
+        let _ = a_dialog;
+    }
+
+    /// 显示前钩子（对应 C++ LawnApp::PreDisplayHook，LawnApp.cpp:1848-1851）
+    pub fn pre_display_hook(&mut self) {
+        self.base.pre_display_hook();
+    }
+
+    /// 加载完成回调（对应 C++ LawnApp::LoadingThreadCompleted，LawnApp.cpp:1788-1790，C++ 为空实现）
+    pub fn loading_thread_completed(&mut self) {
+    }
+
+    /// 命令行参数处理（对应 C++ LawnApp::HandleCmdLineParam，LawnApp.cpp:1341-1354）
+    pub fn handle_cmd_line_param(&mut self, the_param_name: &str, the_param_value: &str) {
+        if the_param_name == "-cheat" {
+            // C++ 中 mCheatKeys/mDebugKeysEnabled 仅在 PVZ_DEBUG 下设置；Rust 以 debug_assertions 对应
+            #[cfg(debug_assertions)]
+            {
+                self.m_cheat_keys_used = true;
+                self.m_debug_keys_enabled = true;
+            }
+        } else {
+            // C++: SexyApp::HandleCmdLineParam（基类处理其余参数）；Rust 基类无对应实现，忽略
+            let _ = the_param_value;
+        }
+    }
+
+    /// 应用更新（对应 C++ LawnApp::UpdateApp，LawnApp.cpp:2276-2297）
+    pub fn update_app(&mut self) -> bool {
+        if self.m_close_request {
+            self.base.shutdown();
+            return false;
+        }
+        self.base.update_app()
+    }
+
+    /// 用户资源预加载（对应 C++ LawnApp::PreloadForUser，LawnApp.cpp:3047-3135）
+    pub fn preload_for_user(&mut self) {
+        // C++: int aNumTasks = mCompletedLoadingThreadTasks + GetNumPreloadingTasks();
+        let a_num_tasks = self.m_loading_thread_tasks_completed + self.get_num_preloading_tasks();
+        // [TRANSLATION_NOTE]: C++ 中 mTitleScreen->mQuickLoadKey 快速加载取消检测依赖 TitleScreen
+        // widget，Rust 侧未接入；LOW_MEMORY 条件编译分支未建模（按非 LOW_MEMORY 路径实现）。
+        use crate::todlib::reanim_loader::reanimator_ensure_definition_loaded;
+        reanimator_ensure_definition_loaded(ReanimationType::Puff);
+        self.m_loading_thread_tasks_completed += 68;
+        reanimator_ensure_definition_loaded(ReanimationType::LawnMoweredZombie);
+        self.m_loading_thread_tasks_completed += 68;
+        reanimator_ensure_definition_loaded(ReanimationType::Readysetplant);
+        self.m_loading_thread_tasks_completed += 68;
+        reanimator_ensure_definition_loaded(ReanimationType::FinalWave);
+        self.m_loading_thread_tasks_completed += 68;
+        reanimator_ensure_definition_loaded(ReanimationType::Sun);
+        self.m_loading_thread_tasks_completed += 68;
+        reanimator_ensure_definition_loaded(ReanimationType::TextFadeOn);
+        self.m_loading_thread_tasks_completed += 68;
+        reanimator_ensure_definition_loaded(ReanimationType::Zombie);
+        self.m_loading_thread_tasks_completed += 68;
+        reanimator_ensure_definition_loaded(ReanimationType::ZombieNewspaper);
+        self.m_loading_thread_tasks_completed += 68;
+        reanimator_ensure_definition_loaded(ReanimationType::SelectorScreen);
+        self.m_loading_thread_tasks_completed += 340;
+        reanimator_ensure_definition_loaded(ReanimationType::ZombieHand);
+        self.m_loading_thread_tasks_completed += 68;
+
+        if self.player_info.is_some() {
+            // C++: for (SeedType i = SEED_PEASHOOTER; i < NUM_SEED_TYPES; i++)
+            for i in 0..crate::lawn::game_enums::NUM_SEED_TYPES as i32 {
+                let a_seed = unsafe { std::mem::transmute::<i32, SeedType>(i) };
+                if self.has_seed_type(a_seed) || self.has_finished_adventure() {
+                    crate::lawn::plant::Plant::preload_plant_resources(a_seed);
+                    if self.m_loading_thread_tasks_completed < a_num_tasks {
+                        self.m_loading_thread_tasks_completed += 68;
+                    }
+                    // C++: if (mShutdown || mCloseRequest) return;
+                    if self.m_close_request {
+                        return;
+                    }
+                }
             }
         }
+
+        // C++: for (ZombieType i = ZOMBIE_NORMAL; i < NUM_ZOMBIE_TYPES; i++)
+        for i in 0..crate::lawn::game_enums::NUM_ZOMBIE_TYPES {
+            let a_ztype = unsafe { std::mem::transmute::<i32, ZombieType>(i) };
+            if !self.has_finished_adventure()
+                && self.player_info.as_ref().map_or(0, |p| p.m_level)
+                    < crate::lawn::zombie::get_zombie_definition(a_ztype).starting_level
+            {
+                continue;
+            }
+            if a_ztype == ZombieType::Boss
+                || a_ztype == ZombieType::Catapult
+                || a_ztype == ZombieType::Gargantuar
+                || a_ztype == ZombieType::Digger
+                || a_ztype == ZombieType::Zamboni
+            {
+                continue;
+            }
+            crate::lawn::zombie::Zombie::preload_zombie_resources(a_ztype);
+            if self.m_loading_thread_tasks_completed < a_num_tasks {
+                self.m_loading_thread_tasks_completed += 68;
+            }
+            // C++: if (mShutdown || mCloseRequest) return;
+            if self.m_close_request {
+                return;
+            }
+        }
+        // C++: mCompletedLoadingThreadTasks = aNumTasks;
+        self.m_loading_thread_tasks_completed = a_num_tasks;
     }
 
     /// 异步关闭请求（对应 C++ CloseRequestAsync）

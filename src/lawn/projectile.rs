@@ -466,8 +466,17 @@ impl Projectile {
                 // [TRANSLATION_NOTE]: C++ 中 mGargantuarsKillsByCornCob 累计与 PopcornParty 成就，Rust 字段暂无
                 let _gargantuars_killed = a_before_gargantuar_count - a_after_gargantuar_count;
             }
-            // 对应 C++ DoImpact(nullptr) COBBIG 分支：BLASTMARK/POPCORNSPLASH 粒子（stub）
-            // + PlaySample(SOUND_DOOMSHROOM)（Rust 音效系统用 FoleyType::Explosion 近似）+ ShakeBoard(3, -4)
+            // 对应 C++ DoImpact(nullptr) COBBIG 分支（Projectile.cpp:855-861）：
+            // BLASTMARK/POPCORNSPLASH 粒子 + PlaySample(SOUND_DOOMSHROOM) + ShakeBoard(3, -4)
+            let a_render_order = crate::lawn::board::make_render_order(RENDER_LAYER_GROUND, self.cob_target_row, 2);
+            let a_particle_x = self.pos_x + 80.0;
+            let a_particle_y = self.pos_y + 40.0;
+            let a_projectile_render_order = self.base.render_order + 1;
+            if let Some(app) = self.base.get_app_mut() {
+                app.add_tod_particle(a_particle_x, a_particle_y, a_render_order, ParticleEffect::Blastmark as i32);
+                app.add_tod_particle(a_particle_x, a_particle_y, a_projectile_render_order, ParticleEffect::Popcornsplash as i32);
+            }
+            // PlaySample(SOUND_DOOMSHROOM)（Rust 音效系统用 FoleyType::Explosion 近似）
             if let Some(app) = self.base.get_app() {
                 app.play_foley(crate::todlib::tod_foley::FoleyType::Explosion as i32);
             }

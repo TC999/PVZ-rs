@@ -3757,44 +3757,114 @@ impl Plant {
             Some(i) => i,
             None => return,
         };
-        let a_magnet_item = &mut self.magnet_items[a_magnet_idx];
-        a_magnet_item.pos_x = z_pos_x;
-        a_magnet_item.pos_y = z_pos_y;
-        a_magnet_item.dest_offset_x = -10.0 + RandFloat(20.0) + 25.0;  // RandRangeFloat(-10,10) + 25
-        a_magnet_item.dest_offset_y = -10.0 + RandFloat(20.0) + 20.0;  // RandRangeFloat(-10,10) + 20
 
-        if helm_type == HelmType::Pail {
-            // MAGNET_ITEM_PAIL_1 + mDamageIndex
-            a_magnet_item.item_type = match helm_damage_idx {
-                0 => MagnetItemType::Pail1,
-                1 => MagnetItemType::Pail2,
-                _ => MagnetItemType::Pail3,
+        // 对应 C++ MagnetShroomAttactItem 各分支（Plant.cpp:1857-1967）：
+        // GetTrackPosition 轨道定位 + 各分支目标偏移与物品类型。
+        // [TRANSLATION_NOTE]: C++ 各分支还会减去 IMAGE_REANIM_* 宽高的一半做居中，
+        // 该图片尺寸表依赖 reanim 资源系统，Rust 未接入，保留轨道位置与偏移。
+        let track_pos = |track: &str| -> (f32, f32) {
+            self.base
+                .get_board()
+                .and_then(|b| b.zombies.get(zombie_idx))
+                .map_or((z_pos_x, z_pos_y), |z| z.get_track_position(track))
+        };
+
+        let (a_item_x, a_item_y, a_dest_offset_x, a_dest_offset_y, a_item_type): (f32, f32, f32, f32, MagnetItemType) =
+            if helm_type == HelmType::Pail {
+                // C++: GetTrackPosition("anim_bucket")；mDestOffsetX/Y = RandRangeFloat(-10,10) + 25/20
+                let (x, y) = track_pos("anim_bucket");
+                (
+                    x,
+                    y,
+                    -10.0 + RandFloat(20.0) + 25.0,
+                    -10.0 + RandFloat(20.0) + 20.0,
+                    match helm_damage_idx {
+                        0 => MagnetItemType::Pail1,
+                        1 => MagnetItemType::Pail2,
+                        _ => MagnetItemType::Pail3,
+                    },
+                )
+            } else if helm_type == HelmType::FootballHelmet {
+                // C++: GetTrackPosition("zombie_football_helmet")；mPosX += 37.0f；mPosY -= 60.0f
+                let (x, y) = track_pos("zombie_football_helmet");
+                (
+                    x + 37.0,
+                    y - 60.0,
+                    -10.0 + RandFloat(20.0) + 20.0,
+                    -10.0 + RandFloat(20.0) + 20.0,
+                    match helm_damage_idx {
+                        0 => MagnetItemType::FootballHelmet1,
+                        1 => MagnetItemType::FootballHelmet2,
+                        _ => MagnetItemType::FootballHelmet3,
+                    },
+                )
+            } else if shield_type == ShieldType::Door {
+                // C++: GetTrackPosition("anim_screendoor")；mDestOffsetX/Y = RandRangeFloat(-10,10) + 30/0
+                let (x, y) = track_pos("anim_screendoor");
+                (
+                    x,
+                    y,
+                    -10.0 + RandFloat(20.0) + 30.0,
+                    -10.0 + RandFloat(20.0),
+                    match shield_damage_idx {
+                        0 => MagnetItemType::Door1,
+                        1 => MagnetItemType::Door2,
+                        _ => MagnetItemType::Door3,
+                    },
+                )
+            } else if shield_type == ShieldType::Ladder {
+                // C++: mPosX = theZombie->mPosX + 31.0f；mPosY = theZombie->mPosY + 20.0f
+                (
+                    z_pos_x + 31.0,
+                    z_pos_y + 20.0,
+                    -10.0 + RandFloat(20.0) + 30.0,
+                    -10.0 + RandFloat(20.0),
+                    match shield_damage_idx {
+                        0 => MagnetItemType::Ladder1,
+                        1 => MagnetItemType::Ladder2,
+                        _ => MagnetItemType::Ladder3,
+                    },
+                )
+            } else if zombie_type == ZombieType::Pogo {
+                // C++: GetTrackPosition("Zombie_pogo_stick")；mPosX += 40.0f；mPosY += 84.0f
+                let (x, y) = track_pos("Zombie_pogo_stick");
+                (
+                    x + 40.0,
+                    y + 84.0,
+                    -10.0 + RandFloat(20.0) + 30.0,
+                    -10.0 + RandFloat(20.0),
+                    if has_arm { MagnetItemType::Pogo1 } else { MagnetItemType::Pogo3 },
+                )
+            } else if zombie_phase == ZombiePhase::JackInTheBoxRunning {
+                // C++: GetTrackPosition("Zombie_jackbox_box")；mDestOffsetX/Y = RandRangeFloat(-10,10) + 20/15
+                let (x, y) = track_pos("Zombie_jackbox_box");
+                (
+                    x,
+                    y,
+                    -10.0 + RandFloat(20.0) + 20.0,
+                    -10.0 + RandFloat(20.0) + 15.0,
+                    MagnetItemType::JackInTheBox,
+                )
+            } else if zombie_type == ZombieType::Digger {
+                // C++: GetTrackPosition("Zombie_digger_pickaxe")；mDestOffsetX/Y = RandRangeFloat(-10,10) + 45/15
+                let (x, y) = track_pos("Zombie_digger_pickaxe");
+                (
+                    x,
+                    y,
+                    -10.0 + RandFloat(20.0) + 45.0,
+                    -10.0 + RandFloat(20.0) + 15.0,
+                    MagnetItemType::PickAxe,
+                )
+            } else {
+                (z_pos_x, z_pos_y, -10.0 + RandFloat(20.0) + 25.0, -10.0 + RandFloat(20.0) + 20.0, MagnetItemType::None)
             };
-        } else if helm_type == HelmType::FootballHelmet {
-            a_magnet_item.item_type = match helm_damage_idx {
-                0 => MagnetItemType::FootballHelmet1,
-                1 => MagnetItemType::FootballHelmet2,
-                _ => MagnetItemType::FootballHelmet3,
-            };
-        } else if shield_type == ShieldType::Door {
-            a_magnet_item.item_type = match shield_damage_idx {
-                0 => MagnetItemType::Door1,
-                1 => MagnetItemType::Door2,
-                _ => MagnetItemType::Door3,
-            };
-        } else if shield_type == ShieldType::Ladder {
-            a_magnet_item.item_type = match shield_damage_idx {
-                0 => MagnetItemType::Ladder1,
-                1 => MagnetItemType::Ladder2,
-                _ => MagnetItemType::Ladder3,
-            };
-        } else if zombie_type == ZombieType::Pogo {
-            a_magnet_item.item_type = if has_arm { MagnetItemType::Pogo1 } else { MagnetItemType::Pogo3 };
-        } else if zombie_phase == ZombiePhase::JackInTheBoxRunning {
-            a_magnet_item.item_type = MagnetItemType::JackInTheBox;
-        } else if zombie_type == ZombieType::Digger {
-            a_magnet_item.item_type = MagnetItemType::PickAxe;
-        }
+
+        let a_magnet_item = &mut self.magnet_items[a_magnet_idx];
+        a_magnet_item.pos_x = a_item_x;
+        a_magnet_item.pos_y = a_item_y;
+        a_magnet_item.dest_offset_x = a_dest_offset_x;
+        a_magnet_item.dest_offset_y = a_dest_offset_y;
+        a_magnet_item.item_type = a_item_type;
 
         // 第二步：修改僵尸（头盔/盾牌/相位）
         if let Some(board) = self.base.get_board_mut() {
@@ -3958,20 +4028,27 @@ impl Plant {
                 if let Some(app) = self.base.get_app() {
                     app.play_foley(crate::todlib::tod_foley::FoleyType::Magnetshroom as i32);
                 }
-                if let Some(board) = self.base.get_board_mut() {
-                    board.grid_items[grid_idx].grid_item_die();
-                    // [TRANSLATION_NOTE]: mPosX/Y 用 GridToPixelX/Y + 40 — 简化为植物坐标
-                    let a_magnet_idx = match self.get_free_magnet_item_idx() {
-                        Some(i) => i,
-                        None => return,
+                // 对应 C++ Plant.cpp:2148-2155：GridItemDie → GetFreeMagnetItem →
+                // GridToPixelX/Y(aClosestLadder->mGridX, aClosestLadder->mGridY)（借用规避：board 借用限定在坐标提取块内）
+                let (a_ladder_grid_x, a_ladder_grid_y, a_pixel_x, a_pixel_y) =
+                    if let Some(board) = self.base.get_board_mut() {
+                        let gi = &board.grid_items[grid_idx];
+                        let (gx, gy) = (gi.grid_x, gi.grid_y);
+                        board.grid_items[grid_idx].grid_item_die();
+                        (gx, gy, board.grid_to_pixel_x(gx, gy), board.grid_to_pixel_y(gx, gy))
+                    } else {
+                        return;
                     };
-                    let item = &mut self.magnet_items[a_magnet_idx];
-                    item.pos_x = self.base.x as f32 + 40.0;
-                    item.pos_y = self.base.y as f32;
-                    item.dest_offset_x = -10.0 + RandFloat(20.0) + 10.0;
-                    item.dest_offset_y = -10.0 + RandFloat(20.0);
-                    item.item_type = MagnetItemType::LadderPlaced;
-                }
+                let a_magnet_idx = match self.get_free_magnet_item_idx() {
+                    Some(i) => i,
+                    None => return,
+                };
+                let item = &mut self.magnet_items[a_magnet_idx];
+                item.pos_x = a_pixel_x as f32 + 40.0;
+                item.pos_y = a_pixel_y as f32;
+                item.dest_offset_x = -10.0 + RandFloat(20.0) + 10.0;
+                item.dest_offset_y = -10.0 + RandFloat(20.0);
+                item.item_type = MagnetItemType::LadderPlaced;
             }
         }
     }

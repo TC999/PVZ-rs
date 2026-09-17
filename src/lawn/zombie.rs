@@ -1039,6 +1039,43 @@ impl Zombie {
     fn update_playing(&mut self) {
         self.groan_counter -= 1;
 
+        // 呻吟音效（对应 C++ Zombie::UpdatePlaying 开头，Zombie.cpp:4576-4608）
+        let a_zombies_count = self.base.get_board().map_or(0, |b| b.zombies.len() as i32);
+        let a_level_award_dropped = self.base.get_board().map_or(true, |b| b.has_level_award_dropped());
+        if self.groan_counter == 0
+            && crate::framework::common::rand_range(a_zombies_count) == 0
+            && self.has_head
+            && self.zombie_type != ZombieType::Boss
+            && !a_level_award_dropped
+        {
+            let mut a_pitch = 0.0f32;
+            if let Some(app) = self.base.get_app() {
+                if app.is_little_trouble_level() {
+                    a_pitch = crate::todlib::tod_common::rand_range_float(40.0, 50.0);
+                }
+            }
+
+            if self.zombie_type == ZombieType::Gargantuar {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::LowGroan as i32);
+                }
+            } else if self.variant {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley_pitch(crate::todlib::tod_foley::FoleyType::Brains as i32, a_pitch);
+                }
+            } else if self.base.get_app().map_or(false, |app| app.m_sukhbir_mode) {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley_pitch(crate::todlib::tod_foley::FoleyType::Sukhbir as i32, a_pitch);
+                }
+            } else {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley_pitch(crate::todlib::tod_foley::FoleyType::Groan as i32, a_pitch);
+                }
+            }
+
+            self.groan_counter = crate::framework::common::rand_range(1000) + 500;
+        }
+
         // 冰陷阱递减
         if self.ice_trap_counter > 0 {
             self.ice_trap_counter -= 1;
@@ -1109,6 +1146,9 @@ impl Zombie {
         if self.zombie_height == ZombieHeight::UpLadder {
             self.update_climbing_ladder();
         }
+        if self.zombie_height == ZombieHeight::Zombiquarium {
+            self.update_zombiquarium();
+        }
         if self.zombie_height == ZombieHeight::OutOfPool || self.zombie_height == ZombieHeight::InToPool || self.in_pool {
             self.update_zombie_pool();
         }
@@ -1169,6 +1209,18 @@ impl Zombie {
         }
         if self.zombie_type == ZombieType::Imp {
             self.update_zombie_imp();
+        }
+        if self.zombie_type == ZombieType::PeaHead {
+            self.update_zombie_pea_head();
+        }
+        if self.zombie_type == ZombieType::JalapenoHead {
+            self.update_zombie_jalapeno_head();
+        }
+        if self.zombie_type == ZombieType::GatlingHead {
+            self.update_zombie_gatling_head();
+        }
+        if self.zombie_type == ZombieType::SquashHead {
+            self.update_zombie_squash_head();
         }
     }
 
@@ -5330,9 +5382,32 @@ impl Zombie {
 
         let plant_idx = self.find_plant_target_index(ZombieAttackType::Chew);
         if let Some(idx) = plant_idx {
+            // 对应 C++ Zombie.cpp:4897-4924：Wallnut/Tallnut 咀嚼粒子（借用规避：先提取植物数据）
+            let a_seed_type = self.base.get_board().and_then(|b| b.plants.get(idx)).map(|p| p.seed_type);
+            let a_is_wallnut = a_seed_type == Some(SeedType::Wallnut) || a_seed_type == Some(SeedType::Tallnut);
+            if a_is_wallnut {
+                let a_render_order = crate::lawn::board::make_render_order(RENDER_LAYER_PROJECTILE, self.base.row, 0);
+                let a_draw_pos = self.get_draw_pos();
+                let mut a_pos_x = self.pos_x + 37.0;
+                let mut a_pos_y = self.pos_y + 40.0 + a_draw_pos.body_y;
+                if self.zombie_type == ZombieType::Snorkel || self.zombie_type == ZombieType::DolphinRider {
+                    a_pos_x -= 7.0;
+                    a_pos_y += 70.0;
+                } else if self.is_walking_backwards() {
+                    a_pos_x += 47.0;
+                } else if self.zombie_type == ZombieType::Balloon {
+                    a_pos_y += 47.0;
+                } else if self.zombie_type == ZombieType::Imp {
+                    a_pos_x += 24.0;
+                    a_pos_y += 40.0;
+                }
+                if let Some(app) = self.base.get_app_mut() {
+                    app.add_tod_particle(a_pos_x, a_pos_y, a_render_order, ParticleEffect::WallnutEatSmall as i32);
+                }
+            }
+
             if let Some(board) = self.base.get_board_mut() {
                 if let Some(plant) = board.plants.get_mut(idx) {
-                    // [TRANSLATION_NOTE]: Wallnut/Tallnut 咀嚼粒子（PARTICLE_WALLNUT_EAT_SMALL）未接入
                     plant.eaten_flash_countdown = plant.eaten_flash_countdown.max(25);
                 }
             }
