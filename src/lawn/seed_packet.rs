@@ -96,9 +96,53 @@ impl SeedPacket {
         }
     }
 
-    /// 能否拾取（对应 C++ CanPickUp）
+    /// 能否拾取（对应 C++ SeedPacket::CanPickUp，SeedPacket.cpp:685）
     pub fn can_pick_up(&self) -> bool {
-        self.active && self.countdown <= 0 && self.seed_type != SeedType::None
+        let app = match self.app {
+            Some(a) => a,
+            None => return false,
+        };
+        let board = match self.board {
+            Some(b) => b,
+            None => return false,
+        };
+        unsafe {
+            let app_ref = &*app;
+            let board_ref = &*board;
+
+            if board_ref.m_paused
+                || app_ref.game_scene != crate::lawn::lawn_app::GameScenes::Playing
+                || self.seed_type == SeedType::None
+            {
+                return false;
+            }
+
+            // C++: Imitater 且 mImitaterType 非空时改用被模仿的种子
+            let mut a_use_seed_type = self.seed_type;
+            if self.seed_type == SeedType::Imitater && self.imitater_type != SeedType::None {
+                a_use_seed_type = self.imitater_type;
+            }
+
+            if app_ref.is_slot_machine_level() {
+                return false;
+            }
+
+            if !app_ref.m_easy_planting_cheat {
+                if !self.active {
+                    return false;
+                }
+
+                let a_cost = board_ref.get_current_plant_cost(self.seed_type, self.imitater_type);
+                if !board_ref.can_take_sun_money(a_cost) && !board_ref.has_conveyor_belt_seed_bank() {
+                    return false;
+                }
+
+                if !board_ref.planting_requirements_met(a_use_seed_type) {
+                    return false;
+                }
+            }
+        }
+        true
     }
 
     /// 准备就绪闪烁（对应 C++ FlashIfReady）
@@ -536,8 +580,22 @@ impl SeedBank {
         }
     }
 
-    /// 鼠标点击测试
-    pub fn mouse_hit_test(&self, _x: i32, _y: i32, _hit_result: &mut HitResult) -> bool {
+    /// 鼠标命中测试（对应 C++ SeedBank::MouseHitTest，SeedPacket.cpp:995）
+    pub fn mouse_hit_test(&self, x: i32, y: i32, hit_result: &mut HitResult) -> bool {
+        if x - self.base.x <= self.base.width - 5 && self.num_packets > 0 {
+            for (i, a_seed_packet) in self.seed_packets.iter().enumerate() {
+                if a_seed_packet.mouse_hit_test(x - self.base.x, y - self.base.y, hit_result) {
+                    // [TRANSLATION_NOTE]: C++ 由 SeedPacket::MouseHitTest 填入指向自身的
+                    // mObject 指针；Rust 侧 HitResult.object 是索引，故在此补填 packet 下标。
+                    // （与 update_cursor 中对 SeedPacket 分支按 seed_bank 索引取值相呼应）
+                    hit_result.object = Some(i);
+                    return true;
+                }
+            }
+        }
+
+        hit_result.object = None;
+        hit_result.object_type = GameObjectType::None;
         false
     }
 }

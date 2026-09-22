@@ -205,8 +205,8 @@ pub enum GameMode {
     ChallengePortalCombat = 26,
     ChallengeColumns = 27,
     ChallengeBobsledBonanza = 28,
-    /// 对应 C++ GAMEMODE_CHALLENGE_SPEED
-    ChallengeZombieNimble = 29,
+    /// 对应 C++ GAMEMODE_CHALLENGE_SPEED（游戏内字符串 [ZOMBIES_ON_SPEED]）
+    ChallengeSpeed = 29,
     ChallengeWhackAZombie = 30,
     ChallengeLastStand = 31,
     ChallengeWarAndPeas2 = 32,
@@ -625,8 +625,12 @@ pub enum StoreItem {
     Invalid = -1,
 }
 
-/// RenderLayer — 渲染层
-pub const RENDER_LAYER_GROUND: i32 = 0;
+/// RenderLayer — 渲染层（对应 C++ ConstEnums.h:975-994）
+/// RENDER_LAYER_ROW_OFFSET 是每行渲染排序步长，见 board::make_render_order。
+pub const RENDER_LAYER_ROW_OFFSET: i32 = 10000;
+pub const RENDER_LAYER_UI_BOTTOM: i32 = 100000;
+pub const RENDER_LAYER_GROUND: i32 = 200000;
+pub const RENDER_LAYER_LAWN: i32 = 300000;
 pub const RENDER_LAYER_GRAVE_STONE: i32 = 301000;
 pub const RENDER_LAYER_PLANT: i32 = 302000;
 pub const RENDER_LAYER_ZOMBIE: i32 = 303000;
@@ -636,11 +640,10 @@ pub const RENDER_LAYER_LAWN_MOWER: i32 = 306000;
 pub const RENDER_LAYER_PARTICLE: i32 = 307000;
 pub const RENDER_LAYER_TOP: i32 = 400000;
 pub const RENDER_LAYER_FOG: i32 = 500000;
-pub const RENDER_LAYER_UI_BOTTOM: i32 = 100000;
 pub const RENDER_LAYER_COIN_BANK: i32 = 600000;
 pub const RENDER_LAYER_UI_TOP: i32 = 700000;
-pub const RENDER_LAYER_SCREEN_FADE: i32 = 900000;
 pub const RENDER_LAYER_ABOVE_UI: i32 = 800000;
+pub const RENDER_LAYER_SCREEN_FADE: i32 = 900000;
 
 // TodCurves
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1037,24 +1040,10 @@ pub enum PlantOrder {
     Cherrybomb,
 }
 
-// ============================================================
-// DamageFlags — 伤害标志位（bitmask）
-// 对应 C++ ConstEnums.h DamageFlags
-// ============================================================
-pub const DAMAGE_FLAGS_NORMAL: u32 = 0;
-pub const DAMAGE_FLAGS_IGNORE_SHIELD: u32 = 1;
-pub const DAMAGE_FLAGS_IGNORE_HELM: u32 = 2;
-pub const DAMAGE_FLAGS_IGNORE_FLYING: u32 = 4;
-pub const DAMAGE_FLAGS_IGNORE_VOODOO: u32 = 8;
-pub const DAMAGE_FLAGS_IGNORE_ALL: u32 = 15;
-
-// ============================================================
-// DamageRangeFlags — 伤害范围标志位（bitmask）
-// ============================================================
-pub const DAMAGE_RANGE_NONE: u32 = 0;
-pub const DAMAGE_RANGE_NORMAL: u32 = 1;
-pub const DAMAGE_RANGE_WIDE: u32 = 2;
-pub const DAMAGE_RANGE_ALL: u32 = 3;
+// DamageFlags / DamageRangeFlags 的权威定义在 src/lawn/zombie.rs:60-69（位索引 0-5，
+// 与 C++ ConstEnums.h:248-267 一致）。此处原先定义的 DAMAGE_FLAGS_NORMAL/IGNORE_* 与
+// DAMAGE_RANGE_NONE/NORMAL/WIDE/ALL 是语义不同的死代码（全库零调用），已删除。
+// 见 ANALYSIS_REPORT.md §3.2。
 
 // ============================================================
 // ID 类型

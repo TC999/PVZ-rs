@@ -2570,9 +2570,20 @@ impl ZenGarden {
         }
     }
 
+    /// 随机取一种可种植的种子（对应 C++ ZenGarden::PickRandomSeedType，ZenGarden.cpp:2410）
     pub fn pick_random_seed_type() -> SeedType {
-        // TODO: 从 ZenGarden.cpp 翻译
-        SeedType::Peashooter
+        let mut a_seed_list: [SeedType; 40] = [SeedType::Peashooter; 40];
+        let mut a_seed_count = 0usize;
+        for i in 0..40 {
+            // C++: SeedType aSeedType = (SeedType)i;
+            let a_seed_type = unsafe { std::mem::transmute::<i32, SeedType>(i) };
+            if a_seed_type != SeedType::Marigold && a_seed_type != SeedType::Flowerpot {
+                a_seed_list[a_seed_count] = a_seed_type;
+                a_seed_count += 1;
+            }
+        }
+        // C++: PvzpPickFromArray(aSeedList, aSeedCount) → aSeedList[Sexy::Rand(aSeedCount)]
+        a_seed_list[crate::framework::common::rand_range(a_seed_count as i32) as usize]
     }
 
     pub fn stinky_wake_up(&self, stinky: &mut GridItem) {

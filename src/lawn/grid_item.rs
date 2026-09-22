@@ -762,21 +762,109 @@ impl GridItem {
         None
     }
 
-    /// 格子物品消亡（对应 C++ GridItemDie）
-    /// 设置 dead 标记，等待清理
+    /// 格子物品消亡（对应 C++ GridItemDie，GridItem.cpp:65）
     pub fn grid_item_die(&mut self) {
         self.dead = true;
+
+        if let Some(app) = self.app {
+            unsafe {
+                // C++: Reanimation* aGridItemReanim = mApp->ReanimationTryToGet(mGridItemReanimID);
+                if let Some(a_grid_item_reanim) =
+                    (*app).reanimation_get_mut(self.grid_item_reanim_id)
+                {
+                    a_grid_item_reanim.reanimation_die();
+                    self.grid_item_reanim_id = REANIMATIONID_NULL;
+                }
+
+                // C++: PvzpParticleSystem* aGridItemParticle = mApp->ParticleTryToGet(mGridItemParticleID);
+                if let Some(a_grid_item_particle) =
+                    (*app).particle_try_to_get(self.grid_item_particle_id)
+                {
+                    a_grid_item_particle.particle_system_die();
+                }
+            }
+        }
     }
 
-    /// 打开传送门（对应 C++ GridItem::OpenPortal）
-    /// [TRANSLATION_NOTE]: C++ 的 OpenPortal 不设置 mGridItemState（仅创建 reanim），
-    /// 由 IsOpenPortal 以「state != PORTAL_CLOSED」判断；此处对齐为置回 Normal。
+    /// 打开传送门（对应 C++ GridItem::OpenPortal，GridItem.cpp:419）
     pub fn open_portal(&mut self) {
-        self.grid_item_state = GridItemState::Normal;
+        let mut a_x_pos = self.grid_x as f32 * 80.0 - 6.0;
+        // C++ GridItem.cpp:422: float aYPos = mBoard->GridToPixelY(0, mGridY) - 65.0f;
+        let mut a_y_pos = self.board.map_or(0, |b| unsafe { (*b).grid_to_pixel_y(0, self.grid_y) }) as f32
+            - 65.0;
+
+        let mut a_reanim_type = crate::lawn::game_enums::ReanimationType::PortalCircle as i32;
+        if self.grid_item_type == GridItemType::PortalSquare {
+            a_y_pos += 25.0;
+            a_x_pos -= 4.0;
+            a_reanim_type = crate::lawn::game_enums::ReanimationType::PortalSquare as i32;
+        }
+
+        if let Some(app) = self.app {
+            unsafe {
+                let a_has_reanim = (*app).reanimation_get(self.grid_item_reanim_id).is_some();
+                if !a_has_reanim {
+                    if let Some(a_portal_reanim) =
+                        (*app).add_reanimation(a_x_pos, a_y_pos, 0, a_reanim_type)
+                    {
+                        (*a_portal_reanim).m_is_attachment = true;
+                        self.grid_item_reanim_id = (*app).reanimation_get_id(a_portal_reanim);
+                    }
+                } else if let Some(a_portal_reanim) =
+                    (*app).reanimation_get_mut(self.grid_item_reanim_id)
+                {
+                    a_portal_reanim.set_position(a_x_pos, a_y_pos);
+                }
+            }
+        }
+
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(a_portal_particle) =
+                    (*app).particle_try_to_get(self.grid_item_particle_id)
+                {
+                    a_portal_particle.particle_system_die();
+                    self.grid_item_particle_id = PARTICLESYSTEMID_NULL;
+                }
+            }
+        }
+
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(a_portal_reanim) = (*app).reanimation_get_mut(self.grid_item_reanim_id) {
+                    a_portal_reanim.play_reanim(
+                        "anim_appear",
+                        crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,
+                        0,
+                        12.0,
+                    );
+                }
+                (*app).play_foley(crate::todlib::tod_foley::FoleyType::Portal as i32);
+            }
+        }
     }
 
-    /// 关闭传送门（对应 C++ GridItem::ClosePortal）
+    /// 关闭传送门（对应 C++ GridItem::ClosePortal，GridItem.cpp:453）
     pub fn close_portal(&mut self) {
+        if let Some(app) = self.app {
+            unsafe {
+                if let Some(a_portal_reanim) = (*app).reanimation_get_mut(self.grid_item_reanim_id) {
+                    a_portal_reanim.play_reanim(
+                        "anim_dissapear",
+                        crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,
+                        0,
+                        12.0,
+                    );
+                }
+                if let Some(a_portal_particle) =
+                    (*app).particle_try_to_get(self.grid_item_particle_id)
+                {
+                    a_portal_particle.particle_system_die();
+                    self.grid_item_particle_id = PARTICLESYSTEMID_NULL;
+                }
+            }
+        }
+
         self.grid_item_state = GridItemState::PortalClosed;
     }
 

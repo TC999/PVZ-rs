@@ -103,12 +103,44 @@ impl Coin {
         }
     }
 
-    /// 初始化硬币
+    /// 按图片资源的格尺寸设置宽高（对应 C++ `IMAGE_X->GetCelWidth()/GetCelHeight()`）
+    fn set_size_from_image(&mut self, name: &str) {
+        if let Some(a_image) = self.overlay_image(name) {
+            unsafe {
+                self.base.width = (*a_image).get_cel_width();
+                self.base.height = (*a_image).get_cel_height();
+            }
+        }
+    }
+
+    /// 初始化硬币（对应 C++ Coin::CoinInitialize，Coin.cpp:50-411）
     pub fn coin_initialize(&mut self, x: f32, y: f32, coin_type: CoinType, motion: CoinMotion) {
         self.pos_x = x;
         self.pos_y = y;
         self.coin_type = coin_type;
+        self.collection_distance = 0.0;
+        self.dead = false;
+        self.base.width = 60;
+        self.base.height = 60;
+        self.disappear_counter = 0;
+        self.is_being_collected = false;
+        self.fade_count = 0;
         self.coin_motion = motion;
+        self.coin_age = 0;
+        self.attachment_id = ATTACHMENTID_NULL;
+        // C++: mRenderOrder = MakeRenderOrder(RENDER_LAYER_COIN_BANK, 0, 1)
+        self.base.render_order =
+            crate::lawn::board::make_render_order(RENDER_LAYER_COIN_BANK, 0, 1);
+        self.scale = 1.0;
+        self.usable_seed_type = SeedType::None;
+        self.needs_bouncy_arrow = false;
+        self.has_bouncy_arrow = false;
+        self.hit_ground = false;
+        self.times_dropped = 0;
+        // C++: mPottedPlantSpec.InitializePottedPlant(SeedType::SEED_NONE);
+        self.potted_plant_spec.initialize_potted_plant(SeedType::None);
+
+        // [TRANSLATION_NOTE]: C++ 由 IsSun()/GetCoinValue() 计算，Rust 侧以字段承载
         self.is_sun = matches!(coin_type, CoinType::Sun | CoinType::SmallSun | CoinType::LargeSun);
         self.value = 0;
         match coin_type {
@@ -125,10 +157,10 @@ impl Coin {
                 self.lifespan = 600;
             },
             CoinType::Silver => {
-                self.value = 1; // 对应 C++ GetCoinValue(COIN_SILVER) = 1
+                self.value = 1;
             },
             CoinType::Gold => {
-                self.value = 5; // 对应 C++ GetCoinValue(COIN_GOLD) = 5
+                self.value = 5;
             },
             CoinType::Diamond => {
                 self.value = 100;
@@ -138,13 +170,374 @@ impl Coin {
             }
         }
 
-        // 对应 C++ CoinInitialize 中 CoinGetsBouncyArrow/PlayLaunchSound 调用
+        // C++ 74-83: 阳光
+        if self.is_sun {
+            let a_pos_x = self.base.width as f32 * 0.5;
+            let a_pos_y = self.base.height as f32 * 0.5;
+            if let Some(app) = self.base.app {
+                unsafe {
+                    if let Some(a_sun_reanim) =
+                        (*app).add_reanimation(0.0, 0.0, 0, ReanimationType::Sun as i32)
+                    {
+                        (*a_sun_reanim).set_position(self.pos_x + a_pos_x, self.pos_y + a_pos_y);
+                        (*a_sun_reanim).m_loop_type =
+                            crate::todlib::reanimator::ReanimLoopType::Loop;
+                        (*a_sun_reanim).m_anim_rate = 6.0;
+                        crate::todlib::attachment::attach_reanim(
+                            &mut self.attachment_id,
+                            a_sun_reanim as *mut std::ffi::c_void,
+                            a_pos_x,
+                            a_pos_y,
+                        );
+                    }
+                }
+            }
+        }
+        // C++ 84-97: 银币
+        else if self.coin_type == CoinType::Silver {
+            self.pos_x -= 10.0;
+            self.pos_y -= 8.0;
+
+            let a_pos_x = 9.0;
+            let a_pos_y = 9.0;
+            if let Some(app) = self.base.app {
+                unsafe {
+                    if let Some(a_coin_reanim) =
+                        (*app).add_reanimation(0.0, 0.0, 0, ReanimationType::CoinSilver as i32)
+                    {
+                        (*a_coin_reanim).set_position(self.pos_x + a_pos_x, self.pos_y + a_pos_y);
+                        (*a_coin_reanim).m_loop_type =
+                            crate::todlib::reanimator::ReanimLoopType::Loop;
+                        (*a_coin_reanim).m_anim_time =
+                            crate::todlib::tod_common::rand_range_float(0.0, 0.99);
+                        (*a_coin_reanim).m_anim_rate *=
+                            crate::todlib::tod_common::rand_range_float(0.6, 1.0);
+                        crate::todlib::attachment::attach_reanim(
+                            &mut self.attachment_id,
+                            a_coin_reanim as *mut std::ffi::c_void,
+                            a_pos_x,
+                            a_pos_y,
+                        );
+                    }
+                }
+            }
+        }
+        // C++ 98-111: 金币
+        else if self.coin_type == CoinType::Gold {
+            self.pos_x -= 10.0;
+            self.pos_y -= 8.0;
+
+            let a_pos_x = 9.0;
+            let a_pos_y = 9.0;
+            if let Some(app) = self.base.app {
+                unsafe {
+                    if let Some(a_coin_reanim) =
+                        (*app).add_reanimation(0.0, 0.0, 0, ReanimationType::CoinGold as i32)
+                    {
+                        (*a_coin_reanim).set_position(self.pos_x + a_pos_x, self.pos_y + a_pos_y);
+                        (*a_coin_reanim).m_loop_type =
+                            crate::todlib::reanimator::ReanimLoopType::Loop;
+                        (*a_coin_reanim).m_anim_time =
+                            crate::todlib::tod_common::rand_range_float(0.0, 0.99);
+                        (*a_coin_reanim).m_anim_rate *=
+                            crate::todlib::tod_common::rand_range_float(0.6, 1.0);
+                        crate::todlib::attachment::attach_reanim(
+                            &mut self.attachment_id,
+                            a_coin_reanim as *mut std::ffi::c_void,
+                            a_pos_x,
+                            a_pos_y,
+                        );
+                    }
+                }
+            }
+        }
+        // C++ 112-125: 钻石
+        else if self.coin_type == CoinType::Diamond {
+            self.pos_x -= 15.0;
+            self.pos_y -= 15.0;
+
+            let a_pos_x = -3.0;
+            let a_pos_y = 4.0;
+            if let Some(app) = self.base.app {
+                unsafe {
+                    if let Some(a_coin_reanim) =
+                        (*app).add_reanimation(0.0, 0.0, 0, ReanimationType::Diamond as i32)
+                    {
+                        (*a_coin_reanim).set_position(self.pos_x + a_pos_x, self.pos_y + a_pos_y);
+                        (*a_coin_reanim).m_loop_type =
+                            crate::todlib::reanimator::ReanimLoopType::Loop;
+                        (*a_coin_reanim).m_anim_time =
+                            crate::todlib::tod_common::rand_range_float(0.0, 0.99);
+                        (*a_coin_reanim).m_anim_rate =
+                            crate::todlib::tod_common::rand_range_float(50.0, 80.0);
+                        crate::todlib::attachment::attach_reanim(
+                            &mut self.attachment_id,
+                            a_coin_reanim as *mut std::ffi::c_void,
+                            a_pos_x,
+                            a_pos_y,
+                        );
+                    }
+                }
+            }
+        }
+
+        // C++ 127-130: 暴雨夜关卡覆写渲染层
+        if self.base.get_app().map_or(false, |app| app.is_stormy_night_level()) {
+            self.base.render_order =
+                crate::lawn::board::make_render_order(RENDER_LAYER_ABOVE_UI, 0, 0);
+        }
+
+        // C++ 132-197: 各类型宽高与渲染层
+        if self.coin_type == CoinType::FinalSeedPacket {
+            self.set_size_from_image("IMAGE_SEEDS");
+            self.base.render_order =
+                crate::lawn::board::make_render_order(RENDER_LAYER_ABOVE_UI, 0, 0);
+        } else if self.coin_type == CoinType::Trophy {
+            self.set_size_from_image("IMAGE_TROPHY");
+            self.base.render_order =
+                crate::lawn::board::make_render_order(RENDER_LAYER_ABOVE_UI, 0, 0);
+        } else if self.coin_type == CoinType::AwardSilverSunflower
+            || self.coin_type == CoinType::AwardGoldSunflower
+        {
+            self.set_size_from_image("IMAGE_SUNFLOWER_TROPHY");
+            self.base.render_order =
+                crate::lawn::board::make_render_order(RENDER_LAYER_ABOVE_UI, 0, 0);
+        } else if self.coin_type == CoinType::Shovel {
+            self.set_size_from_image("IMAGE_SHOVEL");
+            self.base.render_order =
+                crate::lawn::board::make_render_order(RENDER_LAYER_ABOVE_UI, 0, 0);
+        } else if self.coin_type == CoinType::Carkeys {
+            self.set_size_from_image("IMAGE_CARKEYS");
+            self.base.render_order =
+                crate::lawn::board::make_render_order(RENDER_LAYER_ABOVE_UI, 0, 0);
+        } else if self.coin_type == CoinType::Almanac {
+            self.set_size_from_image("IMAGE_ALMANAC");
+            self.base.render_order =
+                crate::lawn::board::make_render_order(RENDER_LAYER_ABOVE_UI, 0, 0);
+        } else if self.coin_type == CoinType::Vase {
+            self.set_size_from_image("IMAGE_SCARY_POT");
+            self.base.render_order =
+                crate::lawn::board::make_render_order(RENDER_LAYER_ABOVE_UI, 0, 0);
+        } else if self.coin_type == CoinType::WateringCan {
+            self.set_size_from_image("IMAGE_WATERINGCAN");
+            self.base.render_order =
+                crate::lawn::board::make_render_order(RENDER_LAYER_ABOVE_UI, 0, 0);
+        } else if self.coin_type == CoinType::Taco {
+            self.set_size_from_image("IMAGE_TACO");
+            self.base.render_order =
+                crate::lawn::board::make_render_order(RENDER_LAYER_ABOVE_UI, 0, 0);
+        } else if self.coin_type == CoinType::Note {
+            self.set_size_from_image("IMAGE_ZOMBIE_NOTE_SMALL");
+            self.base.render_order =
+                crate::lawn::board::make_render_order(RENDER_LAYER_ABOVE_UI, 0, 0);
+        } else if self.coin_type == CoinType::UsableSeedPacket {
+            self.set_size_from_image("IMAGE_SEEDS");
+            self.base.render_order =
+                crate::lawn::board::make_render_order(RENDER_LAYER_FOG, 0, 2);
+        }
+        // C++ 198-293: 礼物盆栽的种子按背景表选取
+        else if self.coin_type == CoinType::PresentPlant
+            || self.coin_type == CoinType::AwardPresent
+        {
+            self.set_size_from_image("IMAGE_PRESENT");
+
+            // C++: PVZP_ASSERT(mBoard);
+            let a_is_endless = match self.base.app {
+                Some(app) => unsafe {
+                    (*app).is_survival_endless((*app).game_mode)
+                        || (*app).is_endless_izombie((*app).game_mode)
+                        || (*app).is_endless_scary_potter((*app).game_mode)
+                },
+                None => false,
+            };
+
+            let a_seed_type = if a_is_endless {
+                crate::lawn::zen_garden::ZenGarden::pick_random_seed_type()
+            } else {
+                let a_background = self
+                    .base
+                    .board
+                    .map_or(BackgroundType::Day, |b| unsafe { (*b).m_background_type });
+                if a_background == BackgroundType::Day {
+                    let a_seed_list = [
+                        SeedType::Peashooter,
+                        SeedType::Sunflower,
+                        SeedType::Cherrybomb,
+                        SeedType::Wallnut,
+                        SeedType::Repeater,
+                        SeedType::PotatoMine,
+                        SeedType::Snowpea,
+                        SeedType::Chomper,
+                    ];
+                    a_seed_list
+                        [crate::framework::common::rand_range(a_seed_list.len() as i32) as usize]
+                } else if a_background == BackgroundType::Night {
+                    let a_seed_list = [
+                        SeedType::Puffshroom,
+                        SeedType::Sunshroom,
+                        SeedType::Fumeshroom,
+                        SeedType::Gravebuster,
+                        SeedType::Hypnoshroom,
+                        SeedType::Scaredyshroom,
+                        SeedType::Iceshroom,
+                        SeedType::Doomshroom,
+                    ];
+                    a_seed_list
+                        [crate::framework::common::rand_range(a_seed_list.len() as i32) as usize]
+                } else if a_background == BackgroundType::Pool {
+                    let a_seed_list = [
+                        SeedType::Lilypad,
+                        SeedType::Squash,
+                        SeedType::Threepeater,
+                        SeedType::Tanglekelp,
+                        SeedType::Jalapeno,
+                        SeedType::Spikeweed,
+                        SeedType::Torchwood,
+                        SeedType::Tallnut,
+                    ];
+                    a_seed_list
+                        [crate::framework::common::rand_range(a_seed_list.len() as i32) as usize]
+                } else if a_background == BackgroundType::Fog {
+                    let a_seed_list = [
+                        SeedType::Seashroom,
+                        SeedType::Plantern,
+                        SeedType::Cactus,
+                        SeedType::Blover,
+                        SeedType::Splitpea,
+                        SeedType::Starfruit,
+                        SeedType::Pumpkinshell,
+                        SeedType::Magnetshroom,
+                    ];
+                    a_seed_list
+                        [crate::framework::common::rand_range(a_seed_list.len() as i32) as usize]
+                } else if a_background == BackgroundType::Roof {
+                    let a_seed_list = [
+                        SeedType::Cabbagepult,
+                        SeedType::Kernelpult,
+                        SeedType::InstantCoffee,
+                        SeedType::Garlic,
+                        SeedType::Umbrella,
+                        SeedType::Melonpult,
+                    ];
+                    a_seed_list
+                        [crate::framework::common::rand_range(a_seed_list.len() as i32) as usize]
+                } else {
+                    crate::lawn::zen_garden::ZenGarden::pick_random_seed_type()
+                }
+            };
+            self.potted_plant_spec.initialize_potted_plant(a_seed_type);
+        } else if self.coin_type == CoinType::AwardMoneyBag
+            || self.coin_type == CoinType::AwardBagDiamond
+        {
+            self.set_size_from_image("IMAGE_MONEYBAG");
+            self.base.render_order =
+                crate::lawn::board::make_render_order(RENDER_LAYER_ABOVE_UI, 0, 0);
+        } else if self.coin_type == CoinType::Chocolate
+            || self.coin_type == CoinType::AwardChocolate
+        {
+            self.set_size_from_image("IMAGE_CHOCOLATE");
+            self.base.render_order =
+                crate::lawn::board::make_render_order(RENDER_LAYER_ABOVE_UI, 0, 0);
+        } else if self.is_present_with_advice() {
+            self.set_size_from_image("IMAGE_PRESENT");
+            self.base.render_order =
+                crate::lawn::board::make_render_order(RENDER_LAYER_ABOVE_UI, 0, 0);
+        }
+
+        // C++ 313-385: 运动学按 mCoinMotion 分派
+        match self.coin_motion {
+            CoinMotion::FromSky => {
+                self.vel_y = 0.67;
+                self.vel_x = 0.0;
+                self.ground_y = (crate::framework::common::rand_range(250) + 300) as f32;
+            }
+            CoinMotion::FromSkySlow => {
+                self.vel_y = 0.33;
+                self.vel_x = 0.0;
+                self.ground_y = (crate::framework::common::rand_range(250) + 300) as f32;
+            }
+            CoinMotion::FromPlant => {
+                self.vel_y = -1.7 - crate::todlib::tod_common::rand_range_float(0.0, 1.7);
+                self.vel_x = -0.4 + crate::todlib::tod_common::rand_range_float(0.0, 0.8);
+                self.ground_y =
+                    self.pos_y + 15.0 + crate::framework::common::rand_range(20) as f32;
+                self.scale = 0.4;
+            }
+            CoinMotion::Coin => {
+                self.vel_y = -3.0 - crate::todlib::tod_common::rand_range_float(0.0, 2.0);
+                self.vel_x = -0.5 + crate::todlib::tod_common::rand_range_float(0.0, 1.0);
+                self.ground_y =
+                    self.pos_y + 45.0 + crate::framework::common::rand_range(20) as f32;
+                self.ground_y = self.ground_y.clamp(80.0, 521.0);
+                if self.coin_type == CoinType::AwardSilverSunflower
+                    || self.coin_type == CoinType::AwardGoldSunflower
+                {
+                    self.pos_y -= 100.0;
+                    self.ground_y = self.pos_y + 45.0;
+                    self.ground_y = self.ground_y.min(400.0);
+                }
+                if self.coin_type == CoinType::FinalSeedPacket
+                    || self.coin_type == CoinType::UsableSeedPacket
+                    || self.coin_type == CoinType::Trophy
+                    || self.coin_type == CoinType::Shovel
+                    || self.coin_type == CoinType::Carkeys
+                    || self.coin_type == CoinType::Almanac
+                    || self.coin_type == CoinType::Vase
+                    || self.coin_type == CoinType::WateringCan
+                    || self.coin_type == CoinType::Taco
+                    || self.coin_type == CoinType::Note
+                {
+                    self.ground_y -= 30.0;
+                }
+            }
+            CoinMotion::LawnmowerCoin => {
+                self.vel_y = 0.0;
+                self.vel_x = 0.0;
+                self.ground_y = 600.0;
+                self.collect();
+            }
+            CoinMotion::FromPresent => {
+                self.vel_y = 0.0;
+                self.vel_x = 0.0;
+                self.ground_y = 600.0;
+                self.base.render_order =
+                    crate::lawn::board::make_render_order(RENDER_LAYER_ABOVE_UI, 0, 1);
+            }
+            CoinMotion::FromBoss => {
+                self.vel_y = -5.0;
+                self.vel_x = -3.0;
+                self.pos_x = 750.0;
+                self.pos_y = if self.coin_type == CoinType::AwardSilverSunflower {
+                    130.0
+                } else {
+                    245.0
+                };
+                self.ground_y = self.pos_y + 40.0;
+            }
+            // C++: default: PVZP_ASSERT(false); break;
+            _ => {}
+        }
+
+        // C++ 387-400: 小阳光/大阳光的 scale 叠加
+        let a_scale;
+        if self.coin_type == CoinType::SmallSun {
+            a_scale = 0.5;
+        } else if self.coin_type == CoinType::LargeSun {
+            a_scale = 2.0;
+        } else {
+            a_scale = 1.0;
+        }
+        self.scale *= a_scale;
+
+        // C++ 402-405
         if self.coin_gets_bouncy_arrow() {
             self.needs_bouncy_arrow = true;
         }
-        // [TRANSLATION_NOTE]: C++ 判定 mCoinMotion != COIN_MOTION_FROM_PRESENT（Rust 枚举暂无该变体）
-        // Rust 侧 add_coin 先调用本初始化再设置 app/board，故此处音效/棋盘依赖在调用时尚未就绪
-        self.play_launch_sound();
+
+        // C++ 407-410: FROM_PRESENT 不播放发射音效
+        if self.coin_motion != CoinMotion::FromPresent {
+            self.play_launch_sound();
+        }
     }
 
     /// 更新（对应 C++ Coin::Update）
@@ -1349,9 +1742,17 @@ impl Coin {
         if self.coin_type == CoinType::LargeSun { 1.5 } else { 1.0 }
     }
 
-    /// 获取阳光值（对应 C++ GetSunValue）
+    /// 获取阳光值（对应 C++ Coin::GetSunValue，Coin.cpp:1297）
     pub fn get_sun_value(&self) -> i32 {
-        self.value
+        if self.coin_type == CoinType::Sun {
+            25
+        } else if self.coin_type == CoinType::SmallSun {
+            15
+        } else if self.coin_type == CoinType::LargeSun {
+            50
+        } else {
+            0
+        }
     }
 
     /// 硬币死亡（对应 C++ Die）

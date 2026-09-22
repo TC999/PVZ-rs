@@ -1033,14 +1033,37 @@ impl Projectile {
         None
     }
 
-    /// 获取子弹矩形
+    /// 获取子弹矩形（对应 C++ Projectile::GetProjectileRect，Projectile.cpp:1167）
     pub fn get_projectile_rect(&self) -> Rect {
-        Rect::new(
-            (self.pos_x - 5.0) as i32,
-            (self.pos_y - 5.0) as i32,
-            10,
-            10,
-        )
+        // C++: mX/mY/mWidth/mHeight 为整型成员
+        let m_x = self.pos_x as i32;
+        let m_y = self.pos_y as i32;
+        let m_width = self.base.width;
+        let m_height = self.base.height;
+
+        match &self.projectile_type {
+            // C++: PROJECTILE_PEA / PROJECTILE_SNOWPEA / PROJECTILE_ZOMBIE_PEA
+            ProjectileType::Pea | ProjectileType::Snowpea | ProjectileType::ZombiePea => {
+                Rect::new(m_x - 15, m_y, m_width + 15, m_height)
+            }
+            // C++: PROJECTILE_COBBIG
+            ProjectileType::Cobbig => Rect::new(
+                m_x + m_width / 2 - 115,
+                m_y + m_height / 2 - 115,
+                230,
+                230,
+            ),
+            // C++: PROJECTILE_MELON / PROJECTILE_WINTERMELON
+            ProjectileType::Melon | ProjectileType::Wintermelon => {
+                Rect::new(m_x + 20, m_y, 60, m_height)
+            }
+            // C++: PROJECTILE_FIREBALL
+            ProjectileType::Fireball => Rect::new(m_x, m_y, m_width - 10, m_height),
+            // C++: PROJECTILE_SPIKE
+            ProjectileType::Spike => Rect::new(m_x - 25, m_y, m_width + 25, m_height),
+            // C++: else 分支
+            _ => Rect::new(m_x, m_y, m_width, m_height),
+        }
     }
 
     /// 产生溅射伤害（对应 C++ DoSplashDamage）

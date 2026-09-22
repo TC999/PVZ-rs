@@ -55,11 +55,98 @@ impl LawnMower {
         }
     }
 
-    /// 初始化割草机
+    /// 初始化割草机（对应 C++ LawnMower::LawnMowerInitialize，LawnMower.cpp:30）
     pub fn lawn_mower_initialize(&mut self, the_row: i32) {
         self.base.row = the_row;
+        // C++: mPosX = -160.0f;
+        self.pos_x = -160.0;
+        // C++: mRenderOrder = MakeRenderOrder(RENDER_LAYER_LAWN_MOWER, theRow, 0);
+        self.base.render_order =
+            crate::lawn::board::make_render_order(RENDER_LAYER_LAWN_MOWER, the_row, 0);
+        // C++: mPosY = mBoard->GetPosYBasedOnRow(mPosX + 40.0f, theRow) + 23.0f;
+        self.pos_y = self
+            .base
+            .get_board()
+            .map_or(0.0, |b| {
+                b.get_pos_y_based_on_row(self.base.x as f32 + 40.0, the_row)
+            })
+            + 23.0;
+        self.dead = false;
         self.mower_state = LawnMowerState::Ready;
         self.visible = true;
+        self.chomp_counter = 0;
+        self.rolling_in_counter = 0;
+        self.squished_counter = 0;
+        self.last_portal_x = -1;
+
+        // C++ 46-61: 依屋顶 / 泳池（且已购买泳池清洁器）/ 普通草坪决定割草机类型与 reanim
+        let a_stage_has_roof = self.base.get_board().map_or(false, |b| b.stage_has_roof());
+        let a_is_pool_row = self
+            .base
+            .get_board()
+            .map_or(false, |b| b.m_plant_row[the_row as usize] == PlantRowType::Pool);
+        let a_has_pool_cleaner = self.base.get_app().map_or(false, |app| unsafe {
+            app.player_info.as_ref().map_or(false, |pi| {
+                pi.m_purchases
+                    .get(crate::lawn::game_enums::StoreItem::PoolCleaner as usize)
+                    .copied()
+                    .unwrap_or(0)
+                    != 0
+            })
+        });
+
+        let a_reanim_type: i32;
+        if a_stage_has_roof {
+            self.mower_type = LawnMowerType::Roof;
+            a_reanim_type = ReanimationType::RoofCleaner as i32;
+        } else if a_is_pool_row && a_has_pool_cleaner {
+            self.mower_type = LawnMowerType::Pool;
+            a_reanim_type = ReanimationType::PoolCleaner as i32;
+        } else {
+            self.mower_type = LawnMowerType::Lawn;
+            a_reanim_type = ReanimationType::Lawnmower as i32;
+        }
+
+        // C++ 63-68: 创建割草机 reanim 并初始化速率/循环/缩放
+        let a_render_order = self.base.render_order;
+        let a_mower_reanim = self
+            .base
+            .get_app_mut()
+            .and_then(|app| app.add_reanimation(0.0, 18.0, a_render_order, a_reanim_type));
+        if let Some(a_mower_reanim) = a_mower_reanim {
+            unsafe {
+                (*a_mower_reanim).m_anim_rate = 0.0;
+                (*a_mower_reanim).m_loop_type = crate::todlib::reanimator::ReanimLoopType::Loop;
+                (*a_mower_reanim).m_is_attachment = true;
+                (*a_mower_reanim).override_scale(0.85, 0.85);
+            }
+            self.mower_anim_id = self
+                .base
+                .get_app()
+                .map_or(REANIMATIONID_NULL, |app| app.reanimation_get_id(a_mower_reanim));
+
+            // C++ 70-79: 草坪用 anim_normal；泳池额外缩放并播 anim_land
+            if self.mower_type == LawnMowerType::Lawn {
+                unsafe {
+                    (*a_mower_reanim).set_frames_for_layer("anim_normal");
+                }
+            } else if self.mower_type == LawnMowerType::Pool {
+                unsafe {
+                    (*a_mower_reanim).override_scale(0.8, 0.8);
+                    (*a_mower_reanim).set_frames_for_layer("anim_land");
+                    (*a_mower_reanim).set_truncate_disappearing_frames(None, false);
+                }
+            }
+        }
+
+        // C++ 81-84: 超级割草机模式下把草坪割草机升级
+        let a_super_mower_mode = self
+            .base
+            .get_board()
+            .map_or(false, |b| b.m_super_mower_mode);
+        if a_super_mower_mode && self.mower_type == LawnMowerType::Lawn {
+            self.enable_super_mower(true);
+        }
     }
 
     /// 启动割草机（对应 C++ StartMower：状态置为 Triggered）
