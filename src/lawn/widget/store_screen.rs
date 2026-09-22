@@ -947,10 +947,10 @@ impl StoreScreen {
         let a_crazy_dave_state = self.app.map_or(CrazyDaveState::Off, |app| unsafe { (*app).m_crazy_dave_state });
         if a_crazy_dave_state == CrazyDaveState::Off {
             // demo sessions preload by update tick instead of the frame-scheduled mDrawnOnce
-            // [TRANSLATION_NOTE]: C++ 用 IsInDemoMode()；Rust 侧无 demo 模式，用恒 false 的 is_ice_demo() 近似
+            // （对应 C++ StoreScreen.cpp:666 的 `mApp->IsInDemoMode()`）
             let a_should_preload = if let Some(app) = self.app {
                 unsafe {
-                    if (*app).is_ice_demo() {
+                    if (*app).base.is_in_demo_mode() {
                         (*app).base.m_update_count - self.added_at_update_count >= 2
                     } else {
                         self.drawn_once

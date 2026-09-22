@@ -399,8 +399,11 @@ impl CreditScreen {
                 }
             }
         }
-        // [TRANSLATION_NOTE]: C++ 中 !IsInDemoMode() && mDrawCount == 0 时暂停；Rust 侧无 demo 模式
-        if self.credits_paused {
+        // C++（CreditScreen.cpp:1131）：
+        //     if (mCreditsPaused || (!mApp->IsInDemoMode() && mDrawCount == 0)) return;
+        let a_in_demo = self.app.map_or(false, |app| unsafe { (*app).base.is_in_demo_mode() });
+        let a_draw_count = self.app.map_or(0, |app| unsafe { (*app).base.m_draw_count });
+        if self.credits_paused || (!a_in_demo && a_draw_count == 0) {
             return;
         }
 

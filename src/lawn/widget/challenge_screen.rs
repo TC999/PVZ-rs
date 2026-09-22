@@ -156,7 +156,7 @@ impl ChallengeScreen {
             unsafe {
                 if (*app).is_survival_endless(a_game_mode)
                     && a_trophies_needed <= 3
-                    && crate::lawn::lawn_app::LawnApp::get_num_trophies(ChallengePage::Survival as i32) < 10
+                    && (*app).get_num_trophies(ChallengePage::Survival as i32) < 10
                     && (*app).has_finished_adventure()
                     && !(*app).is_trial_stage_locked()
                 {
@@ -476,7 +476,7 @@ pub fn get_challenge_definition(challenge_mode: i32) -> Option<&'static Challeng
         ChallengeDefinition { challenge_mode: GameMode::ChallengePortalCombat, challenge_icon_index: 15, page: ChallengePage::Challenge, row: 2, col: 0, challenge_name: Some("[PORTAL_COMBAT]") },
         ChallengeDefinition { challenge_mode: GameMode::ChallengeColumns, challenge_icon_index: 4, page: ChallengePage::Challenge, row: 2, col: 1, challenge_name: Some("[COLUMN_AS_YOU_SEE_EM]") },
         ChallengeDefinition { challenge_mode: GameMode::ChallengeBobsledBonanza, challenge_icon_index: 17, page: ChallengePage::Challenge, row: 2, col: 2, challenge_name: Some("[BOBSLED_BONANZA]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeZombieNimble, challenge_icon_index: 18, page: ChallengePage::Challenge, row: 2, col: 3, challenge_name: Some("[ZOMBIES_ON_SPEED]") },
+        ChallengeDefinition { challenge_mode: GameMode::ChallengeSpeed, challenge_icon_index: 18, page: ChallengePage::Challenge, row: 2, col: 3, challenge_name: Some("[ZOMBIES_ON_SPEED]") },
         ChallengeDefinition { challenge_mode: GameMode::ChallengeWhackAZombie, challenge_icon_index: 16, page: ChallengePage::Challenge, row: 2, col: 4, challenge_name: Some("[WHACK_A_ZOMBIE]") },
         ChallengeDefinition { challenge_mode: GameMode::ChallengeLastStand, challenge_icon_index: 21, page: ChallengePage::Challenge, row: 3, col: 0, challenge_name: Some("[LAST_STAND]") },
         ChallengeDefinition { challenge_mode: GameMode::ChallengeWarAndPeas2, challenge_icon_index: 0, page: ChallengePage::Challenge, row: 3, col: 1, challenge_name: Some("[WAR_AND_PEAS_2]") },

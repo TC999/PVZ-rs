@@ -623,8 +623,12 @@ impl WidgetImpl for TitleScreenImpl {
 
         // ---- 加载线程完成 → 快速加载键映射 / 显示启动按钮 ----
         // C++: if (!mLoadingThreadComplete && (IsInDemoMode() ? mLoaded : mLoadingThreadCompleted.load()))
-        // [TRANSLATION_NOTE]: Rust 无 demo 模式，等价于判断 mLoadingThreadCompleted
-        if !self.loading_thread_complete && app.m_loading_thread_completed {
+        let a_loaded = if app.base.is_in_demo_mode() {
+            app.base.m_loaded
+        } else {
+            app.m_loading_thread_completed
+        };
+        if !self.loading_thread_complete && a_loaded {
             self.loading_thread_complete = true;
             // C++: mStartButton->SetDisabled(false);
             self.start_button_disabled = false;

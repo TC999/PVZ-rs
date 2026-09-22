@@ -143,11 +143,60 @@ impl Default for AchievementsWidget {
 pub struct ReportAchievement;
 
 impl ReportAchievement {
+    /// 授予成就（对应 C++ ReportAchievement::GiveAchievement，AchievementsScreen.cpp:225）
     pub fn give_achievement(app: Option<*mut crate::lawn::lawn_app::LawnApp>, achievement: i32, force_give: bool) {
-        if let Some(_app_ptr) = app { unsafe {
-            let _idx = achievement as usize;
-            if _idx >= MAX_ACHIEVEMENTS { return; }
-        } }
+        let app_ptr = match app {
+            Some(a) => a,
+            None => return,
+        };
+        unsafe {
+            let app_ref = &mut *app_ptr;
+
+            // C++: if (!theApp->mPlayerInfo) return;
+            if app_ref.player_info.is_none() {
+                return;
+            }
+
+            let a_index = achievement as usize;
+            if a_index >= MAX_ACHIEVEMENTS {
+                return;
+            }
+
+            // C++: if (mPlayerInfo->mEarnedAchievements[theAchievement]) return;
+            if app_ref.player_info.as_ref().map_or(false, |pi| {
+                pi.m_earned_achievements.get(a_index).copied().unwrap_or(false)
+            }) {
+                return;
+            }
+
+            // C++: mPlayerInfo->mEarnedAchievements[theAchievement] = true;
+            if let Some(pi) = app_ref.player_info.as_mut() {
+                pi.m_earned_achievements[a_index] = true;
+            }
+
+            if !force_give {
+                return;
+            }
+
+            // C++: GetString(gAchievementList[..].name, ..) 与 "%s Achievement!" 格式化拼接
+            let a_achievement_name = app_ref.base.get_string(G_ACHIEVEMENT_LIST[a_index].name);
+            let a_format = app_ref.base.get_string("%s Achievement!");
+            let a_message = a_format.replace("%s", &a_achievement_name);
+
+            if app_ref.board.is_some() {
+                let a_board = app_ref.board.unwrap();
+                (*a_board).display_advice(
+                    &a_message,
+                    MessageStyle::Achievement as i32,
+                    AdviceType::None,
+                );
+                if let Some(pi) = app_ref.player_info.as_mut() {
+                    pi.m_shown_achievements[a_index] = true;
+                }
+                // C++: theApp->PlaySample(SOUND_ACHIEVEMENT);
+                // [TRANSLATION_NOTE]: Rust 侧尚未移植 SOUND_ACHIEVEMENT 声音资源，此处跳过播放。
+            }
+        }
     }
 
     pub fn achievement_init_for_player(app: Option<*mut crate::lawn::lawn_app::LawnApp>) {

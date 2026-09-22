@@ -164,7 +164,9 @@ impl AwardScreen {
                 } else {
                     let a_msg_char;
                     if self.app.map_or(false, |app| unsafe { (*app).is_survival_mode() }) {
-                        let a_num_trophies = crate::lawn::lawn_app::LawnApp::get_num_trophies(crate::lawn::game_enums::ChallengePage::Survival as i32);
+                        let a_num_trophies = self.app.map_or(0, |app| unsafe {
+                            (*app).get_num_trophies(crate::lawn::game_enums::ChallengePage::Survival as i32)
+                        });
                         a_msg_char = if a_num_trophies <= 7 {
                             "[YOU_UNLOCKED_A_SURVIVAL]"
                         } else if a_num_trophies == 10 {
@@ -177,7 +179,9 @@ impl AwardScreen {
                     } else if self.app.map_or(false, |app| unsafe { (*app).is_puzzle_mode() }) {
                         a_msg_char = "[UNLOCKED_I_ZOMBIE_LEVEL]";
                     } else {
-                        let a_num_trophies = crate::lawn::lawn_app::LawnApp::get_num_trophies(crate::lawn::game_enums::ChallengePage::Challenge as i32);
+                        let a_num_trophies = self.app.map_or(0, |app| unsafe {
+                            (*app).get_num_trophies(crate::lawn::game_enums::ChallengePage::Challenge as i32)
+                        });
                         a_msg_char = if a_num_trophies <= 17 { "[CHALLENGE_UNLOCKED]" } else { "[GET_MORE_TROPHIES]" };
                     }
                     self.draw_bottom(g, "[GOT_TROPHY]", "[TROPHY]", a_msg_char);

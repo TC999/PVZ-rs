@@ -876,11 +876,75 @@ impl SeedChooserScreen {
         }
     }
     pub fn remove_tool_tip(&mut self) { self.tool_tip = None; }
+    /// 关闭选卡界面并把选中的种子写入卡槽（对应 C++ CloseSeedChooser，SeedChooserScreen.cpp:1099）
     pub fn close_seed_chooser(&mut self) {
-        if let Some(app) = self.app { unsafe { /* kill_seed_chooser */ self.choose_state = SeedChooserState::Normal; } }
+        // [TRANSLATION_NOTE]: C++ CloseSeedChooser 本身不改 mChooseState（由 KillSeedChooserScreen 处理）；
+        // 此处保留 Rust 既有的 Normal 置位，避免破坏既有调用链。
+        self.choose_state = SeedChooserState::Normal;
+
+        let app = match self.app {
+            Some(a) => a,
+            None => return,
+        };
+        unsafe {
+            let board = match (*app).board {
+                Some(b) => b,
+                None => return,
+            };
+
+            // C++: DBG_ASSERT(mSeedBank->mNumPackets == mBoard->GetNumSeedsInBank());
+            let a_seed_bank = &mut (*board).seed_bank;
+            for an_index in 0..a_seed_bank.len() {
+                let a_seed_type = self.find_seed_in_bank(an_index as i32);
+                let (a_imitater_type, a_refreshing, a_refresh_counter) =
+                    match self.chosen_seeds.get(a_seed_type as usize) {
+                        Some(a_chosen_seed) => (
+                            a_chosen_seed.imitater_type,
+                            a_chosen_seed.refreshing,
+                            a_chosen_seed.refresh_counter,
+                        ),
+                        None => (SeedType::None, false, 0),
+                    };
+
+                let a_seed_packet = &mut a_seed_bank[an_index];
+                // C++: aSeedPacket.SetPacketType(aSeedType, aChosenSeed.mImitaterType);
+                a_seed_packet.set_packet_type(a_seed_type, a_imitater_type);
+                if a_refreshing {
+                    // C++: aSeedPacket.mRefreshCounter = aChosenSeed.mRefreshCounter;
+                    a_seed_packet.countdown = a_refresh_counter;
+                    a_seed_packet.refresh_time = crate::lawn::plant::Plant::get_refresh_time(
+                        a_seed_packet.seed_type,
+                        a_seed_packet.imitater_type,
+                    );
+                    a_seed_packet.refreshing = true;
+                    a_seed_packet.active = false;
+                }
+            }
+
+            // C++: mBoard->mCutScene->EndSeedChooser();
+            if let Some(a_cut_scene) = (*board).m_cut_scene {
+                (*a_cut_scene).end_seed_chooser();
+            }
+        }
     }
-    pub fn picked_plant_type(&self, t: SeedType) -> bool {
-        self.chosen_seeds.iter().any(|s| s.seed_type == t && s.seed_state != ChosenSeedState::InBank)
+
+    /// 该种子类型是否已被放入卡槽（对应 C++ PickedPlantType，SeedChooserScreen.cpp:1083）
+    pub fn picked_plant_type(&self, the_seed_type: SeedType) -> bool {
+        for a_seed_type in 0..NUM_SEEDS_IN_CHOOSER {
+            let a_chosen_seed = match self.chosen_seeds.get(a_seed_type as usize) {
+                Some(s) => s,
+                None => continue,
+            };
+            // C++: 仅 SEED_IN_BANK 状态计入；Imitater 需比对 mImitaterType
+            if a_chosen_seed.seed_state == ChosenSeedState::InBank
+                && (a_chosen_seed.seed_type == the_seed_type
+                    || (a_chosen_seed.seed_type == SeedType::Imitater
+                        && a_chosen_seed.imitater_type == the_seed_type))
+            {
+                return true;
+            }
+        }
+        false
     }
 }
 

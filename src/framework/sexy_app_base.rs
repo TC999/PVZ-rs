@@ -248,6 +248,10 @@ pub struct SexyAppBase {
     pub m_seh_occurred: bool,
     /// 对应 C++ mAllowAltEnter（录制时过滤 Alt+Enter 屏幕模式切换）
     pub m_allow_alt_enter: bool,
+    /// 对应 C++ mLoaded（资源加载完成；demo 回放期间由 DoUpdateFrames 置位）
+    pub m_loaded: bool,
+    /// 对应 C++ mLoadingThreadCompleted（加载线程完成标志）
+    pub m_loading_thread_completed: bool,
     /// 对应 C++ mLastUserInputTick / mLastTimerTime
     pub m_last_user_input_tick: i32,
     pub m_last_timer_time: i32,
@@ -503,6 +507,8 @@ impl SexyAppBase {
             m_shutdown_on_url_open: false,
             m_seh_occurred: false,
             m_allow_alt_enter: false,
+            m_loaded: false,
+            m_loading_thread_completed: false,
             m_last_user_input_tick: 0,
             m_last_timer_time: 0,
             cursor_num: 0,
@@ -738,8 +744,43 @@ impl SexyAppBase {
         true
     }
 
-    /// 更新帧（对应 C++ SexyAppBase::DoUpdateFrames → UpdateFrames）
+    /// 更新帧（对应 C++ `SexyAppBase::DoUpdateFrames`，SexyAppBase.cpp:1688-1725）
     fn do_update_frames(&mut self) -> bool {
+        if self.m_playing_demo_buffer {
+            // demo 回放：等 DEMO_LOADING_COMPLETE 信号后才进入正常帧更新
+            if self.m_loading_thread_completed && !self.m_loaded && self.m_demo_loading_complete {
+                self.m_loaded = true;
+                // C++: mYieldMainThread = false; LoadingThreadCompleted();
+            }
+
+            // 排队中的命令要等游戏逻辑认领；放行 tick 以便认领或判定为回放跑偏
+            if (self.m_loaded == self.m_demo_loading_complete)
+                && ((self.m_update_count != self.m_last_demo_update_cnt) || self.m_demo_command_queued)
+            {
+                self.update_frames_internal();
+                return true;
+            }
+
+            return false;
+        }
+
+        if self.m_loading_thread_completed && !self.m_loaded {
+            self.m_loaded = true;
+            // C++: mYieldMainThread = false; LoadingThreadCompleted();
+
+            if self.m_recording_demo_buffer {
+                self.write_demo_timing_block();
+                self.m_demo_buffer.write_num_bits(0, 1);
+                self.m_demo_buffer.write_num_bits(DEMO_LOADING_COMPLETE, 5);
+            }
+        }
+
+        self.update_frames_internal();
+        true
+    }
+
+    /// 对应 C++ `SexyAppBase::UpdateFrames`（含到 LawnApp 覆写的虚分派部分）
+    fn update_frames_internal(&mut self) {
         // 对应 C++ UpdateFrames: mWidgetManager->UpdateFrame()
         if let Some(wm) = self.widget_manager {
             unsafe {
@@ -752,7 +793,6 @@ impl SexyAppBase {
             hook();
         }
         self.m_update_count += 1;
-        true
     }
 
     /// 绘制脏区域（对应 C++ SexyAppBase::DrawDirtyStuff）
@@ -1303,11 +1343,60 @@ impl SexyAppBase {
     /// 检查是否已关闭
     pub fn is_shutdown(&self) -> bool { self.m_shutdown_flag }
 
-    // ==================== SexyApp 继承层方法 ====================
+    // ==================== 命令行参数（对应 C++ SexyAppBase::DoParseCmdLine / HandleCmdLineParam） ====================
 
-    /// 命令行参数处理（对应 C++ SexyApp::HandleCmdLineParam）
-    /// 处理 -version 和 -license 等参数
-    pub fn handle_cmd_line_param(&self, param_name: &str, param_value: &str) {
+    /// 参数切分（对应 C++ `DoParseCmdLine()` 的遍历部分，SexyAppBase.cpp:3258-3278）。
+    ///
+    /// 支持 `-name=value` 与 `-name value` 两种形式；后者仅在本参数在
+    /// `ParamTakesValue` 列表中且下一项不以 '-' 开头时生效。
+    /// C++ 侧遍历后直接调虚函数 `HandleCmdLineParam`，Rust 无虚分派，
+    /// 故返回切分结果由调用方分派（LawnApp 覆写优先于基类）。
+    pub fn parse_cmd_line_params(args: &[String]) -> Vec<(String, String)> {
+        let mut a_result: Vec<(String, String)> = Vec::new();
+        let a_argc = args.len() as i32;
+
+        let mut i = 1i32;
+        while i < a_argc {
+            let mut a_param = args[i as usize].clone();
+            let mut a_value = String::new();
+
+            if let Some(an_equals_pos) = a_param.find('=') {
+                a_value = a_param[an_equals_pos + 1..].to_string();
+                a_param = a_param[..an_equals_pos].to_string();
+            } else if i + 1 < a_argc
+                && !args[(i + 1) as usize].starts_with('-')
+                && param_takes_value(&a_param)
+            {
+                i += 1;
+                a_value = args[i as usize].clone();
+            }
+
+            a_result.push((a_param, a_value));
+            i += 1;
+        }
+
+        a_result
+    }
+
+    /// 参数解析收尾（对应 C++ `DoParseCmdLine()` 尾部，SexyAppBase.cpp:3280-3290）：
+    /// 所有参数解析完后再确定 demo 文件，使显式指定的文件无论顺序都优先。
+    pub fn finalize_cmd_line(&mut self) {
+        if self.m_playing_demo_buffer && !self.m_has_custom_demo_file {
+            let a_demo_files = find_demo_files(&self.demo_prefix, false);
+            if a_demo_files.is_empty() {
+                self.popup("No demo recordings found");
+                std::process::exit(1);
+            }
+            let a_idx = self.m_demo_play_index.min(a_demo_files.len() - 1);
+            self.demo_file_name = a_demo_files[a_idx].clone();
+        } else if self.m_recording_demo_buffer && !self.m_has_custom_demo_file {
+            self.demo_file_name = get_timestamped_demo_file_name(&self.demo_prefix);
+        }
+    }
+
+    /// 命令行参数处理（对应 C++ `SexyAppBase::HandleCmdLineParam`，SexyAppBase.cpp:3307-3350）
+    /// 处理 `-version` / `-license` / `-play` / `-playnum` / `-record` / `-recnum`
+    pub fn handle_cmd_line_param(&mut self, param_name: &str, param_value: &str) {
         match param_name {
             "-version" => {
                 // 打印版本信息后退出
@@ -1322,8 +1411,43 @@ impl SexyAppBase {
                 eprintln!("PvZ-Portable - LGPL-3.0-or-later");
                 std::process::exit(0);
             }
+
+            "-play" | "-playnum" => {
+                // 每次出现都完整重定义请求：以最后一次为准
+                self.m_has_custom_demo_file = false;
+                self.m_demo_play_index = 0;
+                if param_name == "-play" && !param_value.is_empty() {
+                    self.demo_file_name = param_value.to_string();
+                    self.m_has_custom_demo_file = true;
+                } else if param_name == "-playnum" {
+                    let a_num: i32 = param_value.trim().parse().unwrap_or(0);
+                    self.m_demo_play_index = (a_num.max(1) - 1) as usize;
+                }
+                self.m_playing_demo_buffer = true;
+                self.m_recording_demo_buffer = false;
+            }
+
+            "-record" | "-recnum" => {
+                if param_name == "-recnum" {
+                    // 按时间戳/名称序只保留前 N 个录制
+                    let mut a_num: i32 = param_value.trim().parse().unwrap_or(0);
+                    if a_num <= 0 {
+                        a_num = 5;
+                    }
+                    self.m_demo_record_file_limit = a_num as u32;
+                } else {
+                    self.m_has_custom_demo_file = false;
+                    if !param_value.is_empty() {
+                        self.demo_file_name = param_value.to_string();
+                        self.m_has_custom_demo_file = true;
+                    }
+                }
+                self.m_recording_demo_buffer = true;
+                self.m_playing_demo_buffer = false;
+            }
+
             _ => {
-                // 其他参数传递给基类处理
+                // 其他参数传递给调用方/子类处理
             }
         }
     }
@@ -2304,6 +2428,67 @@ fn find_demo_files(the_demo_prefix: &str, the_stamped_only: bool) -> Vec<String>
     a_files.sort_by(|a, b| a_key(b).cmp(&a_key(a)));
 
     a_files
+}
+
+/// 对应 C++ `ParamTakesValue()`（SexyAppBase.cpp:3250-3256）
+fn param_takes_value(the_param_name: &str) -> bool {
+    const K_VALUE_PARAMS: [&str; 6] = ["-play", "-playnum", "-record", "-recnum", "-resdir", "-savedir"];
+    K_VALUE_PARAMS.contains(&the_param_name)
+}
+
+extern "C" {
+    /// C 运行时 `localtime`（返回指向 `struct tm` 的指针；
+    /// 前 6 个 int 字段依次为 sec/min/hour/mday/mon/year，Windows 与 glibc 布局一致）
+    fn localtime(timep: *const i64) -> *const i32;
+}
+
+/// 对应 C++ `GetTimestampedDemoFileName()`（SexyAppBase.cpp:3229-3248）
+///
+/// 文件名形如 `<prefix>-YYYYMMDD-HHMMSS.dmo`；若同秒记录已存在则追加 `-N`（N 递增）。
+fn get_timestamped_demo_file_name(the_demo_prefix: &str) -> String {
+    let a_now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    let (a_year, a_mon, a_mday, a_hour, a_min, a_sec) = unsafe {
+        let a_tm = localtime(&a_now);
+        if a_tm.is_null() {
+            (1970, 1, 1, 0, 0, 0)
+        } else {
+            (
+                *a_tm.add(5) + 1900, // tm_year
+                *a_tm.add(4) + 1,    // tm_mon
+                *a_tm.add(3),        // tm_mday
+                *a_tm.add(2),        // tm_hour
+                *a_tm.add(1),        // tm_min
+                *a_tm.add(0),        // tm_sec
+            )
+        }
+    };
+
+    let a_base_name = format!(
+        "{}-{:04}{:02}{:02}-{:02}{:02}{:02}",
+        the_demo_prefix, a_year, a_mon, a_mday, a_hour, a_min, a_sec
+    );
+    let a_name = format!("{}.dmo", a_base_name);
+    let a_suffix_prefix = format!("{}-", a_base_name);
+
+    let a_demo_files = find_demo_files(the_demo_prefix, true);
+    for a_file_name in a_demo_files.iter() {
+        if *a_file_name == a_name {
+            return format!("{}-2.dmo", a_base_name);
+        }
+        if a_file_name.starts_with(&a_suffix_prefix) {
+            let a_num: i32 = a_file_name[a_suffix_prefix.len()..]
+                .trim_end_matches(".dmo")
+                .parse()
+                .unwrap_or(0);
+            return format!("{}-{}.dmo", a_base_name, a_num + 1);
+        }
+    }
+
+    a_name
 }
 
 // ---- DialogListener / ButtonListener 实现 ----

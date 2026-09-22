@@ -36,6 +36,16 @@ fn main() {
         .collect();
     app.base.set_args(arg_ptrs.len() as i32, arg_ptrs.as_mut_ptr());
 
+    // 解析命令行参数（对应 C++ SexyAppBase::DoParseCmdLine，SexyAppBase.cpp:3258-3290）
+    // C++ 在遍历中直接调虚函数 HandleCmdLineParam（LawnApp 覆写优先于基类）；
+    // Rust 无虚分派，故这里显式分派给 LawnApp（其内部再转基类），最后统一收尾解析 demo 文件。
+    for (a_param_name, a_param_value) in
+        framework::sexy_app_base::SexyAppBase::parse_cmd_line_params(&args)
+    {
+        app.handle_cmd_line_param(&a_param_name, &a_param_value);
+    }
+    app.base.finalize_cmd_line();
+
     // 初始化 SDL、创建窗口、初始化 OpenGL（通过 SexyAppBase）
     app.init();
 
