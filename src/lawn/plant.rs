@@ -1128,28 +1128,158 @@ impl Plant {
         }
     }
 
-    /// 寻找目标僵尸（对应 C++ Plant::FindTargetZombie）
+    /// 寻找目标僵尸（对应 C++ Plant::FindTargetZombie，Plant.cpp:4769）
     /// 返回僵尸在 mZombies 中的索引（Rust 侧用 Vec 索引作为 ZombieID）
     pub fn find_target_zombie(&self, row: i32, weapon: PlantWeapon) -> Option<ZombieID> {
-        if let Some(board) = self.base.get_board() {
-            let attack_rect = self.get_plant_attack_rect(weapon);
-            let mut best_id = None;
-            let mut best_weight = -999999;
-            for (i, zombie) in board.zombies.iter().enumerate() {
-                if zombie.dead { continue; }
-                let row_dev = if zombie.zombie_type == ZombieType::Boss { 0 } else { zombie.base.row - row };
-                if row_dev != 0 { continue; }
-                let z_rect = zombie.get_zombie_rect();
-                if crate::lawn::board::get_rect_overlap(&attack_rect, &z_rect) >= 0 {
-                    let weight = -z_rect.x;
-                    if best_id.is_none() || weight > best_weight {
-                        best_weight = weight;
-                        best_id = Some(i as u32);
-                    }
+        let a_damage_range_flags = self.get_damage_range_flags(weapon);
+        // [TRANSLATION_NOTE]: C++ 的 aAttackRect 在循环内被就地修改（大嘴花/土豆雷特判会改 x/width），
+        // 且修改会累积影响后续僵尸；此处保留该行为，故用 mut 并在循环外只取一次。
+        let mut a_attack_rect = self.get_plant_attack_rect(weapon);
+        let mut a_highest_weight = 0;
+        let mut a_best_zombie: Option<ZombieID> = None;
+
+        let board = match self.base.get_board() {
+            Some(b) => b,
+            None => return None,
+        };
+        let a_is_portal_combat = board.game_mode == GameMode::ChallengePortalCombat;
+
+        for (i, a_zombie) in board.zombies.iter().enumerate() {
+            if a_zombie.dead {
+                continue;
+            }
+            let mut a_row_deviation = a_zombie.base.row - row;
+            // C++: Boss 的行偏差强制为 0（可被任意行攻击）
+            if a_zombie.zombie_type == ZombieType::Boss {
+                a_row_deviation = 0;
+            }
+
+            // C++ 4786-4792: 无头或被缠绕的僵尸，对土豆雷/大嘴花/缠绕水草直接跳过
+            if !a_zombie.has_head || a_zombie.is_tangle_kelp_target() {
+                if self.seed_type == SeedType::PotatoMine
+                    || self.seed_type == SeedType::Chomper
+                    || self.seed_type == SeedType::Tanglekelp
+                {
+                    continue;
                 }
             }
-            best_id
-        } else { None }
+
+            // C++ 4794-4801: 传送门大战中豌豆射手/仙人掌/双发射手需要传送门可见性检查
+            let mut need_portal_check = false;
+            if a_is_portal_combat {
+                if self.seed_type == SeedType::Peashooter
+                    || self.seed_type == SeedType::Cactus
+                    || self.seed_type == SeedType::Repeater
+                {
+                    need_portal_check = true;
+                }
+            }
+
+            // C++ 4803-4823: 非香蒲时的行判定
+            if self.seed_type != SeedType::Cattail {
+                if self.seed_type == SeedType::Gloomshroom {
+                    // 忧郁蘑菇可打 ±1 行
+                    if a_row_deviation < -1 || a_row_deviation > 1 {
+                        continue;
+                    }
+                } else if need_portal_check {
+                    if let Some(a_challenge) = board.challenge.as_ref() {
+                        if a_challenge.can_target_zombie_with_portals(self, a_zombie) == 0 {
+                            continue;
+                        }
+                    }
+                } else if a_row_deviation != 0 {
+                    continue;
+                }
+            }
+
+            if !a_zombie.effected_by_damage(a_damage_range_flags) {
+                continue;
+            }
+
+            let mut a_extra_range = 0;
+
+            // C++ 4829-4846: 大嘴花特判
+            if self.seed_type == SeedType::Chomper {
+                if a_zombie.zombie_phase == ZombiePhase::DiggerWalking {
+                    a_attack_rect.x += 20;
+                    a_attack_rect.width -= 20;
+                }
+                if a_zombie.zombie_phase == ZombiePhase::PogoBouncing
+                    || (a_zombie.zombie_type == ZombieType::Bungee
+                        && a_zombie.target_col == self.plant_col)
+                {
+                    continue;
+                }
+                if a_zombie.is_eating || self.state == PlantState::ChomperBiting {
+                    a_extra_range = 60;
+                }
+            }
+
+            // C++ 4848-4871: 土豆雷特判
+            if self.seed_type == SeedType::PotatoMine {
+                if (a_zombie.zombie_type == ZombieType::Pogo && a_zombie.has_object)
+                    || a_zombie.zombie_phase == ZombiePhase::PolevaulterInVault
+                    || a_zombie.zombie_phase == ZombiePhase::PolevaulterPreVault
+                {
+                    continue;
+                }
+
+                if a_zombie.zombie_type == ZombieType::Polevaulter {
+                    // C++ 原注释：classic potato mine quirk，让撑杆跳僵尸能触发地雷
+                    a_attack_rect.x += 40;
+                    a_attack_rect.width -= 40;
+                }
+
+                if a_zombie.zombie_type == ZombieType::Bungee
+                    && a_zombie.target_col != self.plant_col
+                {
+                    continue;
+                }
+
+                if a_zombie.is_eating {
+                    a_extra_range = 30;
+                }
+            }
+
+            // C++ 4873-4877: 爆炸坚果不炸跳入中的撑杆；缠绕水草只抓池中僵尸
+            if (self.seed_type == SeedType::ExplodeONut
+                && a_zombie.zombie_phase == ZombiePhase::PolevaulterInVault)
+                || (self.seed_type == SeedType::Tanglekelp && !a_zombie.in_pool)
+            {
+                continue;
+            }
+
+            let a_zombie_rect = a_zombie.get_zombie_rect();
+            // C++ 4880-4883: 做了传送门检查时不再按重叠裁剪
+            if !need_portal_check
+                && crate::lawn::board::get_rect_overlap(&a_attack_rect, &a_zombie_rect)
+                    < -a_extra_range
+            {
+                continue;
+            }
+
+            // C++ 4885-4893: 权重——默认取更靠右者；香蒲按 2D 距离取更近者，飞行僵尸加权 10000
+            let mut a_weight = -a_zombie_rect.x;
+            if self.seed_type == SeedType::Cattail {
+                a_weight = (-crate::todlib::tod_common::distance(
+                    self.base.x as f32 + 40.0,
+                    self.base.y as f32 + 40.0,
+                    (a_zombie_rect.x + a_zombie_rect.width / 2) as f32,
+                    (a_zombie_rect.y + a_zombie_rect.height / 2) as f32,
+                )) as i32;
+                if a_zombie.is_flying() {
+                    a_weight += 10000;
+                }
+            }
+
+            if a_best_zombie.is_none() || a_weight > a_highest_weight {
+                a_highest_weight = a_weight;
+                a_best_zombie = Some(i as ZombieID);
+            }
+        }
+
+        a_best_zombie
     }
 
     /// 是否找到星星果实目标（对应 C++ FindStarFruitTarget）
@@ -2597,44 +2727,56 @@ impl Plant {
     }
 
     /// 静态辅助函数
-    pub fn get_cost(seed_type: SeedType, _imitater_type: SeedType) -> i32 {
+    /// 种子价格（对应 C++ Plant::GetCost，Plant.cpp:4973）
+    pub fn get_cost(seed_type: SeedType, imitater_type: SeedType) -> i32 {
+        use crate::lawn::game_enums::GameMode;
+
+        // Beghouled / Beghouled Twist 模式的价格特例
+        let a_game_mode = crate::lawn::lawn_app::LawnApp::instance().map(|app| app.game_mode);
+        if a_game_mode == Some(GameMode::ChallengeBeghouled)
+            || a_game_mode == Some(GameMode::ChallengeBeghouledTwist)
+        {
+            if seed_type == SeedType::Repeater {
+                return 1000;
+            } else if seed_type == SeedType::Fumeshroom {
+                return 500;
+            } else if seed_type == SeedType::Tallnut {
+                return 250;
+            } else if seed_type == SeedType::BeghouledButtonShuffle {
+                return 100;
+            } else if seed_type == SeedType::BeghouledButtonCrater {
+                return 200;
+            }
+        }
+
         match seed_type {
-            SeedType::Peashooter | SeedType::Puffshroom => 100,
-            SeedType::Sunflower | SeedType::Sunshroom => 50,
-            SeedType::Cherrybomb => 150,
-            SeedType::Wallnut => 50,
-            SeedType::PotatoMine => 25,
-            SeedType::Snowpea => 175,
-            SeedType::Chomper => 150,
-            SeedType::Repeater => 200,
-            SeedType::Fumeshroom => 75,
-            SeedType::Gravebuster => 75,
-            SeedType::Hypnoshroom => 75,
-            SeedType::Scaredyshroom => 25,
-            SeedType::Iceshroom => 75,
-            SeedType::Doomshroom => 125,
-            SeedType::Lilypad => 25,
-            SeedType::Squash => 50,
-            SeedType::Threepeater => 325,
-            SeedType::Tanglekelp => 25,
-            SeedType::Jalapeno => 125,
-            SeedType::Spikeweed => 100,
-            SeedType::Torchwood => 175,
-            SeedType::Tallnut => 125,
-            SeedType::Cactus => 175,
-            SeedType::Blover => 100,
-            SeedType::Splitpea => 125,
-            SeedType::Starfruit => 125,
-            SeedType::Pumpkinshell => 125,
-            SeedType::Magnetshroom => 100,
-            SeedType::Cabbagepult => 100,
-            SeedType::Kernelpult => 100,
-            SeedType::InstantCoffee => 75,
-            SeedType::Garlic => 50,
-            SeedType::Umbrella => 100,
-            SeedType::Marigold => 50,
-            SeedType::Melonpult => 300,
-            _ => 0,
+            SeedType::SlotMachineSun => 0,
+            SeedType::SlotMachineDiamond => 0,
+            SeedType::ZombiquariumSnorkle => 100,
+            SeedType::ZombiquariumTrophy => 1000,
+            SeedType::ZombieNormal => 50,
+            SeedType::ZombieTrafficCone => 75,
+            SeedType::ZombiePolevaulter => 75,
+            SeedType::ZombiePail => 125,
+            SeedType::ZombieLadder => 150,
+            SeedType::ZombieDigger => 125,
+            SeedType::ZombieBungee => 125,
+            SeedType::ZombieFootball => 175,
+            SeedType::ZombieBalloon => 150,
+            SeedType::ZombieScreenDoor => 100,
+            SeedType::Zomboni => 175,
+            SeedType::ZombiePogo => 200,
+            SeedType::ZombieDancer => 350,
+            SeedType::ZombieGargantuar => 300,
+            SeedType::ZombieImp => 50,
+            _ => {
+                // C++ default 分支：Imitater 取被模仿植物的 cost
+                if seed_type == SeedType::Imitater && imitater_type != SeedType::None {
+                    get_plant_definition(imitater_type).seed_cost
+                } else {
+                    get_plant_definition(seed_type).seed_cost
+                }
+            }
         }
     }
 
@@ -2954,14 +3096,188 @@ impl Plant {
     }
 
     /// 附加眨眼动画（对应 C++ AttachBlinkAnim）
-    pub fn attach_blink_anim(&mut self, _body_reanim: *mut Reanimation) -> Option<*mut Reanimation> {
-        // [TRANSLATION_NOTE]: 完整实现需要 Attachment 系统挂载 blink 动画，当前仅确定轨道名
-        let _ = self.seed_type;
-        None
+    /// 附加眨眼动画（对应 C++ Plant::AttachBlinkAnim，Plant.cpp:2890）
+    pub fn attach_blink_anim(
+        &mut self,
+        the_reanim_body: *mut Reanimation,
+    ) -> Option<*mut Reanimation> {
+        use crate::todlib::attachment::find_reanim_attachment;
+
+        if the_reanim_body.is_null() {
+            return None;
+        }
+
+        let a_plant_def = get_plant_definition(self.seed_type);
+        let mut a_track_to_play: &str = "anim_blink";
+        let mut a_track_to_attach: Option<&str> = None;
+        // C++: Reanimation* aAnimToAttach = theReanimBody;
+        let mut a_anim_to_attach: *mut Reanimation = the_reanim_body;
+
+        // C++ 2898-2910: 坚果类（含高坚果/爆炸坚果/巨型坚果）三种眨眼变体
+        if self.seed_type == SeedType::Wallnut
+            || self.seed_type == SeedType::Tallnut
+            || self.seed_type == SeedType::ExplodeONut
+            || self.seed_type == SeedType::GiantWallnut
+        {
+            let a_hit = crate::framework::common::rand_range(10);
+            if a_hit < 1 && unsafe { (*the_reanim_body).track_exists("anim_blink_twitch") } {
+                a_track_to_play = "anim_blink_twitch";
+            } else {
+                a_track_to_play = if a_hit < 7 {
+                    "anim_blink_twice"
+                } else {
+                    "anim_blink_thrice"
+                };
+            }
+        }
+        // C++ 2911-2935: 三线射手——随机选三个头之一眨眼
+        else if self.seed_type == SeedType::Threepeater {
+            let a_hit = crate::framework::common::rand_range(3);
+            let (a_play, a_attach, a_head_track) = if a_hit == 0 {
+                ("anim_blink1", "anim_face1", "anim_head1")
+            } else if a_hit == 1 {
+                ("anim_blink2", "anim_face2", "anim_head2")
+            } else {
+                ("anim_blink3", "anim_face3", "anim_head3")
+            };
+            a_track_to_play = a_play;
+            a_track_to_attach = Some(a_attach);
+            // C++: theReanimBody->GetTrackInstanceByName(aHeadTrack)->mAttachmentID → FindReanimAttachment
+            if let Some(a_track_instance) =
+                unsafe { (*the_reanim_body).get_track_instance_by_name(a_head_track) }
+            {
+                let mut a_attach_id = a_track_instance.m_attachment_id;
+                if let Some(a_reanim) = find_reanim_attachment(&mut a_attach_id) {
+                    a_anim_to_attach = a_reanim as *mut Reanimation;
+                }
+            }
+        }
+        // C++ 2936-2950: 分裂豌豆——左右头各一套眨眼
+        else if self.seed_type == SeedType::Splitpea {
+            if crate::framework::common::rand_range(2) == 0 {
+                a_track_to_play = "anim_blink";
+                a_track_to_attach = Some("anim_face");
+                a_anim_to_attach = self
+                    .base
+                    .get_app()
+                    .and_then(|app| app.reanimation_get(self.head_reanim_id))
+                    .map_or(std::ptr::null_mut(), |r| {
+                        r as *const Reanimation as *mut Reanimation
+                    });
+            } else {
+                a_track_to_play = "anim_blink2";
+                a_track_to_attach = Some("anim_face2");
+                a_anim_to_attach = self
+                    .base
+                    .get_app()
+                    .and_then(|app| app.reanimation_get(self.head_reanim_id2))
+                    .map_or(std::ptr::null_mut(), |r| {
+                        r as *const Reanimation as *mut Reanimation
+                    });
+            }
+        }
+        // C++ 2951-2963: 双子葵——两套轨道，挂接对象仍是本体
+        else if self.seed_type == SeedType::Twinsunflower {
+            if crate::framework::common::rand_range(2) == 0 {
+                a_track_to_play = "anim_blink";
+                a_track_to_attach = Some("anim_face");
+            } else {
+                a_track_to_play = "anim_blink2";
+                a_track_to_attach = Some("anim_face2");
+            }
+        }
+        // C++ 2964-2976: 豌豆系列——挂到 anim_stem 或 anim_idle 的附件上
+        else if self.seed_type == SeedType::Peashooter
+            || self.seed_type == SeedType::Snowpea
+            || self.seed_type == SeedType::Repeater
+            || self.seed_type == SeedType::Leftpeater
+            || self.seed_type == SeedType::Gatlingpea
+        {
+            if unsafe { (*the_reanim_body).track_exists("anim_stem") } {
+                if let Some(a_track_instance) =
+                    unsafe { (*the_reanim_body).get_track_instance_by_name("anim_stem") }
+                {
+                    let mut a_attach_id = a_track_instance.m_attachment_id;
+                    if let Some(a_reanim) = find_reanim_attachment(&mut a_attach_id) {
+                        a_anim_to_attach = a_reanim as *mut Reanimation;
+                    }
+                }
+            } else if unsafe { (*the_reanim_body).track_exists("anim_idle") } {
+                if let Some(a_track_instance) =
+                    unsafe { (*the_reanim_body).get_track_instance_by_name("anim_idle") }
+                {
+                    let mut a_attach_id = a_track_instance.m_attachment_id;
+                    if let Some(a_reanim) = find_reanim_attachment(&mut a_attach_id) {
+                        a_anim_to_attach = a_reanim as *mut Reanimation;
+                    }
+                }
+            }
+        }
+
+        // C++ 2978-2982: 找不到可挂接对象
+        if a_anim_to_attach.is_null() {
+            // C++: PvzpTrace("Missing head anim");
+            return None;
+        }
+        // C++ 2984-2985: 目标轨道不存在
+        if !unsafe { (*the_reanim_body).track_exists(a_track_to_play) } {
+            return None;
+        }
+
+        // C++ 2987-2991
+        let a_blink_reanim = match self.base.get_app_mut() {
+            Some(app) => {
+                app.add_reanimation(0.0, 0.0, 0, a_plant_def.reanimation_type as i32)
+            }
+            None => return None,
+        };
+        let a_blink_reanim = a_blink_reanim?;
+
+        unsafe {
+            (*a_blink_reanim).set_frames_for_layer(a_track_to_play);
+            (*a_blink_reanim).m_loop_type =
+                crate::todlib::reanimator::ReanimLoopType::PlayOnceFullLastFrameAndHold;
+            (*a_blink_reanim).m_anim_rate = 15.0;
+            (*a_blink_reanim).m_color_override = (*the_reanim_body).m_color_override;
+
+            // C++ 2993-3008: 优先挂到指定轨道，否则退化为 anim_face / anim_idle
+            let a_resolved_track: Option<&str> = if let Some(a_track_to_attach) = a_track_to_attach
+            {
+                if (*a_anim_to_attach).track_exists(a_track_to_attach) {
+                    Some(a_track_to_attach)
+                } else if (*a_anim_to_attach).track_exists("anim_face") {
+                    Some("anim_face")
+                } else if (*a_anim_to_attach).track_exists("anim_idle") {
+                    Some("anim_idle")
+                } else {
+                    None
+                }
+            } else if (*a_anim_to_attach).track_exists("anim_face") {
+                Some("anim_face")
+            } else if (*a_anim_to_attach).track_exists("anim_idle") {
+                Some("anim_idle")
+            } else {
+                None
+            };
+
+            if let Some(a_resolved_track) = a_resolved_track {
+                (*a_blink_reanim).attach_to_another_reanimation(
+                    &mut *a_anim_to_attach,
+                    a_resolved_track,
+                );
+            }
+            // C++: else PvzpTrace("Missing anim_idle for blink");
+
+            (*a_blink_reanim).m_filter_effect = (*the_reanim_body).m_filter_effect;
+        }
+
+        Some(a_blink_reanim)
     }
 
     /// 执行眨眼（对应 C++ DoBlink）
     pub fn do_blink(&mut self) {
+        use crate::todlib::reanim_loader::{reanimator_get_image, resolve_reanim_image_name};
+
         self.blink_countdown = 400 + RandRange(400);
         if self.not_on_ground() || self.shooting_counter != 0 {
             return;
@@ -2976,15 +3292,58 @@ impl Plant {
             return;
         }
         self.end_blink();
+
+        // C++ 3029-3031: 取本体 reanim，缺失则放弃
+        // [TRANSLATION_NOTE]: 原 Rust 实现此处把 mBodyReanimID（索引）直接当作指针传入，
+        // 属于占位错误；现按 C++ 先取真实 reanim 指针。
+        let a_body_reanim = self
+            .base
+            .get_app()
+            .and_then(|app| app.reanimation_get(self.body_reanim_id))
+            .map_or(std::ptr::null_mut(), |r| {
+                r as *const Reanimation as *mut Reanimation
+            });
+        if a_body_reanim.is_null() {
+            return;
+        }
+
+        // C++ 3033-3035: 已受损的高坚果（cracked2）与大蒜（body3）不眨眼
+        unsafe {
+            let a_idle_image = (*a_body_reanim).get_image_override("anim_idle");
+            let a_face_image = (*a_body_reanim).get_image_override("anim_face");
+            let a_tallnut_cracked2 = reanimator_get_image(resolve_reanim_image_name(
+                "IMAGE_REANIM_TALLNUT_CRACKED2",
+            ))
+            .unwrap_or(std::ptr::null_mut());
+            let a_garlic_body3 =
+                reanimator_get_image(resolve_reanim_image_name("IMAGE_REANIM_GARLIC_BODY3"))
+                    .unwrap_or(std::ptr::null_mut());
+            if (self.seed_type == SeedType::Tallnut && a_idle_image == a_tallnut_cracked2)
+                || (self.seed_type == SeedType::Garlic && a_face_image == a_garlic_body3)
+            {
+                return;
+            }
+        }
+
         if matches!(self.seed_type, SeedType::Wallnut | SeedType::Tallnut
             | SeedType::ExplodeONut | SeedType::GiantWallnut)
         {
             self.blink_countdown = 1000 + RandRange(1000);
         }
-        if self.attach_blink_anim(self.body_reanim_id as *mut Reanimation).is_none() {
-            return;
+
+        // C++ 3043-3047: 挂接眨眼动画并记录其 ID
+        if let Some(a_blink_reanim) = self.attach_blink_anim(a_body_reanim) {
+            if let Some(app) = self.base.get_app_mut() {
+                self.blink_reanim_id = app.reanimation_get_id(a_blink_reanim);
+            }
         }
-        // [TRANSLATION_NOTE]: AssignRenderGroupToPrefix("anim_eye", HIDDEN) 依赖 reanim，暂不接入
+        // C++ 3048: 无论挂接是否成功都隐藏眼睛轨道
+        unsafe {
+            (*a_body_reanim).assign_render_group_to_prefix(
+                "anim_eye",
+                crate::todlib::reanimator::RENDER_GROUP_HIDDEN,
+            );
+        }
     }
 
     /// 结束眨眼（对应 C++ EndBlink）

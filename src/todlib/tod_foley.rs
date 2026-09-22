@@ -698,6 +698,8 @@ pub static mut SOUND_GARGANTUDEATH: i32 = -1;
 pub static mut SOUND_CERAMIC: i32 = -1;
 pub static mut SOUND_BOSSBOULDERATTACK: i32 = -1;
 pub static mut SOUND_CHIME: i32 = -1;
+/// 对应 C++ Sexy::SOUND_ZOMBAQUARIUM_DIE（水族馆僵尸自然消亡音，Zombie.cpp:3255 使用）
+pub static mut SOUND_ZOMBAQUARIUM_DIE: i32 = -1;
 pub static mut SOUND_CRAZYDAVESHORT1: i32 = -1;
 pub static mut SOUND_CRAZYDAVESHORT2: i32 = -1;
 pub static mut SOUND_CRAZYDAVESHORT3: i32 = -1;

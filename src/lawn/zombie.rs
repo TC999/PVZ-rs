@@ -1513,25 +1513,164 @@ impl Zombie {
         }
     }
 
-    /// 更新僵尸撑杆跳（对应 C++ UpdateZombiePolevaulter）
+    /// 更新僵尸撑杆跳（对应 C++ Zombie::UpdateZombiePolevaulter，Zombie.cpp:1706）
     pub fn update_zombie_polevaulter(&mut self) {
-        if self.zombie_phase == ZombiePhase::PolevaulterPreVault && self.has_head && self.zombie_height == ZombieHeight::Normal {
-            // 依赖底层系统
-            // 有植物在前方 → 跳越
-            let has_plant_ahead = self.base.x > 50 && self.base.x < 750;
-            if has_plant_ahead {
-                self.zombie_phase = ZombiePhase::PolevaulterInVault;
-                self.play_zombie_reanim("anim_jump", ReanimLoopType::PlayOnceAndHold, 20, 24.0);
-                self.has_object = false;
+        if self.zombie_phase == ZombiePhase::PolevaulterPreVault
+            && self.has_head
+            && self.zombie_height == ZombieHeight::Normal
+        {
+            let a_plant_idx = self.find_plant_target_index(ZombieAttackType::Vault);
+            if let Some(a_idx) = a_plant_idx {
+                let a_plant_info = self
+                    .base
+                    .get_board()
+                    .and_then(|b| b.plants.get(a_idx))
+                    .map(|p| (p.plant_col, p.base.row, p.pos_x));
+                if let Some((a_col, a_row, a_plant_pos_x)) = a_plant_info {
+                    // C++: mBoard->GetLadderAt(aPlant->mPlantCol, aPlant->mRow)
+                    let a_ladder_exists = self
+                        .base
+                        .get_board()
+                        .map_or(false, |b| b.get_ladder_at(a_col, a_row).is_some());
+                    if a_ladder_exists {
+                        let a_plant_x = self
+                            .base
+                            .get_board()
+                            .map_or(0, |b| b.grid_to_pixel_x(a_col, a_row))
+                            + 40;
+                        if a_plant_x as f32 > self.pos_x
+                            && self.zombie_height == ZombieHeight::Normal
+                            && self.use_ladder_col != a_col
+                        {
+                            self.zombie_height = ZombieHeight::UpLadder;
+                            self.use_ladder_col = a_col;
+                        }
+                        return;
+                    }
+
+                    self.zombie_phase = ZombiePhase::PolevaulterInVault;
+                    self.play_zombie_reanim("anim_jump", ReanimLoopType::PlayOnceAndHold, 20, 24.0);
+
+                    // C++: aAnimDuration = aBodyReanim->mFrameCount / aBodyReanim->mAnimRate * 100.0f
+                    let (a_frame_count, a_anim_rate) = self
+                        .base
+                        .get_app()
+                        .and_then(|app| {
+                            app.reanimation_get(self.body_reanim_id)
+                                .map(|r| (r.m_frame_count, r.m_anim_rate))
+                        })
+                        .unwrap_or((0, 1.0));
+                    let a_anim_duration = if a_anim_rate != 0.0 {
+                        a_frame_count as f32 / a_anim_rate * 100.0
+                    } else {
+                        0.0
+                    };
+                    let a_is_wallnut_bowling = self
+                        .base
+                        .get_app()
+                        .map_or(false, |app| app.is_wallnut_bowling_level());
+                    let mut a_jump_distance = self.base.x - a_plant_pos_x as i32 - 80;
+                    if a_is_wallnut_bowling {
+                        a_jump_distance = 0;
+                    }
+                    if a_anim_duration != 0.0 {
+                        self.vel_x = a_jump_distance as f32 / a_anim_duration;
+                    }
+                    self.has_object = false;
+                }
+            }
+
+            // C++: IZombie 关卡且已有脑目标 → 直接进入 POST_VAULT
+            let a_izombie_has_brain = self
+                .base
+                .get_app()
+                .map_or(false, |app| app.is_izombie_level())
+                && self
+                    .base
+                    .get_board()
+                    .and_then(|b| b.challenge.as_ref())
+                    .map_or(false, |ch| ch.izombie_get_brain_target(self).is_some());
+            if a_izombie_has_brain {
+                self.zombie_phase = ZombiePhase::PolevaulterPostVault;
+                self.start_walk_anim(0);
             }
         } else if self.zombie_phase == ZombiePhase::PolevaulterInVault {
-            // 依赖底层系统
-            // 简化处理：直接结束跳跃
-            self.pos_x -= 150.0;
-            self.base.x = self.pos_x as i32;
-            self.zombie_phase = ZombiePhase::PolevaulterPostVault;
-            self.zombie_attack_rect = Rect::new(50, 0, 20, 115);
-            self.start_walk_anim(0);
+            let (a_anim_time, a_loop_count) = self
+                .base
+                .get_app()
+                .and_then(|app| {
+                    app.reanimation_get(self.body_reanim_id)
+                        .map(|r| (r.m_anim_time, r.m_loop_count))
+                })
+                .unwrap_or((0.0, 0));
+
+            let mut a_jump_ends = false;
+            if a_anim_time > 0.6 && a_anim_time <= 0.7 {
+                let a_tallnut_info = self
+                    .find_plant_target_index(ZombieAttackType::Vault)
+                    .and_then(|i| {
+                        self.base
+                            .get_board()
+                            .and_then(|b| b.plants.get(i))
+                            .map(|p| (p.seed_type, p.pos_x, p.pos_y))
+                    });
+                if let Some((a_seed_type, a_plant_pos_x, a_plant_pos_y)) = a_tallnut_info {
+                    if a_seed_type == SeedType::Tallnut {
+                        if let Some(app) = self.base.get_app() {
+                            app.play_foley(crate::todlib::tod_foley::FoleyType::Bonk as i32);
+                        }
+                        a_jump_ends = true;
+                        let a_render_order = self.base.render_order + 1;
+                        if let Some(app) = self.base.get_app_mut() {
+                            app.add_tod_particle(
+                                a_plant_pos_x + 60.0,
+                                a_plant_pos_y - 20.0,
+                                a_render_order,
+                                ParticleEffect::TallNutBlock as i32,
+                            );
+                        }
+                        self.zombie_height = ZombieHeight::Falling;
+                        self.pos_x = a_plant_pos_x;
+                        self.pos_y -= 30.0;
+                    }
+                }
+            }
+
+            if a_loop_count > 0 {
+                a_jump_ends = true;
+                self.pos_x -= 150.0;
+            }
+            let a_grass_step = self.base.get_app().map_or(false, |app| {
+                app.reanimation_get(self.body_reanim_id)
+                    .map_or(false, |r| r.should_trigger_timed_event(0.2))
+            });
+            if a_grass_step {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::GrassStep as i32);
+                }
+            }
+            let a_pole_vault = self.base.get_app().map_or(false, |app| {
+                app.reanimation_get(self.body_reanim_id)
+                    .map_or(false, |r| r.should_trigger_timed_event(0.4))
+            });
+            if a_pole_vault {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Polevault as i32);
+                }
+            }
+
+            if a_jump_ends {
+                self.base.x = self.pos_x as i32;
+                self.zombie_phase = ZombiePhase::PolevaulterPostVault;
+                self.zombie_attack_rect = Rect::new(50, 0, 20, 115);
+                self.start_walk_anim(0);
+            } else {
+                // C++ 原样保留「先位移再还原」写法：还原前调用 GetPosYBasedOnRow 以保留其副作用
+                let a_old_pos_x = self.pos_x;
+                self.pos_x -= 150.0 * a_anim_time;
+                self.pos_y = self.get_pos_y_based_on_row(self.base.row);
+                self.pos_x = a_old_pos_x;
+            }
         }
     }
 
@@ -1621,9 +1760,32 @@ impl Zombie {
         }
     }
 
-    /// 更新海豚骑士（对应 C++ UpdateZombieDolphinRider）
+    /// 是否是缠绕水草的目标（对应 C++ Zombie::IsTanglekelpTarget，Zombie.cpp:1796）
+    pub fn is_tanglekelp_target(&self) -> bool {
+        let board = match self.base.get_board() {
+            Some(b) => b,
+            None => return false,
+        };
+        let a_this_id = board.zombie_get_id(self);
+        for a_plant in &board.plants {
+            if a_plant.dead {
+                continue;
+            }
+            if a_plant.seed_type == SeedType::Tanglekelp
+                && a_plant.target_zombie_id == a_this_id
+            {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// 更新海豚骑士（对应 C++ Zombie::UpdateZombieDolphinRider，Zombie.cpp:1811）
     pub fn update_zombie_dolphin_rider(&mut self) {
-        // 依赖底层系统
+        if self.is_tanglekelp_target() {
+            return;
+        }
+
         let a_backwards = self.is_walking_backwards();
 
         if self.zombie_phase == ZombiePhase::DolphinWalking && !a_backwards {
@@ -1632,31 +1794,65 @@ impl Zombie {
                 self.play_zombie_reanim("anim_jumpinpool", ReanimLoopType::PlayOnceAndHold, 20, 16.0);
             }
         } else if self.zombie_phase == ZombiePhase::DolphinIntoPool {
-            // 依赖底层系统
-            // 依赖底层系统
-            self.pos_x -= 70.0;
-            self.zombie_phase = ZombiePhase::DolphinRiding;
-            self.in_pool = true;
-            self.zombie_attack_rect = Rect::new(-29, 0, 70, 115);
-            self.play_zombie_reanim("anim_ride", ReanimLoopType::LoopFullOffset, 0, 12.0);
+            let a_loop_count = self
+                .base
+                .get_app()
+                .and_then(|app| app.reanimation_get(self.body_reanim_id).map(|r| r.m_loop_count))
+                .unwrap_or(0);
+            let a_splash = self.base.get_app().map_or(false, |app| {
+                app.reanimation_get(self.body_reanim_id)
+                    .map_or(false, |r| r.should_trigger_timed_event(0.56))
+            });
+            if a_splash {
+                // C++: AddReanimation(mX - 83, mY + 73, mRenderOrder + 1, REANIM_SPLASH)
+                let a_base_x = self.base.x as f32;
+                let a_base_y = self.base.y as f32;
+                let a_render_order = self.base.render_order + 1;
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_splash_reanim) = app.add_reanimation(
+                        a_base_x - 83.0,
+                        a_base_y + 73.0,
+                        a_render_order,
+                        ReanimationType::Splash as i32,
+                    ) {
+                        unsafe { (*a_splash_reanim).override_scale(1.2, 0.8); }
+                    }
+                    app.add_tod_particle(
+                        a_base_x - 46.0,
+                        a_base_y + 115.0,
+                        a_render_order,
+                        ParticleEffect::PlantingPool as i32,
+                    );
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::ZombieEnteringWater as i32);
+                }
+            }
+
+            if a_loop_count > 0 {
+                self.pos_x -= 70.0;
+                self.zombie_phase = ZombiePhase::DolphinRiding;
+                self.in_pool = true;
+                self.zombie_attack_rect = Rect::new(-29, 0, 70, 115);
+                self.play_zombie_reanim("anim_ride", ReanimLoopType::LoopFullOffset, 0, 12.0);
+            }
         } else if self.zombie_phase == ZombiePhase::DolphinRiding {
             if self.base.x <= 10 {
                 self.altitude = -40.0;
                 self.zombie_height = ZombieHeight::OutOfPool;
                 self.zombie_phase = ZombiePhase::DolphinWalking;
-                // 依赖底层系统
+                self.pool_splash(false);
                 self.play_zombie_reanim("anim_walkdolphin", ReanimLoopType::Loop, 0, 0.0);
                 self.pick_random_speed();
                 return;
             }
 
-            if self.has_head {
-                // 依赖底层系统
-                // 若有植物在前方，触发跳跃
-                let has_plant_ahead = self.base.x > 50 && self.base.x < 700;
-                if has_plant_ahead {
+            if self.has_head && !self.is_tanglekelp_target() {
+                // C++: FindPlantTarget(ATTACKTYPE_VAULT) 命中后连续播两个音效
+                if self.find_plant_target_index(ZombieAttackType::Vault).is_some() {
                     if let Some(app) = self.base.get_app() {
                         app.play_foley(crate::todlib::tod_foley::FoleyType::DolphinBeforeJumping as i32);
+                    }
+                    if let Some(app) = self.base.get_app() {
+                        app.play_foley(crate::todlib::tod_foley::FoleyType::PlantWater as i32);
                     }
                     self.vel_x = 0.5;
                     self.zombie_phase = ZombiePhase::DolphinInJump;
@@ -1665,14 +1861,86 @@ impl Zombie {
                 }
             }
         } else if self.zombie_phase == ZombiePhase::DolphinInJump {
-            // 跳跃高度曲线
+            let a_loop_count = self
+                .base
+                .get_app()
+                .and_then(|app| app.reanimation_get(self.body_reanim_id).map(|r| r.m_loop_count))
+                .unwrap_or(0);
+
             self.altitude = crate::todlib::tod_common::tod_animate_curve_float(
                 DOLPHIN_JUMP_TIME, 0, self.phase_counter, 0.0, 10.0, TodCurves::Linear,
             );
 
-            // 依赖底层系统
-            // 简化：phase_counter 为 0 时结束跳跃
-            if self.phase_counter == 0 {
+            let mut a_jump_ends = false;
+            let a_bonk = self.base.get_app().map_or(false, |app| {
+                app.reanimation_get(self.body_reanim_id)
+                    .map_or(false, |r| r.should_trigger_timed_event(0.3))
+            });
+            if a_bonk {
+                let a_tallnut_info = self
+                    .find_plant_target_index(ZombieAttackType::Vault)
+                    .and_then(|i| {
+                        self.base
+                            .get_board()
+                            .and_then(|b| b.plants.get(i))
+                            .map(|p| (p.seed_type, p.pos_x, p.pos_y))
+                    });
+                if let Some((a_seed_type, a_plant_pos_x, a_plant_pos_y)) = a_tallnut_info {
+                    if a_seed_type == SeedType::Tallnut {
+                        if let Some(app) = self.base.get_app() {
+                            app.play_foley(crate::todlib::tod_foley::FoleyType::Bonk as i32);
+                        }
+                        a_jump_ends = true;
+                        let a_render_order = self.base.render_order + 1;
+                        if let Some(app) = self.base.get_app_mut() {
+                            app.add_tod_particle(
+                                a_plant_pos_x + 60.0,
+                                a_plant_pos_y - 20.0,
+                                a_render_order,
+                                ParticleEffect::TallNutBlock as i32,
+                            );
+                        }
+                        self.zombie_height = ZombieHeight::Falling;
+                        self.pos_x = a_plant_pos_x + 25.0;
+                        self.altitude = 30.0;
+                    }
+                }
+            } else {
+                let a_splash = self.base.get_app().map_or(false, |app| {
+                    app.reanimation_get(self.body_reanim_id)
+                        .map_or(false, |r| r.should_trigger_timed_event(0.49))
+                });
+                if a_splash {
+                    // C++: AddReanimation(mX - 63, mY + 73, mRenderOrder + 1, REANIM_SPLASH)
+                    let a_base_x = self.base.x as f32;
+                    let a_base_y = self.base.y as f32;
+                    let a_render_order = self.base.render_order + 1;
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_splash_reanim) = app.add_reanimation(
+                            a_base_x - 63.0,
+                            a_base_y + 73.0,
+                            a_render_order,
+                            ReanimationType::Splash as i32,
+                        ) {
+                            unsafe { (*a_splash_reanim).override_scale(1.2, 0.8); }
+                        }
+                        app.add_tod_particle(
+                            a_base_x - 26.0,
+                            a_base_y + 115.0,
+                            a_render_order,
+                            ParticleEffect::PlantingPool as i32,
+                        );
+                        app.play_foley(crate::todlib::tod_foley::FoleyType::ZombieEnteringWater as i32);
+                    }
+                    self.vel_x = 0.0;
+                } else if a_loop_count > 0 {
+                    a_jump_ends = true;
+                    self.pos_x -= 94.0;
+                    self.altitude = 0.0;
+                }
+            }
+
+            if a_jump_ends {
                 self.zombie_attack_rect = Rect::new(30, 0, 30, 115);
                 self.zombie_rect = Rect::new(20, 0, 42, 115);
                 self.zombie_phase = ZombiePhase::DolphinWalkingInPool;
@@ -1683,14 +1951,14 @@ impl Zombie {
                 self.altitude = -40.0;
                 self.zombie_height = ZombieHeight::OutOfPool;
                 self.zombie_phase = ZombiePhase::DolphinWalkingWithoutDolphin;
-                // 依赖底层系统
+                self.pool_splash(false);
                 self.play_zombie_reanim("anim_walk", ReanimLoopType::Loop, 0, 0.0);
                 self.pick_random_speed();
             }
         }
     }
 
-    /// 更新潜水僵尸（对应 C++ UpdateZombieSnorkel）
+    /// 更新潜水僵尸（对应 C++ Zombie::UpdateZombieSnorkel，Zombie.cpp:1932）
     pub fn update_zombie_snorkel(&mut self) {
         let a_backwards = self.is_walking_backwards();
 
@@ -1701,11 +1969,58 @@ impl Zombie {
                 self.play_zombie_reanim("anim_jumpinpool", ReanimLoopType::PlayOnceAndHold, 20, 16.0);
             }
         } else if self.zombie_phase == ZombiePhase::SnorkelIntoPool {
-            // 依赖底层系统
-            // 简化处理
-            self.zombie_phase = ZombiePhase::SnorkelWalkingInPool;
-            self.in_pool = true;
-            self.play_zombie_reanim("anim_swim", ReanimLoopType::LoopFullOffset, 0, 12.0);
+            let (a_anim_time, a_loop_count) = self
+                .base
+                .get_app()
+                .and_then(|app| {
+                    app.reanimation_get(self.body_reanim_id)
+                        .map(|r| (r.m_anim_time, r.m_loop_count))
+                })
+                .unwrap_or((0.0, 0));
+
+            // C++: mAltitude = PvzpAnimateCurveFloat(0, 1000, mAnimTime * 1000, 0.0f, 10.0f, CURVE_LINEAR)
+            self.altitude = crate::todlib::tod_common::tod_animate_curve_float(
+                0,
+                1000,
+                (a_anim_time * 1000.0) as i32,
+                0.0,
+                10.0,
+                TodCurves::Linear,
+            );
+
+            let a_splash = self.base.get_app().map_or(false, |app| {
+                app.reanimation_get(self.body_reanim_id)
+                    .map_or(false, |r| r.should_trigger_timed_event(0.83))
+            });
+            if a_splash {
+                // C++: AddReanimation(mX - 47, mY + 73, mRenderOrder + 1, REANIM_SPLASH)
+                let a_base_x = self.base.x as f32;
+                let a_base_y = self.base.y as f32;
+                let a_render_order = self.base.render_order + 1;
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_splash_reanim) = app.add_reanimation(
+                        a_base_x - 47.0,
+                        a_base_y + 73.0,
+                        a_render_order,
+                        ReanimationType::Splash as i32,
+                    ) {
+                        unsafe { (*a_splash_reanim).override_scale(1.2, 0.8); }
+                    }
+                    app.add_tod_particle(
+                        a_base_x - 10.0,
+                        a_base_y + 115.0,
+                        a_render_order,
+                        ParticleEffect::PlantingPool as i32,
+                    );
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::ZombieEnteringWater as i32);
+                }
+            }
+
+            if a_loop_count > 0 {
+                self.zombie_phase = ZombiePhase::SnorkelWalkingInPool;
+                self.in_pool = true;
+                self.play_zombie_reanim("anim_swim", ReanimLoopType::LoopFullOffset, 0, 12.0);
+            }
         } else if self.zombie_phase == ZombiePhase::SnorkelWalkingInPool {
             if !self.has_head {
                 self.take_damage(1800, 9);
@@ -1714,25 +2029,29 @@ impl Zombie {
                 self.pos_x -= 15.0;
                 self.zombie_phase = ZombiePhase::SnorkelWalking;
                 self.zombie_height = ZombieHeight::OutOfPool;
-                // 依赖底层系统
+                self.pool_splash(false);
                 self.start_walk_anim(0);
             } else if self.base.x > 640 && a_backwards {
                 self.altitude = -90.0;
                 self.pos_x += 15.0;
                 self.zombie_phase = ZombiePhase::SnorkelWalking;
                 self.zombie_height = ZombieHeight::OutOfPool;
-                // 依赖底层系统
+                self.pool_splash(false);
                 self.start_walk_anim(0);
             } else if self.is_eating {
                 self.zombie_phase = ZombiePhase::SnorkelUpToEat;
                 self.play_zombie_reanim("anim_uptoeat", ReanimLoopType::PlayOnceAndHold, 0, 24.0);
             }
         } else if self.zombie_phase == ZombiePhase::SnorkelUpToEat {
+            let a_loop_count = self
+                .base
+                .get_app()
+                .and_then(|app| app.reanimation_get(self.body_reanim_id).map(|r| r.m_loop_count))
+                .unwrap_or(0);
             if !self.is_eating {
                 self.zombie_phase = ZombiePhase::SnorkelDownFromEat;
                 self.play_zombie_reanim("anim_uptoeat", ReanimLoopType::PlayOnceAndHold, 0, -24.0);
-            } else {
-                // 依赖底层系统
+            } else if a_loop_count > 0 {
                 self.zombie_phase = ZombiePhase::SnorkelEatingInPool;
                 self.play_zombie_reanim("anim_eat", ReanimLoopType::Loop, 0, 0.0);
             }
@@ -1742,10 +2061,16 @@ impl Zombie {
                 self.play_zombie_reanim("anim_uptoeat", ReanimLoopType::PlayOnceAndHold, 0, -24.0);
             }
         } else if self.zombie_phase == ZombiePhase::SnorkelDownFromEat {
-            // 依赖底层系统
-            self.zombie_phase = ZombiePhase::SnorkelWalkingInPool;
-            self.play_zombie_reanim("anim_swim", ReanimLoopType::LoopFullOffset, 0, 0.0);
-            self.pick_random_speed();
+            let a_loop_count = self
+                .base
+                .get_app()
+                .and_then(|app| app.reanimation_get(self.body_reanim_id).map(|r| r.m_loop_count))
+                .unwrap_or(0);
+            if a_loop_count > 0 {
+                self.zombie_phase = ZombiePhase::SnorkelWalkingInPool;
+                self.play_zombie_reanim("anim_swim", ReanimLoopType::LoopFullOffset, 0, 0.0);
+                self.pick_random_speed();
+            }
         }
     }
 
@@ -1990,38 +2315,55 @@ impl Zombie {
                     }
                 }
 
-                // 对应 C++: PlayFoley(FOLEY_THUMP) + ShakeBoard(0, 3)
+                // C++ Zombie.cpp:2117-2125：ScaryPotter 关卡砸开瓦罐
+                let a_is_scary_potter = self
+                    .base
+                    .get_app()
+                    .map_or(false, |app| app.is_scary_potter_level());
+                if a_is_scary_potter {
+                    let a_row = self.base.row;
+                    let a_base_y = self.base.y;
+                    let a_scary_idx = self.base.get_board().and_then(|board| {
+                        let a_grid_x = board.pixel_to_grid_x(self.base.x, a_base_y);
+                        board
+                            .get_scary_pot_at(a_grid_x, a_row)
+                            .and_then(|item| board.grid_items.iter().position(|g| std::ptr::eq(g, item)))
+                    });
+                    if let Some(sidx) = a_scary_idx {
+                        if let Some(board) = self.base.get_board_mut() {
+                            // challenge 与 grid_items 为不同字段，可分离借用
+                            if let Some(challenge) = board.challenge.as_mut() {
+                                let a_pot = &mut board.grid_items[sidx];
+                                challenge.scary_potter_open_pot(a_pot);
+                            }
+                        }
+                    }
+                }
+
+                // C++ Zombie.cpp:2127-2134：IZombie 关卡压碎脑目标
+                let a_is_izombie = self.base.get_app().map_or(false, |app| app.is_izombie_level());
+                if a_is_izombie {
+                    let a_brain_idx = self
+                        .base
+                        .get_board()
+                        .and_then(|b| b.challenge.as_ref())
+                        .and_then(|ch| ch.izombie_get_brain_target(self));
+                    if let Some(bidx) = a_brain_idx {
+                        if let Some(board) = self.base.get_board_mut() {
+                            if let Some(challenge) = board.challenge.as_mut() {
+                                challenge.izombie_squish_brain(bidx);
+                            }
+                        }
+                    }
+                }
+
+                // C++ Zombie.cpp:2137-2138：砸击音效与震屏
                 if let Some(app) = self.base.get_app() {
                     app.play_foley(crate::todlib::tod_foley::FoleyType::Thump as i32);
                 }
                 if let Some(board) = self.base.get_board_mut() {
                     board.shake_board(0, 3);
                 }
-
-                // 对应 C++: scary potter 关卡的瓦罐被砸开
-                if self.base.get_app().map_or(false, |app| app.is_scary_potter_level()) {
-                    let a_row = self.base.row;
-                    let a_pos_x = self.base.x;
-                    if let Some(board) = self.base.get_board_mut() {
-                        let a_grid_x = board.pixel_to_grid_x_keep_on_board(a_pos_x, 0);
-                        if let Some(challenge) = board.challenge.as_mut() {
-                            // 对应 C++: mBoard->GetScaryPotAt(aGridX, mRow)；Rust 以 grid_items 查找
-                            let a_scary_idx = board
-                                .grid_items
-                                .iter()
-                                .position(|item| {
-                                    !item.dead
-                                        && item.grid_item_type == crate::lawn::grid_item::GridItemType::ScaryPot
-                                        && item.grid_x == a_grid_x
-                                        && item.grid_y == a_row
-                                });
-                            if let Some(sidx) = a_scary_idx {
-                                challenge.scary_potter_open_pot(&mut board.grid_items[sidx]);
-                            }
-                        }
-                    }
-                }
-                // [TRANSLATION_NOTE]: C++ IZombie 分支（IZombieGetBrainTarget/SquishBrain）依赖 IZombie 系统，暂未接入
             }
 
             // 对应 C++: aBodyReanim->mLoopCount > 0 → 回 Normal
@@ -2038,9 +2380,19 @@ impl Zombie {
         let a_throwing_distance = self.pos_x - 360.0;
 
         if self.zombie_phase == ZombiePhase::GargantuarThrowing {
-            // 触发扔小鬼事件
-            if self.anim_counter % 40 == 0 {
+            // C++ Zombie.cpp:2154：aBodyReanim->ShouldTriggerTimedEvent(0.74f)
+            let a_throw_triggered = self.base.get_app().map_or(false, |app| {
+                app.reanimation_get(self.body_reanim_id)
+                    .map_or(false, |r| r.should_trigger_timed_event(0.74))
+            });
+            if a_throw_triggered {
                 self.has_object = false;
+                // C++ Zombie.cpp:2157-2158
+                self.reanim_show_prefix("Zombie_imp", crate::todlib::reanimator::RENDER_GROUP_HIDDEN);
+                self.reanim_show_track(
+                    "Zombie_gargantuar_whiterope",
+                    crate::todlib::reanimator::RENDER_GROUP_HIDDEN,
+                );
                 if let Some(app) = self.base.get_app() {
                     app.play_foley(crate::todlib::tod_foley::FoleyType::Swing as i32);
                 }
@@ -2099,8 +2451,12 @@ impl Zombie {
                 }
             }
 
-            // 动画循环结束后回 Normal
-            if self.anim_counter % 120 == 0 {
+            // C++ Zombie.cpp:2212-2216：aBodyReanim->mLoopCount > 0 → 回 Normal
+            let a_loop_done = self.base.get_app().map_or(false, |app| {
+                app.reanimation_get(self.body_reanim_id)
+                    .map_or(false, |r| r.m_loop_count > 0)
+            });
+            if a_loop_done {
                 self.zombie_phase = ZombiePhase::Normal;
                 self.start_walk_anim(20);
             }
@@ -2118,10 +2474,25 @@ impl Zombie {
             return;
         }
 
-        // 有植物目标 → 砸击
-        // 依赖底层系统
-        let plant_target = self.plant_col_below();
-        if plant_target != -1 {
+        // C++ Zombie.cpp:2256-2277：doSmash 三路判定（植物目标 / ScaryPotter 瓦罐 / IZombie 脑目标）
+        let mut do_smash = self.find_plant_target_index(ZombieAttackType::Chew).is_some();
+        if !do_smash && self.base.get_app().map_or(false, |app| app.is_scary_potter_level()) {
+            let a_row = self.base.row;
+            let a_base_y = self.base.y;
+            do_smash = self.base.get_board().map_or(false, |board| {
+                let a_grid_x = board.pixel_to_grid_x(self.base.x, a_base_y);
+                board.get_scary_pot_at(a_grid_x, a_row).is_some()
+            });
+        }
+        if !do_smash && self.base.get_app().map_or(false, |app| app.is_izombie_level()) {
+            do_smash = self
+                .base
+                .get_board()
+                .and_then(|b| b.challenge.as_ref())
+                .map_or(false, |ch| ch.izombie_get_brain_target(self).is_some());
+        }
+
+        if do_smash {
             self.zombie_phase = ZombiePhase::GargantuarSmashing;
             if let Some(app) = self.base.get_app() {
                 app.play_foley(crate::todlib::tod_foley::FoleyType::LowGroan as i32);
@@ -2359,29 +2730,91 @@ impl Zombie {
     }
 
     /// 召唤伴舞（对应 C++ SummonBackupDancer）
-    pub fn summon_backup_dancer(&mut self, row: i32, pos_x: i32) -> ZombieID {
-        // 依赖底层系统
-        // 但 AddZombie 返回 Option<&mut Zombie> 无法在此持久返回 ID
-        if let Some(board) = self.base.get_board() {
-            if !board.row_can_have_zombie_type(row, ZombieType::BackupDancer) {
-                return ZOMBIEID_NULL;
+    /// 召唤单个伴舞（对应 C++ Zombie::SummonBackupDancer，Zombie.cpp:2809）
+    pub fn summon_backup_dancer(&mut self, the_row: i32, the_pos_x: i32) -> ZombieID {
+        if !self
+            .base
+            .get_board()
+            .map_or(false, |b| b.row_can_have_zombie_type(the_row, ZombieType::BackupDancer))
+        {
+            return ZOMBIEID_NULL;
+        }
+
+        let a_from_wave = self.from_wave;
+        let a_related_id = self.base.get_board().map_or(ZOMBIEID_NULL, |b| b.zombie_get_id(self));
+        let a_pos_y = self.get_pos_y_based_on_row(the_row);
+        let a_mind_controlled = self.mind_controlled;
+
+        // C++: mBoard->AddZombie(ZOMBIE_BACKUP_DANCER, mFromWave)
+        let a_idx = match self.base.get_board_mut() {
+            Some(board) => board.add_zombie_in_row(ZombieType::BackupDancer, the_row, a_from_wave),
+            None => return ZOMBIEID_NULL,
+        };
+        if a_idx == usize::MAX {
+            return ZOMBIEID_NULL;
+        }
+
+        let a_particle_x;
+        let a_particle_y;
+        {
+            let board = match self.base.get_board_mut() {
+                Some(b) => b,
+                None => return ZOMBIEID_NULL,
+            };
+            let a_zombie = match board.zombies.get_mut(a_idx) {
+                Some(z) => z,
+                None => return ZOMBIEID_NULL,
+            };
+
+            a_zombie.pos_x = the_pos_x as f32;
+            a_zombie.pos_y = a_pos_y;
+            a_zombie.set_row(the_row);
+            a_zombie.base.x = a_zombie.pos_x as i32;
+            a_zombie.base.y = a_zombie.pos_y as i32;
+
+            a_zombie.altitude = ZOMBIE_BACKUP_DANCER_RISE_HEIGHT as f32;
+            a_zombie.zombie_phase = ZombiePhase::DancerRising;
+            a_zombie.phase_counter = 150;
+            a_zombie.related_zombie_id = a_related_id;
+
+            a_zombie.set_anim_rate(0.0);
+            a_zombie.mind_controlled = a_mind_controlled;
+
+            // C++ Zombie.cpp:2832-2837
+            a_particle_x = a_zombie.pos_x as i32 + 60;
+            let mut a_y = a_zombie.pos_y as i32 + 110;
+            if a_zombie.is_on_high_ground() {
+                a_y -= crate::lawn::game_enums::HIGH_GROUND_HEIGHT;
             }
+            a_particle_y = a_y;
         }
-        let from_wave = self.from_wave;
-        if let Some(board) = self.base.get_board_mut() {
-            board.add_zombie(ZombieType::BackupDancer, from_wave);
+
+        let a_render_order = crate::lawn::board::make_render_order(
+            crate::lawn::game_enums::RENDER_LAYER_PARTICLE,
+            the_row,
+            0,
+        );
+        if let Some(app) = self.base.get_app_mut() {
+            app.add_tod_particle(
+                a_particle_x as f32,
+                a_particle_y as f32,
+                a_render_order,
+                ParticleEffect::DancerRise as i32,
+            );
+            app.play_foley(crate::todlib::tod_foley::FoleyType::GraveStoneRumble as i32);
         }
-        ZOMBIEID_NULL
+
+        // Rust 侧 ZombieID 即 Vec 索引（见 Board::zombie_get_id）
+        a_idx as ZombieID
     }
 
-    /// 召唤全部伴舞（对应 C++ SummonBackupDancers）
+    /// 召唤全部伴舞（对应 C++ Zombie::SummonBackupDancers，Zombie.cpp:2845）
     pub fn summon_backup_dancers(&mut self) {
         if !self.has_head {
             return;
         }
 
         for i in 0..NUM_BACKUP_DANCERS {
-            // 依赖底层系统
             let (a_row, a_pos_x) = match i {
                 0 => (self.base.row - 1, self.base.x),
                 1 => (self.base.row + 1, self.base.x),
@@ -2389,8 +2822,7 @@ impl Zombie {
                 3 => (self.base.row, self.base.x + 100),
                 _ => (0, 0),
             };
-            let _id = self.summon_backup_dancer(a_row, a_pos_x);
-            // self.follower_zombie_ids[i] = id;
+            self.follower_zombie_ids[i] = self.summon_backup_dancer(a_row, a_pos_x);
         }
     }
 
@@ -3924,17 +4356,21 @@ impl Zombie {
         if self.in_pool {
             self.ice_trap_counter = 300;
         } else if cold {
-            self.ice_trap_counter = 300 + RandRange(100);  // RandRangeInt(300, 400)
+            // C++ Zombie.cpp:8402 RandRangeInt(300, 400) —— 闭区间，用 rand_range_int 而非 rand_range
+            self.ice_trap_counter = crate::todlib::tod_common::rand_range_int(300, 400);
         } else {
-            self.ice_trap_counter = 400 + RandRange(200);  // RandRangeInt(400, 600)
+            // C++ Zombie.cpp:8406 RandRangeInt(400, 600) —— 闭区间
+            self.ice_trap_counter = crate::todlib::tod_common::rand_range_int(400, 600);
         }
 
         self.stop_zombie_sound();
         if self.zombie_type == ZombieType::Balloon {
-            // C++: 冰阱命中时气球螺旋桨停转（BalloonPropellerHatSpin(false)）
+            self.balloon_propeller_hat_spin(false);
         }
         if self.zombie_phase == ZombiePhase::BossHeadSpit {
-            // C++: Boss 吐息阶段冻结特殊头动画（mSpecialHeadReanimID）
+            if let Some(board) = self.base.get_board_mut() {
+                board.remove_particle_by_type(ParticleEffect::ZombieBossFireball);
+            }
         }
 
         self.take_damage(20, 1);
@@ -3958,8 +4394,9 @@ impl Zombie {
         self.pick_random_speed();
     }
 
+    /// 从墓碑中升起（对应 C++ Zombie::RiseFromGrave，Zombie.cpp:8184）
     pub fn rise_from_grave(&mut self, col: i32, row: i32) {
-        // PVZP_ASSERT(mZombiePhase == PHASE_ZOMBIE_NORMAL)
+        // C++: PVZP_ASSERT(mZombiePhase == ZombiePhase::PHASE_ZOMBIE_NORMAL)
         let has_pool = self.base.get_board().map_or(false, |b| b.stage_has_pool());
 
         if let Some(board) = self.base.get_board() {
@@ -3974,14 +4411,102 @@ impl Zombie {
         self.phase_counter = 150;
 
         if has_pool {
+            // C++ 8197-8242: 泳池出土
             self.altitude = -150.0;
             self.in_pool = true;
             self.phase_counter = 50;
             self.zombie_height = ZombieHeight::Normal;
+
             self.start_walk_anim(0);
-            // C++: 水池分支完成（进入泳池行走，见 RiseFromGrave Zombie.cpp:8184）
+            self.reanim_ignore_clip_rect("Zombie_duckytube", false);
+            self.reanim_ignore_clip_rect("Zombie_whitewater", false);
+            self.reanim_ignore_clip_rect("Zombie_outerarm_hand", false);
+            self.reanim_ignore_clip_rect("Zombie_innerarm3", false);
+
+            // [TRANSLATION_NOTE]: C++ 通过 aBodyReanim->AttachParticleToTrack(轨道名, 粒子, x, y)
+            // 把三团海草粒子分别挂到铁桶/锥子/头部等轨道上；Rust reanim 侧尚无该 API，
+            // 此处仅创建并缩放三个粒子，粒子不会跟随对应轨道移动。
+            let a_particle = match self.base.get_app_mut() {
+                Some(app) => app.add_tod_particle(
+                    0.0,
+                    0.0,
+                    0,
+                    ParticleEffect::ZombieSeaweed as i32,
+                ),
+                None => None,
+            };
+            if let Some(a_particle) = a_particle {
+                self.override_particle_scale(a_particle);
+            }
+            // C++: 按类型挂到 anim_cone(37,20) / anim_bucket(37,20) / anim_head1(30,20)
+
+            let a_particle2 = match self.base.get_app_mut() {
+                Some(app) => app.add_tod_particle(
+                    0.0,
+                    0.0,
+                    0,
+                    ParticleEffect::ZombieSeaweed as i32,
+                ),
+                None => None,
+            };
+            if let Some(a_particle2) = a_particle2 {
+                self.override_particle_scale(a_particle2);
+                // C++: aBodyReanim->AttachParticleToTrack("Zombie_outerarm_upper", aParticle2, 5, 5)
+            }
+
+            let a_particle3 = match self.base.get_app_mut() {
+                Some(app) => app.add_tod_particle(
+                    0.0,
+                    0.0,
+                    0,
+                    ParticleEffect::ZombieSeaweed as i32,
+                ),
+                None => None,
+            };
+            if let Some(a_particle3) = a_particle3 {
+                self.override_particle_scale(a_particle3);
+                // C++: aBodyReanim->AttachParticleToTrack("Zombie_duckytube", aParticle3, 77, 20)
+            }
+
+            self.pool_splash(false);
         } else {
-            // C++: 非水池分支（陆地出土）
+            // C++ 8245-8262: 陆地出土
+            let a_particle_x = (self.pos_x + 60.0) as i32;
+            let mut a_particle_y = (self.pos_y + 110.0) as i32;
+            if self.is_on_high_ground() {
+                a_particle_y -= HIGH_GROUND_HEIGHT as i32;
+            }
+
+            let a_render_order = crate::lawn::board::make_render_order(
+                crate::lawn::game_enums::RENDER_LAYER_PARTICLE,
+                row,
+                0,
+            );
+            let a_is_whack = self
+                .base
+                .get_app()
+                .map_or(false, |a| a.is_whack_a_zombie_level());
+            if a_is_whack {
+                if let Some(app) = self.base.get_app_mut() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::DirtRise as i32);
+                    app.add_tod_particle(
+                        a_particle_x as f32,
+                        a_particle_y as f32,
+                        a_render_order,
+                        ParticleEffect::WhackAZombieRise as i32,
+                    );
+                }
+            } else {
+                if let Some(app) = self.base.get_app_mut() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::GraveStoneRumble as i32);
+                    app.add_tod_particle(
+                        a_particle_x as f32,
+                        a_particle_y as f32,
+                        a_render_order,
+                        ParticleEffect::ZombieRise as i32,
+                    );
+                }
+            }
         }
     }
 
@@ -4192,17 +4717,65 @@ impl Zombie {
         }
 
         if self.is_eating && self.has_head {
-            // 进食动画帧速率为 6
-            let a_frame_length = 6;
-            if self.anim_counter >= a_frame_length {
-                self.anim_counter = 0;
-                self.frame = (self.frame + 1) % 2;
+            // C++: aFrameLength = 6（chilled 时 12）；mFrame = mAnimCounter / aFrameLength
+            let mut a_frame_length = 6;
+            if self.chilled_counter > 0 {
+                a_frame_length = 12;
+            }
+            if self.anim_counter >= self.anim_frames * a_frame_length {
+                self.anim_counter = a_frame_length;
+            }
+            self.frame = self.anim_counter / a_frame_length;
+
+            let a_has_body_reanim = self
+                .base
+                .get_app()
+                .map_or(false, |app| app.reanimation_get(self.body_reanim_id).is_some());
+            if a_has_body_reanim {
+                let mut a_left_hand_time = 0.14f32;
+                let mut a_right_hand_time = 0.68f32;
+                if self.zombie_type == ZombieType::Polevaulter {
+                    a_left_hand_time = 0.38;
+                    a_right_hand_time = 0.8;
+                } else if self.zombie_type == ZombieType::Newspaper
+                    || self.zombie_type == ZombieType::Ladder
+                {
+                    a_left_hand_time = 0.42;
+                    a_right_hand_time = 0.42;
+                } else if self.zombie_type == ZombieType::JackInTheBox {
+                    a_left_hand_time = 0.53;
+                    a_right_hand_time = 0.53;
+                } else if self.zombie_type == ZombieType::Bobsled {
+                    a_left_hand_time = 0.33;
+                    a_right_hand_time = 0.83;
+                } else if self.zombie_type == ZombieType::Imp {
+                    a_left_hand_time = 0.33;
+                    a_right_hand_time = 0.79;
+                }
+
+                let a_trigger = self.base.get_app().map_or(false, |app| {
+                    app.reanimation_get(self.body_reanim_id).map_or(false, |r| {
+                        r.should_trigger_timed_event(a_left_hand_time)
+                            || r.should_trigger_timed_event(a_right_hand_time)
+                    })
+                });
+                if a_trigger {
+                    self.animate_chew_sound();
+                    self.animate_chew_effect();
+                }
+            } else {
+                if self.anim_counter == 4 * a_frame_length {
+                    self.animate_chew_sound();
+                }
+                if self.anim_counter == 7 * a_frame_length && !self.mind_controlled {
+                    self.animate_chew_effect();
+                }
             }
         } else {
-            if self.anim_counter >= self.anim_ticks_per_frame {
+            if self.anim_counter >= self.anim_frames * self.anim_ticks_per_frame {
                 self.anim_counter = 0;
-                self.frame = (self.frame + 1) % self.anim_frames;
             }
+            self.frame = self.anim_counter / self.anim_ticks_per_frame;
         }
     }
 
@@ -4211,38 +4784,316 @@ impl Zombie {
         self.ice_trap_counter > 0 || self.buttered_counter > 0
     }
 
-    /// 更新恶心表情（对应 C++ UpdateYuckyFace）
+    /// 更新恶心表情（对应 C++ Zombie::UpdateYuckyFace，Zombie.cpp:4734）
     pub fn update_yucky_face(&mut self) {
         self.yucky_face_counter += 1;
+
+        // C++ Zombie.cpp:4737-4749：没有嫌恶贴图的僵尸直接跳过嫌恶阶段
+        if self.yucky_face_counter > 20
+            && self.yucky_face_counter < 170
+            && !self.has_yucky_face_image()
+        {
+            self.stop_eating();
+            self.yucky_face_counter = 170;
+            let a_count = self
+                .base
+                .get_board()
+                .map_or(0, |b| b.count_zombies_on_screen());
+            if a_count <= 5 && self.has_head {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Yuck as i32);
+                }
+            } else if a_count <= 10 && self.has_head && crate::framework::common::rand_range(2) == 0 {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Yuck as i32);
+                }
+            }
+        }
+
         if self.yucky_face_counter > 270 {
+            self.show_yucky_face(false);
             self.yucky_face = false;
             self.yucky_face_counter = 0;
+            return;
+        }
+
+        if self.yucky_face_counter == 70 {
+            self.stop_eating();
+            self.show_yucky_face(true);
+            let a_count = self
+                .base
+                .get_board()
+                .map_or(0, |b| b.count_zombies_on_screen());
+            if a_count <= 5 && self.has_head {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Yuck as i32);
+                }
+            } else if a_count <= 10 && self.has_head && crate::framework::common::rand_range(2) == 0 {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Yuck as i32);
+                }
+            }
+        }
+
+        if self.yucky_face_counter == 170 {
+            self.start_walk_anim(20);
+
+            // C++ Zombie.cpp:4776-4802：决定换行方向
+            let a_row = self.base.row;
+            let (a_up_ok, a_down_ok, a_is_pool, a_up_row_type, a_down_row_type) = self
+                .base
+                .get_board()
+                .map_or(
+                    (false, false, false, PlantRowType::Dirt, PlantRowType::Dirt),
+                    |b| {
+                        let a_is_pool = b
+                            .m_plant_row
+                            .get(a_row as usize)
+                            .map_or(false, |p| *p == PlantRowType::Pool);
+                        // 注：C++ 直接索引 mPlantRow[mRow - 1]（mRow==0 时为越界 UB）；
+                        // 此处用 saturating_sub 保证不 panic。
+                        let a_up = b
+                            .m_plant_row
+                            .get(a_row.saturating_sub(1) as usize)
+                            .copied()
+                            .unwrap_or(PlantRowType::Dirt);
+                        let a_down = b
+                            .m_plant_row
+                            .get(a_row as usize + 1)
+                            .copied()
+                            .unwrap_or(PlantRowType::Dirt);
+                        (
+                            b.row_can_have_zombies(a_row - 1),
+                            b.row_can_have_zombies(a_row + 1),
+                            a_is_pool,
+                            a_up,
+                            a_down,
+                        )
+                    },
+                );
+
+            let mut a_can_go_up = true;
+            let mut a_can_go_down = true;
+            if !a_up_ok {
+                a_can_go_up = false;
+            } else if a_up_row_type == PlantRowType::Pool && !a_is_pool {
+                a_can_go_up = false;
+            } else if a_up_row_type != PlantRowType::Pool && a_is_pool {
+                a_can_go_up = false;
+            }
+            if !a_down_ok {
+                a_can_go_down = false;
+            } else if a_down_row_type == PlantRowType::Pool && !a_is_pool {
+                a_can_go_down = false;
+            } else if a_down_row_type != PlantRowType::Pool && a_is_pool {
+                a_can_go_down = false;
+            }
+
+            if a_can_go_down && !a_can_go_up {
+                self.set_row(a_row + 1);
+            } else if !a_can_go_down && a_can_go_up {
+                self.set_row(a_row - 1);
+            } else if a_can_go_down && a_can_go_up {
+                if crate::framework::common::rand_range(2) == 0 {
+                    self.set_row(a_row + 1);
+                } else {
+                    self.set_row(a_row - 1);
+                }
+            } else {
+                debug_assert!(false, "C++ PVZP_ASSERT(false)");
+            }
         }
     }
 
-    /// 更新僵尸行走（对应 C++ UpdateZombieWalking）
+    /// 更新僵尸行走（对应 C++ Zombie::UpdateZombieWalking，Zombie.cpp:4104）
     pub fn update_zombie_walking(&mut self) {
         if self.zombie_not_walking() {
             return;
         }
 
-        self.base.x = self.pos_x as i32;
-        self.base.y = self.pos_y as i32;
+        let a_has_body_reanim = self
+            .base
+            .get_app()
+            .map_or(false, |app| app.reanimation_get(self.body_reanim_id).is_some());
 
-        // 计算速度
-        let a_speed = self.vel_x;
-        let a_speed = if self.is_moving_at_chilled_speed() { a_speed * CHILLED_SPEED_FACTOR } else { a_speed };
+        if a_has_body_reanim {
+            // C++ Zombie.cpp:4113-4138：四段速度取值
+            let a_speed: f32;
+            if self.is_bouncing_pogo()
+                || self.zombie_phase == ZombiePhase::BalloonFlying
+                || self.zombie_phase == ZombiePhase::DolphinRiding
+                || self.zombie_phase == ZombiePhase::SnorkelWalkingInPool
+                || self.zombie_type == ZombieType::Catapult
+            {
+                a_speed = if self.is_moving_at_chilled_speed() {
+                    self.vel_x * CHILLED_SPEED_FACTOR
+                } else {
+                    self.vel_x
+                };
+            } else if self.zombie_type == ZombieType::Zamboni
+                || self.zombie_phase == ZombiePhase::DiggerTunneling
+                || self.zombie_phase == ZombiePhase::DolphinInJump
+                || self.is_bobsled_team_with_sled()
+                || self.zombie_phase == ZombiePhase::PolevaulterInVault
+                || self.zombie_phase == ZombiePhase::SnorkelIntoPool
+            {
+                // 这些状态不乘 CHILLED_SPEED_FACTOR
+                a_speed = self.vel_x;
+            } else {
+                let a_track_velocity = self.base.get_app().and_then(|app| {
+                    app.reanimation_get(self.body_reanim_id).and_then(|r| {
+                        if r.track_exists("_ground") {
+                            Some(r.get_track_velocity("_ground"))
+                        } else {
+                            None
+                        }
+                    })
+                });
+                if let Some(a_velocity) = a_track_velocity {
+                    a_speed = a_velocity * self.scale_zombie;
+                } else if self.is_moving_at_chilled_speed() {
+                    a_speed = self.vel_x * CHILLED_SPEED_FACTOR;
+                } else {
+                    a_speed = self.vel_x;
+                }
+            }
 
-        if self.is_walking_backwards() || self.zombie_phase == ZombiePhase::DancerDancingIn {
-            self.pos_x += a_speed;
+            if self.is_walking_backwards() || self.zombie_phase == ZombiePhase::DancerDancingIn {
+                self.pos_x += a_speed;
+            } else {
+                self.pos_x -= a_speed;
+            }
+
+            // C++ Zombie.cpp:4149-4159：足球僵尸脚步灰尘
+            if self.zombie_type == ZombieType::Football && self.from_wave != Zombie::ZOMBIE_WAVE_WINNER {
+                let a_dust_1 = self.base.get_app().map_or(false, |app| {
+                    app.reanimation_get(self.body_reanim_id)
+                        .map_or(false, |r| r.should_trigger_timed_event(0.03))
+                });
+                if a_dust_1 {
+                    let a_x = self.base.x as f32 + 81.0;
+                    let a_y = self.base.y as f32 + 106.0;
+                    let a_order = self.base.render_order - 1;
+                    if let Some(app) = self.base.get_app_mut() {
+                        app.add_tod_particle(a_x, a_y, a_order, ParticleEffect::DustFoot as i32);
+                    }
+                }
+                let a_dust_2 = self.base.get_app().map_or(false, |app| {
+                    app.reanimation_get(self.body_reanim_id)
+                        .map_or(false, |r| r.should_trigger_timed_event(0.61))
+                });
+                if a_dust_2 {
+                    let a_x = self.base.x as f32 + 87.0;
+                    let a_y = self.base.y as f32 + 110.0;
+                    let a_order = self.base.render_order - 1;
+                    if let Some(app) = self.base.get_app_mut() {
+                        app.add_tod_particle(a_x, a_y, a_order, ParticleEffect::DustFoot as i32);
+                    }
+                }
+            }
+
+            // C++ Zombie.cpp:4160-4170：撑杆僵尸助跑灰尘
+            if self.zombie_phase == ZombiePhase::PolevaulterPreVault {
+                let a_dust_1 = self.base.get_app().map_or(false, |app| {
+                    app.reanimation_get(self.body_reanim_id)
+                        .map_or(false, |r| r.should_trigger_timed_event(0.16))
+                });
+                if a_dust_1 {
+                    let a_x = self.base.x as f32 + 81.0;
+                    let a_y = self.base.y as f32 + 106.0;
+                    let a_order = self.base.render_order - 1;
+                    if let Some(app) = self.base.get_app_mut() {
+                        app.add_tod_particle(a_x, a_y, a_order, ParticleEffect::DustFoot as i32);
+                    }
+                }
+                let a_dust_2 = self.base.get_app().map_or(false, |app| {
+                    app.reanimation_get(self.body_reanim_id)
+                        .map_or(false, |r| r.should_trigger_timed_event(0.67))
+                });
+                if a_dust_2 {
+                    let a_x = self.base.x as f32 + 87.0;
+                    let a_y = self.base.y as f32 + 110.0;
+                    let a_order = self.base.render_order - 1;
+                    if let Some(app) = self.base.get_app_mut() {
+                        app.add_tod_particle(a_x, a_y, a_order, ParticleEffect::DustFoot as i32);
+                    }
+                }
+            }
         } else {
-            self.pos_x -= a_speed;
+            // C++ Zombie.cpp:4172-4216：无 reanim 时按帧号判定是否行走
+            let mut do_walk = false;
+            if self.zombie_phase == ZombiePhase::PolevaulterInVault
+                || self.zombie_phase == ZombiePhase::DiggerTunneling
+                || self.zombie_type == ZombieType::Dancer
+                || self.zombie_type == ZombieType::BackupDancer
+                || self.zombie_type == ZombieType::Bobsled
+                || self.zombie_type == ZombieType::Pogo
+                || self.zombie_type == ZombieType::DolphinRider
+                || self.zombie_type == ZombieType::Balloon
+            {
+                do_walk = true;
+            } else if self.zombie_type == ZombieType::Snorkel && self.in_pool {
+                do_walk = true;
+            } else if self.frame >= 0 && self.frame <= 2 {
+                do_walk = true;
+            } else if self.frame >= 6 && self.frame <= 8 {
+                do_walk = true;
+            }
+
+            if do_walk {
+                let a_speed = if self.is_moving_at_chilled_speed() {
+                    self.vel_x * CHILLED_SPEED_FACTOR
+                } else {
+                    self.vel_x
+                };
+                if self.is_walking_backwards() {
+                    self.pos_x += a_speed;
+                } else {
+                    self.pos_x -= a_speed;
+                }
+            }
         }
     }
 
-    /// 是否正在以冻结速度移动（对应 C++ IsMovingAtChilledSpeed）
+    /// 是否正在以冻结速度移动（对应 C++ Zombie::IsMovingAtChilledSpeed，Zombie.cpp:6589）
     pub fn is_moving_at_chilled_speed(&self) -> bool {
-        self.chilled_counter > 0
+        if self.chilled_counter > 0 {
+            return true;
+        }
+
+        // C++ 6594-6622: 舞者/后备舞者共享减速——领队或任一后备舞者被冻则整体视为减速
+        if self.zombie_type == ZombieType::Dancer || self.zombie_type == ZombieType::BackupDancer {
+            let a_leader: Option<&Zombie> = if self.zombie_type == ZombieType::Dancer {
+                Some(self)
+            } else {
+                // C++: aLeader = mBoard->ZombieTryToGet(mRelatedZombieID);
+                match self.base.get_board() {
+                    Some(a_board) => a_board.zombie_get(self.related_zombie_id),
+                    None => None,
+                }
+            };
+
+            if let Some(a_leader) = a_leader {
+                if a_leader.chilled_counter > 0 {
+                    return true;
+                }
+
+                let a_board = match self.base.get_board() {
+                    Some(b) => b,
+                    None => return false,
+                };
+                for i in 0..NUM_BACKUP_DANCERS {
+                    let a_dancer = a_board.zombie_get(a_leader.follower_zombie_ids[i]);
+                    if let Some(a_dancer) = a_dancer {
+                        if a_dancer.chilled_counter > 0 {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        false
     }
 
     /// 是否在倒走（对应 C++ IsWalkingBackwards）
@@ -4576,11 +5427,15 @@ impl Zombie {
         damage_remaining
     }
 
-    /// 头盔受伤（对应 C++ TakeHelmDamage）
+    /// 头盔受伤（对应 C++ Zombie::TakeHelmDamage，Zombie.cpp:7717）
     pub fn take_helm_damage(&mut self, damage: i32, damage_flags: u32) -> i32 {
+        use crate::todlib::reanim_loader::{reanimator_get_image, resolve_reanim_image_name};
+
         if !test_bit(damage_flags, DAMAGE_DOESNT_CAUSE_FLASH) {
             self.just_got_shot_counter = 25;
         }
+
+        let a_damage_index_before_damage = self.get_helm_damage_index();
 
         let damage_actual = self.helm_health.min(damage);
         let damage_remaining = damage - damage_actual;
@@ -4591,6 +5446,161 @@ impl Zombie {
         if self.helm_health == 0 {
             self.drop_helm(damage_flags);
             return damage_remaining;
+        }
+
+        // C++ 7738-7799: 受损档位变化时替换头盔/坚果头受击贴图
+        let a_damage_index_after_damage = self.get_helm_damage_index();
+        if a_damage_index_before_damage != a_damage_index_after_damage {
+            let a_helm_type = self.helm_type;
+            let a_body_reanim_id = self.body_reanim_id;
+            let a_special_head_reanim_id = self.special_head_reanim_id;
+
+            if a_helm_type == HelmType::TrafficCone && a_damage_index_after_damage == 1 {
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                        a_body_reanim.set_image_override(
+                            "anim_cone",
+                            reanimator_get_image(resolve_reanim_image_name(
+                                "IMAGE_REANIM_ZOMBIE_CONE2",
+                            ))
+                            .unwrap_or(std::ptr::null_mut()),
+                        );
+                    }
+                }
+            } else if a_helm_type == HelmType::TrafficCone && a_damage_index_after_damage == 2 {
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                        a_body_reanim.set_image_override(
+                            "anim_cone",
+                            reanimator_get_image(resolve_reanim_image_name(
+                                "IMAGE_REANIM_ZOMBIE_CONE3",
+                            ))
+                            .unwrap_or(std::ptr::null_mut()),
+                        );
+                    }
+                }
+            } else if a_helm_type == HelmType::Pail && a_damage_index_after_damage == 1 {
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                        a_body_reanim.set_image_override(
+                            "anim_bucket",
+                            reanimator_get_image(resolve_reanim_image_name(
+                                "IMAGE_REANIM_ZOMBIE_BUCKET2",
+                            ))
+                            .unwrap_or(std::ptr::null_mut()),
+                        );
+                    }
+                }
+            } else if a_helm_type == HelmType::Pail && a_damage_index_after_damage == 2 {
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                        a_body_reanim.set_image_override(
+                            "anim_bucket",
+                            reanimator_get_image(resolve_reanim_image_name(
+                                "IMAGE_REANIM_ZOMBIE_BUCKET3",
+                            ))
+                            .unwrap_or(std::ptr::null_mut()),
+                        );
+                    }
+                }
+            } else if a_helm_type == HelmType::Digger && a_damage_index_after_damage == 1 {
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                        a_body_reanim.set_image_override(
+                            "Zombie_digger_hardhat",
+                            reanimator_get_image(resolve_reanim_image_name(
+                                "IMAGE_REANIM_ZOMBIE_DIGGER_HARDHAT2",
+                            ))
+                            .unwrap_or(std::ptr::null_mut()),
+                        );
+                    }
+                }
+            } else if a_helm_type == HelmType::Digger && a_damage_index_after_damage == 2 {
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                        a_body_reanim.set_image_override(
+                            "Zombie_digger_hardhat",
+                            reanimator_get_image(resolve_reanim_image_name(
+                                "IMAGE_REANIM_ZOMBIE_DIGGER_HARDHAT3",
+                            ))
+                            .unwrap_or(std::ptr::null_mut()),
+                        );
+                    }
+                }
+            } else if a_helm_type == HelmType::FootballHelmet && a_damage_index_after_damage == 1 {
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                        a_body_reanim.set_image_override(
+                            "zombie_football_helmet",
+                            reanimator_get_image(resolve_reanim_image_name(
+                                "IMAGE_REANIM_ZOMBIE_FOOTBALL_HELMET2",
+                            ))
+                            .unwrap_or(std::ptr::null_mut()),
+                        );
+                    }
+                }
+            } else if a_helm_type == HelmType::FootballHelmet && a_damage_index_after_damage == 2 {
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                        a_body_reanim.set_image_override(
+                            "zombie_football_helmet",
+                            reanimator_get_image(resolve_reanim_image_name(
+                                "IMAGE_REANIM_ZOMBIE_FOOTBALL_HELMET3",
+                            ))
+                            .unwrap_or(std::ptr::null_mut()),
+                        );
+                    }
+                }
+            } else if a_helm_type == HelmType::Wallnut && a_damage_index_after_damage == 1 {
+                // C++: Reanimation* aHeadReanim = mApp->ReanimationGet(mSpecialHeadReanimID);
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_head_reanim) = app.reanimation_get_mut(a_special_head_reanim_id) {
+                        a_head_reanim.set_image_override(
+                            "anim_face",
+                            reanimator_get_image(resolve_reanim_image_name(
+                                "IMAGE_REANIM_WALLNUT_CRACKED1",
+                            ))
+                            .unwrap_or(std::ptr::null_mut()),
+                        );
+                    }
+                }
+            } else if a_helm_type == HelmType::Wallnut && a_damage_index_after_damage == 2 {
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_head_reanim) = app.reanimation_get_mut(a_special_head_reanim_id) {
+                        a_head_reanim.set_image_override(
+                            "anim_face",
+                            reanimator_get_image(resolve_reanim_image_name(
+                                "IMAGE_REANIM_WALLNUT_CRACKED2",
+                            ))
+                            .unwrap_or(std::ptr::null_mut()),
+                        );
+                    }
+                }
+            } else if a_helm_type == HelmType::Tallnut && a_damage_index_after_damage == 1 {
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_head_reanim) = app.reanimation_get_mut(a_special_head_reanim_id) {
+                        a_head_reanim.set_image_override(
+                            "anim_idle",
+                            reanimator_get_image(resolve_reanim_image_name(
+                                "IMAGE_REANIM_TALLNUT_CRACKED1",
+                            ))
+                            .unwrap_or(std::ptr::null_mut()),
+                        );
+                    }
+                }
+            } else if a_helm_type == HelmType::Tallnut && a_damage_index_after_damage == 2 {
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_head_reanim) = app.reanimation_get_mut(a_special_head_reanim_id) {
+                        a_head_reanim.set_image_override(
+                            "anim_idle",
+                            reanimator_get_image(resolve_reanim_image_name(
+                                "IMAGE_REANIM_TALLNUT_CRACKED2",
+                            ))
+                            .unwrap_or(std::ptr::null_mut()),
+                        );
+                    }
+                }
+            }
         }
 
         damage_remaining
@@ -4612,8 +5622,10 @@ impl Zombie {
         damage_remaining
     }
 
-    /// 身体受伤（对应 C++ TakeBodyDamage）
+    /// 身体受伤（对应 C++ Zombie::TakeBodyDamage，Zombie.cpp:7821）
     pub fn take_body_damage(&mut self, damage: i32, damage_flags: u32) {
+        use crate::todlib::reanim_loader::{reanimator_get_image, resolve_reanim_image_name};
+
         if !test_bit(damage_flags, DAMAGE_DOESNT_CAUSE_FLASH) {
             self.just_got_shot_counter = 25;
         }
@@ -4622,29 +5634,292 @@ impl Zombie {
             self.apply_chill(false);
         }
 
-        let body_health_origin = self.body_health;
+        let a_body_health_origin = self.body_health;
+        let a_damage_index_before_damage = self.get_body_damage_index();
         self.body_health -= damage;
-        if self.body_health <= 0 {
-            self.body_health = 0;
-            self.play_death_anim(damage_flags);
-            self.drop_loot();
-            return;
-        }
+        let a_damage_index_after_damage = self.get_body_damage_index();
 
-        // 特殊僵尸类型的受伤处理
-        match self.zombie_type {
-            ZombieType::Zamboni | ZombieType::Catapult => {
-                if test_bit(damage_flags, DAMAGE_SPIKE) || self.body_health <= 0 {
-                    if self.zombie_type == ZombieType::Zamboni {
-                        self.zamboni_death(damage_flags);
+        if self.zombie_type == ZombieType::Zamboni {
+            if !test_bit(damage_flags, DAMAGE_DOESNT_CAUSE_FLASH) {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::ShieldHit as i32);
+                }
+            }
+
+            if test_bit(damage_flags, DAMAGE_SPIKE) {
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                        a_body_reanim.set_image_override(
+                            "Zombie_zamboni_1",
+                            reanimator_get_image(resolve_reanim_image_name(
+                                "IMAGE_REANIM_ZOMBIE_ZAMBONI_1_DAMAGE2",
+                            ))
+                            .unwrap_or(std::ptr::null_mut()),
+                        );
+                        a_body_reanim.set_image_override(
+                            "Zombie_zamboni_2",
+                            reanimator_get_image(resolve_reanim_image_name(
+                                "IMAGE_REANIM_ZOMBIE_ZAMBONI_2_DAMAGE2",
+                            ))
+                            .unwrap_or(std::ptr::null_mut()),
+                        );
+                    }
+                }
+                self.zamboni_death(damage_flags);
+            } else if self.body_health <= 0 {
+                self.zamboni_death(damage_flags);
+            } else if a_damage_index_before_damage != a_damage_index_after_damage {
+                if a_damage_index_after_damage == 1 {
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Zombie_zamboni_1",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_ZAMBONI_1_DAMAGE1",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                            a_body_reanim.set_image_override(
+                                "Zombie_zamboni_2",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_ZAMBONI_2_DAMAGE1",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                } else if a_damage_index_after_damage == 2 {
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Zombie_zamboni_1",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_ZAMBONI_1_DAMAGE2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                            a_body_reanim.set_image_override(
+                                "Zombie_zamboni_2",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_ZAMBONI_2_DAMAGE2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                    self.add_attached_particle(27, 72, ParticleEffect::ZamboniSmoke);
+                }
+            }
+        } else if self.zombie_type == ZombieType::Catapult {
+            if test_bit(damage_flags, DAMAGE_SPIKE) || self.body_health <= 0 {
+                if let Some(app) = self.base.get_app_mut() {
+                    if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                        a_body_reanim.set_image_override(
+                            "Zombie_catapult_siding",
+                            reanimator_get_image(resolve_reanim_image_name(
+                                "IMAGE_REANIM_ZOMBIE_CATAPULT_SIDING_DAMAGE",
+                            ))
+                            .unwrap_or(std::ptr::null_mut()),
+                        );
+                    }
+                }
+                self.catapult_death(damage_flags);
+            } else if a_damage_index_before_damage != a_damage_index_after_damage {
+                if a_damage_index_after_damage == 1 {
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Zombie_catapult_siding",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_CATAPULT_SIDING_DAMAGE",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                } else if a_damage_index_after_damage == 2 {
+                    self.add_attached_particle(47, 77, ParticleEffect::ZamboniSmoke);
+                }
+            }
+        } else if self.zombie_type == ZombieType::Gargantuar
+            || self.zombie_type == ZombieType::RedeEyeGargantuar
+        {
+            if a_damage_index_before_damage != a_damage_index_after_damage {
+                if a_damage_index_after_damage == 1 {
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Zombie_gargantua_body1",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_GARGANTUAR_BODY1_2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                            a_body_reanim.set_image_override(
+                                "Zombie_gargantuar_outerarm_lower",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_GARGANTUAR_OUTERARM_LOWER2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                } else if a_damage_index_after_damage == 2 {
+                    let a_head_image_name = if self.zombie_type == ZombieType::RedeEyeGargantuar {
+                        "IMAGE_REANIM_ZOMBIE_GARGANTUAR_HEAD2_REDEYE"
                     } else {
-                        self.catapult_death(damage_flags);
+                        "IMAGE_REANIM_ZOMBIE_GARGANTUAR_HEAD2"
+                    };
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Zombie_gargantua_body1",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_GARGANTUAR_BODY1_3",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                            a_body_reanim.set_image_override(
+                                "Zombie_gargantuar_outerleg_foot",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_GARGANTUAR_FOOT2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                            a_body_reanim.set_image_override(
+                                "Zombie_gargantuar_outerarm_lower",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_GARGANTUAR_OUTERARM_LOWER2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                            a_body_reanim.set_image_override(
+                                "anim_head1",
+                                reanimator_get_image(resolve_reanim_image_name(a_head_image_name))
+                                    .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
                     }
                 }
             }
-            _ => {
-                self.update_damage_states(damage_flags);
+        } else if self.zombie_type == ZombieType::Boss {
+            if !test_bit(damage_flags, DAMAGE_DOESNT_CAUSE_FLASH) {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::ShieldHit as i32);
+                }
             }
+
+            if a_damage_index_before_damage != a_damage_index_after_damage {
+                if a_damage_index_after_damage == 1 {
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Boss_head",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_BOSS_HEAD_DAMAGE1",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                            a_body_reanim.set_image_override(
+                                "Boss_jaw",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_BOSS_JAW_DAMAGE1",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                            a_body_reanim.set_image_override(
+                                "Boss_outerarm_hand",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_BOSS_OUTERARM_HAND_DAMAGE1",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                            a_body_reanim.set_image_override(
+                                "Boss_outerarm_thumb2",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_BOSS_OUTERARM_THUMB_DAMAGE1",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                            a_body_reanim.set_image_override(
+                                "Boss_innerleg_foot",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_BOSS_FOOT_DAMAGE1",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                } else if a_damage_index_after_damage == 2 {
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(self.body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Boss_head",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_BOSS_HEAD_DAMAGE2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                            a_body_reanim.set_image_override(
+                                "Boss_jaw",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_BOSS_JAW_DAMAGE2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                            a_body_reanim.set_image_override(
+                                "Boss_outerarm_hand",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_BOSS_OUTERARM_HAND_DAMAGE2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                            a_body_reanim.set_image_override(
+                                "Boss_outerarm_thumb2",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_BOSS_OUTERARM_THUMB_DAMAGE2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                            a_body_reanim.set_image_override(
+                                "Boss_outerleg_foot",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_BOSS_FOOT_DAMAGE2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                    self.apply_boss_smoke_particles(true);
+                }
+            }
+
+            const BOSS_FLASH_HEALTH_FRACTION: i32 = 10;
+            if a_body_health_origin >= self.body_max_health / BOSS_FLASH_HEALTH_FRACTION
+                && self.body_health < self.body_max_health / BOSS_FLASH_HEALTH_FRACTION
+            {
+                if let Some(app) = self.base.get_app_mut() {
+                    (*app).add_tod_particle(
+                        770.0,
+                        260.0,
+                        crate::lawn::board::make_render_order(
+                            crate::lawn::game_enums::RENDER_LAYER_TOP,
+                            0,
+                            0,
+                        ),
+                        crate::lawn::game_enums::ParticleEffect::BossExplosion as i32,
+                    );
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::BossExplosionSmall as i32);
+                }
+                self.apply_boss_smoke_particles(true);
+            }
+
+            // Boss 血量钳到 1：普通伤害无法击杀 Boss（C++ Zombie.cpp:7952-7955）
+            if self.body_health <= 0 {
+                self.body_health = 1;
+            }
+        } else {
+            self.update_damage_states(damage_flags);
         }
 
         if self.body_health <= 0 {
@@ -4668,6 +5943,11 @@ impl Zombie {
             self.drop_head(damage_flags);
             self.drop_loot();
             self.stop_zombie_sound();
+
+            // C++ Zombie.cpp:3920-3923
+            if self.base.get_board().map_or(false, |b| b.has_level_award_dropped()) {
+                self.play_death_anim(damage_flags);
+            }
 
             if self.zombie_phase == ZombiePhase::SnorkelWalkingInPool {
                 self.die_no_loot();
@@ -4831,11 +6111,12 @@ impl Zombie {
         false
     }
 
-    /// 更新水族馆僵尸（对应 C++ UpdateZombiquarium）
+    /// 更新水族馆僵尸（对应 C++ Zombie::UpdateZombiquarium，Zombie.cpp:3131）
     pub fn update_zombiquarium(&mut self) {
         if self.is_dead_or_dying() {
             return;
         }
+
         if self.zombie_phase == ZombiePhase::ZombiquariumBite {
             let mut reanim_loop = false;
             if let Some(app) = self.base.app {
@@ -4844,46 +6125,110 @@ impl Zombie {
                 }
             }
             if reanim_loop {
-                let anim_rate = crate::todlib::tod_common::rand_range_float(8.0, 10.0);
-                self.play_zombie_reanim("anim_aquarium_swim", ReanimLoopType::Loop, 20, anim_rate);
+                let a_anim_rate = crate::todlib::tod_common::rand_range_float(8.0, 10.0);
+                self.play_zombie_reanim("anim_aquarium_swim", ReanimLoopType::Loop, 20, a_anim_rate);
                 self.zombie_phase = ZombiePhase::ZombiquariumDrift;
                 self.phase_counter = 100;
             }
         } else if !self.zombiquarium_find_closest_brain() && self.phase_counter == 0 {
-            let phase_hit = crate::framework::common::rand_range(7);
-            if phase_hit <= 4 {
+            let a_phase_hit = crate::framework::common::rand_range(7);
+            if a_phase_hit <= 4 {
                 self.zombie_phase = ZombiePhase::ZombiquariumAccel;
                 self.vel_z = crate::todlib::tod_common::rand_range_float(0.0, std::f32::consts::PI * 2.0);
                 self.phase_counter = crate::todlib::tod_common::rand_range_int(300, 1000);
-            } else if phase_hit == 5 {
+                let a_rate = crate::todlib::tod_common::rand_range_float(15.0, 20.0);
+                self.set_body_reanim_anim_rate(a_rate);
+            } else if a_phase_hit == 5 {
                 self.zombie_phase = ZombiePhase::ZombiquariumBackAndForth;
                 self.vel_z = 0.0;
                 self.phase_counter = crate::todlib::tod_common::rand_range_int(300, 1000);
+                let a_rate = crate::todlib::tod_common::rand_range_float(15.0, 20.0);
+                self.set_body_reanim_anim_rate(a_rate);
             } else {
                 self.zombie_phase = ZombiePhase::ZombiquariumBackAndForth;
                 self.vel_z = std::f32::consts::PI;
                 self.phase_counter = crate::todlib::tod_common::rand_range_int(300, 1000);
+                let a_rate = crate::todlib::tod_common::rand_range_float(15.0, 20.0);
+                self.set_body_reanim_anim_rate(a_rate);
             }
         }
 
-        let vel_x = self.vel_z.cos();
-        let vel_y = self.vel_z.sin();
-        let mut is_out_of_bounds = false;
-        if self.pos_x < 0.0 && vel_x < 0.0 {
-            is_out_of_bounds = true;
-        } else if self.pos_x > 680.0 && vel_x > 0.0 {
-            is_out_of_bounds = true;
-        } else if self.pos_y < 0.0 && vel_y < 0.0 {
-            is_out_of_bounds = true;
-        } else if self.pos_y > 500.0 && vel_y > 0.0 {
-            is_out_of_bounds = true;
-        }
-        if is_out_of_bounds {
-            self.vel_z += std::f32::consts::PI / 2.0;
+        let mut a_vel_x = self.vel_z.cos();
+        let mut a_vel_y = self.vel_z.sin();
+        let mut a_is_out_of_bounds = false;
+        if self.pos_x < 0.0 && a_vel_x < 0.0 {
+            a_is_out_of_bounds = true;
+        } else if self.pos_x > 680.0 && a_vel_x > 0.0 {
+            a_is_out_of_bounds = true;
+        } else if self.pos_y < 100.0 && a_vel_y < 0.0 {
+            a_is_out_of_bounds = true;
+        } else if self.pos_y > 400.0 && a_vel_y > 0.0 {
+            a_is_out_of_bounds = true;
         }
 
-        if self.phase_counter > 0 {
-            self.phase_counter -= 1;
+        let mut a_max_speed = 0.5f32;
+        if a_is_out_of_bounds {
+            a_max_speed = self.vel_x * 0.3;
+            self.phase_counter = 100.min(self.phase_counter);
+        } else if self.zombie_phase == ZombiePhase::ZombiquariumAccel {
+            a_max_speed = 0.5;
+        } else if self.zombie_phase == ZombiePhase::ZombiquariumBackAndForth {
+            if self.pos_x < 200.0 && a_vel_x < 0.0 {
+                self.vel_z = 0.0;
+            }
+            if self.pos_x > 550.0 && a_vel_x > 0.0 {
+                self.vel_z = std::f32::consts::PI;
+            }
+            a_max_speed = 0.3;
+        } else if self.zombie_phase == ZombiePhase::ZombiquariumDrift
+            || self.zombie_phase == ZombiePhase::ZombiquariumBite
+        {
+            a_max_speed = 0.05;
+        }
+
+        self.vel_x = a_max_speed.min(self.vel_x + 0.01);
+        a_vel_x *= self.vel_x;
+        a_vel_y *= self.vel_x;
+        self.pos_x += a_vel_x;
+        self.pos_y += a_vel_y;
+
+        if !self.base.get_board().map_or(false, |b| b.has_level_award_dropped()) {
+            if self.summon_counter > 0 {
+                self.summon_counter -= 1;
+                if self.summon_counter == 0 {
+                    if let Some(app) = self.base.get_app() {
+                        app.play_foley(crate::todlib::tod_foley::FoleyType::SpawnSun as i32);
+                    }
+                    let a_coin_x = self.base.x as f32 + 50.0;
+                    let a_coin_y = self.base.y as f32 + 40.0;
+                    if let Some(board) = self.base.get_board_mut() {
+                        board.add_coin(a_coin_x, a_coin_y, CoinType::Sun, CoinMotion::FromPlant);
+                    }
+                    self.summon_counter = crate::todlib::tod_common::rand_range_int(1000, 1500);
+                }
+            }
+
+            // C++ Zombie.cpp:3250：每 100 帧自伤 10（DAMAGE_FLAGS 8）
+            if self.zombie_age % 100 == 0 {
+                self.take_damage(10, 8);
+                if self.is_dead_or_dying() {
+                    if let Some(app) = self.base.get_app() {
+                        app.play_sample(unsafe {
+                            crate::todlib::tod_foley::SOUND_ZOMBAQUARIUM_DIE
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    /// 直接设置身体 reanim 的动画速率（对应 C++ aBodyReanim->mAnimRate = value）
+    fn set_body_reanim_anim_rate(&mut self, anim_rate: f32) {
+        let reanim_id = self.body_reanim_id;
+        if let Some(app) = self.base.get_app_mut() {
+            if let Some(body) = app.reanimation_get_mut(reanim_id) {
+                body.m_anim_rate = anim_rate;
+            }
         }
     }
 
@@ -5012,24 +6357,183 @@ impl Zombie {
         self.reanim_show_prefix("Zombie_polevaulter_pole", -1); // RENDER_GROUP_HIDDEN
     }
 
-    /// 掉头盔（对应 C++ DropHelm）
+    /// 掉头盔（对应 C++ Zombie::DropHelm，Zombie.cpp:7666）
     pub fn drop_helm(&mut self, damage_flags: u32) {
         if self.helm_type == HelmType::None {
             return;
         }
-        // 依赖底层系统
+
+        // C++: ZombieDrawPosition aDrawPos; GetDrawPos(aDrawPos);
+        let a_draw_pos = self.get_draw_pos();
+        let mut a_pos_x = self.pos_x + a_draw_pos.image_offset_x + a_draw_pos.head_x as f32 + 14.0;
+        let mut a_pos_y = self.pos_y
+            + a_draw_pos.image_offset_y
+            + a_draw_pos.head_y as f32
+            + a_draw_pos.body_y
+            + 18.0;
+        let mut a_effect = ParticleEffect::None;
+
+        // C++: HELMTYPE_TRAFFIC_CONE
+        if self.helm_type == HelmType::TrafficCone {
+            let (a_track_x, a_track_y) = self.get_track_position("anim_cone");
+            a_pos_x = a_track_x;
+            a_pos_y = a_track_y;
+            self.reanim_show_prefix("anim_cone", crate::todlib::reanimator::RENDER_GROUP_HIDDEN);
+            self.reanim_show_prefix("anim_hair", crate::todlib::reanimator::RENDER_GROUP_NORMAL);
+            a_effect = ParticleEffect::ZombieTrafficCone;
+        }
+        // C++: HELMTYPE_PAIL
+        else if self.helm_type == HelmType::Pail {
+            let (a_track_x, a_track_y) = self.get_track_position("anim_bucket");
+            a_pos_x = a_track_x;
+            a_pos_y = a_track_y;
+            self.reanim_show_prefix(
+                "anim_bucket",
+                crate::todlib::reanimator::RENDER_GROUP_HIDDEN,
+            );
+            self.reanim_show_prefix("anim_hair", crate::todlib::reanimator::RENDER_GROUP_NORMAL);
+            a_effect = ParticleEffect::ZombiePail;
+        }
+        // C++: HELMTYPE_FOOTBALL
+        else if self.helm_type == HelmType::FootballHelmet {
+            let (a_track_x, a_track_y) = self.get_track_position("zombie_football_helmet");
+            a_pos_x = a_track_x;
+            a_pos_y = a_track_y;
+            self.reanim_show_prefix(
+                "zombie_football_helmet",
+                crate::todlib::reanimator::RENDER_GROUP_HIDDEN,
+            );
+            self.reanim_show_prefix("anim_hair", crate::todlib::reanimator::RENDER_GROUP_NORMAL);
+            a_effect = ParticleEffect::ZombieHelmet;
+        }
+        // C++: HELMTYPE_DIGGER
+        else if self.helm_type == HelmType::Digger {
+            let (a_track_x, a_track_y) = self.get_track_position("Zombie_digger_hardhat");
+            a_pos_x = a_track_x;
+            a_pos_y = a_track_y;
+            // C++: ReanimShowTrack("Zombie_digger_hardhat", RENDER_GROUP_HIDDEN)
+            self.reanim_show_track(
+                "Zombie_digger_hardhat",
+                crate::todlib::reanimator::RENDER_GROUP_HIDDEN,
+            );
+            a_effect = ParticleEffect::ZombieHeadlight;
+        }
+        // C++: HELMTYPE_BOBSLED —— 仅在伤害允许留尸时撞车
+        else if self.helm_type == HelmType::Bobsled
+            && !test_bit(damage_flags, DAMAGE_DOESNT_LEAVE_BODY)
+        {
+            self.bobsled_crash();
+        }
+
+        if !test_bit(damage_flags, DAMAGE_DOESNT_LEAVE_BODY) && a_effect != ParticleEffect::None {
+            let a_render_order = self.base.render_order + 1;
+            let a_particle = match self.base.get_app_mut() {
+                Some(app) => {
+                    app.add_tod_particle(a_pos_x, a_pos_y, a_render_order, a_effect as i32)
+                }
+                None => None,
+            };
+            if let Some(a_particle) = a_particle {
+                self.override_particle_scale(a_particle);
+            }
+        }
+
         self.helm_type = HelmType::None;
-        let _ = damage_flags;
     }
 
-    /// 掉盾牌（对应 C++ DropShield）
+    /// 掉盾牌（对应 C++ Zombie::DropShield，Zombie.cpp:7539）
     pub fn drop_shield(&mut self, damage_flags: u32) {
         if self.shield_type == ShieldType::None {
             return;
         }
-        // 依赖底层系统
+
+        // C++: SHIELDTYPE_DOOR —— 拆门 + 门板粒子
+        if self.shield_type == ShieldType::Door {
+            self.detach_shield();
+            if !test_bit(damage_flags, DAMAGE_DOESNT_LEAVE_BODY) {
+                let (a_pos_x, a_pos_y) = self.get_track_position("anim_screendoor");
+                let a_render_order = self.base.render_order + 1;
+                let a_particle = match self.base.get_app_mut() {
+                    Some(app) => app.add_tod_particle(
+                        a_pos_x,
+                        a_pos_y,
+                        a_render_order,
+                        ParticleEffect::ZombieDoor as i32,
+                    ),
+                    None => None,
+                };
+                if let Some(a_particle) = a_particle {
+                    self.override_particle_scale(a_particle);
+                }
+            }
+        }
+        // C++: SHIELDTYPE_NEWSPAPER —— 进入暴走相位 + 报纸撕碎
+        else if self.shield_type == ShieldType::Newspaper {
+            self.stop_eating();
+            if self.yucky_face {
+                self.show_yucky_face(false);
+                self.yucky_face = false;
+                self.yucky_face_counter = 0;
+            }
+
+            self.zombie_phase = ZombiePhase::NewspaperMaddening;
+            self.play_zombie_reanim(
+                "anim_gasp",
+                crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,
+                10,
+                8.0,
+            );
+            self.detach_shield();
+
+            if !test_bit(damage_flags, DAMAGE_DOESNT_LEAVE_BODY) {
+                let (a_pos_x, a_pos_y) = self.get_track_position("Zombie_paper_paper");
+                let a_render_order = self.base.render_order + 1;
+                let a_particle = match self.base.get_app_mut() {
+                    Some(app) => app.add_tod_particle(
+                        a_pos_x,
+                        a_pos_y,
+                        a_render_order,
+                        ParticleEffect::ZombieNewspaper as i32,
+                    ),
+                    None => None,
+                };
+                if let Some(a_particle) = a_particle {
+                    self.override_particle_scale(a_particle);
+                }
+            }
+
+            if !test_bit(damage_flags, DAMAGE_DOESNT_LEAVE_BODY)
+                && !test_bit(damage_flags, DAMAGE_BYPASSES_SHIELD)
+            {
+                if let Some(app) = self.base.get_app_mut() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::NewspaperRip as i32);
+                }
+                self.add_attached_reanim(-11, 0, ReanimationType::ZombieSurprise);
+            }
+        }
+        // C++: SHIELDTYPE_LADDER —— 拆梯 + 梯子粒子（位置为 mPosX+31 / mPosY+80）
+        else if self.shield_type == ShieldType::Ladder {
+            self.detach_shield();
+            if !test_bit(damage_flags, DAMAGE_DOESNT_LEAVE_BODY) {
+                let a_pos_x = self.pos_x + 31.0;
+                let a_pos_y = self.pos_y + 80.0;
+                let a_render_order = self.base.render_order + 1;
+                let a_particle = match self.base.get_app_mut() {
+                    Some(app) => app.add_tod_particle(
+                        a_pos_x,
+                        a_pos_y,
+                        a_render_order,
+                        ParticleEffect::ZombieLadder as i32,
+                    ),
+                    None => None,
+                };
+                if let Some(a_particle) = a_particle {
+                    self.override_particle_scale(a_particle);
+                }
+            }
+        }
+
         self.shield_type = ShieldType::None;
-        let _ = damage_flags;
     }
 
     /// 掉手臂（对应 C++ DropArm）
@@ -5059,8 +6563,10 @@ impl Zombie {
         // [TRANSLATION_NOTE]: C++ 末尾 PlayFoley(FOLEY_LIMBS_POP) 音效未接入
     }
 
-    /// 掉头（对应 C++ DropHead：CanLoseBodyParts + mHasHead 前置检查，Zombie.cpp:3508）
+    /// 掉头（对应 C++ Zombie::DropHead，Zombie.cpp:3508）
     pub fn drop_head(&mut self, damage_flags: u32) {
+        use crate::todlib::reanim_loader::{reanimator_get_image, resolve_reanim_image_name};
+
         if !self.can_lose_body_parts() || !self.has_head {
             return;
         }
@@ -5075,7 +6581,239 @@ impl Zombie {
         if test_bit(damage_flags, DAMAGE_DOESNT_LEAVE_BODY) {
             return;
         }
-        // [TRANSLATION_NOTE]: 头部掉落粒子（PARTICLE_ZOMBIE_HEAD 等）+ FOLEY_LIMBS_POP 未接入
+
+        // C++ 3526-3531: Zombotany 类型仅移除特殊头 reanim 后返回
+        if Zombie::is_zombotany(self.zombie_type) {
+            let a_special_head_reanim_id = self.special_head_reanim_id;
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(a_head_reanim) = app.reanimation_get_mut(a_special_head_reanim_id) {
+                    a_head_reanim.reanimation_die();
+                }
+            }
+            self.special_head_reanim_id = REANIMATIONID_NULL;
+            return;
+        }
+
+        // C++ 3533-3541: 头部粒子位置
+        let mut a_render_order = self.base.render_order + 1;
+        let a_draw_pos = self.get_draw_pos();
+        let mut a_pos_x = self.pos_x + a_draw_pos.image_offset_x + a_draw_pos.head_x as f32 + 11.0;
+        let mut a_pos_y = self.pos_y
+            + a_draw_pos.image_offset_y
+            + a_draw_pos.head_y as f32
+            + a_draw_pos.body_y
+            + 21.0;
+        if self.body_reanim_id != REANIMATIONID_NULL {
+            let (a_track_x, a_track_y) = self.get_track_position("anim_head1");
+            a_pos_x = a_track_x;
+            a_pos_y = a_track_y;
+        }
+
+        // C++ 3543-3578: 粒子类型与特殊处理
+        let mut a_effect = ParticleEffect::ZombieHead;
+        if self.zombie_phase == ZombiePhase::Mowered {
+            a_effect = ParticleEffect::MoweredZombieHead;
+        } else if self.in_pool {
+            a_effect = ParticleEffect::ZombieHeadPool;
+        }
+        if self.zombie_type == ZombieType::Dancer {
+            a_render_order = self.base.render_order - 1;
+        }
+        if self.zombie_type == ZombieType::Newspaper {
+            a_effect = ParticleEffect::ZombieNewspaperHead;
+        } else if self.zombie_type == ZombieType::Pogo {
+            self.pogo_break(damage_flags);
+            a_effect = ParticleEffect::ZombiePogoHead;
+        } else if self.zombie_type == ZombieType::Balloon {
+            self.reanim_show_prefix("anim_hat", crate::todlib::reanimator::RENDER_GROUP_HIDDEN);
+            self.reanim_show_prefix("hat", crate::todlib::reanimator::RENDER_GROUP_HIDDEN);
+            a_effect = ParticleEffect::ZombieBalloonHead;
+        } else if self.zombie_type == ZombieType::Polevaulter {
+            self.drop_pole();
+        } else if self.zombie_type == ZombieType::Flag {
+            self.drop_flag();
+        }
+
+        // C++ 3580-3583: 创建头部粒子并套用颜色/缩放覆盖
+        let a_particle = match self.base.get_app_mut() {
+            Some(app) => app.add_tod_particle(a_pos_x, a_pos_y, a_render_order, a_effect as i32),
+            None => None,
+        };
+        if let Some(a_particle) = a_particle {
+            self.override_particle_color(a_particle);
+            self.override_particle_scale(a_particle);
+
+            // C++ 3585-3632: 按类型替换掉头粒子贴图（部分类型还需隐藏装饰轨道）
+            // [TRANSLATION_NOTE]: C++ 对 OverrideImage 传 emitter 名为 nullptr（表示全部 emitter）；
+            // Rust 侧以空串表达同一语义（override_image 内 isEmpty 判定）。
+            let a_head_image_name: Option<&str> = if self.zombie_type == ZombieType::Dancer {
+                self.reanim_show_prefix(
+                    "Zombie_disco_chops",
+                    crate::todlib::reanimator::RENDER_GROUP_HIDDEN,
+                );
+                self.reanim_show_prefix(
+                    "Zombie_disco_glasses",
+                    crate::todlib::reanimator::RENDER_GROUP_HIDDEN,
+                );
+                Some("zombiedancerhead")
+            } else if self.zombie_type == ZombieType::BackupDancer {
+                self.reanim_show_prefix(
+                    "Zombie_disco_chops",
+                    crate::todlib::reanimator::RENDER_GROUP_HIDDEN,
+                );
+                self.reanim_show_prefix(
+                    "Zombie_backup_stash",
+                    crate::todlib::reanimator::RENDER_GROUP_HIDDEN,
+                );
+                Some("zombiebackupdancerhead")
+            } else if self.zombie_type == ZombieType::Bobsled {
+                Some("zombiebobsledhead")
+            } else if self.zombie_type == ZombieType::Ladder {
+                Some("zombieladderhead")
+            } else if self.zombie_type == ZombieType::Imp {
+                Some("zombieimphead")
+            } else if self.zombie_type == ZombieType::Football {
+                Some("zombiefootballhead")
+            } else if self.zombie_type == ZombieType::Polevaulter {
+                Some("zombiepolevaulterhead")
+            } else if self.zombie_type == ZombieType::Snorkel {
+                Some("reanim_zombie_snorkle_head")
+            } else if self.zombie_type == ZombieType::Digger {
+                Some("zombiediggerhead")
+            } else if self.zombie_type == ZombieType::DolphinRider {
+                Some("zombiedolphinriderhead")
+            } else if self.zombie_type == ZombieType::Yeti {
+                Some("zombieyetihead")
+            } else {
+                None
+            };
+            if let Some(a_head_image_name) = a_head_image_name {
+                if let Some(a_image) = self.get_zombie_image(a_head_image_name) {
+                    let a_image_ptr: *const crate::framework::graphics::image::Image = a_image;
+                    unsafe {
+                        (*a_particle).override_image("", a_image_ptr as *mut _);
+                    }
+                }
+            }
+        }
+
+        // C++ 3635-3649: 小胡子模式——额外生成胡子粒子并沿用覆盖贴图
+        let a_body_reanim_id = self.body_reanim_id;
+        let a_mustache_mode = self.base.get_board().map_or(false, |b| b.m_mustache_mode);
+        let a_future_mode = self.base.get_board().map_or(false, |b| b.m_future_mode);
+        let a_pinata_mode = self.base.get_board().map_or(false, |b| b.m_pinata_mode);
+
+        if a_mustache_mode {
+            let a_body_has_mustache = self
+                .base
+                .get_app()
+                .and_then(|app| app.reanimation_get(a_body_reanim_id))
+                .map_or(false, |r| r.track_exists("Zombie_mustache"));
+            if a_body_has_mustache {
+                self.reanim_show_prefix(
+                    "Zombie_mustache",
+                    crate::todlib::reanimator::RENDER_GROUP_HIDDEN,
+                );
+
+                let a_mustache_particle = match self.base.get_app_mut() {
+                    Some(app) => app.add_tod_particle(
+                        a_pos_x,
+                        a_pos_y,
+                        a_render_order,
+                        ParticleEffect::ZombieMustache as i32,
+                    ),
+                    None => None,
+                };
+                if let Some(a_mustache_particle) = a_mustache_particle {
+                    self.override_particle_color(a_mustache_particle);
+                    self.override_particle_scale(a_mustache_particle);
+                }
+
+                // C++: Image* aMustacheImage = aBodyReanim->GetImageOverride("Zombie_mustache");
+                let a_mustache_image = self
+                    .base
+                    .get_app()
+                    .and_then(|app| app.reanimation_get(a_body_reanim_id))
+                    .map_or(std::ptr::null_mut(), |r| {
+                        r.get_image_override("Zombie_mustache")
+                    });
+                if let Some(a_mustache_particle) = a_mustache_particle {
+                    if !a_mustache_image.is_null() {
+                        unsafe {
+                            (*a_mustache_particle).override_image("", a_mustache_image);
+                        }
+                    }
+                }
+            }
+        }
+
+        // C++ 3650-3684: 未来模式——按头部覆盖贴图是第几张墨镜图决定粒子帧
+        if a_future_mode {
+            let a_head_image = self
+                .base
+                .get_app()
+                .and_then(|app| app.reanimation_get(a_body_reanim_id))
+                .map_or(std::ptr::null_mut(), |r| r.get_image_override("anim_head1"));
+            let mut a_frame = -1;
+            if !a_head_image.is_null() {
+                let a_sunglasses = [
+                    "IMAGE_REANIM_ZOMBIE_HEAD_SUNGLASSES1",
+                    "IMAGE_REANIM_ZOMBIE_HEAD_SUNGLASSES2",
+                    "IMAGE_REANIM_ZOMBIE_HEAD_SUNGLASSES3",
+                    "IMAGE_REANIM_ZOMBIE_HEAD_SUNGLASSES4",
+                ];
+                for (i, a_name) in a_sunglasses.iter().enumerate() {
+                    let a_sunglass_image = reanimator_get_image(resolve_reanim_image_name(a_name))
+                        .unwrap_or(std::ptr::null_mut());
+                    if a_head_image == a_sunglass_image {
+                        a_frame = i as i32;
+                        break;
+                    }
+                }
+            }
+
+            if a_frame != -1 {
+                let a_sunglass_particle = match self.base.get_app_mut() {
+                    Some(app) => app.add_tod_particle(
+                        a_pos_x,
+                        a_pos_y,
+                        a_render_order,
+                        ParticleEffect::ZombieSunglass as i32,
+                    ),
+                    None => None,
+                };
+                if let Some(a_sunglass_particle) = a_sunglass_particle {
+                    self.override_particle_color(a_sunglass_particle);
+                    self.override_particle_scale(a_sunglass_particle);
+                    unsafe {
+                        (*a_sunglass_particle).override_frame("", a_frame);
+                    }
+                }
+            }
+        }
+
+        // C++ 3685-3690: 皮纳塔模式
+        if a_pinata_mode && self.zombie_phase != ZombiePhase::Mowered {
+            let _a_pinata_particle = match self.base.get_app_mut() {
+                Some(app) => app.add_tod_particle(
+                    a_pos_x,
+                    a_pos_y,
+                    a_render_order,
+                    ParticleEffect::ZombiePinata as i32,
+                ),
+                None => None,
+            };
+            // C++: OverrideParticleScale(aParticle) —— 原作者这里缩放的是头部粒子而非刚创建的
+            // 皮纳塔粒子，并自注 "Weird, TODO: test the Pinata Mode"。此处保持原样不改。
+            if let Some(a_particle) = a_particle {
+                self.override_particle_scale(a_particle);
+            }
+        }
+
+        // C++ 3692: 掉头音效
+        if let Some(app) = self.base.get_app_mut() {
+            app.play_foley(crate::todlib::tod_foley::FoleyType::LimbsPop as i32);
+        }
     }
 
     /// 隐藏头部 reanim 图层（对应 C++ SetupReanimForLostHead）
@@ -5085,8 +6823,10 @@ impl Zombie {
         self.reanim_show_prefix("anim_tongue", -1); // RENDER_GROUP_HIDDEN
     }
 
-    /// 隐藏手臂 reanim 图层（对应 C++ SetupReanimForLostArm）
-    pub fn setup_reanim_for_lost_arm(&mut self, _damage_flags: u32) {
+    /// 隐藏手臂 reanim 图层（对应 C++ Zombie::SetupReanimForLostArm，Zombie.cpp:3695）
+    pub fn setup_reanim_for_lost_arm(&mut self, damage_flags: u32) {
+        use crate::todlib::reanim_loader::{reanimator_get_image, resolve_reanim_image_name};
+
         match self.zombie_type {
             ZombieType::Football => {
                 self.reanim_show_prefix("Zombie_football_leftarm_lower", -1);
@@ -5113,8 +6853,386 @@ impl Zombie {
                 self.reanim_show_prefix("Zombie_outerarm_hand", -1);
             }
         }
-        // [TRANSLATION_NOTE]: C++ 按类型设置手臂上部图片覆盖（IMAGE_REANIM_ZOMBIE_*_UPPER2 等）
-        // 并生成 PARTICLE_ZOMBIE_ARM 粒子 — 图片/粒子未接入
+        // C++ 3725-3732: 手臂粒子/贴图锚点位置（倒走时右移 36）
+        let a_draw_pos = self.get_draw_pos();
+        let mut a_pos_x = self.pos_x + a_draw_pos.image_offset_x + 45.0;
+        let mut a_pos_y = self.pos_y + a_draw_pos.image_offset_y + a_draw_pos.body_y + 78.0;
+        if self.is_walking_backwards() {
+            a_pos_x += 36.0;
+        }
+
+        // C++ 3734-3819: body reanim 存在时，按类型定位并替换手臂上部贴图
+        let a_body_reanim_id = self.body_reanim_id;
+        let a_has_body_reanim = self
+            .base
+            .get_app()
+            .and_then(|app| app.reanimation_get(a_body_reanim_id))
+            .is_some();
+        if a_has_body_reanim {
+            match self.zombie_type {
+                ZombieType::Football => {
+                    let (a_track_x, a_track_y) =
+                        self.get_track_position("Zombie_football_leftarm_hand");
+                    a_pos_x = a_track_x;
+                    a_pos_y = a_track_y;
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Zombie_football_leftarm_upper",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_FOOTBALL_LEFTARM_UPPER2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                }
+                ZombieType::Newspaper => {
+                    let (a_track_x, a_track_y) =
+                        self.get_track_position("Zombie_paper_leftarm_lower");
+                    a_pos_x = a_track_x;
+                    a_pos_y = a_track_y;
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Zombie_paper_leftarm_upper",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_PAPER_LEFTARM_UPPER2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                }
+                ZombieType::Polevaulter => {
+                    let (a_track_x, a_track_y) =
+                        self.get_track_position("Zombie_polevaulter_outerarm_lower");
+                    a_pos_x = a_track_x;
+                    a_pos_y = a_track_y;
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Zombie_polevaulter_outerarm_upper",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_POLEVAULTER_OUTERARM_UPPER2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                }
+                ZombieType::Balloon => {
+                    let (a_track_x, a_track_y) = self.get_track_position("Zombie_outerarm_lower");
+                    a_pos_x = a_track_x;
+                    a_pos_y = a_track_y;
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Zombie_outerarm_upper",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_BALLOON_OUTERARM_UPPER2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                }
+                ZombieType::Imp => {
+                    let (a_track_x, a_track_y) = self.get_track_position("Zombie_outerarm_lower");
+                    a_pos_x = a_track_x;
+                    a_pos_y = a_track_y;
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Zombie_imp_outerarm_upper",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_IMP_ARM1_BONE",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                }
+                ZombieType::Digger => {
+                    let (a_track_x, a_track_y) = self.get_track_position("Zombie_outerarm_lower");
+                    a_pos_x = a_track_x;
+                    a_pos_y = a_track_y;
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Zombie_digger_outerarm_upper",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_DIGGER_OUTERARM_UPPER2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                }
+                ZombieType::Bobsled => {
+                    let (a_track_x, a_track_y) = self.get_track_position("Zombie_outerarm_lower");
+                    a_pos_x = a_track_x;
+                    a_pos_y = a_track_y;
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Zombie_dolphinrider_outerarm_upper",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_BOBSLED_OUTERARM_UPPER2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                }
+                ZombieType::JackInTheBox => {
+                    let (a_track_x, a_track_y) =
+                        self.get_track_position("Zombie_jackbox_outerarm_lower");
+                    a_pos_x = a_track_x;
+                    a_pos_y = a_track_y;
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Zombie_jackbox_outerarm_lower",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_JACKBOX_OUTERARM_LOWER2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                }
+                ZombieType::Snorkel => {
+                    let (a_track_x, a_track_y) = self.get_track_position("Zombie_outerarm_lower");
+                    a_pos_x = a_track_x;
+                    a_pos_y = a_track_y;
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Zombie_snorkle_outerarm_upper",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_SNORKLE_OUTERARM_UPPER2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                }
+                ZombieType::DolphinRider => {
+                    let (a_track_x, a_track_y) = self.get_track_position("Zombie_outerarm_lower");
+                    a_pos_x = a_track_x;
+                    a_pos_y = a_track_y;
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Zombie_dolphinrider_outerarm_upper",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_DOLPHINRIDER_OUTERARM_UPPER2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                }
+                ZombieType::Pogo => {
+                    let (a_track_x, a_track_y) = self.get_track_position("Zombie_outerarm_lower");
+                    a_pos_x = a_track_x;
+                    a_pos_y = a_track_y;
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Zombie_outerarm_upper",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_POGO_OUTERARM_UPPER2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                            a_body_reanim.set_image_override(
+                                "Zombie_pogo_stickhands",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_POGO_STICKHANDS2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                            a_body_reanim.set_image_override(
+                                "Zombie_pogo_stick",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_POGO_STICKDAMAGE2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                            a_body_reanim.set_image_override(
+                                "Zombie_pogo_stick2",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_POGO_STICK2DAMAGE2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                }
+                ZombieType::Flag => {
+                    let (a_track_x, a_track_y) = self.get_track_position("Zombie_outerarm_lower");
+                    a_pos_x = a_track_x;
+                    a_pos_y = a_track_y;
+                    let a_special_head_reanim_id = self.special_head_reanim_id;
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Zombie_outerarm_upper",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_OUTERARM_UPPER2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                        // C++: 旗面本身挂在特殊头 reanim 上
+                        if let Some(a_head_reanim) =
+                            app.reanimation_get_mut(a_special_head_reanim_id)
+                        {
+                            a_head_reanim.set_image_override(
+                                "Zombie_flag",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_FLAG3",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                }
+                ZombieType::Dancer => {
+                    let (a_track_x, a_track_y) =
+                        self.get_track_position("Zombie_disco_outerarm_lower");
+                    a_pos_x = a_track_x;
+                    a_pos_y = a_track_y;
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                            // C++ 原注释：GOTY 资源里该贴图使用不同名字
+                            a_body_reanim.set_image_override(
+                                "Zombie_disco_outerarm_upper",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_DISCO_OUTERARM_UPPER2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                }
+                ZombieType::BackupDancer => {
+                    let (a_track_x, a_track_y) =
+                        self.get_track_position("Zombie_disco_outerarm_lower");
+                    a_pos_x = a_track_x;
+                    a_pos_y = a_track_y;
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Zombie_disco_outerarm_upper",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_BACKUP_OUTERARM_UPPER2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                }
+                ZombieType::Ladder => {
+                    let (a_track_x, a_track_y) = self.get_track_position("Zombie_outerarm_hand");
+                    a_pos_x = a_track_x;
+                    a_pos_y = a_track_y;
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Zombie_ladder_outerarm_upper",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_LADDER_OUTERARM_UPPER2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                }
+                ZombieType::Yeti => {
+                    let (a_track_x, a_track_y) = self.get_track_position("Zombie_outerarm_hand");
+                    a_pos_x = a_track_x;
+                    a_pos_y = a_track_y;
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Zombie_yeti_outerarm_upper",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_YETI_OUTERARM_UPPER2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                }
+                _ => {
+                    let (a_track_x, a_track_y) = self.get_track_position("Zombie_outerarm_lower");
+                    a_pos_x = a_track_x;
+                    a_pos_y = a_track_y;
+                    if let Some(app) = self.base.get_app_mut() {
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                            a_body_reanim.set_image_override(
+                                "Zombie_outerarm_upper",
+                                reanimator_get_image(resolve_reanim_image_name(
+                                    "IMAGE_REANIM_ZOMBIE_OUTERARM_UPPER2",
+                                ))
+                                .unwrap_or(std::ptr::null_mut()),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // C++ 3821-3875: 非池中且允许留尸时生成断臂粒子
+        if !self.in_pool && !test_bit(damage_flags, DAMAGE_DOESNT_LEAVE_BODY) {
+            let mut a_effect = ParticleEffect::ZombieArm;
+            if self.zombie_phase == ZombiePhase::Mowered {
+                a_effect = ParticleEffect::MoweredZombieArm;
+            }
+
+            let a_render_order = self.base.render_order + 1;
+            let a_particle = match self.base.get_app_mut() {
+                Some(app) => {
+                    app.add_tod_particle(a_pos_x, a_pos_y, a_render_order, a_effect as i32)
+                }
+                None => None,
+            };
+            if let Some(a_particle) = a_particle {
+                self.override_particle_color(a_particle);
+                self.override_particle_scale(a_particle);
+
+                // C++: aParticle->OverrideImage(nullptr, IMAGE_...)
+                let a_arm_image_name: Option<&str> = match self.zombie_type {
+                    ZombieType::Football => Some("IMAGE_REANIM_ZOMBIE_FOOTBALL_LEFTARM_HAND"),
+                    ZombieType::Newspaper => Some("IMAGE_REANIM_ZOMBIE_PAPER_LEFTARM_LOWER"),
+                    ZombieType::Dancer => Some("IMAGE_REANIM_ZOMBIE_DISCO_OUTERARM_HAND"),
+                    ZombieType::BackupDancer => Some("IMAGE_REANIM_ZOMBIE_BACKUP_INNERARM_HAND"),
+                    ZombieType::Bobsled => Some("IMAGE_REANIM_ZOMBIE_BOBSLED_OUTERARM_HAND"),
+                    ZombieType::Imp => Some("IMAGE_REANIM_ZOMBIE_IMP_ARM2"),
+                    ZombieType::Yeti => Some("IMAGE_REANIM_ZOMBIE_YETI_OUTERARM_HAND"),
+                    ZombieType::JackInTheBox => Some("IMAGE_ZOMBIEJACKBOXARM"),
+                    ZombieType::Digger => Some("IMAGE_ZOMBIEDIGGERARM"),
+                    ZombieType::Polevaulter
+                    | ZombieType::Balloon
+                    | ZombieType::DolphinRider
+                    | ZombieType::Pogo
+                    | ZombieType::Ladder => Some("IMAGE_REANIM_ZOMBIE_OUTERARM_HAND"),
+                    _ => None,
+                };
+                if let Some(a_arm_image_name) = a_arm_image_name {
+                    let a_image = reanimator_get_image(resolve_reanim_image_name(
+                        a_arm_image_name,
+                    ))
+                    .unwrap_or(std::ptr::null_mut());
+                    unsafe {
+                        (*a_particle).override_image("", a_image);
+                    }
+                }
+            }
+        }
     }
 
     /// 是否有鬼脸图片（对应 C++ HasYuckyFaceImage）
@@ -5132,11 +7250,61 @@ impl Zombie {
             ZombieType::Polevaulter)
     }
 
-    /// 显示/隐藏鬼脸（对应 C++ ShowYuckyFace）
+    /// 显示/隐藏鬼脸（对应 C++ Zombie::ShowYuckyFace，Zombie.cpp:4706）
     pub fn show_yucky_face(&mut self, the_show: bool) {
-        // [TRANSLATION_NOTE]: C++ 通过 aBodyReanim->SetImageOverride("anim_head1", IMAGE_REANIM_ZOMBIE_HEAD_GROSSOUT)
-        // + AssignRenderGroupToTrack 隐藏/恢复 head2/head_jaw/tongue — reanim 未接入
-        let _ = the_show;
+        use crate::todlib::reanim_loader::{reanimator_get_image, resolve_reanim_image_name};
+
+        // C++: Reanimation* aBodyReanim = mApp->ReanimationGet(mBodyReanimID);
+        let a_body_reanim_id = self.body_reanim_id;
+        let a_has_head = self.has_head;
+        let a_variant = self.variant;
+        let a_has_yucky_face_image = self.has_yucky_face_image();
+
+        if let Some(app) = self.base.get_app_mut() {
+            if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                if a_has_yucky_face_image {
+                    if the_show {
+                        a_body_reanim.set_image_override(
+                            "anim_head1",
+                            reanimator_get_image(resolve_reanim_image_name(
+                                "IMAGE_REANIM_ZOMBIE_HEAD_GROSSOUT",
+                            ))
+                            .unwrap_or(std::ptr::null_mut()),
+                        );
+                        a_body_reanim.assign_render_group_to_track(
+                            "anim_head2",
+                            crate::todlib::reanimator::RENDER_GROUP_HIDDEN,
+                        );
+                        a_body_reanim.assign_render_group_to_track(
+                            "anim_head_jaw",
+                            crate::todlib::reanimator::RENDER_GROUP_HIDDEN,
+                        );
+                        a_body_reanim.assign_render_group_to_track(
+                            "anim_tongue",
+                            crate::todlib::reanimator::RENDER_GROUP_HIDDEN,
+                        );
+                    } else if a_has_head {
+                        // C++: SetImageOverride("anim_head1", nullptr)
+                        a_body_reanim.set_image_override("anim_head1", std::ptr::null_mut());
+                        a_body_reanim.assign_render_group_to_track(
+                            "anim_head2",
+                            crate::todlib::reanimator::RENDER_GROUP_NORMAL,
+                        );
+                        a_body_reanim.assign_render_group_to_track(
+                            "anim_head_jaw",
+                            crate::todlib::reanimator::RENDER_GROUP_NORMAL,
+                        );
+                        // C++: 仅变种僵尸恢复舌头轨道显示
+                        if a_variant {
+                            a_body_reanim.assign_render_group_to_track(
+                                "anim_tongue",
+                                crate::todlib::reanimator::RENDER_GROUP_NORMAL,
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// 精神控制（对应 C++ StartMindControlled）
@@ -5324,7 +7492,18 @@ impl Zombie {
                     }
                 }
                 self.start_mind_controlled();
-                // [TRANSLATION_NOTE]: PARTICLE_MIND_CONTROL 粒子未接入
+                // C++ Zombie.cpp:4837：PARTICLE_MIND_CONTROL
+                let a_mind_pos_x = self.pos_x + 60.0;
+                let a_mind_pos_y = self.pos_y + 40.0;
+                let a_mind_render_order = self.base.render_order + 1;
+                if let Some(app) = self.base.get_app_mut() {
+                    app.add_tod_particle(
+                        a_mind_pos_x,
+                        a_mind_pos_y,
+                        a_mind_render_order,
+                        ParticleEffect::MindControl as i32,
+                    );
+                }
                 self.try_spawn_level_award();
                 self.vel_x = 0.17;
                 self.anim_ticks_per_frame = 18;
@@ -5991,40 +8170,195 @@ impl Zombie {
         self.zombie_height = ZombieHeight::Falling;
     }
 
-    /// 播放死亡动画（对应 C++ PlayDeathAnim）
+    /// 播放死亡动画（对应 C++ Zombie::PlayDeathAnim，Zombie.cpp:8899）
     pub fn play_death_anim(&mut self, damage_flags: u32) {
-        if self.zombie_phase == ZombiePhase::Dying || self.zombie_phase == ZombiePhase::Burned || self.zombie_phase == ZombiePhase::Mowered {
+        if self.zombie_phase == ZombiePhase::Dying
+            || self.zombie_phase == ZombiePhase::Burned
+            || self.zombie_phase == ZombiePhase::Mowered
+        {
             return;
         }
 
-        // 冰陷阱/黄油/恶心表情清理
-        // 依赖底层系统
+        // C++ 8904-8909: body reanim 缺失或没有 anim_death 轨道 → 无掉落死亡
+        let a_body_has_death_track = self
+            .base
+            .get_app()
+            .and_then(|app| app.reanimation_get(self.body_reanim_id))
+            .map_or(false, |r| r.track_exists("anim_death"));
+        if !a_body_has_death_track {
+            self.die_no_loot();
+            return;
+        }
+        // C++ 8910-8914: 海豚骑士不在池中行走时直接死亡
+        if self.zombie_type == ZombieType::DolphinRider
+            && self.zombie_phase != ZombiePhase::DolphinWalkingInPool
+        {
+            self.die_no_loot();
+            return;
+        }
+        // C++ 8915-8919: 潜水僵尸入水/水中行走时直接死亡
+        if self.zombie_phase == ZombiePhase::SnorkelIntoPool
+            || self.zombie_phase == ZombiePhase::SnorkelWalking
+        {
+            self.die_no_loot();
+            return;
+        }
 
+        // C++ 8921-8925: 冰陷阱解除粒子
+        if self.ice_trap_counter > 0 {
+            self.add_attached_particle(75, 106, ParticleEffect::IceTrapRelease);
+            self.ice_trap_counter = 0;
+        }
+        // C++: mButteredCounter = std::min(mButteredCounter, 0);
+        self.buttered_counter = self.buttered_counter.min(0);
+        if self.yucky_face {
+            self.show_yucky_face(false);
+            self.yucky_face = false;
+            self.yucky_face_counter = 0;
+        }
+
+        // C++ 8934-8941: 不留尸体的伤害，且非 Boss / 巨人 → 直接死亡
+        if test_bit(damage_flags, DAMAGE_DOESNT_LEAVE_BODY)
+            && self.zombie_type != ZombieType::Boss
+            && self.zombie_type != ZombieType::Gargantuar
+            && self.zombie_type != ZombieType::RedeEyeGargantuar
+        {
+            self.die_no_loot();
+            return;
+        }
+
+        // C++ 8943-8946
+        if self.zombie_type == ZombieType::Pogo {
+            self.altitude = 0.0;
+        }
+
+        // C++ 8948-8949: 移除惊讶表情附着动画 + 停止啃食
+        crate::todlib::attachment::attachment_reanim_type_die(
+            &mut self.attachment_id,
+            ReanimationType::ZombieSurprise,
+        );
         self.stop_eating();
+
         if self.shield_type != ShieldType::None {
             self.drop_shield(1);
+        }
+        // C++ 8955-8959: 压扁头且已无头 → 移除特殊头 reanim
+        if self.zombie_type == ZombieType::SquashHead && !self.has_head {
+            let a_special_head_reanim_id = self.special_head_reanim_id;
+            if let Some(app) = self.base.get_app_mut() {
+                app.remove_reanimation(a_special_head_reanim_id);
+            }
+            self.special_head_reanim_id = REANIMATIONID_NULL;
         }
 
         self.vel_x = 0.0;
         self.zombie_phase = ZombiePhase::Dying;
 
-        // 不同僵尸类型的死亡动画速率
-        let a_death_anim_rate = match self.zombie_type {
-            ZombieType::Football => 24.0,
-            ZombieType::Gargantuar | ZombieType::RedeEyeGargantuar => 14.0,
-            ZombieType::Snorkel => 14.0,
-            ZombieType::Digger => 18.0,
-            ZombieType::Yeti => 14.0,
-            ZombieType::Boss => 18.0,
-            _ => 24.0 + RandFloat(6.0),
-        };
+        // C++ 8963-8967: 水族馆高度使用专用死亡动画
+        if self.zombie_height == ZombieHeight::Zombiquarium {
+            self.play_zombie_reanim(
+                "anim_aquarium_death",
+                ReanimLoopType::PlayOnceAndHold,
+                20,
+                14.0,
+            );
+            return;
+        }
+        // C++ 8968-8971: 爬梯高度转为坠落
+        if self.zombie_height == ZombieHeight::UpLadder {
+            self.zombie_height = ZombieHeight::Falling;
+        }
 
-        // 选择死亡动画轨道
-        let mut a_death_track = "anim_death";
-        // 依赖底层系统
-        let _ = damage_flags;
+        // C++ 8973-9006: 按类型决定死亡动画速率
+        let mut a_death_anim_rate;
+        if self.zombie_type == ZombieType::Football {
+            a_death_anim_rate = 24.0;
+        } else if self.zombie_type == ZombieType::Gargantuar
+            || self.zombie_type == ZombieType::RedeEyeGargantuar
+        {
+            a_death_anim_rate = 14.0;
+            if let Some(app) = self.base.get_app_mut() {
+                app.play_foley(crate::todlib::tod_foley::FoleyType::Gargantudeath as i32);
+            }
+        } else if self.zombie_type == ZombieType::Snorkel {
+            a_death_anim_rate = 14.0;
+        } else if self.zombie_type == ZombieType::Digger {
+            a_death_anim_rate = 18.0;
+        } else if self.zombie_type == ZombieType::Yeti {
+            a_death_anim_rate = 14.0;
+        } else if self.zombie_type == ZombieType::Boss {
+            a_death_anim_rate = 18.0;
 
-        self.play_zombie_reanim(a_death_track, ReanimLoopType::PlayOnceAndHold, 20, a_death_anim_rate);
+            self.boss_die();
+            // C++: aHeadReanim->PlayReanim("anim_death", ..., 20, aDeathAnimRate);
+            let a_special_head_reanim_id = self.special_head_reanim_id;
+            if let Some(app) = self.base.get_app_mut() {
+                if let Some(a_head_reanim) = app.reanimation_get_mut(a_special_head_reanim_id) {
+                    a_head_reanim.play_reanim(
+                        "anim_death",
+                        crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,
+                        20,
+                        a_death_anim_rate,
+                    );
+                }
+            }
+        } else {
+            a_death_anim_rate = crate::todlib::tod_common::rand_range_float(24.0, 30.0);
+        }
+
+        // C++ 9008-9024: 死亡轨道选择（水下 / 超长 / 第二套死亡动画）
+        let mut a_death_track_name = "anim_death";
+        let a_death_anim_hit = crate::framework::common::rand_range(100);
+        let a_can_do_super_long_death = self
+            .base
+            .get_app()
+            .map_or(false, |app| app.has_finished_adventure())
+            || self.base.get_board().map_or(false, |b| b.level > 5);
+        let a_body_has_waterdeath = self
+            .base
+            .get_app()
+            .and_then(|app| app.reanimation_get(self.body_reanim_id))
+            .map_or(false, |r| r.track_exists("anim_waterdeath"));
+
+        if self.in_pool && a_body_has_waterdeath {
+            a_death_track_name = "anim_waterdeath";
+            self.reanim_ignore_clip_rect("Zombie_duckytube", false);
+        } else {
+            let a_body_has_superlongdeath = self
+                .base
+                .get_app()
+                .and_then(|app| app.reanimation_get(self.body_reanim_id))
+                .map_or(false, |r| r.track_exists("anim_superlongdeath"));
+            let a_body_has_death2 = self
+                .base
+                .get_app()
+                .and_then(|app| app.reanimation_get(self.body_reanim_id))
+                .map_or(false, |r| r.track_exists("anim_death2"));
+
+            if a_death_anim_hit == 99
+                && a_body_has_superlongdeath
+                && a_can_do_super_long_death
+                && self.chilled_counter == 0
+                && self
+                    .base
+                    .get_board()
+                    .map_or(false, |b| b.count_zombies_on_screen() <= 5)
+            {
+                a_death_anim_rate = 14.0;
+                a_death_track_name = "anim_superlongdeath";
+            } else if a_death_anim_hit > 50 && a_body_has_death2 {
+                a_death_track_name = "anim_death2";
+            }
+        }
+
+        self.play_zombie_reanim(
+            a_death_track_name,
+            ReanimLoopType::PlayOnceAndHold,
+            20,
+            a_death_anim_rate,
+        );
+        // C++: ReanimShowPrefix("anim_tongue", RENDER_GROUP_HIDDEN);
+        self.reanim_show_prefix("anim_tongue", crate::todlib::reanimator::RENDER_GROUP_HIDDEN);
     }
 
     /// 更新死亡状态（对应 C++ UpdateDeath，Zombie.cpp:9068）
@@ -6320,12 +8654,42 @@ impl Zombie {
         self.update_anim_speed();
     }
 
-    /// 直接死亡（对应 C++ DieNoLoot）
+    /// 直接死亡（对应 C++ Zombie::DieNoLoot，Zombie.cpp:7419）
     pub fn die_no_loot(&mut self) {
+        // C++: StopZombieSound();
+        self.stop_zombie_sound();
+
+        // C++: AttachmentDie(mAttachmentID);
+        crate::todlib::attachment::attachment_die(&mut self.attachment_id);
+
+        // C++: mApp->RemoveReanimation(...) × 4（body / mowered / specialHead / zombatarHead）
+        let a_body_reanim_id = self.body_reanim_id;
+        let a_mowered_reanim_id = self.mowered_reanim_id;
+        let a_special_head_reanim_id = self.special_head_reanim_id;
+        let a_zombatar_head_reanim_id = self.zombatar_head_reanim_id;
+        if let Some(app) = self.base.get_app_mut() {
+            app.remove_reanimation(a_body_reanim_id);
+            app.remove_reanimation(a_mowered_reanim_id);
+            app.remove_reanimation(a_special_head_reanim_id);
+            app.remove_reanimation(a_zombatar_head_reanim_id);
+        }
+
         self.dead = true;
+        // [TRANSLATION_NOTE]: C++ DieNoLoot 不设 mZombiePhase；Rust 侧保留既有 Dying 置位，
+        // 供后续依赖相位判断的逻辑（如死亡动画分支）使用。
         self.zombie_phase = ZombiePhase::Dying;
-        if self.playing_song {
-            self.stop_zombie_sound();
+
+        self.try_spawn_level_award();
+
+        // C++: 雪橇/蹦极/Boss 各自的收尾处理
+        if self.zombie_type == ZombieType::Bobsled {
+            self.bobsled_die();
+        }
+        if self.zombie_type == ZombieType::Bungee {
+            self.bungee_die();
+        }
+        if self.zombie_type == ZombieType::Boss {
+            self.boss_die();
         }
     }
 
@@ -6375,24 +8739,69 @@ impl Zombie {
             let center_x = zombie_rect.x + zombie_rect.width / 2;
             let center_y = zombie_rect.y + zombie_rect.height / 2;
 
-            let mut coin_type = CoinType::AwardMoneyBag;
+            // C++ Zombie.cpp:7175-7178
+            if !(*board).is_survival_stage_with_repick() {
+                (*board).remove_all_zombies();
+            }
+
+            let mut coin_type;
             if (*app).is_scary_potter_level() && !(*board).is_final_scary_potter_stage() {
                 coin_type = CoinType::None;
                 let gx = (*board).pixel_to_grid_x_keep_on_board(self.pos_x as i32 + 75, self.pos_y as i32);
                 if let Some(challenge) = &mut (*board).challenge {
                     challenge.puzzle_phase_complete(gx, self.base.row);
                 }
+            } else if (*app).is_adventure_mode() && (*board).level <= 50 {
+                // C++ Zombie.cpp:7186-7224：冒险模式奖励
+                let a_level = (*board).level;
+                if a_level == 9 || a_level == 19 || a_level == 29 || a_level == 39 || a_level == 49 {
+                    coin_type = CoinType::Note;
+                } else if a_level == 50 {
+                    coin_type = if (*app).has_finished_adventure() {
+                        CoinType::AwardMoneyBag
+                    } else {
+                        CoinType::AwardSilverSunflower
+                    };
+                } else if (*app).has_finished_adventure() {
+                    coin_type = CoinType::AwardMoneyBag;
+                } else if a_level == 4 {
+                    coin_type = CoinType::Shovel;
+                } else if a_level == 14 {
+                    coin_type = CoinType::Almanac;
+                } else if a_level == 24 {
+                    coin_type = CoinType::Carkeys;
+                } else if a_level == 34 {
+                    coin_type = CoinType::Taco;
+                } else if a_level == 44 {
+                    coin_type = CoinType::WateringCan;
+                } else {
+                    coin_type = CoinType::FinalSeedPacket;
+                }
             } else if (*board).is_survival_stage_with_repick() {
                 coin_type = CoinType::None;
+                (*board).fade_out_level();
             } else if (*board).is_last_stand_stage_with_repick() {
                 coin_type = CoinType::None;
-                // FadeOutLevel 与阳光雨暂未接入
+                (*board).fade_out_level();
+                (*app).play_foley(crate::todlib::tod_foley::FoleyType::SpawnSun as i32);
+                for i in 0..10 {
+                    (*board).add_coin(
+                        (center_x + i * 5) as f32,
+                        center_y as f32,
+                        CoinType::Sun,
+                        CoinMotion::Coin,
+                    );
+                }
             } else if !(*app).is_adventure_mode() {
                 if (*app).has_beaten_challenge((*app).game_mode) {
                     coin_type = CoinType::AwardMoneyBag;
+                } else if (*app).trophies_need_for_gold_sunflower() == 1 {
+                    coin_type = CoinType::AwardGoldSunflower;
                 } else {
                     coin_type = CoinType::Trophy;
                 }
+            } else {
+                coin_type = CoinType::AwardMoneyBag;
             }
 
             let mut coin_motion = CoinMotion::Coin;
@@ -6707,22 +9116,249 @@ impl Zombie {
     }
 
     /// 绘制雪橇（对应 C++ Zombie::DrawBobsledReanim）
-    pub fn draw_bobsled_reanim(&self, g: &mut Graphics, the_draw_pos: &ZombieDrawPosition, the_before_zombie: bool) {
-        // [TRANSLATION_NOTE]: 雪橇绘制依赖 BOBSLED 图片资源与领队僵尸，图片未接入时跳过
-        let _ = (g, the_draw_pos, the_before_zombie);
-    }
+    /// 绘制雪橇（对应 C++ Zombie::DrawBobsledReanim，Zombie.cpp:5386）
+    pub fn draw_bobsled_reanim(
+        &self,
+        g: &mut Graphics,
+        the_draw_pos: &ZombieDrawPosition,
+        the_before_zombie: bool,
+    ) {
+        let a_position = self.get_bobsled_position();
+        let mut a_draw_front = false;
+        let mut a_draw_back = false;
 
-    /// 绘制蹦极（对应 C++ Zombie::DrawBungeeReanim）
-    pub fn draw_bungee_reanim(&self, g: &mut Graphics) {
-        // C++: 先画蹦极绳，再画本体，再画被抓目标
-        self.draw_bungee_cord(g, -22);
-        if let Some(app) = self.base.get_app() {
-            if let Some(body) = app.reanimation_get(self.body_reanim_id) {
-                body.draw(g);
+        // C++ 5392-5410: 取得领队僵尸（过场波或 aPosition==0 时为自己）
+        let a_zombie_leader: &Zombie = if self.from_wave == Zombie::ZOMBIE_WAVE_CUTSCENE {
+            self
+        } else {
+            if a_position == -1 {
+                return;
+            }
+            if a_position == 0 {
+                self
+            } else {
+                let a_board = match self.base.get_board() {
+                    Some(b) => b,
+                    None => return,
+                };
+                match a_board.zombie_get(self.related_zombie_id) {
+                    Some(a_zombie) => a_zombie,
+                    None => return,
+                }
+            }
+        };
+
+        // C++ 5412-5458: 判定雪橇画在僵尸之前还是之后
+        if self.from_wave == Zombie::ZOMBIE_WAVE_CUTSCENE {
+            // 选卡过场：先画雪橇后半、再画僵尸、再画雪橇前半
+            if the_before_zombie {
+                a_draw_back = true;
+            } else {
+                a_draw_front = true;
+            }
+        } else if self.zombie_phase == ZombiePhase::BobsledCrashing {
+            // 已撞车：领队僵尸之后同时画前后半
+            if a_position == 0 && !the_before_zombie {
+                a_draw_front = true;
+                a_draw_back = true;
+            }
+        } else if self.zombie_phase == ZombiePhase::BobsledSliding
+            || self.zombie_phase == ZombiePhase::Burned
+        {
+            // 滑行/被烧：第 2 只僵尸之前同时画前后半
+            if a_position == 2 && the_before_zombie {
+                a_draw_front = true;
+                a_draw_back = true;
+            }
+        } else if self.zombie_phase == ZombiePhase::BobsledBoarding {
+            // C++: Reanimation* aBodyReanim = mApp->ReanimationGet(mBodyReanimID);
+            let a_anim_time = match self
+                .base
+                .get_app()
+                .and_then(|app| app.reanimation_get(self.body_reanim_id))
+            {
+                Some(a_body_reanim) => a_body_reanim.m_anim_time,
+                None => 0.0,
+            };
+            if a_anim_time < 0.5 {
+                // 腾空中：第 2 只僵尸之前画前后半
+                if a_position == 2 && the_before_zombie {
+                    a_draw_front = true;
+                    a_draw_back = true;
+                }
+            } else if a_position == 0 && !the_before_zombie {
+                // 上车完成：领队僵尸之后画前半
+                a_draw_front = true;
+            } else if a_position == 3 && the_before_zombie {
+                // 上车完成：最后一只僵尸之前画后半
+                a_draw_back = true;
             }
         }
-        // [TRANSLATION_NOTE]: 被抓僵尸/植物绘制依赖 board 查找与 graphics 拷贝，暂以注释保留
-        let _ = g;
+
+        // C++ 5460-5479: 偏移与损伤档位
+        let mut a_offset_x =
+            a_zombie_leader.pos_x + the_draw_pos.image_offset_x - self.pos_x - 76.0;
+        let mut a_offset_y = 15.0;
+        let a_bobsled_damage_status;
+        if self.zombie_phase == ZombiePhase::BobsledCrashing {
+            a_bobsled_damage_status = 3;
+            let a_alpha = crate::todlib::tod_common::tod_animate_curve(
+                30,
+                0,
+                self.phase_counter,
+                255,
+                0,
+                TodCurves::Linear,
+            );
+            // 回退到撞车起始位置，再叠加横向滑行与纵向抬升
+            a_offset_x += (BOBSLED_CRASH_TIME - self.phase_counter) as f32 * self.vel_x
+                / ZOMBIE_LIMP_SPEED_FACTOR as f32;
+            a_offset_x -= crate::todlib::tod_common::tod_animate_curve_float(
+                BOBSLED_CRASH_TIME,
+                0,
+                self.phase_counter,
+                0.0,
+                50.0,
+                TodCurves::EaseOut,
+            );
+            a_offset_y += crate::todlib::tod_common::tod_animate_curve_float(
+                BOBSLED_CRASH_TIME,
+                75,
+                self.phase_counter,
+                5.0,
+                10.0,
+                TodCurves::Linear,
+            );
+            if a_alpha != 255 {
+                g.set_colorize_images(true);
+                g.set_color(&crate::framework::color::Color::new(
+                    255,
+                    255,
+                    255,
+                    a_alpha as u8,
+                ));
+            }
+        } else {
+            a_bobsled_damage_status = a_zombie_leader.get_helm_damage_index();
+        }
+
+        // C++ 5481-5497: 按损伤档位选雪橇贴图
+        let a_image_name = if a_bobsled_damage_status == 0 {
+            "zombie_bobsled1"
+        } else if a_bobsled_damage_status == 1 {
+            "zombie_bobsled2"
+        } else if a_bobsled_damage_status == 2 {
+            "zombie_bobsled3"
+        } else {
+            "zombie_bobsled4"
+        };
+
+        if self.zombie_phase == ZombiePhase::Burned {
+            g.set_colorize_images(true);
+            g.set_color(&crate::framework::color::Color::new(0, 0, 0, 255));
+        }
+
+        if a_draw_back && a_bobsled_damage_status != 3 {
+            if let Some(a_image) = self.get_zombie_image("zombie_bobsled_inside") {
+                g.draw_image_f_xy(a_image, a_offset_x, a_offset_y);
+            }
+        }
+        if a_draw_front {
+            if let Some(a_image) = self.get_zombie_image(a_image_name) {
+                g.draw_image_f_xy(a_image, a_offset_x, a_offset_y);
+            }
+        }
+
+        // C++ 5514-5531: 领队刚被击中时的加色重绘
+        if a_zombie_leader.just_got_shot_counter > 0 {
+            g.set_draw_mode(1); // DRAWMODE_ADDITIVE
+            g.set_colorize_images(true);
+            let a_grayness = (a_zombie_leader.just_got_shot_counter * 10).min(255) as u8;
+            g.set_color(&crate::framework::color::Color::new(
+                a_grayness,
+                a_grayness,
+                a_grayness,
+                255,
+            ));
+
+            if a_draw_back && a_bobsled_damage_status != 3 {
+                if let Some(a_image) = self.get_zombie_image("zombie_bobsled_inside") {
+                    g.draw_image_f_xy(a_image, a_offset_x, a_offset_y);
+                }
+            }
+            if a_draw_front {
+                if let Some(a_image) = self.get_zombie_image(a_image_name) {
+                    g.draw_image_f_xy(a_image, a_offset_x, a_offset_y);
+                }
+            }
+
+            g.set_draw_mode(0); // DRAWMODE_NORMAL
+        }
+
+        g.set_colorize_images(false);
+    }
+
+    /// 绘制蹦极（对应 C++ Zombie::DrawBungeeReanim，Zombie.cpp:5536）
+    pub fn draw_bungee_reanim(&self, g: &mut Graphics) {
+        // C++ Zombie.cpp:50: constexpr const int RENDER_GROUP_ARMS = 2;
+        const RENDER_GROUP_ARMS: i32 = 2;
+
+        // C++ 5540-5541: 先画蹦极绳，再画本体
+        self.draw_bungee_cord(g, -22);
+        if let Some(app) = self.base.get_app() {
+            if let Some(a_body_reanim) = app.reanimation_get(self.body_reanim_id) {
+                a_body_reanim.draw(g);
+            }
+        }
+
+        // C++ 5543-5554: 优先绘制被吊起的僵尸（临时图形上下文平移）
+        let a_dropped_zombie = self
+            .base
+            .get_board()
+            .and_then(|b| b.zombie_get(self.related_zombie_id));
+        if let Some(a_dropped_zombie) = a_dropped_zombie {
+            let a_dropped_draw_pos = a_dropped_zombie.get_draw_pos();
+            // C++: Graphics aDropGraphics(*g); mTransY -= mAltitude; mTransX += (dropped.mPosX - mPosX);
+            g.push_state();
+            g.translate_f(a_dropped_zombie.pos_x - self.pos_x, -self.altitude);
+            a_dropped_zombie.draw_reanim(
+                g,
+                &a_dropped_draw_pos,
+                crate::todlib::reanimator::RENDER_GROUP_NORMAL,
+            );
+            g.pop_state();
+        } else {
+            // C++ 5557-5575: 没有被吊僵尸时改画目标植物
+            let a_target_plant_id = self.target_plant_id;
+            if let Some(a_board) = self.base.get_board() {
+                if let Some(a_plant) = a_board.plants.get(a_target_plant_id as usize) {
+                    // C++: Graphics aPlantGraphics(*g); mTransY += 30.0f - mAltitude;
+                    let mut a_dy = 30.0 - self.altitude;
+                    if self.zombie_phase == ZombiePhase::BungeeRising {
+                        if a_plant.seed_type == SeedType::Spikeweed
+                            || a_plant.seed_type == SeedType::Spikerock
+                        {
+                            a_dy -= 34.0;
+                        }
+                    }
+                    if a_plant.plant_col <= 4 && a_board.stage_has_roof() {
+                        a_dy += 10.0;
+                    }
+
+                    g.push_state();
+                    g.translate_f(0.0, a_dy);
+                    a_plant.draw(g);
+                    g.pop_state();
+                }
+            }
+        }
+
+        // C++ 5578: 最后补画手臂渲染层
+        if let Some(app) = self.base.get_app() {
+            if let Some(a_body_reanim) = app.reanimation_get(self.body_reanim_id) {
+                a_body_reanim.draw_render_group(g, RENDER_GROUP_ARMS);
+            }
+        }
     }
 
     /// 绘制蹦极目标标记（对应 C++ Zombie::DrawBungeeTarget）
@@ -7142,24 +9778,42 @@ impl Zombie {
         None
     }
 
-    /// 获取僵尸矩形
+    /// 获取僵尸矩形（对应 C++ Zombie::GetZombieRect，Zombie.cpp:8298）
     pub fn get_zombie_rect(&self) -> Rect {
-        Rect::new(
-            (self.pos_x - 20.0) as i32,
-            (self.pos_y - 30.0) as i32,
-            50,
-            60,
-        )
+        let mut a_zombie_rect = self.zombie_rect;
+        if self.is_walking_backwards() {
+            a_zombie_rect.x = self.base.width - a_zombie_rect.x - a_zombie_rect.width;
+        }
+
+        let a_draw_pos = self.get_draw_pos();
+        a_zombie_rect.offset(self.base.x, self.base.y + a_draw_pos.body_y as i32);
+        if a_draw_pos.clip_height > CLIP_HEIGHT_LIMIT {
+            a_zombie_rect.height -= a_draw_pos.clip_height as i32;
+        }
+
+        a_zombie_rect
     }
 
-    /// 获取僵尸攻击矩形
+    /// 获取僵尸攻击矩形（对应 C++ Zombie::GetZombieAttackRect，Zombie.cpp:8317）
     pub fn get_zombie_attack_rect(&self) -> Rect {
-        Rect::new(
-            (self.pos_x - 40.0) as i32,
-            (self.pos_y - 30.0) as i32,
-            20,
-            60,
-        )
+        let mut a_attack_rect = self.zombie_attack_rect;
+        if self.zombie_phase == ZombiePhase::PolevaulterInVault
+            || self.zombie_phase == ZombiePhase::DolphinInJump
+        {
+            a_attack_rect = Rect::new(-40, 0, 100, 115);
+        }
+
+        if self.is_walking_backwards() {
+            a_attack_rect.x = self.base.width - a_attack_rect.x - a_attack_rect.width;
+        }
+
+        let a_draw_pos = self.get_draw_pos();
+        a_attack_rect.offset(self.base.x, self.base.y + a_draw_pos.body_y as i32);
+        if a_draw_pos.clip_height > CLIP_HEIGHT_LIMIT {
+            a_attack_rect.height -= a_draw_pos.clip_height as i32;
+        }
+
+        a_attack_rect
     }
 
     /// 获取雪橇位置（对应 C++ GetBobsledPosition）
@@ -7560,10 +10214,73 @@ impl Zombie {
         }
     }
 
-    /// 更新动画速度（对应 C++ UpdateAnimSpeed）
+    /// 更新动画速度（对应 C++ Zombie::UpdateAnimSpeed，Zombie.cpp:6642）
     pub fn update_anim_speed(&mut self) {
-        if self.chilled_counter > 0 { self.anim_ticks_per_frame = 5; }
-        else { self.anim_ticks_per_frame = 2; }
+        if !self.is_on_board() {
+            return;
+        }
+
+        // C++: mApp->ReanimationTryToGet(mBodyReanimID) == nullptr 直接返回
+        let a_has_body_reanim = self
+            .base
+            .get_app()
+            .map_or(false, |app| app.reanimation_get(self.body_reanim_id).is_some());
+        if !a_has_body_reanim {
+            return;
+        }
+
+        // C++: IsImmobilizied() || (mYuckyFace && mYuckyFaceCounter < 170)
+        //      IsImmobilizied() == mIceTrapCounter > 0 || mButteredCounter > 0
+        if self.ice_trap_counter > 0
+            || self.buttered_counter > 0
+            || (self.yucky_face && self.yucky_face_counter < 170)
+        {
+            self.apply_anim_rate(0.0);
+            return;
+        }
+
+        if self.zombie_phase == ZombiePhase::SnorkelUpToEat
+            || self.zombie_phase == ZombiePhase::SnorkelDownFromEat
+            || self.is_dead_or_dying()
+        {
+            self.apply_anim_rate(self.original_anim_rate);
+            return;
+        }
+
+        if self.is_eating {
+            if self.zombie_type == ZombieType::Polevaulter
+                || self.zombie_type == ZombieType::Balloon
+                || self.zombie_type == ZombieType::Imp
+                || self.zombie_type == ZombieType::Digger
+                || self.zombie_type == ZombieType::JackInTheBox
+                || self.zombie_type == ZombieType::Snorkel
+                || self.zombie_type == ZombieType::Yeti
+            {
+                self.apply_anim_rate(20.0);
+            } else {
+                self.apply_anim_rate(36.0);
+            }
+        } else if self.zombie_not_walking()
+            || self.is_bobsled_team_with_sled()
+            || self.zombie_type == ZombieType::Catapult
+            || self.zombie_phase == ZombiePhase::DolphinRiding
+            || self.zombie_phase == ZombiePhase::SnorkelWalkingInPool
+        {
+            self.apply_anim_rate(self.original_anim_rate);
+        } else {
+            // C++: aBodyReanim->TrackExists("_ground") → 由 track 位移反推动画速率
+            let a_track_displacement = self.base.get_app().and_then(|app| {
+                app.reanimation_get(self.body_reanim_id)
+                    .and_then(|r| r.get_track_frame_displacement("_ground"))
+            });
+            if let Some((a_distance, a_frame_count)) = a_track_displacement {
+                if a_distance >= 1e-6 {
+                    let a_one_over_speed = a_frame_count as f32 / a_distance;
+                    let a_anim_rate = self.vel_x * a_one_over_speed * 47.0 / self.scale_zombie;
+                    self.apply_anim_rate(a_anim_rate);
+                }
+            }
+        }
     }
 
     /// 更新重动画（对应 C++ UpdateReanim）
@@ -8187,9 +10904,85 @@ pub fn get_pos_y_based_on_row(&mut self, row: i32) -> f32 {
     }
 
     /// 蹦极提起目标（对应 C++ BungeeLiftTarget）
+    /// 蹦极提起目标（对应 C++ Zombie::BungeeLiftTarget，Zombie.cpp:1246）
     pub fn bungee_lift_target(&mut self) {
         self.play_zombie_reanim("anim_raise", ReanimLoopType::PlayOnceAndHold, 0, 36.0);
-        // 依赖底层系统
+
+        let a_target_plant_id = self.target_plant_id;
+        let a_target_col = self.target_col;
+        let a_row = self.base.row;
+        let a_self_ptr = self as *const Zombie;
+
+        // [TRANSLATION_NOTE]: C++ 通过 mBoard 直接访问；Rust 侧此处需要同时改 self 与 board，
+        // 故取裸指针解引用，避免 &mut self 与 &mut board 的借用冲突。
+        let a_board_ptr = match self.base.board {
+            Some(b) => b,
+            None => return,
+        };
+        let a_board = unsafe { &mut *a_board_ptr };
+
+        // C++: Plant* aPlant = mBoard->mPlants.DataArrayTryToGet(mTargetPlantID);
+        //      if (aPlant == nullptr) return;
+        if a_board.plants.get(a_target_plant_id as usize).is_none() {
+            return;
+        }
+
+        // C++: #ifdef DO_FIX_BUGS —— 同一株植物被多个蹦极僵尸锁定时清空其余僵尸的目标
+        // （原作者注释：修 I,Zombie 蹦极刷阳光 bug）
+        for a_zombie in a_board.zombies.iter_mut() {
+            if a_zombie.dead {
+                continue;
+            }
+            if a_zombie.zombie_type == ZombieType::Bungee
+                && a_zombie.target_plant_id == a_target_plant_id
+                && !std::ptr::eq(a_zombie as *const Zombie, a_self_ptr)
+            {
+                a_zombie.target_plant_id = PLANTID_NULL;
+            }
+        }
+
+        // C++: aPlant->mOnBungeeState = RISING_WITH_BUNGEE;
+        let a_plant_body_reanim_id = match a_board.plants.get_mut(a_target_plant_id as usize) {
+            Some(a_plant) => {
+                a_plant.on_bungee_state = PlantOnBungeeState::RisingWithBungee;
+                a_plant.body_reanim_id
+            }
+            None => return,
+        };
+
+        // C++: mApp->PlayFoley(FOLEY_FLOOP); 并把植物本体动画速率压到 0.1
+        if let Some(app) = self.base.get_app_mut() {
+            app.play_foley(crate::todlib::tod_foley::FoleyType::Floop as i32);
+
+            // C++: Reanimation* aPlantReanim = mApp->ReanimationTryToGet(aPlant->mBodyReanimID);
+            if let Some(a_plant_reanim) = app.reanimation_get_mut(a_plant_body_reanim_id) {
+                a_plant_reanim.m_anim_rate = 0.1;
+            }
+        }
+
+        // C++: 猫尾草且该格顶上有南瓜头时补种一株荷叶
+        let a_plant_seed_type = a_board
+            .plants
+            .get(a_target_plant_id as usize)
+            .map(|p| p.seed_type);
+        if a_plant_seed_type == Some(SeedType::Cattail)
+            && a_board
+                .get_top_plant_at(a_target_col, a_row, PlantPriority::OnlyPumpkin)
+                .is_some()
+        {
+            a_board.new_plant(a_target_col, a_row, SeedType::Lilypad, SeedType::None);
+        }
+
+        // C++: if (mApp->IsIZombieLevel()) mBoard->mChallenge->IZombiePlantDropRemainingSun(aPlant);
+        let a_is_izombie = self.base.get_app().map_or(false, |a| a.is_izombie_level());
+        if a_is_izombie {
+            let a_plant = a_board.plants.get(a_target_plant_id as usize);
+            if let Some(a_plant) = a_plant {
+                if let Some(a_challenge) = a_board.challenge.as_ref() {
+                    a_challenge.i_zombie_plant_drop_remaining_sun(a_plant);
+                }
+            }
+        }
     }
 
     /// 蹦极着陆（对应 C++ BungeeLanding）
@@ -8231,7 +11024,17 @@ pub fn get_pos_y_based_on_row(&mut self, row: i32) -> f32 {
         }
 
         if self.zombie_phase == ZombiePhase::BungeeDiving || self.zombie_phase == ZombiePhase::BungeeDivingScreaming {
+            let a_old_altitude = self.altitude;
             self.altitude -= 8.0;
+            // C++ Zombie.cpp:1344：目标标记落地音（跨越 BUNGEE_ZOMBIE_HEIGHT - 404 且非被牵引目标）
+            if self.altitude <= BUNGEE_ZOMBIE_HEIGHT as f32 - 404.0
+                && a_old_altitude > BUNGEE_ZOMBIE_HEIGHT as f32 - 404.0
+                && self.related_zombie_id == ZOMBIEID_NULL
+            {
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::GrassStep as i32);
+                }
+            }
             self.bungee_landing();
         } else if self.zombie_phase == ZombiePhase::BungeeAtBottom {
             if self.phase_counter <= 0 {
@@ -8239,9 +11042,15 @@ pub fn get_pos_y_based_on_row(&mut self, row: i32) -> f32 {
                 self.zombie_phase = ZombiePhase::BungeeGrabbing;
             }
         } else if self.zombie_phase == ZombiePhase::BungeeGrabbing {
-            // Reanimation mLoopCount > 0 检查 — Reanimation 系统暂未实现
-            self.bungee_lift_target();
-            self.zombie_phase = ZombiePhase::BungeeRising;
+            // C++ Zombie.cpp:1362：等 reanim 循环一圈（mLoopCount > 0）后才抓取上提
+            let a_loop_done = self.base.get_app().map_or(false, |app| {
+                app.reanimation_get(self.body_reanim_id)
+                    .map_or(false, |r| r.m_loop_count > 0)
+            });
+            if a_loop_done {
+                self.bungee_lift_target();
+                self.zombie_phase = ZombiePhase::BungeeRising;
+            }
         } else if self.zombie_phase == ZombiePhase::BungeeHitOuchy {
             if self.phase_counter <= 0 {
                 self.die_with_loot();

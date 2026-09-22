@@ -1079,6 +1079,31 @@ impl Reanimation {
         0.0
     }
 
+    /// 取轨道在 [mFrameStart, mFrameStart + mFrameCount - 1] 区间的 x 位移与帧数
+    /// （对应 C++ Zombie::UpdateAnimSpeed 中直接访问 mDefinition->mTracks 计算 aDistance 的等价封装）
+    pub fn get_track_frame_displacement(&self, track_name: &str) -> Option<(f32, i32)> {
+        let track_index = self.find_track_index(track_name);
+        if track_index < 0 {
+            return None;
+        }
+        let def = self.m_definition?;
+        unsafe {
+            let def_ref = &*def;
+            if track_index as usize >= def_ref.m_tracks.len() {
+                return None;
+            }
+            let track = &def_ref.m_tracks[track_index as usize];
+            let a_first = self.m_frame_start.max(0) as usize;
+            let a_last = (self.m_frame_start + self.m_frame_count - 1).max(0) as usize;
+            if a_first >= track.m_transforms.len() || a_last >= track.m_transforms.len() {
+                return None;
+            }
+            let a_distance =
+                track.m_transforms[a_last].m_trans_x - track.m_transforms[a_first].m_trans_x;
+            Some((a_distance, self.m_frame_count))
+        }
+    }
+
     /// 传播颜色到附着动画（对应 C++ PropogateColorToAttachments）
     pub fn propogate_color_to_attachments(&self) {
         let a_attachment_ids: Vec<crate::lawn::game_enums::AttachmentID> =
