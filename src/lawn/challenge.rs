@@ -538,7 +538,7 @@ impl Challenge {
         if self.get_app().is_slot_machine_level() {
             self.update_slot_machine();
         }
-        if a_game_mode == GameMode::ChallengeZombieNimble {
+        if a_game_mode == GameMode::ChallengeSpeed {
             // C++ L2200: mBoard->UpdateGame() —— 速度挑战的额外一帧更新（C++ GAMEMODE_CHALLENGE_SPEED）
             self.get_board().update();
         }
@@ -569,24 +569,214 @@ impl Challenge {
         // [TRANSLATION_NOTE]: reanim 系统未接入，跳过
     }
 
+    /// 消除类小游戏每帧更新（对应 C++ Challenge::UpdateBeghouled，Challenge.cpp:1547）
     pub fn update_beghouled(&mut self) {
-        {
+        // C++ Challenge.cpp:58: constexpr const int BEGHOULED_WINNING_SCORE = 75;
+        const BEGHOULED_WINNING_SCORE: i32 = 75;
+
+        // C++ 1549: 进度条宽度按分数插值
+        let a_progress_width = crate::todlib::tod_common::tod_animate_curve(
+            0,
+            BEGHOULED_WINNING_SCORE,
+            self.challenge_score,
+            0,
+            crate::lawn::board::PROGRESS_METER_COUNTER,
+            TodCurves::Linear,
+        );
+        self.get_board().m_progress_meter_width = a_progress_width;
+
+        // C++ 1551-1560: 更新所有植物位置，记录是否仍有植物在移动
+        let mut a_moving_plant = false;
+        // [TRANSLATION_NOTE]: C++ 在遍历 mPlants 的同时调用 UpdateBeghouledPlant(aPlant)；
+        // Rust 侧先收集裸指针，避免遍历期间对 self 的第二次可变借用。
+        let a_plant_ptrs: Vec<*mut Plant> = {
             let board = self.get_board();
-            board.m_progress_meter_width = 0;
+            board
+                .plants
+                .iter_mut()
+                .filter(|a_plant| !a_plant.dead)
+                .map(|a_plant| a_plant as *mut Plant)
+                .collect()
+        };
+        for a_plant_ptr in a_plant_ptrs {
+            if unsafe { self.update_beghouled_plant(&mut *a_plant_ptr) } != 0 {
+                a_moving_plant = true;
+            }
         }
-        if self.challenge_state_counter > 0 {
+
+        // C++ 1562-1569: 提示使用弹坑（卡槽 > 4 且该提示未显示过）
+        // [TRANSLATION_NOTE]: C++ 判据为 !mBoard->mAdvice->IsBeingDisplayed()；
+        // Rust 侧 Board::m_advice 是 AdviceType 值而非对象，故以 m_advice == None 近似。
+        let a_show_crater_advice = {
+            let board = self.get_board();
+            board.seed_bank.len() > 4
+                && board.m_advice == AdviceType::None
+                && !board.m_help_displayed[AdviceType::BeghouledUseCrater2 as usize]
+        };
+        if a_show_crater_advice {
+            let a_cost = {
+                let board = self.get_board();
+                board.get_current_plant_cost(SeedType::BeghouledButtonCrater, SeedType::None)
+            };
+            let a_can_take = self.get_board().can_take_sun_money(a_cost);
+            let a_can_clear = self.beghouled_can_clear_crater() != 0;
+            let a_no_award = !self.get_board().has_level_award_dropped();
+            if a_can_take && a_can_clear && a_no_award {
+                self.get_board().display_advice(
+                    "[ADVICE_BEGHOULED_USE_CRATER_2]",
+                    crate::lawn::game_enums::MessageStyle::HintFast as i32,
+                    AdviceType::BeghouledUseCrater2,
+                );
+            }
+        }
+
+        // C++ 1571-1588: BeghouledTwist 模式下高亮鼠标所指的可交换格子
+        let a_is_twist = self.app.map_or(false, |app| unsafe {
+            (*app).game_mode == GameMode::ChallengeBeghouledTwist
+        });
+        if a_is_twist && self.challenge_state == ChallengeState::Normal {
+            let (a_mouse_x, a_mouse_y) = self.app.map_or((0, 0), |app| unsafe {
+                (
+                    (*app).base.widget_manager.map_or(0, |wm| (*wm).last_mouse_x),
+                    (*app).base.widget_manager.map_or(0, |wm| (*wm).last_mouse_y),
+                )
+            });
+            let mut a_grid_x = self.challenge_grid_x;
+            let mut a_grid_y = self.challenge_grid_y;
+            if self.beghouled_twist_square_from_mouse(
+                a_mouse_x,
+                a_mouse_y,
+                &mut a_grid_x,
+                &mut a_grid_y,
+            ) != 0
+            {
+                let mut a_board_state = BeghouledBoardState {
+                    seed_type: [[SeedType::None; 6]; 9],
+                };
+                self.load_beghouled_board_state(&mut a_board_state);
+                if self.beghouled_twist_valid_move(a_grid_x, a_grid_y, &a_board_state) == 0 {
+                    a_grid_x = -1;
+                    a_grid_y = -1;
+                }
+            }
+            self.challenge_grid_x = a_grid_x;
+            self.challenge_grid_y = a_grid_y;
+        } else {
+            self.challenge_grid_x = -1;
+            self.challenge_grid_y = -1;
+        }
+
+        // C++ 1590-1608: 没有植物在移动且处于下落/交换状态 → 结算一次
+        if !a_moving_plant
+            && (self.challenge_state == ChallengeState::BeghouledFalling
+                || self.challenge_state == ChallengeState::BeghouledMoving)
+        {
+            self.challenge_state = ChallengeState::Normal;
+            self.challenge_state_counter = 1500;
+
+            // C++ 1595-1600: 同一个 aBoardState 被重新加载（第二次 LoadBeghouledBoardState 覆盖第一次）
+            let mut a_board_state = BeghouledBoardState {
+                seed_type: [[SeedType::None; 6]; 9],
+            };
+            self.load_beghouled_board_state(&mut a_board_state);
+            self.beghouled_remove_matches(&mut a_board_state);
+            self.load_beghouled_board_state(&mut a_board_state);
+            self.beghouled_make_plants_fall(&mut a_board_state);
+            self.beghouled_populate_board();
+
+            // C++ 1602-1603
+            if self.challenge_state == ChallengeState::BeghouledFalling {
+                return;
+            }
+
+            self.challenge_state_counter = 1500;
+            self.beghouled_matches_this_move = 0;
+            self.beghouled_check_stuck_state();
+        }
+
+        // C++ 1610-1626
+        if self.challenge_state_counter != 0 {
             self.challenge_state_counter -= 1;
+            if self.challenge_state_counter <= 0 && !self.get_board().has_level_award_dropped() {
+                if self.challenge_state == ChallengeState::Normal {
+                    self.beghouled_flash_a_match();
+                    self.challenge_state_counter = 1500;
+                } else if self.challenge_state == ChallengeState::BeghouledNoMatches {
+                    // [TRANSLATION_NOTE]: C++ 在此先调用
+                    // mApp->AddPvzpParticle(BOARD_WIDTH / 2, BOARD_HEIGHT / 2, RENDER_LAYER_TOP,
+                    // PARTICLE_SCREEN_FLASH) 再做洗牌；Rust 侧粒子系统 API 尚未移植
+                    // （报告 §7.2），故略过该调用。
+                    self.beghouled_shuffle();
+                }
+            }
         }
     }
 
+    /// 更新单个被移动植物的位置（对应 C++ Challenge::UpdateBeghouledPlant，Challenge.cpp:1384）
     pub fn update_beghouled_plant(&mut self, plant: &mut Plant) -> i32 {
-        let board = self.get_board();
-        let diff_x = board.grid_to_pixel_x(plant.plant_col, plant.base.row) - plant.pos_x as i32;
-        let diff_y = board.grid_to_pixel_y(plant.plant_col, plant.base.row) - plant.pos_y as i32;
-        let mut moving = 0;
-        if diff_x > 0 || diff_x < 0 { moving = 1; }
-        if diff_y > 0 || diff_y < 0 { moving = 1; }
-        moving
+        // C++ 1386-1388
+        let a_row = plant.base.row;
+        let a_col = plant.plant_col;
+        let (a_grid_pixel_x, a_grid_pixel_y) = {
+            let board = self.get_board();
+            (
+                board.grid_to_pixel_x(a_col, a_row),
+                board.grid_to_pixel_y(a_col, a_row),
+            )
+        };
+        let a_diff_x = a_grid_pixel_x - plant.pos_x as i32;
+        let a_diff_y = a_grid_pixel_y - plant.pos_y as i32;
+
+        // C++ 1389: 移动中恒为 3，否则按状态计数器插值（90→30 映射到 1→20，EASE_IN）
+        let a_delta = if self.challenge_state == ChallengeState::BeghouledMoving {
+            3
+        } else {
+            crate::todlib::tod_common::tod_animate_curve(
+                90,
+                30,
+                self.challenge_state_counter,
+                1,
+                20,
+                TodCurves::EaseIn,
+            )
+        };
+
+        let mut a_moving = false;
+        let mut a_delta_x = 0;
+        let mut a_delta_y = 0;
+
+        // C++ 1392-1403
+        if a_diff_x > 0 {
+            a_delta_x = a_delta.min(a_diff_x);
+            plant.pos_x += a_delta_x as f32;
+            a_moving = true;
+        } else if a_diff_x < 0 {
+            a_delta_x = -a_delta.min(-a_diff_x);
+            plant.pos_x += a_delta_x as f32;
+            a_moving = true;
+        }
+
+        // C++ 1404-1415
+        if a_diff_y > 0 {
+            a_delta_y = a_delta.min(a_diff_y);
+            plant.pos_y += a_delta_y as f32;
+            a_moving = true;
+        } else if a_diff_y < 0 {
+            a_delta_y = -a_delta.min(-a_diff_y);
+            plant.pos_y += a_delta_y as f32;
+            a_moving = true;
+        }
+
+        // C++ 1417-1421: 磁力菇的吸附物随本体一起移动
+        if plant.state == PlantState::MagnetshroomCharging
+            || plant.state == PlantState::MagnetshroomSucking
+        {
+            plant.magnet_items[0].pos_x += a_delta_x as f32;
+            plant.magnet_items[0].pos_y += a_delta_y as f32;
+        }
+
+        // C++ 1423: return aMoving
+        i32::from(a_moving)
     }
 
     pub fn beghouled_fall_into_square(&mut self, grid_x: i32, grid_y: i32, board_state: &mut BeghouledBoardState) {
@@ -1178,14 +1368,209 @@ impl Challenge {
         1
     }
 
+    /// 打僵尸关卡的僵尸生成（对应 C++ Challenge::WhackAZombieSpawning，Challenge.cpp:2785）
     pub fn whack_a_zombie_spawning(&mut self) {
-        let board = self.get_board();
-        if board.m_current_wave == board.m_num_waves && board.m_zombie_count_down == 0 { return; }
-        board.m_zombie_count_down -= 1;
-        if board.m_zombie_count_down == 0 {
-            board.m_zombie_count_down = 2000;
-            board.m_zombie_count_down_start = board.m_zombie_count_down;
-            if board.m_current_wave < board.m_num_waves { board.m_current_wave += 1; }
+        // C++ 2787-2788: 最后一波已打完 → 直接返回
+        let a_at_end = {
+            let board = self.get_board();
+            board.m_current_wave == board.m_num_waves && board.m_zombie_count_down == 0
+        };
+        if a_at_end {
+            return;
+        }
+
+        // C++ 2790
+        self.get_board().m_zombie_count_down -= 1;
+        let a_count_down = self.get_board().m_zombie_count_down;
+        let a_wave = self.get_board().m_current_wave;
+
+        // C++ 2791-2795: 倒计时 100 时补足墓碑
+        if a_count_down == 100 && a_wave > 0 {
+            let a_num_graves = 5 - self.get_board().get_grave_stones_count();
+            self.whack_a_zombie_place_graves(a_num_graves.max(1));
+        }
+
+        // C++ 2796-2799
+        if a_count_down == 5 {
+            self.get_board().next_wave_coming();
+        }
+
+        // C++ 2800-2810
+        if a_count_down == 0 {
+            {
+                let board = self.get_board();
+                board.m_zombie_count_down = 2000;
+                board.m_zombie_count_down_start = board.m_zombie_count_down;
+                if board.m_current_wave < board.m_num_waves {
+                    board.m_current_wave += 1;
+                }
+            }
+            let a_now_wave = self.get_board().m_current_wave;
+            let a_final = a_now_wave == self.get_board().m_num_waves;
+            self.challenge_state_counter = if a_final { 300 } else { 1 };
+        } else if a_count_down < 300 {
+            return;
+        }
+
+        // C++ 2812: if (--mChallengeStateCounter == 0)
+        self.challenge_state_counter -= 1;
+        if self.challenge_state_counter != 0 {
+            return;
+        }
+
+        // C++ 2814: aPhase = clamp((mCurrentWave - 1) * 6 / 12, 0, 5)
+        let a_cur_wave = self.get_board().m_current_wave;
+        let a_phase = ((a_cur_wave - 1) * 6 / 12).clamp(0, 5);
+
+        // C++ 2816-2819: 各阶段的概率表（锥桶/铁桶僵尸、2/3 僵尸组）
+        const A_DOUBLE_CHANCE: [i32; 6] = [0, 30, 10, 10, 15, 18];
+        const A_TRIPLE_CHANCE: [i32; 6] = [0, 0, 0, 0, 10, 13];
+        const A_PAIL_CHANCE: [i32; 6] = [0, 0, 0, 10, 15, 15];
+        const A_CONE_CHANCE: [i32; 6] = [0, 0, 30, 30, 30, 30];
+
+        let mut a_zombie_count = 1;
+        let mut a_zombie_type = ZombieType::Normal;
+        let a_num_hit = crate::framework::common::rand_range(100);
+        let a_type_hit = crate::framework::common::rand_range(100);
+        let a_is_final_wave = a_cur_wave == self.get_board().m_num_waves;
+
+        // C++ 2826-2837
+        if a_is_final_wave {
+            a_zombie_count = 20;
+        } else if a_num_hit < A_TRIPLE_CHANCE[a_phase as usize] {
+            a_zombie_count = 3;
+        } else if a_num_hit < A_TRIPLE_CHANCE[a_phase as usize] + A_DOUBLE_CHANCE[a_phase as usize] {
+            a_zombie_count = 2;
+        }
+
+        // C++ 2839-2846
+        if a_type_hit < A_PAIL_CHANCE[a_phase as usize] && a_zombie_count < 3 {
+            a_zombie_type = ZombieType::Pail;
+        } else if a_type_hit < A_PAIL_CHANCE[a_phase as usize] + A_CONE_CHANCE[a_phase as usize] {
+            a_zombie_type = ZombieType::TrafficCone;
+        }
+
+        // C++ 2848-2865: 收集可用的墓碑格（排除已有墓碑吞噬者的）
+        // C++ Board.h:45: #define MAX_GRAVE_STONES MAX_GRID_SIZE_X * MAX_GRID_SIZE_Y
+        const MAX_GRAVE_STONES: usize =
+            crate::lawn::board::MAX_GRID_SIZE_X * crate::lawn::board::MAX_GRID_SIZE_Y;
+        let mut a_grid_picks = [crate::todlib::tod_common::TodWeightedArray {
+            item: 0,
+            weight: 0,
+        }; MAX_GRAVE_STONES];
+        let mut a_grid_picks_count = 0usize;
+        {
+            let board = self.get_board();
+            for (a_index, a_grid_item) in board.grid_items.iter().enumerate() {
+                if a_grid_item.dead {
+                    continue;
+                }
+                if a_grid_item.grid_item_type == crate::lawn::grid_item::GridItemType::Gravestone {
+                    let a_plant = board.get_top_plant_at(
+                        a_grid_item.grid_x,
+                        a_grid_item.grid_y,
+                        crate::lawn::game_enums::PlantPriority::OnlyNormalPosition,
+                    );
+                    let a_has_gravebuster =
+                        a_plant.map_or(false, |p| p.seed_type == SeedType::Gravebuster);
+                    if !a_has_gravebuster {
+                        a_grid_picks[a_grid_picks_count].item = a_index;
+                        a_grid_picks[a_grid_picks_count].weight = 1;
+                        a_grid_picks_count += 1;
+                    }
+                }
+            }
+        }
+
+        // C++ 2866: float aMaxSpeed = PvzpAnimateCurve(1, 12, mCurrentWave, 1, 3, CURVE_EASE_IN)
+        let mut a_max_speed = crate::todlib::tod_common::tod_animate_curve(
+            1,
+            12,
+            a_cur_wave,
+            1,
+            3,
+            TodCurves::EaseIn,
+        ) as f32;
+
+        // C++ 2867
+        a_zombie_count = a_zombie_count.min(a_grid_picks_count as i32);
+
+        // C++ 2869-2889
+        for _ in 0..a_zombie_count {
+            // C++ 2871-2873
+            let a_picked_item = crate::todlib::tod_common::tod_pick_from_weighted_array(
+                &a_grid_picks[..a_grid_picks_count],
+            );
+            if a_picked_item < 0 {
+                break;
+            }
+            // [TRANSLATION_NOTE]: C++ 用返回的指针就地执行 aGrid->mWeight = 0；
+            // Rust 侧该函数返回 mItem 的值，故按值定位后清零。
+            for a_entry in a_grid_picks[..a_grid_picks_count].iter_mut() {
+                if a_entry.item == a_picked_item as usize {
+                    a_entry.weight = 0;
+                    break;
+                }
+            }
+            let a_grave_index = a_picked_item as usize;
+            let (a_grave_x, a_grave_y) = {
+                let board = self.get_board();
+                (
+                    board.grid_items[a_grave_index].grid_x,
+                    board.grid_items[a_grave_index].grid_y,
+                )
+            };
+
+            // C++ 2875-2879: 最后一波随机锥桶/铁桶，且速度固定为 2
+            if a_is_final_wave {
+                a_zombie_type = if crate::framework::common::rand_range(2) == 0 {
+                    ZombieType::TrafficCone
+                } else {
+                    ZombieType::Pail
+                };
+                a_max_speed = 2.0;
+            }
+
+            // C++ 2881-2883: AddZombie 返回空则中断
+            let a_zombie_index = {
+                let board = self.get_board();
+                let a_row = board.pick_row_for_new_zombie(a_zombie_type);
+                board.add_zombie_in_row(a_zombie_type, a_row, a_cur_wave)
+            };
+
+            // C++ 2885-2888
+            {
+                let board = self.get_board();
+                let a_zombie = &mut board.zombies[a_zombie_index];
+                a_zombie.rise_from_grave(a_grave_x, a_grave_y);
+                a_zombie.phase_counter = 50;
+                a_zombie.vel_x = crate::framework::common::rand_range_float(0.5, a_max_speed);
+                a_zombie.update_anim_speed();
+            }
+        }
+
+        // C++ 2891-2898
+        let a_state_counter_min = crate::todlib::tod_common::tod_animate_curve(
+            1,
+            12,
+            a_cur_wave,
+            100,
+            30,
+            TodCurves::Linear,
+        );
+        let a_state_counter_max = crate::todlib::tod_common::tod_animate_curve(
+            1,
+            12,
+            a_cur_wave,
+            200,
+            60,
+            TodCurves::Linear,
+        );
+        self.challenge_state_counter =
+            crate::framework::common::rand_range_int(a_state_counter_min, a_state_counter_max);
+        if a_is_final_wave {
+            self.get_board().m_zombie_count_down = 0;
+            self.challenge_state_counter = 0;
         }
     }
 
@@ -2275,7 +2660,571 @@ impl Challenge {
         }
     }
 
+    /// 恐怖罐子关卡填充罐子（对应 C++ Challenge::ScaryPotterPopulate，Challenge.cpp:3785）
     pub fn scary_potter_populate(&mut self) {
+        // C++ Challenge.cpp:64: constexpr const int MAX_SCARY_POTS = 54;
+        const MAX_SCARY_POTS: usize = 54;
+
+        // C++ 3787-3800: 构建 5×4 加权网格（最后一行不放罐子）
+        let mut a_grid_array = [crate::todlib::tod_common::TodWeightedGridArray {
+            x: 0,
+            y: 0,
+            weight: 0,
+        }; MAX_SCARY_POTS];
+        let mut a_grid_array_count = 0usize;
+        for a_grid_x in 0..crate::lawn::board::MAX_GRID_SIZE_X as i32 {
+            for a_grid_y in 0..(crate::lawn::board::MAX_GRID_SIZE_Y as i32 - 1) {
+                a_grid_array[a_grid_array_count].x = a_grid_x;
+                a_grid_array[a_grid_array_count].y = a_grid_y;
+                a_grid_array[a_grid_array_count].weight = 1;
+                a_grid_array_count += 1;
+            }
+        }
+        let a_count = a_grid_array_count as i32;
+
+        let a_is_adventure = self.app.map_or(false, |app| unsafe { (*app).is_adventure_mode() });
+        let a_board_level = self.get_board().level;
+
+        if a_is_adventure && a_board_level == 35 {
+            // C++ 3802-3847: 冒险模式 3-5 的三个生存阶段
+            match self.survival_stage {
+                0 => {
+                    for a_col in 0..6 {
+                        self.scary_potter_dont_place_in_col(a_col, &mut a_grid_array, a_count);
+                    }
+                    self.scary_potter_place_pot(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Peashooter,
+                        5,
+                        &mut a_grid_array,
+                        a_count,
+                    );
+                    self.scary_potter_place_pot(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Squash,
+                        5,
+                        &mut a_grid_array,
+                        a_count,
+                    );
+                    self.scary_potter_place_pot(
+                        ScaryPotType::Zombie,
+                        ZombieType::Normal,
+                        SeedType::None,
+                        4,
+                        &mut a_grid_array,
+                        a_count,
+                    );
+                    self.scary_potter_place_pot(
+                        ScaryPotType::Zombie,
+                        ZombieType::Pail,
+                        SeedType::None,
+                        1,
+                        &mut a_grid_array,
+                        a_count,
+                    );
+                }
+                1 => {
+                    for a_col in 0..5 {
+                        self.scary_potter_dont_place_in_col(a_col, &mut a_grid_array, a_count);
+                    }
+                    self.scary_potter_place_pot(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Peashooter,
+                        4,
+                        &mut a_grid_array,
+                        a_count,
+                    );
+                    self.scary_potter_place_pot(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Snowpea,
+                        5,
+                        &mut a_grid_array,
+                        a_count,
+                    );
+                    self.scary_potter_place_pot(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Squash,
+                        4,
+                        &mut a_grid_array,
+                        a_count,
+                    );
+                    self.scary_potter_place_pot(
+                        ScaryPotType::Zombie,
+                        ZombieType::Normal,
+                        SeedType::None,
+                        5,
+                        &mut a_grid_array,
+                        a_count,
+                    );
+                    self.scary_potter_place_pot(
+                        ScaryPotType::Zombie,
+                        ZombieType::Pail,
+                        SeedType::None,
+                        1,
+                        &mut a_grid_array,
+                        a_count,
+                    );
+                    self.scary_potter_place_pot(
+                        ScaryPotType::Zombie,
+                        ZombieType::Football,
+                        SeedType::None,
+                        1,
+                        &mut a_grid_array,
+                        a_count,
+                    );
+                    self.scary_potter_change_pot_type(GridItemState::ScaryPotLeaf, 2);
+                }
+                2 => {
+                    for a_col in 0..4 {
+                        self.scary_potter_dont_place_in_col(a_col, &mut a_grid_array, a_count);
+                    }
+                    self.scary_potter_place_pot(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Peashooter,
+                        5,
+                        &mut a_grid_array,
+                        a_count,
+                    );
+                    self.scary_potter_place_pot(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Snowpea,
+                        5,
+                        &mut a_grid_array,
+                        a_count,
+                    );
+                    self.scary_potter_place_pot(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Hypnoshroom,
+                        5,
+                        &mut a_grid_array,
+                        a_count,
+                    );
+                    self.scary_potter_place_pot(
+                        ScaryPotType::Zombie,
+                        ZombieType::Normal,
+                        SeedType::None,
+                        6,
+                        &mut a_grid_array,
+                        a_count,
+                    );
+                    self.scary_potter_place_pot(
+                        ScaryPotType::Zombie,
+                        ZombieType::Pail,
+                        SeedType::None,
+                        2,
+                        &mut a_grid_array,
+                        a_count,
+                    );
+                    self.scary_potter_place_pot(
+                        ScaryPotType::Zombie,
+                        ZombieType::Dancer,
+                        SeedType::None,
+                        1,
+                        &mut a_grid_array,
+                        a_count,
+                    );
+                    self.scary_potter_place_pot(
+                        ScaryPotType::Zombie,
+                        ZombieType::JackInTheBox,
+                        SeedType::None,
+                        1,
+                        &mut a_grid_array,
+                        a_count,
+                    );
+                    self.scary_potter_change_pot_type(GridItemState::ScaryPotLeaf, 3);
+                }
+                _ => {}
+            }
+        } else {
+            // C++ 3850-4002: 按 GameMode 分派
+            // [TRANSLATION_NOTE]: C++ 在这 10 个 case 里以 ScaryPotterPlacePot(...) 紧凑调用形式
+            // 列出约 90 条策划数据。此处用同名局部宏保持 1:1 的调用表形态，不做参数化抽象。
+            macro_rules! place_pot {
+                ($pot:expr, $zombie:expr, $seed:expr, $count:expr) => {
+                    self.scary_potter_place_pot(
+                        $pot,
+                        $zombie,
+                        $seed,
+                        $count,
+                        &mut a_grid_array,
+                        a_count,
+                    )
+                };
+            }
+            macro_rules! dont_place_in_col {
+                ($col:expr) => {
+                    self.scary_potter_dont_place_in_col($col, &mut a_grid_array, a_count)
+                };
+            }
+            macro_rules! change_pot_type {
+                ($state:expr, $count:expr) => {
+                    self.scary_potter_change_pot_type($state, $count)
+                };
+            }
+
+            let a_game_mode = self
+                .app
+                .map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+            match a_game_mode {
+                GameMode::ScaryPotter1 => {
+                    dont_place_in_col!(0);
+                    dont_place_in_col!(1);
+                    dont_place_in_col!(2);
+                    dont_place_in_col!(3);
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Peashooter, 5);
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Snowpea, 5);
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Squash, 5);
+                    place_pot!(ScaryPotType::Zombie, ZombieType::Normal, SeedType::None, 6);
+                    place_pot!(ScaryPotType::Zombie, ZombieType::Pail, SeedType::None, 3);
+                    place_pot!(
+                        ScaryPotType::Zombie,
+                        ZombieType::JackInTheBox,
+                        SeedType::None,
+                        1
+                    );
+                    change_pot_type!(GridItemState::ScaryPotLeaf, 2);
+                }
+                GameMode::ScaryPotter2 => {
+                    dont_place_in_col!(0);
+                    dont_place_in_col!(1);
+                    dont_place_in_col!(2);
+                    dont_place_in_col!(8);
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Leftpeater,
+                        7
+                    );
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Snowpea, 3);
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Wallnut, 3);
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::PotatoMine,
+                        2
+                    );
+                    place_pot!(ScaryPotType::Zombie, ZombieType::Normal, SeedType::None, 6);
+                    place_pot!(ScaryPotType::Zombie, ZombieType::Pail, SeedType::None, 3);
+                    place_pot!(
+                        ScaryPotType::Zombie,
+                        ZombieType::JackInTheBox,
+                        SeedType::None,
+                        1
+                    );
+                    change_pot_type!(GridItemState::ScaryPotLeaf, 2);
+                }
+                GameMode::ScaryPotter3 => {
+                    dont_place_in_col!(0);
+                    dont_place_in_col!(1);
+                    dont_place_in_col!(2);
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Leftpeater,
+                        6
+                    );
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Snowpea, 4);
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Squash, 2);
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Hypnoshroom,
+                        3
+                    );
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Wallnut, 3);
+                    place_pot!(ScaryPotType::Zombie, ZombieType::Normal, SeedType::None, 8);
+                    place_pot!(ScaryPotType::Zombie, ZombieType::Pail, SeedType::None, 2);
+                    place_pot!(ScaryPotType::Zombie, ZombieType::Dancer, SeedType::None, 1);
+                    place_pot!(
+                        ScaryPotType::Zombie,
+                        ZombieType::JackInTheBox,
+                        SeedType::None,
+                        1
+                    );
+                    change_pot_type!(GridItemState::ScaryPotLeaf, 2);
+                }
+                GameMode::ScaryPotter4 => {
+                    dont_place_in_col!(0);
+                    dont_place_in_col!(1);
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Puffshroom,
+                        11
+                    );
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Hypnoshroom,
+                        4
+                    );
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Leftpeater,
+                        4
+                    );
+                    place_pot!(
+                        ScaryPotType::Zombie,
+                        ZombieType::JackInTheBox,
+                        SeedType::None,
+                        8
+                    );
+                    place_pot!(ScaryPotType::Zombie, ZombieType::Normal, SeedType::None, 7);
+                    place_pot!(ScaryPotType::Zombie, ZombieType::Football, SeedType::None, 1);
+                    change_pot_type!(GridItemState::ScaryPotLeaf, 2);
+                }
+                GameMode::ScaryPotter5 => {
+                    dont_place_in_col!(0);
+                    dont_place_in_col!(1);
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Leftpeater,
+                        6
+                    );
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Pumpkinshell,
+                        3
+                    );
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Squash, 4);
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Hypnoshroom,
+                        2
+                    );
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Snowpea, 2);
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Magnetshroom,
+                        3
+                    );
+                    place_pot!(ScaryPotType::Zombie, ZombieType::Normal, SeedType::None, 6);
+                    place_pot!(ScaryPotType::Zombie, ZombieType::Pail, SeedType::None, 5);
+                    place_pot!(
+                        ScaryPotType::Zombie,
+                        ZombieType::JackInTheBox,
+                        SeedType::None,
+                        1
+                    );
+                    place_pot!(ScaryPotType::Zombie, ZombieType::Football, SeedType::None, 3);
+                    change_pot_type!(GridItemState::ScaryPotLeaf, 2);
+                }
+                GameMode::ScaryPotter6 => {
+                    dont_place_in_col!(0);
+                    dont_place_in_col!(1);
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Leftpeater,
+                        7
+                    );
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Squash, 2);
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Tallnut, 5);
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Threepeater,
+                        2
+                    );
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Torchwood,
+                        4
+                    );
+                    place_pot!(ScaryPotType::Zombie, ZombieType::Normal, SeedType::None, 7);
+                    place_pot!(
+                        ScaryPotType::Zombie,
+                        ZombieType::Polevaulter,
+                        SeedType::None,
+                        5
+                    );
+                    place_pot!(ScaryPotType::Zombie, ZombieType::Football, SeedType::None, 2);
+                    place_pot!(
+                        ScaryPotType::Zombie,
+                        ZombieType::JackInTheBox,
+                        SeedType::None,
+                        1
+                    );
+                    change_pot_type!(GridItemState::ScaryPotLeaf, 2);
+                }
+                GameMode::ScaryPotter7 => {
+                    dont_place_in_col!(0);
+                    dont_place_in_col!(1);
+                    dont_place_in_col!(2);
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Spikeweed,
+                        13
+                    );
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Wallnut, 3);
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Squash, 3);
+                    place_pot!(ScaryPotType::Zombie, ZombieType::Normal, SeedType::None, 10);
+                    place_pot!(ScaryPotType::Zombie, ZombieType::Pail, SeedType::None, 1);
+                    change_pot_type!(GridItemState::ScaryPotLeaf, 2);
+                }
+                GameMode::ScaryPotter8 => {
+                    dont_place_in_col!(0);
+                    dont_place_in_col!(1);
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Puffshroom,
+                        7
+                    );
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Wallnut, 3);
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Squash, 5);
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Leftpeater,
+                        4
+                    );
+                    place_pot!(
+                        ScaryPotType::Zombie,
+                        ZombieType::JackInTheBox,
+                        SeedType::None,
+                        8
+                    );
+                    place_pot!(ScaryPotType::Zombie, ZombieType::Normal, SeedType::None, 4);
+                    place_pot!(ScaryPotType::Zombie, ZombieType::Pogo, SeedType::None, 4);
+                    change_pot_type!(GridItemState::ScaryPotLeaf, 2);
+                }
+                GameMode::ScaryPotter9 => {
+                    dont_place_in_col!(0);
+                    dont_place_in_col!(1);
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Leftpeater,
+                        6
+                    );
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Snowpea, 2);
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Peashooter,
+                        2
+                    );
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Threepeater,
+                        2
+                    );
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Squash, 5);
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::PotatoMine,
+                        1
+                    );
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Wallnut, 1);
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Plantern, 1);
+                    place_pot!(ScaryPotType::Zombie, ZombieType::Normal, SeedType::None, 8);
+                    place_pot!(ScaryPotType::Zombie, ZombieType::Pail, SeedType::None, 5);
+                    place_pot!(
+                        ScaryPotType::Zombie,
+                        ZombieType::JackInTheBox,
+                        SeedType::None,
+                        1
+                    );
+                    place_pot!(
+                        ScaryPotType::Zombie,
+                        ZombieType::Gargantuar,
+                        SeedType::None,
+                        1
+                    );
+                    change_pot_type!(GridItemState::ScaryPotLeaf, 2);
+                }
+                GameMode::ScaryPotterEndless => {
+                    // C++ 3976: std::clamp(mSurvivalStage / 10, 0, 8)
+                    let a_num_extra_gargantuars = (self.survival_stage / 10).clamp(0, 8);
+                    dont_place_in_col!(0);
+                    dont_place_in_col!(1);
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Leftpeater,
+                        6
+                    );
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Snowpea, 2);
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Peashooter,
+                        1
+                    );
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::Threepeater,
+                        2
+                    );
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Squash, 5);
+                    place_pot!(
+                        ScaryPotType::Seed,
+                        ZombieType::Invalid,
+                        SeedType::PotatoMine,
+                        1
+                    );
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Wallnut, 1);
+                    place_pot!(ScaryPotType::Seed, ZombieType::Invalid, SeedType::Plantern, 1);
+                    place_pot!(ScaryPotType::Sun, ZombieType::Invalid, SeedType::None, 1);
+                    place_pot!(
+                        ScaryPotType::Zombie,
+                        ZombieType::Normal,
+                        SeedType::None,
+                        8 - a_num_extra_gargantuars
+                    );
+                    place_pot!(ScaryPotType::Zombie, ZombieType::Pail, SeedType::None, 5);
+                    place_pot!(
+                        ScaryPotType::Zombie,
+                        ZombieType::JackInTheBox,
+                        SeedType::None,
+                        1
+                    );
+                    place_pot!(
+                        ScaryPotType::Zombie,
+                        ZombieType::Gargantuar,
+                        SeedType::None,
+                        1 + a_num_extra_gargantuars
+                    );
+                    change_pot_type!(GridItemState::ScaryPotLeaf, 2);
+
+                    // C++ 3994-3995: 第 15 阶段授予 ChinaShop 成就
+                    if self.survival_stage == 15 {
+                        if let Some(app) = self.app {
+                            crate::lawn::widget::achievements_screen::ReportAchievement::give_achievement(
+                                Some(app),
+                                crate::lawn::widget::achievements_screen::AchievementId::ChinaShop
+                                    as i32,
+                                true,
+                            );
+                        }
+                    }
+                }
+                _ => {
+                    // C++ 3999-4001: PVZP_ASSERT(false)
+                    debug_assert!(false);
+                }
+            }
+        }
+
         self.scary_potter_pots = self.scary_potter_count_pots();
     }
 
@@ -2448,10 +3397,94 @@ impl Challenge {
         }
     }
 
+    /// I, Zombie 关卡运行时更新（对应 C++ Challenge::IZombieUpdate，Challenge.cpp:4659）
     pub fn i_zombie_update(&mut self) {
-        let board = self.get_board();
-        if board.zombies.len() == 0 && board.m_sun_money < 50 && !board.has_level_award_dropped() {
-            board.zombies_won_no_zombie();
+        // C++ 4661: 阳光总量 = 已有 + 正在被收集的
+        let a_sun_money = {
+            let board = self.get_board();
+            board.m_sun_money + board.count_sun_being_collected()
+        };
+
+        // C++ 4663-4671: 长期未被击中的僵尸重新随机速度
+        {
+            let board = self.get_board();
+            for a_zombie in board.zombies.iter_mut() {
+                if a_zombie.dead {
+                    continue;
+                }
+                if !a_zombie.is_dead_or_dying()
+                    && a_zombie.zombie_phase != ZombiePhase::PolevaulterInVault
+                    && !a_zombie.is_eating
+                    && a_zombie.just_got_shot_counter < -500
+                {
+                    a_zombie.pick_random_speed();
+                }
+            }
+        }
+
+        // C++ 4673-4683: 是否有植物正处在"活动"状态
+        let mut an_active = false;
+        {
+            let board = self.get_board();
+            for a_plant in board.plants.iter() {
+                if a_plant.dead {
+                    continue;
+                }
+                let a_state = a_plant.state;
+                if a_state == PlantState::SquashFalling
+                    || a_state == PlantState::SquashDoneFalling
+                    || a_state == PlantState::ChomperBiting
+                    || a_state == PlantState::ChomperBitingGotOne
+                {
+                    an_active = true;
+                }
+            }
+        }
+
+        // C++ 4684-4692: 土豆雷爆炸粒子同样算作"活动"
+        // [TRANSLATION_NOTE]: C++ 遍历
+        // mBoard->mApp->mEffectSystem->mParticleHolder->mParticleSystems 并判定
+        // PARTICLE_POTATO_MINE；Rust 侧粒子系统的该枚举无对应项（报告 §7.2），
+        // 故此处判定暂时恒为 false。
+
+        // C++ 4694-4704: 场上是否存在可收集的阳光
+        let mut a_has_available_sun = false;
+        {
+            let board = self.get_board();
+            for a_coin in board.coins.iter() {
+                if a_coin.dead {
+                    continue;
+                }
+                if a_coin.is_sun_type() && !a_coin.is_being_collected {
+                    a_has_available_sun = true;
+                    break;
+                }
+            }
+        }
+
+        // C++ 4706: 无僵尸、阳光不足 50、无奖励掉落、无活动、无可用阳光 → 判负
+        let a_no_zombies = self.get_board().zombies.len() == 0;
+        if a_no_zombies
+            && a_sun_money < 50
+            && !self.get_board().has_level_award_dropped()
+            && !an_active
+            && !a_has_available_sun
+        {
+            // C++ 4708-4716: 先让所有钱币消失
+            {
+                let board = self.get_board();
+                for a_coin in board.coins.iter_mut() {
+                    if a_coin.dead {
+                        continue;
+                    }
+                    if a_coin.is_money() {
+                        a_coin.die();
+                    }
+                }
+            }
+
+            // C++ 4718
+            self.get_board().zombies_won_no_zombie();
         }
     }
 
@@ -2529,20 +3562,263 @@ impl Challenge {
         count
     }
 
+    /// I, Zombie 关卡初始化（对应 C++ Challenge::IZombieInitLevel，Challenge.cpp:4426）
     pub fn i_zombie_init_level(&mut self) {
         self.challenge_score = 0;
-        let board = self.get_board();
-        for row in 0..5 {
-            let mut brain = crate::lawn::grid_item::GridItem::new();
-            brain.grid_item_type = crate::lawn::grid_item::GridItemType::None;
-            brain.grid_x = 0;
-            brain.grid_y = row;
-            brain.render_order = 0;
-            brain.counter = 70;
-            brain.pos_x = (board.grid_to_pixel_x(0, row) - 40) as f32;
-            brain.pos_y = (board.grid_to_pixel_y(0, row) + 40) as f32;
-            board.grid_items.push(brain);
+
+        // C++ 4429-4439: 第 0 列的 5 行各放一个大脑
+        for a_row in 0..I_ZOMBIE_WINNING_SCORE {
+            let mut a_brain = crate::lawn::grid_item::GridItem::new();
+            a_brain.grid_item_type = crate::lawn::grid_item::GridItemType::IZombieBrain;
+            a_brain.grid_x = 0;
+            a_brain.grid_y = a_row;
+            a_brain.render_order = crate::lawn::board::make_render_order(
+                crate::lawn::game_enums::RENDER_LAYER_PLANT,
+                a_row,
+                0,
+            );
+            a_brain.counter = 70;
+            {
+                let board = self.get_board();
+                a_brain.pos_x = (board.grid_to_pixel_x(0, a_row) - 40) as f32;
+                a_brain.pos_y = (board.grid_to_pixel_y(0, a_row) + 40) as f32;
+            }
+            self.get_board().grid_items.push(a_brain);
         }
+
+        // C++ 4441-4650: 按关卡摆放植物
+        let a_game_mode = self
+            .app
+            .map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
+        match a_game_mode {
+            GameMode::PuzzleIZombie1 => {
+                self.i_zombie_place_plant_in_square(SeedType::Sunflower, 3, 2);
+                self.i_zombie_place_plant_in_square(SeedType::Sunflower, 3, 3);
+                self.i_zombie_place_plants(SeedType::Sunflower, 7, -1);
+                self.i_zombie_place_plants(SeedType::Squash, 3, -1);
+                self.i_zombie_place_plants(SeedType::Peashooter, 6, -1);
+                self.i_zombie_place_plants(SeedType::Snowpea, 2, -1);
+            }
+            GameMode::PuzzleIZombie2 => {
+                self.i_zombie_place_plant_in_square(SeedType::Spikeweed, 3, 0);
+                self.i_zombie_place_plant_in_square(SeedType::Sunflower, 2, 0);
+                self.i_zombie_place_plant_in_square(SeedType::Sunflower, 3, 3);
+                self.i_zombie_place_plants(SeedType::Spikeweed, 1, 0);
+                self.i_zombie_place_plants(SeedType::Peashooter, 1, 0);
+                self.i_zombie_place_plants(SeedType::Snowpea, 2, 3);
+                self.i_zombie_place_plants(SeedType::Sunflower, 1, 3);
+                self.i_zombie_place_plants(SeedType::Sunflower, 4, -1);
+                self.i_zombie_place_plants(SeedType::Spikeweed, 2, -1);
+                self.i_zombie_place_plants(SeedType::Snowpea, 2, -1);
+                self.i_zombie_place_plants(SeedType::Peashooter, 4, -1);
+            }
+            GameMode::PuzzleIZombie3 => {
+                self.i_zombie_place_plant_in_square(SeedType::PotatoMine, 3, 0);
+                self.i_zombie_place_plant_in_square(SeedType::Sunflower, 2, 0);
+                self.i_zombie_place_plant_in_square(SeedType::PotatoMine, 2, 2);
+                self.i_zombie_place_plant_in_square(SeedType::Sunflower, 2, 4);
+                self.i_zombie_place_plant_in_square(SeedType::Torchwood, 3, 3);
+                self.i_zombie_place_plants(SeedType::Torchwood, 2, -1);
+                self.i_zombie_place_plants(SeedType::Sunflower, 5, -1);
+                self.i_zombie_place_plants(SeedType::Peashooter, 7, -1);
+                self.i_zombie_place_plants(SeedType::Splitpea, 1, -1);
+            }
+            GameMode::PuzzleIZombie4 => {
+                self.i_zombie_place_plant_in_square(SeedType::Wallnut, 3, 0);
+                self.i_zombie_place_plant_in_square(SeedType::Sunflower, 2, 0);
+                self.i_zombie_place_plant_in_square(SeedType::Wallnut, 3, 1);
+                self.i_zombie_place_plant_in_square(SeedType::Wallnut, 3, 2);
+                self.i_zombie_place_plant_in_square(SeedType::Sunflower, 2, 2);
+                self.i_zombie_place_plant_in_square(SeedType::Wallnut, 3, 3);
+                self.i_zombie_place_plant_in_square(SeedType::Wallnut, 3, 4);
+                self.i_zombie_place_plant_in_square(SeedType::Sunflower, 2, 4);
+                self.i_zombie_place_plants(SeedType::Peashooter, 1, 0);
+                self.i_zombie_place_plants(SeedType::Snowpea, 1, 1);
+                self.i_zombie_place_plants(SeedType::Fumeshroom, 2, 2);
+                self.i_zombie_place_plants(SeedType::Snowpea, 1, 3);
+                self.i_zombie_place_plants(SeedType::Peashooter, 1, 4);
+                self.i_zombie_place_plants(SeedType::Peashooter, 2, -1);
+                self.i_zombie_place_plants(SeedType::Sunflower, 4, -1);
+            }
+            GameMode::PuzzleIZombie5 => {
+                self.i_zombie_place_plant_in_square(SeedType::Sunflower, 3, 2);
+                self.i_zombie_place_plant_in_square(SeedType::Sunflower, 3, 3);
+                self.i_zombie_place_plants(SeedType::Cactus, 1, 1);
+                self.i_zombie_place_plants(SeedType::Cactus, 1, 4);
+                self.i_zombie_place_plants(SeedType::Magnetshroom, 1, -1);
+                self.i_zombie_place_plants(SeedType::Sunflower, 5, -1);
+                self.i_zombie_place_plants(SeedType::Peashooter, 8, -1);
+                self.i_zombie_place_plants(SeedType::Snowpea, 2, -1);
+            }
+            GameMode::PuzzleIZombie6 => {
+                self.i_zombie_place_plant_in_square(SeedType::Garlic, 4, 1);
+                self.i_zombie_place_plant_in_square(SeedType::Garlic, 4, 3);
+                self.i_zombie_place_plants(SeedType::Sunflower, 3, 1);
+                self.i_zombie_place_plants(SeedType::Sunflower, 3, 3);
+                self.i_zombie_place_plants(SeedType::Torchwood, 2, -1);
+                self.i_zombie_place_plants(SeedType::Sunflower, 2, -1);
+                self.i_zombie_place_plants(SeedType::Spikeweed, 3, -1);
+                self.i_zombie_place_plants(SeedType::Snowpea, 1, -1);
+                self.i_zombie_place_plants(SeedType::Peashooter, 5, -1);
+                self.i_zombie_place_plants(SeedType::Squash, 2, -1);
+                self.i_zombie_place_plants(SeedType::Kernelpult, 2, -1);
+            }
+            GameMode::PuzzleIZombie7 => {
+                self.i_zombie_place_plant_in_square(SeedType::Sunflower, 4, 2);
+                self.i_zombie_place_plant_in_square(SeedType::Sunflower, 4, 4);
+                self.i_zombie_place_plants(SeedType::Sunflower, 6, -1);
+                self.i_zombie_place_plants(SeedType::PotatoMine, 9, -1);
+                self.i_zombie_place_plants(SeedType::Chomper, 8, -1);
+            }
+            GameMode::PuzzleIZombie8 => {
+                self.i_zombie_place_plants(SeedType::Wallnut, 3, -1);
+                self.i_zombie_place_plants(SeedType::Magnetshroom, 2, -1);
+                self.i_zombie_place_plants(SeedType::Peashooter, 8, -1);
+                self.i_zombie_place_plants(SeedType::Squash, 2, -1);
+                self.i_zombie_place_plants(SeedType::PotatoMine, 2, -1);
+                self.i_zombie_place_plants(SeedType::Sunflower, 8, -1);
+            }
+            GameMode::PuzzleIZombie9 => {
+                self.i_zombie_place_plant_in_square(SeedType::Tallnut, 5, 1);
+                self.i_zombie_place_plant_in_square(SeedType::Torchwood, 5, 3);
+                self.i_zombie_place_plants(SeedType::PotatoMine, 4, 0);
+                self.i_zombie_place_plants(SeedType::Sunflower, 2, 0);
+                self.i_zombie_place_plants(SeedType::Sunflower, 2, 1);
+                self.i_zombie_place_plants(SeedType::Threepeater, 1, 1);
+                self.i_zombie_place_plants(SeedType::Snowpea, 1, 1);
+                self.i_zombie_place_plants(SeedType::Splitpea, 1, 1);
+                self.i_zombie_place_plants(SeedType::Chomper, 3, 2);
+                self.i_zombie_place_plants(SeedType::Sunflower, 2, 2);
+                self.i_zombie_place_plants(SeedType::Squash, 1, 2);
+                self.i_zombie_place_plants(SeedType::Peashooter, 3, 3);
+                self.i_zombie_place_plants(SeedType::Sunflower, 2, 3);
+                self.i_zombie_place_plants(SeedType::Sunflower, 1, 4);
+                self.i_zombie_place_plants(SeedType::Fumeshroom, 1, 4);
+                self.i_zombie_place_plants(SeedType::Scaredyshroom, 1, 4);
+                self.i_zombie_place_plants(SeedType::Starfruit, 1, 4);
+                self.i_zombie_place_plants(SeedType::Splitpea, 1, 4);
+                self.i_zombie_place_plants(SeedType::Magnetshroom, 1, 4);
+            }
+            GameMode::PuzzleIZombieEndless => {
+                // C++ 4553-4554: 第 10 阶段授予 BetterOffDead 成就
+                if self.survival_stage == 10 {
+                    if let Some(app) = self.app {
+                        crate::lawn::widget::achievements_screen::ReportAchievement::give_achievement(
+                            Some(app),
+                            crate::lawn::widget::achievements_screen::AchievementId::BetterOffDead
+                                as i32,
+                            true,
+                        );
+                    }
+                }
+
+                // C++ 4556: aFormationHit = RandRangeInt(0, 4)
+                let a_formation_hit = crate::framework::common::rand_range_int(0, 4);
+
+                // C++ 4558-4570: 小喷菇数量随阶段增长（第 0/1 阶段为特例）
+                let mut a_puffshroom_count = crate::framework::common::rand_range_int(
+                    (2 + self.survival_stage / 3).clamp(2, 4),
+                    (3 + self.survival_stage / 2).clamp(2, 6),
+                );
+                if self.survival_stage == 0 {
+                    a_puffshroom_count = 0;
+                } else if self.survival_stage == 1 {
+                    a_puffshroom_count = 1;
+                } else if self.survival_stage >= 10 {
+                    a_puffshroom_count = crate::framework::common::rand_range_int(
+                        (2 + self.survival_stage / 3).clamp(2, 5),
+                        (3 + self.survival_stage / 2).clamp(2, 7),
+                    );
+                }
+                let a_sunflower_count = 8 - a_puffshroom_count;
+
+                // C++ 4572-4573
+                self.i_zombie_place_plants(SeedType::Sunflower, a_sunflower_count, -1);
+                self.i_zombie_place_plants(SeedType::Puffshroom, a_puffshroom_count, -1);
+
+                // C++ 4575-4644: 阵型选择
+                if a_formation_hit == 0 && self.survival_stage >= 1 {
+                    // C++ 4577-4599: 特殊阵型
+                    match crate::framework::common::rand_range_int(0, 4) {
+                        0 => {
+                            // 伤害阵型
+                            self.i_zombie_place_plants(SeedType::Snowpea, 9, -1);
+                            self.i_zombie_place_plants(SeedType::Splitpea, 4, -1);
+                            self.i_zombie_place_plants(SeedType::Repeater, 4, -1);
+                        }
+                        1 => {
+                            // 爆炸阵型
+                            self.i_zombie_place_plants(SeedType::PotatoMine, 9, -1);
+                            self.i_zombie_place_plants(SeedType::Chomper, 8, -1);
+                        }
+                        2 => {
+                            // 倾斜阵型
+                            self.i_zombie_place_plants(SeedType::Spikeweed, 9, -1);
+                            self.i_zombie_place_plants(SeedType::Starfruit, 8, -1);
+                        }
+                        3 => {
+                            // 穿刺阵型
+                            self.i_zombie_place_plants(SeedType::Fumeshroom, 9, -1);
+                            self.i_zombie_place_plants(SeedType::Magnetshroom, 8, -1);
+                        }
+                        _ => {
+                            // 恢复阵型
+                            self.i_zombie_place_plants(SeedType::Scaredyshroom, 12, -1);
+                            self.i_zombie_place_plants(SeedType::Sunflower, 5, -1);
+                        }
+                    }
+                } else {
+                    // C++ 4603-4643
+                    match crate::framework::common::rand_range_int(0, 5) {
+                        0 | 1 | 2 => {
+                            // 混合阵型
+                            self.i_zombie_place_plants(SeedType::Wallnut, 1, -1);
+                            self.i_zombie_place_plants(SeedType::Torchwood, 1, -1);
+                            self.i_zombie_place_plants(SeedType::PotatoMine, 1, -1);
+                            self.i_zombie_place_plants(SeedType::Chomper, 2, -1);
+                            self.i_zombie_place_plants(SeedType::Peashooter, 1, -1);
+                            self.i_zombie_place_plants(SeedType::Splitpea, 1, -1);
+                            self.i_zombie_place_plants(SeedType::Kernelpult, 1, -1);
+                            self.i_zombie_place_plants(SeedType::Threepeater, 1, -1);
+                            self.i_zombie_place_plants(SeedType::Snowpea, 1, -1);
+                            self.i_zombie_place_plants(SeedType::Squash, 1, -1);
+                            self.i_zombie_place_plants(SeedType::Fumeshroom, 1, -1);
+                            self.i_zombie_place_plants(SeedType::Umbrella, 1, -1);
+                            self.i_zombie_place_plants(SeedType::Starfruit, 1, -1);
+                            self.i_zombie_place_plants(SeedType::Magnetshroom, 1, -1);
+                            self.i_zombie_place_plants(SeedType::Spikeweed, 2, -1);
+                        }
+                        3 | 4 => {
+                            // 控制阵型
+                            self.i_zombie_place_plants(SeedType::Torchwood, 1, -1);
+                            self.i_zombie_place_plants(SeedType::Splitpea, 3, -1);
+                            self.i_zombie_place_plants(SeedType::Repeater, 1, -1);
+                            self.i_zombie_place_plants(SeedType::Kernelpult, 3, -1);
+                            self.i_zombie_place_plants(SeedType::Threepeater, 1, -1);
+                            self.i_zombie_place_plants(SeedType::Snowpea, 3, -1);
+                            self.i_zombie_place_plants(SeedType::Umbrella, 1, -1);
+                            self.i_zombie_place_plants(SeedType::Magnetshroom, 1, -1);
+                            self.i_zombie_place_plants(SeedType::Spikeweed, 3, -1);
+                        }
+                        _ => {
+                            // 秒杀阵型
+                            self.i_zombie_place_plants(SeedType::PotatoMine, 4, -1);
+                            self.i_zombie_place_plants(SeedType::Chomper, 3, -1);
+                            self.i_zombie_place_plants(SeedType::Squash, 3, -1);
+                            self.i_zombie_place_plants(SeedType::Fumeshroom, 4, -1);
+                            self.i_zombie_place_plants(SeedType::Spikeweed, 3, -1);
+                        }
+                    }
+                }
+            }
+            _ => {
+                // C++ 4647-4648: PVZP_ASSERT(false)
+                debug_assert!(false);
+            }
+        }
+
+        // C++ 4651: mBoard->mBonusLawnMowersRemaining = 0
+        self.get_board().m_bonus_lawn_mowers_remaining = 0;
     }
 
     pub fn draw_rain(&self, g: &mut Graphics) {
@@ -3652,7 +4928,9 @@ impl Challenge {
         } else if size >= 1000 && crate::framework::common::rand_range(47) == 0 {
             self.tree_of_wisdom_talk_index = 1000;
         } else {
-            self.tree_of_wisdom_talk_index = 2 + crate::framework::common::rand_range(size.clamp(3, 49) - 2);
+            // C++ Challenge.cpp:5434 RandRangeInt(2, std::clamp(aTreeSize, 3, 49)) —— 闭区间上界
+            self.tree_of_wisdom_talk_index =
+                crate::todlib::tod_common::rand_range_int(2, size.clamp(3, 49));
         }
         self.challenge_state_counter = 600;
     }

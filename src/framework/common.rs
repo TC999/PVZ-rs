@@ -84,9 +84,24 @@ pub fn rand_range(range: i32) -> i32 {
     rand() % range
 }
 
+/// 区间随机整数（对应 C++ RandRangeInt，PvzpCommon.cpp:404）
+/// [TRANSLATION_NOTE]: C++ 用 PVZP_ASSERT(theMin <= theMax) 做调试断言，此处保留为 debug_assert。
+pub fn rand_range_int(min: i32, max: i32) -> i32 {
+    debug_assert!(min <= max);
+    rand_range(max - min + 1) + min
+}
+
 pub fn rand_float(range: f32) -> f32 {
     if range <= 0.0 { return 0.0; }
     (rand() as f32 / SEXY_RAND_MAX as f32) * range
+}
+
+/// 区间随机浮点（对应 C++ RandRangeFloat，PvzpCommon.cpp:410）
+/// [TRANSLATION_NOTE]: C++ 为 Rand(theMax - theMin) + theMin —— 注意与 RandRangeInt 不同，
+/// 这里**没有** +1（浮点区间不存在整数端点问题）。
+pub fn rand_range_float(min: f32, max: f32) -> f32 {
+    debug_assert!(min <= max);
+    rand_float(max - min) + min
 }
 
 pub fn srand(seed: u32) {
