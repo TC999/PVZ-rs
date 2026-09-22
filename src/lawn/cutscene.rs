@@ -973,15 +973,21 @@ impl CutScene {
             zombie.pos_y += crate::framework::common::rand_range(15) as f32;
             zombie.pos_x += crate::framework::common::rand_range(15) as f32;
         }
-        zombie.base.render_order = board::make_render_order(0, 0, (grid_x % 2) * 2 + grid_y * 4);
+        zombie.base.render_order = board::make_render_order(
+            crate::lawn::game_enums::RENDER_LAYER_LAWN,
+            0,
+            (grid_x % 2) * 2 + grid_y * 4,
+        );
 
         if zombie_type == ZombieType::Bungee {
-            zombie.base.render_order = board::make_render_order(0, 0, 0);
+            zombie.base.render_order =
+                board::make_render_order(crate::lawn::game_enums::RENDER_LAYER_GROUND, 0, 0);
             zombie.base.row = 0;
             zombie.pos_x = grid_x as f32 * 50.0 + 950.0;
             zombie.pos_y = 50.0;
         } else if zombie_type == ZombieType::Bobsled {
-            zombie.base.render_order = board::make_render_order(0, 0, 1000);
+            zombie.base.render_order =
+                board::make_render_order(crate::lawn::game_enums::RENDER_LAYER_LAWN, 0, 1000);
             zombie.base.row = 0;
             zombie.pos_x = 1105.0;
             zombie.pos_y = 480.0;

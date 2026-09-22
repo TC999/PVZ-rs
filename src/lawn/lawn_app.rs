@@ -66,7 +66,10 @@ pub struct LawnApp {
     pub board: Option<*mut Board>,
     pub title_screen: Option<*mut Widget>,
     pub game_selector: Option<*mut ()>,
-    pub seed_chooser_screen: Option<*mut ()>,
+    /// [TRANSLATION_NOTE]: C++ mSeedChooserScreen 为强类型指针；Rust 侧原为 *mut () 擦除，
+    /// 但 UpdateToolTip 需要访问其 almanac/store/imitater 三个按钮，故恢复为具体类型。
+    pub seed_chooser_screen:
+        Option<*mut crate::lawn::widget::seed_chooser_screen::SeedChooserScreen>,
     pub award_screen: Option<*mut ()>,
     pub almanac_dialog: Option<*mut ()>,
     pub credit_screen: Option<*mut ()>,
@@ -280,6 +283,14 @@ impl LawnApp {
         unsafe { G_LAWN_APP_INSTANCE = Some(self as *mut LawnApp); }
         self.base.init();
         if self.base.is_shutdown() { return; }
+
+        // 对应 C++ LawnApp::Init（LawnApp.cpp:1230）：
+        //     if (mRecordingDemoBuffer || mPlayingDemoBuffer) mAppRandSeed = mRandSeed;
+        // demo 会话从录制中派生应用级随机种子
+        if self.base.m_recording_demo_buffer || self.base.m_playing_demo_buffer {
+            self.m_app_rand_seed = self.base.rand_seed as i32;
+        }
+
         self.base.title = "PvZ Portable".to_string();
 
         // 初始化全局位图字体（对应 C++ LoadResources 中 GetFontThrow 批量赋值 Sexy::FONT_*）
@@ -814,7 +825,7 @@ impl LawnApp {
                 (*wm).set_focus(Some(widget_ptr));
             }
         }
-        self.seed_chooser_screen = Some(screen_ptr as *mut ());
+        self.seed_chooser_screen = Some(screen_ptr);
         self.seed_chooser_screen_widget = Some(widget_ptr);
     }
 
@@ -829,7 +840,7 @@ impl LawnApp {
         }
         if let Some(screen) = self.seed_chooser_screen.take() {
             unsafe {
-                let _ = Box::from_raw(screen as *mut crate::lawn::widget::seed_chooser_screen::SeedChooserScreen);
+                let _ = Box::from_raw(screen);
             }
         }
     }
@@ -1733,7 +1744,39 @@ impl LawnApp {
             info.m_challenge_records.get(index).copied().unwrap_or(0)
         }) >= 100
     }
-    pub fn can_pause_now(&self) -> bool { true }
+    /// 当前是否可以暂停（对应 C++ CanPauseNow，LawnApp.cpp:367）
+    pub fn can_pause_now(&self) -> bool {
+        let board = match self.board {
+            Some(b) => b,
+            None => return false,
+        };
+
+        // C++: if (mSeedChooserScreen && mSeedChooserScreen->mMouseVisible) return false;
+        if let Some(widget) = self.seed_chooser_screen_widget {
+            if unsafe { (*widget).mouse_visible } {
+                return false;
+            }
+        }
+
+        // C++: if (mBoard->mBoardFadeOutCounter >= 0) return false;
+        if unsafe { (*board).m_board_fade_out_counter } >= 0 {
+            return false;
+        }
+
+        // C++: if (mCrazyDaveState != CrazyDaveState::CRAZY_DAVE_OFF) return false;
+        if self.m_crazy_dave_state != CrazyDaveState::Off {
+            return false;
+        }
+
+        // C++: ZEN_GARDEN / TREE_OF_WISDOM 不可暂停
+        if self.game_mode == GameMode::ChallengeZenGarden
+            || self.game_mode == GameMode::ChallengeTreeOfWisdom
+        {
+            return false;
+        }
+
+        self.get_dialog_count() <= 0
+    }
     pub fn can_spawn_yetis(&self) -> bool {
         // [TRANSLATION_NOTE]: 对应 C++ CanSpawnYetis，需要 get_zombie_definition 的 mStartingLevel
         if self.player_info.is_none() {
@@ -1820,13 +1863,26 @@ impl LawnApp {
     pub fn get_current_challenge_index(&self) -> i32 { 0 }
     pub fn get_current_level_name(&self) -> String { format!("Level {}", self.m_level) }
     pub fn get_stage_string(level: i32) -> String { format!("Stage {}", level) }
-    pub fn get_num_trophies(_page: i32) -> i32 { 0 }
+    /// 某挑战页已获得的奖杯数（对应 C++ GetNumTrophies，LawnApp.cpp:3151）
+    pub fn get_num_trophies(&self, the_page: i32) -> i32 {
+        let mut a_num_trophies = 0;
+
+        for i in 0..crate::lawn::widget::challenge_screen::NUM_CHALLENGE_MODES {
+            let a_def = crate::lawn::widget::challenge_screen::get_challenge_definition(i as i32);
+            if let Some(a_def) = a_def {
+                if a_def.page as i32 == the_page && self.has_beaten_challenge(a_def.challenge_mode) {
+                    a_num_trophies += 1;
+                }
+            }
+        }
+
+        a_num_trophies
+    }
     /// 距离金色向日葵奖杯还差多少奖杯（对应 C++ TrophiesNeedForGoldSunflower）
-    /// 注意：get_num_trophies 目前为 stub（返回 0），此值为 48 直到奖杯系统接入。
     pub fn trophies_need_for_gold_sunflower(&self) -> i32 {
-        48 - Self::get_num_trophies(ChallengePage::Survival as i32)
-            - Self::get_num_trophies(ChallengePage::Challenge as i32)
-            - Self::get_num_trophies(ChallengePage::Puzzle as i32)
+        48 - self.get_num_trophies(ChallengePage::Survival as i32)
+            - self.get_num_trophies(ChallengePage::Challenge as i32)
+            - self.get_num_trophies(ChallengePage::Puzzle as i32)
     }
     /// 获取当前时间戳（秒，对应 C++ GetNowTime）
     pub fn get_now_time(&self) -> i64 {
@@ -2349,7 +2405,29 @@ impl LawnApp {
         }
     }
 
-    pub fn need_pause_game(&self) -> bool { false }
+    /// 是否需要暂停游戏（对应 C++ NeedPauseGame，LawnApp.cpp:1146）
+    pub fn need_pause_game(&self) -> bool {
+        let a_dialog_count = self.base.m_dialog_list.len();
+        if a_dialog_count == 0 {
+            return false;
+        }
+
+        if a_dialog_count == 1 {
+            // C++: int anId = mDialogList.front()->mId;
+            let an_id = unsafe { (*self.base.m_dialog_list[0]).id };
+            if an_id != Dialogs::NewGame as i32
+                && (an_id == Dialogs::ChooserWarning as i32
+                    || an_id == Dialogs::PurchasePacketSlot as i32
+                    || an_id == Dialogs::Imitater as i32)
+            {
+                return false;
+            }
+        }
+
+        // C++: (mBoard == nullptr || mGameMode != ZEN_GARDEN) && (mBoard == nullptr || mGameMode != TREE_OF_WISDOM)
+        (self.board.is_none() || self.game_mode != GameMode::ChallengeZenGarden)
+            && (self.board.is_none() || self.game_mode != GameMode::ChallengeTreeOfWisdom)
+    }
     pub fn need_register(&self) -> bool { false }
 
     // ==================== 缺失的方法（GameSelector 需要） ====================
@@ -2478,8 +2556,8 @@ impl LawnApp {
                 self.m_debug_keys_enabled = true;
             }
         } else {
-            // C++: SexyApp::HandleCmdLineParam（基类处理其余参数）；Rust 基类无对应实现，忽略
-            let _ = the_param_value;
+            // C++: SexyApp::HandleCmdLineParam（基类处理其余参数，如 -play/-record/-version）
+            self.base.handle_cmd_line_param(the_param_name, the_param_value);
         }
     }
 
@@ -2820,7 +2898,7 @@ pub fn write_to_registry(&mut self) {
                     unsafe { (*b).survival_save_score(); }
                 }
                 if a_unlocked_new_challenge && self.has_finished_adventure() {
-                    let a_num_trophies = Self::get_num_trophies(ChallengePage::Survival as i32);
+                    let a_num_trophies = self.get_num_trophies(ChallengePage::Survival as i32);
                     if a_num_trophies != 8 && a_num_trophies != 9 {
                         if let Some(pi) = self.player_info.as_mut() {
                             pi.m_has_new_survival = 1;
@@ -2855,17 +2933,23 @@ pub fn write_to_registry(&mut self) {
             a_unlocked_new_challenge = !self.has_beaten_challenge(self.game_mode);
             let a_index = self.get_current_challenge_index() as usize;
             let has_finished = self.has_finished_adventure();
-            if let Some(pi) = self.player_info.as_mut() {
-                if let Some(rec) = pi.m_challenge_records.get_mut(a_index) {
-                    *rec += 1;
-                }
-                if a_unlocked_new_challenge && has_finished {
-                    let a_num_trophies = Self::get_num_trophies(ChallengePage::Challenge as i32);
-                    if a_num_trophies <= 17 {
-                        pi.m_has_new_mini_game = 1;
+            // [TRANSLATION_NOTE]: C++ 此处以 mPlayerInfo 长借用访问；Rust 侧拆成短借用才能调用
+            // 需要 &self 的 GetNumTrophies。调用顺序与 C++ 一致（先 ++ 再统计奖杯数）。
+            if self.player_info.is_some() {
+                if let Some(pi) = self.player_info.as_mut() {
+                    if let Some(rec) = pi.m_challenge_records.get_mut(a_index) {
+                        *rec += 1;
                     }
                 }
-                let a_num_trophies = Self::get_num_trophies(ChallengePage::Challenge as i32);
+                if a_unlocked_new_challenge && has_finished {
+                    let a_num_trophies = self.get_num_trophies(ChallengePage::Challenge as i32);
+                    if a_num_trophies <= 17 {
+                        if let Some(pi) = self.player_info.as_mut() {
+                            pi.m_has_new_mini_game = 1;
+                        }
+                    }
+                }
+                let a_num_trophies = self.get_num_trophies(ChallengePage::Challenge as i32);
                 if a_num_trophies == 20 {
                     crate::lawn::widget::achievements_screen::ReportAchievement::give_achievement(
                         Some(app_ptr),
@@ -2924,8 +3008,26 @@ pub fn write_to_registry(&mut self) {
     pub fn url_open_succeeded(&self, _url: &str) {
         // [TRANSLATION_NOTE]: C++ 中无对应方法（Rust 侧为占位，浏览器打开回调暂不处理）
     }
-    /// 打开 URL（对应 C++ OpenURL）
-    pub fn open_url(&self, _url: &str, _minimized: bool) -> bool { false }
+    /// 打开 URL（对应 C++ LawnApp::OpenURL，LawnApp.cpp:1823）
+    pub fn open_url(&mut self, the_url: &str, shutdown_on_open: bool) -> bool {
+        // C++: DoDialog(DIALOG_OPENURL_WAIT, true, GetString("OPENING_BROWSER","Opening Browser"), ...)
+        let a_dialog_text = self.base.get_string("OPENING_BROWSER");
+        self.do_dialog(
+            Dialogs::OpenUrlWait as i32,
+            true,
+            &a_dialog_text,
+            &a_dialog_text,
+            "",
+            crate::framework::widget::dialog::BUTTONS_NONE,
+        );
+
+        // C++: DrawDirtyStuff();
+        // [TRANSLATION_NOTE]: Rust 基类的 SexyAppBase::draw_dirty_stuff 未对外开放，改由主循环绘制。
+        // C++: return SexyAppBase::OpenURL(theURL, shutdownOnOpen);
+        // [TRANSLATION_NOTE]: Rust 基类无 OpenURL 实现（无平台浏览器启动路径），保持返回 false。
+        let _ = (the_url, shutdown_on_open);
+        false
+    }
     /// 获取布尔属性（对应 C++ GetBoolean）
     pub fn get_boolean(&self, id: &str, default: bool) -> bool {
         // C++ 中从 mBoolProperties 读取，Rust 简化版始终返回默认值
@@ -3128,6 +3230,9 @@ pub fn write_to_registry(&mut self) {
         }
 
         self.m_loading_thread_completed = true;
+        // 对应 C++ SexyAppBase::mLoadingThreadCompleted（DoUpdateFrames 据此置 mLoaded，
+        // 录制时并写 DEMO_LOADING_COMPLETE）
+        self.base.m_loading_thread_completed = true;
         eprintln!("[LawnApp] 资源加载完成");
     }
 

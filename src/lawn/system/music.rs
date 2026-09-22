@@ -494,7 +494,7 @@ impl Music {
                 self.make_sure_music_is_playing(MusicTune::FinalBossBrainiacManiac);
             } else if app.is_wallnut_bowling_level() || app.is_whack_a_zombie_level()
                 || app.is_little_trouble_level() || app.is_bungee_blitz_level()
-                || app.game_mode == GameMode::ChallengeZombieNimble
+                || app.game_mode == GameMode::ChallengeSpeed
             {
                 self.make_sure_music_is_playing(MusicTune::MinigameLoonboon);
             } else if (app.is_adventure_mode() && (app.player_info.as_ref().map_or(0, |p| p.m_level) == 10
@@ -507,8 +507,23 @@ impl Music {
                 self.stop_all_music();
             } else if app.is_scary_potter_level() || app.is_izombie_level() {
                 self.make_sure_music_is_playing(MusicTune::PuzzleCerebrawl);
+            } else if let Some(board) = app.board {
+                // C++ Music.cpp:605-617：按舞台类型选曲
+                let b = unsafe { &*board };
+                if b.stage_is_night() {
+                    if b.stage_has_pool() {
+                        self.make_sure_music_is_playing(MusicTune::FogRigormormist);
+                    } else {
+                        self.make_sure_music_is_playing(MusicTune::NightMoongrains);
+                    }
+                } else if b.stage_has_6_rows() {
+                    self.make_sure_music_is_playing(MusicTune::PoolWateryGraves);
+                } else if b.stage_has_roof() {
+                    self.make_sure_music_is_playing(MusicTune::RoofGrazeTheRoof);
+                } else {
+                    self.make_sure_music_is_playing(MusicTune::DayGrasswalk);
+                }
             } else {
-                // [TRANSLATION_NOTE]: 阶段背景判定依赖 board，Rust 侧按默认白天曲目
                 self.make_sure_music_is_playing(MusicTune::DayGrasswalk);
             }
         }

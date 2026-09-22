@@ -139,9 +139,9 @@ pub fn x_to_col(x: i32) -> i32 {
     ((x - 40) / 80).clamp(0, 8)
 }
 
-/// 创建渲染排序值（对应 C++ MakeRenderOrder）
+/// 创建渲染排序值（对应 C++ MakeRenderOrder / Board.cpp:478）
 pub fn make_render_order(layer: i32, row: i32, layer_offset: i32) -> i32 {
-    row * 10000 + layer + layer_offset  // RENDER_LAYER_ROW_OFFSET = 10000
+    row * crate::lawn::game_enums::RENDER_LAYER_ROW_OFFSET + layer + layer_offset
 }
 
 /// RenderItem 排序比较函数（对应 C++ RenderItemSortFunc）
@@ -1343,11 +1343,14 @@ impl Board {
     pub fn add_coin(&mut self, x: f32, y: f32, coin_type: CoinType, motion: CoinMotion) {
         // 对应 C++ Board::AddCoin (Board.cpp:1985)
         let mut coin = Coin::new();
-        coin.coin_initialize(x, y, coin_type, motion);
-        coin.base.board = Some(self as *mut Board); // 注意：这是 unsafe 的简化
+        // [TRANSLATION_NOTE]: C++ 的 Coin 在构造期即持有 mApp/mBoard，CoinInitialize 内部依赖
+        // 它们创建 reanim（mApp->AddReanimation）与读取背景表（mBoard->mBackground）；
+        // Rust 侧因此必须先注入 app/board 再执行 CoinInitialize。
+        coin.base.board = Some(self as *mut Board);
         if let Some(app) = self.app {
             coin.base.app = Some(app);
         }
+        coin.coin_initialize(x, y, coin_type, motion);
         self.coins.push(coin);
         // 对应 C++ DataArrayGetID(this)：记录 coin 在数组中的 ID（Vec 索引）
         let a_new_index = self.coins.len() - 1;
@@ -1372,8 +1375,16 @@ impl Board {
         self.projectiles.len() - 1
     }
 
-    /// 添加植物到棋盘
-    pub fn add_plant(&mut self, grid_x: i32, grid_y: i32, seed_type: SeedType, _imitater_type: SeedType) {
+    /// 添加植物到棋盘（对应 C++ Board::AddPlant）
+    /// [TRANSLATION_NOTE]: C++ 返回 Plant* 供调用方继续设置（如 SetSleeping / mWakeUpCounter）；
+    /// Rust 侧改为返回新植物在 mPlants 中的下标，调用方以 self.plants[idx] 访问。
+    pub fn add_plant(
+        &mut self,
+        grid_x: i32,
+        grid_y: i32,
+        seed_type: SeedType,
+        _imitater_type: SeedType,
+    ) -> usize {
         let mut plant = Plant::new();
         plant.plant_initialize(grid_x, grid_y, seed_type, SeedType::None);
         plant.base.board = Some(self as *mut Board);
@@ -1389,6 +1400,7 @@ impl Board {
         plant.pos_y = y as f32;
 
         self.plants.push(plant);
+        let a_new_index = self.plants.len() - 1;
 
         // ★ 关键接入：通知挑战模式新植物已添加（C++ Board.cpp:2104 mChallenge->PlantAdded(aPlant)）
         if self.challenge.is_some() {
@@ -1406,6 +1418,8 @@ impl Board {
         if a_sun_plants_count > self.m_max_sun_plants {
             self.m_max_sun_plants = a_sun_plants_count;
         }
+
+        a_new_index
     }
 
     /// 新建植物并返回引用（对应 C++ Board::NewPlant）
@@ -1449,14 +1463,30 @@ impl Board {
         self.get_grid_item_at(GridItemType::Ladder, grid_x, grid_y)
     }
 
-    /// 获取耙子（对应 C++ GetRake）
+    /// 获取耙子（对应 C++ GetRake，Board.cpp:415）
     pub fn get_rake(&self) -> Option<&GridItem> {
-        self.grid_items.iter().find(|item| item.grid_item_type == GridItemType::Rake)
+        for a_grid_item in self.grid_items.iter() {
+            if a_grid_item.dead {
+                continue;
+            }
+            if a_grid_item.grid_item_type == GridItemType::Rake {
+                return Some(a_grid_item);
+            }
+        }
+        None
     }
 
     /// 获取耙子（可变引用）
     pub fn get_rake_mut(&mut self) -> Option<&mut GridItem> {
-        self.grid_items.iter_mut().find(|item| item.grid_item_type == GridItemType::Rake)
+        for a_grid_item in self.grid_items.iter_mut() {
+            if a_grid_item.dead {
+                continue;
+            }
+            if a_grid_item.grid_item_type == GridItemType::Rake {
+                return Some(a_grid_item);
+            }
+        }
+        None
     }
     /// [TRANSLATION_NOTE]: C++ Board::CreateRakeReanim (Board.cpp): AddReanimation(x+20,y,fUndefined,REANIM_RAKE)
     pub fn create_rake_reanim(&self, the_rake_x: f32, the_rake_y: f32, the_render_order: i32) -> Option<*mut crate::todlib::reanimator::Reanimation> {
@@ -2630,19 +2660,51 @@ Spawn: {}
         })
     }
 
-    /// 检查屏幕上是否有活着的敌人僵尸（对应 C++ AreEnemyZombiesOnScreen）
+    /// 检查屏幕上是否有活着的敌人僵尸（对应 C++ AreEnemyZombiesOnScreen，Board.cpp:286）
     pub fn are_enemy_zombies_on_screen(&self) -> bool {
-        self.zombies.iter().any(|z| !z.dead && !z.mind_controlled)
+        for a_zombie in self.zombies.iter() {
+            if a_zombie.dead {
+                continue;
+            }
+            if a_zombie.has_head && !a_zombie.is_dead_or_dying() && !a_zombie.mind_controlled {
+                return true;
+            }
+        }
+        false
     }
 
-    /// 统计屏幕上存活的僵尸数量（对应 C++ CountZombiesOnScreen）
+    /// 统计屏幕上存活的僵尸数量（对应 C++ CountZombiesOnScreen，Board.cpp:301）
     pub fn count_zombies_on_screen(&self) -> i32 {
-        self.zombies.iter().filter(|z| !z.dead && !z.mind_controlled).count() as i32
+        let mut a_count = 0;
+        for a_zombie in self.zombies.iter() {
+            if a_zombie.dead {
+                continue;
+            }
+            if a_zombie.has_head
+                && !a_zombie.is_dead_or_dying()
+                && !a_zombie.mind_controlled
+                && a_zombie.is_on_board()
+            {
+                a_count += 1;
+            }
+        }
+        a_count
     }
 
-    /// 统计未触发的割草机数量（对应 C++ CountUntriggerLawnMowers）
+    /// 统计未触发的割草机数量（对应 C++ CountUntriggerLawnMowers，Board.cpp:329）
     pub fn count_untrigger_lawn_mowers(&self) -> i32 {
-        self.lawn_mowers.iter().filter(|m| !m.mowing && !m.dead).count() as i32
+        let mut a_count = 0;
+        for a_lawn_mower in self.lawn_mowers.iter() {
+            if a_lawn_mower.dead {
+                continue;
+            }
+            if a_lawn_mower.mower_state != LawnMowerState::Triggered
+                && a_lawn_mower.mower_state != LawnMowerState::Squished
+            {
+                a_count += 1;
+            }
+        }
+        a_count
     }
 
     /// 淡出关卡（对应 C++ Board::FadeOutLevel）
@@ -4683,7 +4745,7 @@ Spawn: {}
                 | GameMode::PuzzleIZombieEndless => BackgroundType::Night,
                 GameMode::SurvivalNormalStage3 | GameMode::SurvivalHardStage3 | GameMode::SurvivalEndlessStage3
                 | GameMode::ChallengeLittleTrouble | GameMode::ChallengeBobsledBonanza
-                | GameMode::ChallengeZombieNimble | GameMode::ChallengeLastStand
+                | GameMode::ChallengeSpeed | GameMode::ChallengeLastStand
                 | GameMode::ChallengeWarAndPeas2 | GameMode::Upsell | GameMode::Intro => BackgroundType::Pool,
                 GameMode::SurvivalNormalStage4 | GameMode::SurvivalHardStage4 | GameMode::SurvivalEndlessStage4
                 | GameMode::ChallengeRainingSeeds | GameMode::ChallengeInvisighoul
@@ -4925,14 +4987,98 @@ Spawn: {}
         self.m_progress_meter_width != 0
     }
 
-    /// 获取关卡随机种子（对应 C++ GetLevelRandSeed）
+    /// 获取关卡随机种子（对应 C++ GetLevelRandSeed，Board.cpp:799）
     pub fn get_level_rand_seed(&self) -> i32 {
-        self.m_board_rand_seed as i32
+        let app = match self.app {
+            Some(a) => a,
+            None => return self.m_board_rand_seed as i32,
+        };
+        unsafe {
+            // C++: int aRndSeed = mApp->mPlayerInfo->mId + mBoardRandSeed;
+            let mut a_rnd_seed = (*app).player_info.as_ref().map_or(0, |pi| pi.m_id as i32)
+                + self.m_board_rand_seed as i32;
+            if (*app).is_adventure_mode() {
+                a_rnd_seed += (*app)
+                    .player_info
+                    .as_ref()
+                    .map_or(0, |pi| pi.m_finished_adventure)
+                    * 101
+                    + self.level;
+            } else {
+                let a_survival_stage = self.challenge.as_ref().map_or(0, |c| c.survival_stage);
+                a_rnd_seed += a_survival_stage * 101 + (*app).game_mode as i32;
+            }
+            a_rnd_seed
+        }
     }
 
-    /// 获取种子银行中的卡槽数量（对应 C++ GetNumSeedsInBank）
+    /// 获取种子银行中的卡槽数量（对应 C++ GetNumSeedsInBank，Board.cpp:8587）
     pub fn get_num_seeds_in_bank(&self) -> i32 {
-        if self.is_first_time_adventure() && self.level < 5 { 3 } else { 6 }
+        let app = match self.app {
+            Some(a) => a,
+            None => return 0,
+        };
+        unsafe {
+            if (*app).is_scary_potter_level() {
+                return 1;
+            }
+            if (*app).is_whack_a_zombie_level() {
+                return 3;
+            }
+            if (*app).is_challenge_without_seed_bank() {
+                return 0;
+            }
+            if self.has_conveyor_belt_seed_bank() {
+                return 10;
+            }
+            if (*app).is_slot_machine_level() {
+                return 3;
+            }
+            let a_game_mode = (*app).game_mode;
+            if a_game_mode == GameMode::ChallengeIceLevel {
+                return 6;
+            }
+            if a_game_mode == GameMode::ChallengeBeghouled
+                || a_game_mode == GameMode::ChallengeBeghouledTwist
+            {
+                return 0;
+            }
+            if a_game_mode == GameMode::ChallengeZombiquarium {
+                return 2;
+            }
+            if a_game_mode == GameMode::PuzzleIZombie1
+                || a_game_mode == GameMode::PuzzleIZombie2
+                || a_game_mode == GameMode::PuzzleIZombie3
+                || a_game_mode == GameMode::PuzzleIZombie4
+            {
+                return 3;
+            }
+            if a_game_mode == GameMode::PuzzleIZombie5
+                || a_game_mode == GameMode::PuzzleIZombie6
+                || a_game_mode == GameMode::PuzzleIZombie7
+            {
+                return 4;
+            }
+            if a_game_mode == GameMode::PuzzleIZombie8 {
+                return 6;
+            }
+            if a_game_mode == GameMode::PuzzleIZombie9 {
+                return 8;
+            }
+            if a_game_mode == GameMode::PuzzleIZombieEndless {
+                return 9;
+            }
+
+            // C++: mPlayerInfo->mPurchases[STORE_ITEM_PACKET_UPGRADE] + 6
+            let a_num_seeds = (*app).player_info.as_ref().map_or(0, |pi| {
+                pi.m_purchases
+                    .get(crate::lawn::game_enums::StoreItem::PacketUpgrade as usize)
+                    .copied()
+                    .unwrap_or(0)
+            }) + 6;
+            let a_seeds_available = (*app).get_seeds_available();
+            std::cmp::min(a_num_seeds, a_seeds_available)
+        }
     }
 
     /// 某行是否可以生成僵尸（对应 C++ RowCanHaveZombies）
@@ -4980,9 +5126,18 @@ Spawn: {}
         }
     }
 
-    /// 获取墓碑数量（对应 C++ GetGraveStoneCount）
+    /// 获取墓碑数量（对应 C++ GetGraveStoneCount，Board.cpp:9044）
     pub fn get_grave_stone_count(&self) -> i32 {
-        self.grid_items.iter().filter(|item| item.grid_item_type == GridItemType::Gravestone).count() as i32
+        let mut a_count = 0;
+        for a_grid_item in self.grid_items.iter() {
+            if a_grid_item.dead {
+                continue;
+            }
+            if a_grid_item.grid_item_type == GridItemType::Gravestone {
+                a_count += 1;
+            }
+        }
+        a_count
     }
 
     /// 统计某种硬币的数量（对应 C++ CountCoinByType）
@@ -5196,17 +5351,23 @@ Spawn: {}
         let _ = a_to_die;
     }
 
-    /// 添加一个弹坑（对应 C++ AddACrater）
+    /// 添加一个弹坑（对应 C++ AddACrater，Board.cpp:491）
     pub fn add_crater(&mut self, grid_x: i32, grid_y: i32) {
         let mut crater = GridItem::new();
         crater.grid_item_initialize(GridItemType::Crater, grid_x, grid_y);
+        // C++: aCrater->mRenderOrder = MakeRenderOrder(RENDER_LAYER_GROUND, theGridY, 1);
+        crater.render_order = make_render_order(RENDER_LAYER_GROUND, grid_y, 1);
         self.grid_items.push(crater);
     }
 
-    /// 添加一个墓碑（对应 C++ AddAGraveStone）
+    /// 添加一个墓碑（对应 C++ AddAGraveStone，Board.cpp:501）
     pub fn add_grave_stone(&mut self, grid_x: i32, grid_y: i32) {
         let mut grave = GridItem::new();
         grave.grid_item_initialize(GridItemType::Gravestone, grid_x, grid_y);
+        // C++: aGraveStone->mGridItemCounter = -Rand(50);
+        grave.counter = -crate::framework::common::rand_range(50);
+        // C++: aGraveStone->mRenderOrder = MakeRenderOrder(RENDER_LAYER_GRAVE_STONE, theGridY, 3);
+        grave.render_order = make_render_order(RENDER_LAYER_GRAVE_STONE, grid_y, 3);
         self.grid_items.push(grave);
     }
 
@@ -5492,10 +5653,33 @@ Spawn: {}
         )
     }
 
-    /// 获取光标中的种子类型（对应 C++ GetSeedTypeInCursor）
-    /// 手推车模式需从 ZenGarden 获取（依赖未译，暂返回 cursor_object.seed_type）
+    /// 获取光标中的种子类型（对应 C++ Board::GetSeedTypeInCursor，Board.cpp:2006）
     pub fn get_seed_type_in_cursor(&self) -> SeedType {
-        self.cursor_object.seed_type
+        // C++ 2008-2015: 手推车光标 → 取推车里盆栽的种子
+        if self.cursor_object.cursor_type == CursorType::Wheelbarrow {
+            let a_potted_plant = self.app.and_then(|app| unsafe {
+                match (*app).zen_garden {
+                    Some(zg) => (&*zg).get_potted_plant_in_wheelbarrow(),
+                    None => None,
+                }
+            });
+            if let Some(a_potted_plant) = a_potted_plant {
+                unsafe {
+                    return (*a_potted_plant).seed_type;
+                }
+            }
+        }
+
+        // C++ 2017-2020: 光标里不是植物
+        if !self.is_plant_in_cursor() {
+            return SeedType::None;
+        }
+        // C++ 2021: Imitater 返回被模仿的种子类型
+        if self.cursor_object.seed_type == SeedType::Imitater {
+            self.cursor_object.imitater_type
+        } else {
+            self.cursor_object.seed_type
+        }
     }
 
     /// 从光标刷新种子包（对应 C++ RefreshSeedPacketFromCursor）
@@ -5568,9 +5752,27 @@ Spawn: {}
         self.m_background_type == BackgroundType::Pool
     }
 
-    /// 僵尸是否从右侧走进来（对应 C++ StageHasZombieWalkInFromRight）
+    /// 僵尸是否从右侧走进来（对应 C++ StageHasZombieWalkInFromRight，Board.cpp:8689）
     pub fn stage_has_zombie_walk_in_from_right(&self) -> bool {
-        !self.stage_has_roof() && !self.stage_has_pool()
+        let app = match self.app {
+            Some(a) => a,
+            None => return true,
+        };
+        unsafe {
+            if (*app).is_whack_a_zombie_level()
+                || (*app).game_mode == GameMode::ChallengeIceLevel
+                || (*app).game_mode == GameMode::ChallengeZenGarden
+                || (*app).game_mode == GameMode::ChallengeTreeOfWisdom
+                || (*app).game_mode == GameMode::ChallengeZombiquarium
+                || (*app).is_final_boss_level()
+                || (*app).is_izombie_level()
+                || (*app).is_squirrel_level()
+                || (*app).is_scary_potter_level()
+            {
+                return false;
+            }
+        }
+        true
     }
 
     /// 获取行选择数组中某项的值（对应 C++ 行选择相关）
@@ -6182,41 +6384,113 @@ Spawn: {}
 
     // ========== 阳光/金钱 ==========
 
-    /// 增加阳光/金钱（对应 C++ AddSunMoney）
+    /// 增加阳光/金钱（对应 C++ Board::AddSunMoney，Board.cpp:8458）
     pub fn add_sun_money(&mut self, amount: i32) {
         self.m_sun_count += amount;
-    }
-
-    /// 消耗阳光/金钱（对应 C++ TakeSunMoney）
-    pub fn take_sun_money(&mut self, amount: i32) -> bool {
-        if self.m_sun_count >= amount {
-            self.m_sun_count -= amount;
-            true
-        } else {
-            false
+        self.m_sun_count = self.m_sun_count.min(9990);
+        if self.m_sun_count >= 8000 {
+            crate::lawn::widget::achievements_screen::ReportAchievement::give_achievement(
+                self.app,
+                crate::lawn::widget::achievements_screen::AchievementId::SunnyDays as i32,
+                true,
+            );
         }
     }
 
-    /// 是否可以消耗阳光/金钱（对应 C++ CanTakeSunMoney）
-    pub fn can_take_sun_money(&self, amount: i32) -> bool {
-        self.m_sun_count >= amount
+    /// 消耗阳光/金钱（对应 C++ Board::TakeSunMoney，Board.cpp:8496）
+    pub fn take_sun_money(&mut self, amount: i32) -> bool {
+        if self.can_take_sun_money(amount) {
+            self.m_sun_count -= amount;
+            return true;
+        }
+
+        // C++: mApp->PlaySample(Sexy::SOUND_BUZZER); mOutOfMoneyCounter = 70;
+        if let Some(app) = self.app {
+            unsafe {
+                (*app).play_sample(crate::todlib::tod_foley::SOUND_BUZZER);
+            }
+        }
+        self.m_out_of_money_counter = 70;
+        false
     }
 
-    /// 暂停/恢复（对应 C++ Pause）
+    /// 是否可以消耗阳光/金钱（对应 C++ Board::CanTakeSunMoney，Board.cpp:8509）
+    pub fn can_take_sun_money(&self, amount: i32) -> bool {
+        amount <= self.m_sun_count + self.count_sun_being_collected()
+    }
+
+    /// 暂停/恢复（对应 C++ Board::Pause，Board.cpp:4672）
     pub fn pause(&mut self, pause: bool) {
+        // C++: if (mPaused == thePause) return;
+        if self.m_paused == pause {
+            return;
+        }
+
         self.m_paused = pause;
+
+        // C++ 4678-4681: 暂停且玩家持有金币时弹出金币箱
+        let a_has_coins = self.app.map_or(false, |app| unsafe {
+            (*app)
+                .player_info
+                .as_ref()
+                .map_or(false, |pi| pi.m_coins > 0)
+        });
+        if pause && a_has_coins {
+            self.show_coin_bank(0);
+        }
+
+        // C++ 4683-4687: 非 LEVEL_INTRO 场景时暂停音效与音乐
+        let a_is_level_intro = self.app.map_or(false, |app| unsafe {
+            (*app).game_scene == crate::lawn::lawn_app::GameScenes::LevelIntro
+        });
+        if !pause || !a_is_level_intro {
+            // [TRANSLATION_NOTE]: C++ 此处还调用 mSoundSystem->GamePause(thePause)；
+            // Rust 侧 SoundSystem 未暴露该 API（board.rs 其它位置也仅存注释）。
+            if let Some(app) = self.app {
+                unsafe {
+                    if let Some(a_music) = (*app).music.as_mut() {
+                        a_music.game_music_pause(pause);
+                    }
+                }
+            }
+        }
+
+        // C++ 4689-4692: 暂停且当前关卡需要存档时保存
+        if pause && self.need_save_game() {
+            self.try_to_save_game();
+        }
     }
 
     // ========== 统计 ==========
 
-    /// 统计未触发的割草机数量（对应 C++ CountUntriggerLawnMowers）
+    /// 统计未触发的割草机数量（对应 C++ CountUntriggerLawnMowers，Board.cpp:329）
     pub fn count_lawn_mowers_remaining(&self) -> i32 {
-        self.lawn_mowers.iter().filter(|m| !m.dead && !m.mowing).count() as i32
+        let mut a_count = 0;
+        for a_lawn_mower in self.lawn_mowers.iter() {
+            if a_lawn_mower.dead {
+                continue;
+            }
+            if a_lawn_mower.mower_state != LawnMowerState::Triggered
+                && a_lawn_mower.mower_state != LawnMowerState::Squished
+            {
+                a_count += 1;
+            }
+        }
+        a_count
     }
 
-    /// 统计正在被收集的硬币数量（对应 C++ CountCoinsBeingCollected）
+    /// 统计正在被收集的硬币金额（对应 C++ CountCoinsBeingCollected，Board.cpp:8481）
     pub fn count_coins_being_collected(&self) -> i32 {
-        self.coins.iter().filter(|c| !c.dead && c.lifetime > 0 && c.lifetime < 600).count() as i32
+        let mut a_count = 0;
+        for a_coin in self.coins.iter() {
+            if a_coin.dead {
+                continue;
+            }
+            if a_coin.is_being_collected && a_coin.is_money() {
+                a_count += crate::lawn::coin::Coin::get_coin_value(a_coin.coin_type);
+            }
+        }
+        a_count
     }
 
     // ========== 模式设置 ==========
@@ -6233,9 +6507,31 @@ Spawn: {}
         if n <= 6 { 0 } else if n == 7 { 60 } else if n == 8 { 76 } else if n == 9 { 112 } else { 153 }
     }
 
-    /// 获取迷雾左边界列号（对应 C++ LeftFogColumn）
+    /// 获取迷雾左边界列号（对应 C++ LeftFogColumn，Board.cpp:8718）
     pub fn left_fog_column(&self) -> i32 {
-        5
+        let app = match self.app {
+            Some(a) => a,
+            None => return 5,
+        };
+        unsafe {
+            if (*app).game_mode == GameMode::ChallengeAirRaid {
+                return 6;
+            }
+            if !(*app).is_adventure_mode() {
+                return 5;
+            }
+        }
+        if self.level == 31 {
+            return 6;
+        }
+        if self.level >= 32 && self.level <= 36 {
+            return 5;
+        }
+        if self.level >= 37 && self.level <= 40 {
+            return 4;
+        }
+        // C++: PVZP_ASSERT(false); unreachable();
+        unreachable!()
     }
 
     /// 调整种植 Y 坐标（对应 C++ OffsetYForPlanting）
@@ -6255,11 +6551,40 @@ Spawn: {}
         self.pixel_to_grid_x(x, adjusted_y)
     }
 
-    /// 种植时像素到网格 Y（对应 C++ PlantingPixelToGridY）
+    /// 种植时像素到网格 Y（对应 C++ PlantingPixelToGridY，Board.cpp:8769）
     pub fn planting_pixel_to_grid_y(&self, x: i32, y: i32, seed_type: SeedType) -> i32 {
         let mut adjusted_y = y;
         self.offset_y_for_planting(&mut adjusted_y, seed_type);
-        self.pixel_to_grid_y(x, adjusted_y)
+
+        let a_grid_y = self.pixel_to_grid_y(x, adjusted_y);
+        if seed_type == SeedType::InstantCoffee {
+            let a_grid_x = self.pixel_to_grid_x(x, adjusted_y);
+
+            // C++: 优先上/下格已睡眠植物（TOPPLANT_ONLY_NORMAL_POSITION）
+            let a_plant = self.get_top_plant_at(a_grid_x, a_grid_y, PlantPriority::OnlyNormalPosition);
+            if a_plant.map_or(false, |p| p.is_asleep) {
+                return a_grid_y;
+            }
+
+            let a_grid_y_down = self.pixel_to_grid_y(x, adjusted_y + 30);
+            if a_grid_y_down != a_grid_y {
+                let a_plant_down =
+                    self.get_top_plant_at(a_grid_x, a_grid_y_down, PlantPriority::OnlyNormalPosition);
+                if a_plant_down.map_or(false, |p| p.is_asleep) {
+                    return a_grid_y_down;
+                }
+            }
+
+            let a_grid_y_up = self.pixel_to_grid_y(x, adjusted_y - 50);
+            if a_grid_y_up != a_grid_y {
+                let a_plant_up =
+                    self.get_top_plant_at(a_grid_x, a_grid_y_up, PlantPriority::OnlyNormalPosition);
+                if a_plant_up.map_or(false, |p| p.is_asleep) {
+                    return a_grid_y_up;
+                }
+            }
+        }
+        a_grid_y
     }
 
     /// 种植需求检查（对应 C++ PlantingRequirementsMet）
@@ -6312,13 +6637,18 @@ Spawn: {}
         cost
     }
 
-    /// 在某行查找割草机（对应 C++ FindLawnMowerInRow）
-    pub fn find_lawn_mower_in_row(&self, _row: i32) -> Option<&LawnMower> {
-        self.lawn_mowers.iter().find(|m| !m.dead && !m.mowing)
+    /// 在某行查找割草机（对应 C++ FindLawnMowerInRow，Board.cpp:9460）
+    pub fn find_lawn_mower_in_row(&self, the_row: i32) -> Option<&LawnMower> {
+        // C++: if (aLawnMower->mDead) continue; if (aLawnMower->mRow == theRow) return aLawnMower;
+        self.lawn_mowers
+            .iter()
+            .find(|m| !m.dead && m.base.row == the_row)
     }
 
-    pub fn find_lawn_mower_in_row_mut(&mut self, _row: i32) -> Option<&mut LawnMower> {
-        self.lawn_mowers.iter_mut().find(|m| !m.dead && !m.mowing)
+    pub fn find_lawn_mower_in_row_mut(&mut self, the_row: i32) -> Option<&mut LawnMower> {
+        self.lawn_mowers
+            .iter_mut()
+            .find(|m| !m.dead && m.base.row == the_row)
     }
 
     // ========== 坐标转换（补充） ==========
@@ -6666,103 +6996,385 @@ Spawn: {}
         self.update_cursor();
     }
 
-    /// 更新光标形状（对应 C++ UpdateCursor L3008，简化版）
+    /// 更新光标形状（对应 C++ Board::UpdateCursor，Board.cpp:2931）
     pub fn update_cursor(&mut self) {
-        if self.m_paused || self.m_board_fade_out_counter >= 0 {
+        // C++ 2933-2934: 鼠标坐标以棋盘为原点
+        let (a_mouse_x, a_mouse_y) = match self.app {
+            Some(app) => unsafe {
+                match (*app).base.widget_manager {
+                    Some(wm) => (
+                        (*wm).last_mouse_x - self.m_x,
+                        (*wm).last_mouse_y - self.m_y,
+                    ),
+                    None => (self.m_prev_mouse_x, self.m_prev_mouse_y),
+                }
+            },
+            None => (self.m_prev_mouse_x, self.m_prev_mouse_y),
+        };
+        let mut a_show_finger = false;
+        let a_show_drag = false;
+        let mut a_hide_cursor = false;
+
+        // C++ 2939-2940: 鼠标落在选卡界面内 → 保持原光标
+        let a_seed_chooser_contains = self.app.map_or(false, |app| unsafe {
+            match (*app).seed_chooser_screen_widget {
+                Some(w) => (*w).contains(a_mouse_x + self.m_x, a_mouse_y + self.m_y),
+                None => false,
+            }
+        });
+        if a_seed_chooser_contains {
             return;
         }
 
-        // 命中检测决定光标形状（简化版）
+        // C++ 2942-2943: 有对话框打开 → 保持原光标
+        let a_dialog_count = self.app.map_or(0, |app| unsafe { (*app).get_dialog_count() });
+        if a_dialog_count > 0 {
+            return;
+        }
+
+        // C++ 2945-2949: 暂停 / 淡出 / 时间停止 / 僵尸获胜 → 普通指针
+        let a_zombies_won = self.app.map_or(false, |app| unsafe {
+            (*app).game_scene == crate::lawn::lawn_app::GameScenes::ZombiesWon
+        });
+        if self.m_paused
+            || self.m_board_fade_out_counter >= 0
+            || self.m_time_stop_counter > 0
+            || a_zombies_won
+        {
+            if let Some(app) = self.app {
+                unsafe {
+                    (*app).base.set_cursor(crate::lawn::game_enums::CURSOR_POINTER);
+                }
+            }
+            return;
+        }
+
         let mut hit_result = HitResult {
             object: None,
             object_type: GameObjectType::None,
         };
-        let mx = self.m_prev_mouse_x;
-        let my = self.m_prev_mouse_y;
-        self.mouse_hit_test(mx, my, &mut hit_result);
+        self.mouse_hit_test(a_mouse_x, a_mouse_y, &mut hit_result);
+
+        // C++ 2953-3008: 命中类型决定手指/隐藏光标
+        match hit_result.object_type {
+            GameObjectType::MenuButton
+            | GameObjectType::StoreButton
+            | GameObjectType::Shovel
+            | GameObjectType::WateringCan
+            | GameObjectType::Fertilizer
+            | GameObjectType::BugSpray
+            | GameObjectType::Phonograph
+            | GameObjectType::Chocolate
+            | GameObjectType::Glove
+            | GameObjectType::MoneySign
+            | GameObjectType::NextGarden
+            | GameObjectType::Wheelbarrow
+            | GameObjectType::SlotMachineHandle
+            | GameObjectType::TreeFood
+            | GameObjectType::Stinky
+            | GameObjectType::TreeOfWisdom
+            | GameObjectType::Coin
+            | GameObjectType::Projectile => {
+                a_show_finger = true;
+            }
+            GameObjectType::SeedPacket => {
+                // [TRANSLATION_NOTE]: C++ 用 aHitResult.mObject 裸指针直接调 CanPickUp()；
+                // Rust 的 HitResult.object 是索引。当前 mouse_hit_test 尚未填 SeedPacket 分支，
+                // 此处按其应有的语义（seed_bank 索引）实现，待 mouse_hit_test 补全后自然生效。
+                a_show_finger = hit_result
+                    .object
+                    .and_then(|idx| self.seed_bank.get(idx))
+                    .map_or(false, |a_seed_packet| a_seed_packet.can_pick_up());
+            }
+            GameObjectType::ScaryPot => {
+                if self.cursor_object.cursor_type == CursorType::Normal {
+                    a_show_finger = true;
+                } else if self.cursor_object.cursor_type == CursorType::Hammer {
+                    a_hide_cursor = true;
+                }
+            }
+            GameObjectType::Plant => {
+                let a_beghouled = self.app.map_or(false, |app| unsafe {
+                    let a_mode = (*app).game_mode;
+                    a_mode == crate::lawn::game_enums::GameMode::ChallengeBeghouled
+                        || a_mode == crate::lawn::game_enums::GameMode::ChallengeBeghouledTwist
+                });
+                if a_beghouled && !self.has_level_award_dropped() {
+                    a_show_finger = true;
+                }
+                // C++: ((Plant*)aHitResult.mObject)->mState == STATE_COBCANNON_READY
+                let a_cobcannon_ready = hit_result
+                    .object
+                    .and_then(|idx| self.plants.get(idx))
+                    .map_or(false, |a_plant| {
+                        a_plant.state == crate::lawn::game_enums::PlantState::CobcannonReady
+                    });
+                if a_cobcannon_ready {
+                    a_show_finger = true;
+                }
+            }
+            _ => {
+                if self.cursor_object.cursor_type == CursorType::Hammer {
+                    a_hide_cursor = true;
+                }
+            }
+        }
+
+        // C++ 3010-3025: 决定最终光标形状
+        let a_beghouled_capture = self
+            .challenge
+            .as_ref()
+            .map_or(false, |c| c.beghouled_mouse_capture != 0);
+        if a_beghouled_capture || a_show_drag {
+            if let Some(app) = self.app {
+                unsafe {
+                    (*app).base.set_cursor(crate::lawn::game_enums::CURSOR_DRAGGING);
+                }
+            }
+        } else if a_show_finger {
+            if let Some(app) = self.app {
+                unsafe {
+                    (*app).base.set_cursor(crate::lawn::game_enums::CURSOR_HAND);
+                }
+            }
+        } else if a_hide_cursor {
+            if let Some(app) = self.app {
+                unsafe {
+                    (*app).base.set_cursor(crate::lawn::game_enums::CURSOR_NONE);
+                }
+            }
+        } else if let Some(app) = self.app {
+            unsafe {
+                (*app).base.set_cursor(crate::lawn::game_enums::CURSOR_POINTER);
+            }
+        }
 
         // C++: UpdateMousePosition 中按光标类型高亮植物（金水壶/铲子等工具）
-        self.highlight_plants_for_mouse(mx, my);
+        self.highlight_plants_for_mouse(a_mouse_x, a_mouse_y);
     }
 
-    /// 命中检测（对应 C++ MouseHitTest L4225 完整版）
-    /// 依次检测：菜单按钮→商店按钮→种子槽→铲子→硬币→Zen花园→智慧树→工具→植物→陶罐→老虎机
+    /// 命中检测（对应 C++ Board::MouseHitTest，Board.cpp:4132）
+    /// 依次检测：淡出→菜单按钮→商店按钮→种子槽→铲子→硬币→Zen花园→智慧树→工具→植物→陶罐→老虎机
     pub fn mouse_hit_test(&self, x: i32, y: i32, result: &mut HitResult) {
         result.object = None;
         result.object_type = GameObjectType::None;
 
-        // 关卡淡出或 Dave 说话时忽略
+        // C++ 4134-4139: 关卡淡出或 ScaryPotter Dave 说话时忽略
         if self.m_board_fade_out_counter >= 0 || self.is_scary_potter_dave_talking() {
             return;
         }
 
-        // 菜单按钮
-        if self.can_interact_with_board_buttons() && self.menu_button.is_some() {
-            // 简化：按钮 IsMouseOver 暂略
-        }
+        let a_can_interact = self.can_interact_with_board_buttons();
 
-        // 铲子按钮
-        let shovel_rect = self.get_shovel_button_rect();
-        if self.m_show_shovel && shovel_rect.contains(x, y) && self.can_interact_with_board_buttons() {
-            // GameObjectType::Shovel 在 Rust 枚举中未定义，暂跳过
+        // C++ 4141-4145: 菜单按钮
+        let a_menu_over = self.menu_button.map_or(false, |b| unsafe { (*b).is_over });
+        if a_menu_over && a_can_interact {
+            result.object_type = GameObjectType::MenuButton;
+            return;
         }
-
-        // 硬币检测（仅 Normal 和 Hammer 光标模式）
-        let ct = self.cursor_object.cursor_type;
-        if ct == CursorType::Normal || ct == CursorType::Hammer {
-            let mut top_coin: Option<usize> = None;
-            for (i, coin) in self.coins.iter().enumerate() {
-                if coin.mouse_hit_test(x, y) {
-                    match top_coin {
-                        None => top_coin = Some(i),
-                        Some(old) => {
-                            // 取渲染顺序较高的硬币（C++ 中通过 mRenderOrder 比较）
-                            if i > old { top_coin = Some(i); }
-                        }
-                    }
-                }
-            }
-            if let Some(idx) = top_coin {
-                result.object = Some(idx);
-                result.object_type = GameObjectType::Coin;
-                return;
-            }
-        }
-
-        // 植物命中检测
-        if self.mouse_hit_test_plant(x, y, result) {
+        // C++ 4146-4150: 商店按钮
+        let a_store_over = self.store_button.map_or(false, |b| unsafe { (*b).is_over });
+        if a_store_over && a_can_interact {
+            result.object_type = GameObjectType::StoreButton;
             return;
         }
 
-        // 可怕陶罐关卡
-        let is_scary = self.app.map_or(false, |app| unsafe { (*app).is_scary_potter_level() });
-        if is_scary && ct == CursorType::Normal {
-            let gx = self.pixel_to_grid_x(x, y);
-            let gy = self.pixel_to_grid_y(x, y);
-            let grid_item = self.grid_items.iter().find(|gi| {
-                gi.grid_item_type == GridItemType::ScaryPot
-                    && gi.grid_x == gx && gi.grid_y == gy
-            });
-            if grid_item.is_some() {
-                // result.object 设置为 grid_item 索引
-                // result.object_type = GameObjectType::ScaryPot;  // 暂缺该变体
+        // C++ 4152-4159: 种子银行命中（仅 Normal / CobcannonTarget / Hammer 光标接受）
+        let a_seed_bank_width = match self.app {
+            Some(app) => {
+                let a_img = crate::lawn::board::get_overlay_image(unsafe { &*app }, "IMAGE_SEEDBANK");
+                if a_img.is_null() {
+                    456
+                } else {
+                    unsafe { (*a_img).width }
+                }
+            }
+            None => 456,
+        };
+        let a_seed_bank_total_width = self.get_seed_bank_extra_width() + a_seed_bank_width;
+        if x - self.m_seed_bank_x <= a_seed_bank_total_width - 5 && !self.seed_bank.is_empty() {
+            let a_ct = self.cursor_object.cursor_type;
+            let a_accept = a_ct == CursorType::Normal
+                || a_ct == CursorType::CobcannonTarget
+                || a_ct == CursorType::Hammer;
+            if a_accept {
+                for (i, a_seed_packet) in self.seed_bank.iter().enumerate() {
+                    let mut a_packet_hit = HitResult {
+                        object: None,
+                        object_type: GameObjectType::None,
+                    };
+                    if a_seed_packet.mouse_hit_test(x, y, &mut a_packet_hit) {
+                        a_packet_hit.object = Some(i);
+                        *result = a_packet_hit;
+                        return;
+                    }
+                }
+            }
+        }
+
+        // C++ 4160-4164: 铲子按钮
+        let a_shovel_rect = self.get_shovel_button_rect();
+        if self.m_show_shovel && a_shovel_rect.contains(x, y) && a_can_interact {
+            result.object_type = GameObjectType::Shovel;
+            return;
+        }
+
+        // C++ 4166-4189: 硬币（仅 Normal / Hammer 光标）——按 render_order 取最上层
+        let ct = self.cursor_object.cursor_type;
+        if ct == CursorType::Normal || ct == CursorType::Hammer {
+            let mut a_top_coin: Option<usize> = None;
+            for (i, a_coin) in self.coins.iter().enumerate() {
+                if a_coin.dead {
+                    continue;
+                }
+                if a_coin.mouse_hit_test(x, y) {
+                    // C++: if (aTopCoin == nullptr || aCoin->mRenderOrder >= aTopCoin->mRenderOrder)
+                    let a_take = match a_top_coin {
+                        None => true,
+                        Some(old) => {
+                            a_coin.base.render_order >= self.coins[old].base.render_order
+                        }
+                    };
+                    if a_take {
+                        result.object_type = GameObjectType::Coin;
+                        result.object = Some(i);
+                        a_top_coin = Some(i);
+                    }
+                }
+            }
+            if a_top_coin.is_some() {
                 return;
             }
         }
 
-        // 老虎机关卡
-        let is_slot = self.app.map_or(false, |app| unsafe { (*app).is_slot_machine_level() });
-        if is_slot {
-            if let Some(ref ch) = self.challenge {
-                let handle_rect = ch.slot_machine_get_handle_rect();
-                if handle_rect.contains(x, y) && ch.challenge_state == ChallengeState::Normal {
-                    // result.object_type = GameObjectType::SlotMachineHandle;  // 暂缺该变体
+        // C++ 4191-4213: Zen Garden 的臭臭花（巧克力光标且未嗨 / 普通光标且睡着）
+        let a_is_zen = self.app.map_or(false, |app| unsafe {
+            (*app).game_mode == GameMode::ChallengeZenGarden
+        });
+        if a_is_zen {
+            let (a_can_click, a_stinky_rect) = self.app.map_or((false, None), |app| unsafe {
+                match (*app).zen_garden {
+                    Some(zg) => {
+                        let a_ct = self.cursor_object.cursor_type;
+                        let mut a_can_click = false;
+                        if a_ct == CursorType::Chocolate && !(&*zg).is_stinky_high_on_chocolate() {
+                            a_can_click = true;
+                        } else if a_ct == CursorType::Normal && (&*zg).is_stinky_sleeping() {
+                            a_can_click = true;
+                        }
+                        let a_rect = (&*zg).get_stinky().map(|s| {
+                            Rect::new((*s).pos_x as i32 - 6, (*s).pos_y as i32 - 10, 84, 90)
+                        });
+                        (a_can_click, a_rect)
+                    }
+                    None => (false, None),
+                }
+            });
+            if a_can_click {
+                if let Some(a_rect) = a_stinky_rect {
+                    if a_rect.contains(x, y) {
+                        result.object_type = GameObjectType::Stinky;
+                        return;
+                    }
+                }
+            }
+        }
+
+        // C++ 4214-4220: 智慧树（树肥光标）
+        let a_is_tree = self.app.map_or(false, |app| unsafe {
+            (*app).game_mode == GameMode::ChallengeTreeOfWisdom
+        });
+        if a_is_tree && self.cursor_object.cursor_type == CursorType::TreeFood {
+            if let Some(a_challenge) = self.challenge.as_ref() {
+                if a_challenge.tree_of_wisdom_hit_test(x, y, result) != 0 {
                     return;
                 }
             }
         }
 
-        // 未命中任何对象
+        // C++ 4221-4245: Zen / 智慧树的底部工具按钮（WATERING_CAN..NEXT_GARDEN）
+        if (a_is_zen || a_is_tree) && a_can_interact {
+            for i in GameObjectType::WateringCan as i32..=GameObjectType::NextGarden as i32 {
+                let a_tool: GameObjectType = unsafe { std::mem::transmute(i) };
+                // C++: CanUseGameObject(aTool) && (aTool != TREE_FOOD || TreeOfWisdomCanFeed())
+                let a_can_use = self.can_use_game_object(a_tool)
+                    && (a_tool != GameObjectType::TreeFood
+                        || self
+                            .challenge
+                            .as_ref()
+                            .map_or(false, |c| c.tree_of_wisdom_can_feed() != 0));
+                if a_can_use {
+                    let a_button_rect = if a_tool == GameObjectType::NextGarden {
+                        let mut a_rect = self.get_shovel_button_rect();
+                        a_rect.x = 564;
+                        a_rect
+                    } else {
+                        self.get_zen_button_rect(a_tool)
+                    };
+                    if a_button_rect.contains(x, y) {
+                        result.object_type = a_tool;
+                        return;
+                    }
+                }
+            }
+        }
+
+        // C++ 4247-4248: 植物命中检测
+        if self.mouse_hit_test_plant(x, y, result) {
+            return;
+        }
+
+        // C++ 4250-4264: 恐怖陶罐
+        let a_is_scary = self
+            .app
+            .map_or(false, |app| unsafe { (*app).is_scary_potter_level() });
+        let a_scene_playing = self.app.map_or(false, |app| unsafe {
+            (*app).game_scene == crate::lawn::lawn_app::GameScenes::Playing
+        });
+        let a_no_blocking_dialog = self.app.map_or(false, |app| unsafe {
+            (*app).game_over_dialog.is_none() && (*app).continue_dialog.is_none()
+        });
+        let a_not_malleting = self
+            .challenge
+            .as_ref()
+            .map_or(true, |c| {
+                c.challenge_state != ChallengeState::ScaryPotterMaletting
+            });
+        if a_is_scary && ct == CursorType::Normal && a_not_malleting && a_scene_playing
+            && a_no_blocking_dialog
+        {
+            let gx = self.pixel_to_grid_x(x, y);
+            let gy = self.pixel_to_grid_y(x, y);
+            let a_pot_index = self.grid_items.iter().position(|gi| {
+                gi.grid_item_type == GridItemType::ScaryPot
+                    && gi.grid_x == gx
+                    && gi.grid_y == gy
+            });
+            if let Some(idx) = a_pot_index {
+                result.object = Some(idx);
+                result.object_type = GameObjectType::ScaryPot;
+                return;
+            }
+        }
+
+        // C++ 4266-4274: 老虎机手柄
+        let is_slot = self
+            .app
+            .map_or(false, |app| unsafe { (*app).is_slot_machine_level() });
+        if is_slot {
+            if let Some(ref ch) = self.challenge {
+                let handle_rect = ch.slot_machine_get_handle_rect();
+                if handle_rect.contains(x, y)
+                    && ch.challenge_state == ChallengeState::Normal
+                    && !self.has_level_award_dropped()
+                {
+                    result.object_type = GameObjectType::SlotMachineHandle;
+                    return;
+                }
+            }
+        }
+
+        // C++ 4276-4278: 未命中任何对象
         result.object = None;
         result.object_type = GameObjectType::None;
     }
@@ -6982,67 +7594,460 @@ Spawn: {}
         }
     }
 
-    /// 手持植物点击（对应 C++ MouseDownWithPlant L3689 完整版）
-    /// 验证种植条件、扣除阳光、执行种植、更新教程状态
+    /// 手持植物点击（对应 C++ Board::MouseDownWithPlant，Board.cpp:3608）
     pub fn mouse_down_with_plant(&mut self, x: i32, y: i32, click_count: i32) {
-        // 右击取消（对应 C++ Board::MouseDownWithPlant: RefreshSeedPacketFromCursor(); return;）
+        // C++ 3610-3615: 右击 → 放回种子包 + 放下音效
         if click_count < 0 {
             self.refresh_seed_packet_from_cursor();
-            return;
-        }
-
-        // 从光标获取种子类型
-        let seed_type = self.cursor_object.seed_type;
-        if seed_type == SeedType::None {
-            return;
-        }
-
-        // 计算种植网格位置
-        let grid_x = self.planting_pixel_to_grid_x(x, y, seed_type);
-        let grid_y = self.planting_pixel_to_grid_y(x, y, seed_type);
-
-        // 不在场地内 → 放下卡牌
-        if grid_x < 0 || grid_x >= MAX_GRID_SIZE_X as i32 || grid_y < 0 || grid_y > MAX_GRID_SIZE_Y as i32 {
-            return;
-        }
-
-        // 检查能否种植
-        let reason = self.can_plant_at(grid_x, grid_y, seed_type);
-        if reason != PlantingReason::Ok {
-            // 根据 PlantingReason 显示提示
-            match reason {
-                PlantingReason::OnlyOnGraves => {
-                    self.display_advice("[ADVICE_GRAVEBUSTERS_ON_GRAVES]", 2, AdviceType::PlantGravebustersOnGraves);
-                }
-                PlantingReason::NotOnWater | PlantingReason::OnlyInPool => {
-                    self.display_advice("[ADVICE_PLANT_NOT_ON_WATER]", 2, AdviceType::PlantNotOnWater);
-                }
-                PlantingReason::NeedsPot => {
-                    self.display_advice("[ADVICE_PLANT_NEED_POT2]", 2, AdviceType::CantPlantThere);
-                }
-                PlantingReason::NotPassedLine => {
-                    self.display_advice("[ADVICE_NOT_PASSED_LINE]", 2, AdviceType::CantPlantThere);
-                }
-                PlantingReason::NotOnGrave => {
-                    self.display_advice("[ADVICE_PLANT_NOT_ON_GRAVE]", 2, AdviceType::CantPlantThere);
-                }
-                PlantingReason::NotOnCrater => {
-                    self.display_advice("[ADVICE_PLANT_NOT_ON_CRATER]", 2, AdviceType::CantPlantThere);
-                }
-                _ => {
-                    self.display_advice("[ADVICE_CANT_PLANT_THERE]", 2, AdviceType::CantPlantThere);
+            if let Some(app) = self.app {
+                unsafe {
+                    (*app).play_foley(crate::todlib::tod_foley::FoleyType::Drop as i32);
                 }
             }
             return;
         }
 
-        // 从种子槽种植时扣除阳光
-        self.take_sun_money(self.get_current_plant_cost(seed_type, SeedType::None));
+        // C++ 3617-3621: I,Zombie 关卡交由 Challenge 处理
+        let a_is_izombie = self.app.map_or(false, |app| unsafe { (*app).is_izombie_level() });
+        if a_is_izombie {
+            if let Some(a_challenge) = self.challenge.as_mut() {
+                a_challenge.i_zombie_mouse_down_with_zombie(x, y, click_count);
+            }
+            return;
+        }
 
-        // 执行种植
-        self.add_plant(grid_x, grid_y, seed_type, self.cursor_object.imitater_type);
+        // C++ 3623-3625
+        let a_planting_seed_type = self.get_seed_type_in_cursor();
+        let a_grid_x = self.planting_pixel_to_grid_x(x, y, a_planting_seed_type);
+        let a_grid_y = self.planting_pixel_to_grid_y(x, y, a_planting_seed_type);
 
-        // 对应 C++ Board.cpp:3915-3963: 种植后教程状态推进
+        // C++ 3627-3632: 越界 → 放回种子包
+        if a_grid_x < 0
+            || a_grid_x >= MAX_GRID_SIZE_X as i32
+            || a_grid_y < 0
+            || a_grid_y > MAX_GRID_SIZE_Y as i32
+        {
+            self.refresh_seed_packet_from_cursor();
+            if let Some(app) = self.app {
+                unsafe {
+                    (*app).play_foley(crate::todlib::tod_foley::FoleyType::Drop as i32);
+                }
+            }
+            return;
+        }
+
+        // C++ 3634-3771: 种植条件不满足时的提示链
+        let a_reason = self.can_plant_at(a_grid_x, a_grid_y, a_planting_seed_type);
+        if a_reason != PlantingReason::Ok {
+            let a_hint_fast = crate::lawn::game_enums::MessageStyle::HintFast as i32;
+            if a_reason == PlantingReason::OnlyOnGraves {
+                self.display_advice(
+                    "[ADVICE_GRAVEBUSTERS_ON_GRAVES]",
+                    a_hint_fast,
+                    AdviceType::PlantGravebustersOnGraves,
+                );
+            } else if a_planting_seed_type == SeedType::Lilypad {
+                if a_reason == PlantingReason::OnlyInPool {
+                    self.display_advice(
+                        "[ADVICE_LILYPAD_ON_WATER]",
+                        a_hint_fast,
+                        AdviceType::PlantLilypadOnWater,
+                    );
+                }
+            } else if a_planting_seed_type == SeedType::Tanglekelp {
+                if a_reason == PlantingReason::OnlyInPool {
+                    self.display_advice(
+                        "[ADVICE_TANGLEKELP_ON_WATER]",
+                        a_hint_fast,
+                        AdviceType::PlantTanglekelpOnWater,
+                    );
+                }
+            } else if a_planting_seed_type == SeedType::Seashroom {
+                if a_reason == PlantingReason::OnlyInPool {
+                    self.display_advice(
+                        "[ADVICE_SEASHROOM_ON_WATER]",
+                        a_hint_fast,
+                        AdviceType::PlantSeashroomOnWater,
+                    );
+                }
+            } else if a_reason == PlantingReason::OnlyOnGround {
+                self.display_advice(
+                    "[ADVICE_POTATO_MINE_ON_LILY]",
+                    a_hint_fast,
+                    AdviceType::PlantPotatoeMineOnLily,
+                );
+            } else if a_reason == PlantingReason::NotPassedLine {
+                self.display_advice(
+                    "[ADVICE_NOT_PASSED_LINE]",
+                    a_hint_fast,
+                    AdviceType::PlantNotPassedLine,
+                );
+            } else if a_reason == PlantingReason::NeedsUpgrade {
+                // C++ 3672-3707: 七种升级种子 + 玉米炮各自的「只能种在 X 上」提示
+                match a_planting_seed_type {
+                    SeedType::Gatlingpea => self.display_advice(
+                        "[ADVICE_ONLY_ON_REPEATERS]",
+                        a_hint_fast,
+                        AdviceType::PlantOnlyOnRepeaters,
+                    ),
+                    SeedType::Twinsunflower => self.display_advice(
+                        "[ADVICE_ONLY_ON_SUNFLOWER]",
+                        a_hint_fast,
+                        AdviceType::PlantOnlyOnSunflower,
+                    ),
+                    SeedType::Gloomshroom => self.display_advice(
+                        "[ADVICE_ONLY_ON_FUMESHROOM]",
+                        a_hint_fast,
+                        AdviceType::PlantOnlyOnFumeshroom,
+                    ),
+                    SeedType::Cattail => self.display_advice(
+                        "[ADVICE_ONLY_ON_LILYPAD]",
+                        a_hint_fast,
+                        AdviceType::PlantOnlyOnLilypad,
+                    ),
+                    SeedType::Wintermelon => self.display_advice(
+                        "[ADVICE_ONLY_ON_MELONPULT]",
+                        a_hint_fast,
+                        AdviceType::PlantOnlyOnMelonpult,
+                    ),
+                    SeedType::GoldMagnet => self.display_advice(
+                        "[ADVICE_ONLY_ON_MAGNETSHROOM]",
+                        a_hint_fast,
+                        AdviceType::PlantOnlyOnMagnetshroom,
+                    ),
+                    SeedType::Spikerock => self.display_advice(
+                        "[ADVICE_ONLY_ON_SPIKEWEED]",
+                        a_hint_fast,
+                        AdviceType::PlantOnlyOnSpikeweed,
+                    ),
+                    SeedType::Cobcannon => self.display_advice(
+                        "[ADVICE_ONLY_ON_KERNELPULT]",
+                        a_hint_fast,
+                        AdviceType::PlantOnlyOnKernelpult,
+                    ),
+                    _ => {}
+                }
+            } else if a_reason == PlantingReason::NotOnArt {
+                // C++ 3709-3714: 把 {SEED} 换成该格应有的种子名
+                // [TRANSLATION_NOTE]: C++ 用 PvzpReplaceString 做简单字符串替换，Rust 用 str::replace 等价实现。
+                let a_seed_name = match self.challenge.as_ref() {
+                    Some(a_challenge) => crate::lawn::plant::Plant::get_name_string(
+                        a_challenge.get_art_challenge_seed(a_grid_x, a_grid_y),
+                        SeedType::None,
+                    ),
+                    None => String::new(),
+                };
+                let a_message = "[ADVICE_WRONG_ART_TYPE]".replace("{SEED}", &a_seed_name);
+                self.display_advice(&a_message, a_hint_fast, AdviceType::PlantWrongArtType);
+            } else if a_reason == PlantingReason::NeedsPot {
+                // C++ 3715-3725: 首次冒险第 41 关用另一套文案
+                let a_first_time_level_41 = self
+                    .app
+                    .map_or(false, |app| unsafe { (*app).is_first_time_adventure_mode() })
+                    && self.level == 41;
+                if a_first_time_level_41 {
+                    self.display_advice(
+                        "[ADVICE_PLANT_NEED_POT1]",
+                        a_hint_fast,
+                        AdviceType::PlantNeedPot,
+                    );
+                } else {
+                    self.display_advice(
+                        "[ADVICE_PLANT_NEED_POT2]",
+                        a_hint_fast,
+                        AdviceType::PlantNeedPot,
+                    );
+                }
+            } else if a_reason == PlantingReason::NotOnGrave {
+                self.display_advice(
+                    "[ADVICE_PLANT_NOT_ON_GRAVE]",
+                    a_hint_fast,
+                    AdviceType::PlantNotOnGrave,
+                );
+            } else if a_reason == PlantingReason::NotOnCrater {
+                if self.is_pool_square(a_grid_x, a_grid_y) {
+                    self.display_advice(
+                        "[ADVICE_CANT_PLANT_THERE]",
+                        a_hint_fast,
+                        AdviceType::CantPlantThere,
+                    );
+                } else {
+                    self.display_advice(
+                        "[ADVICE_PLANT_NOT_ON_CRATER]",
+                        a_hint_fast,
+                        AdviceType::PlantNotOnCrater,
+                    );
+                }
+            } else if a_reason == PlantingReason::NotOnWater {
+                // C++ 3741-3755: 水族馆 / 土豆雷 / 默认三种文案
+                // [TRANSLATION_NOTE]: Option<*mut T>.as_ref() 得到的是 &*mut T（多一层指针），
+                // 故此处用 match 显式解引用，避免 (*zg) 只解到 *mut ZenGarden。
+                let a_is_aquarium = self.app.map_or(false, |app| unsafe {
+                    (*app).game_mode == GameMode::ChallengeZenGarden
+                        && match (*app).zen_garden {
+                            Some(zg) => {
+                                (&*zg).garden_type
+                                    == crate::lawn::game_enums::GardenType::Aquarium
+                            }
+                            None => false,
+                        }
+                });
+                if a_is_aquarium {
+                    self.display_advice("[ZEN_ONLY_AQUATIC_PLANTS]", a_hint_fast, AdviceType::None);
+                } else if a_planting_seed_type == SeedType::PotatoMine {
+                    self.display_advice(
+                        "[ADVICE_POTATO_MINE_ON_LILY]",
+                        a_hint_fast,
+                        AdviceType::PlantPotatoeMineOnLily,
+                    );
+                } else {
+                    self.display_advice(
+                        "[ADVICE_PLANT_NOT_ON_WATER]",
+                        a_hint_fast,
+                        AdviceType::PlantNotOnWater,
+                    );
+                }
+            } else if a_reason == PlantingReason::NeedsGround {
+                self.display_advice(
+                    "[ADVICE_PLANTING_NEEDS_GROUND]",
+                    a_hint_fast,
+                    AdviceType::PlantingNeedsGround,
+                );
+            } else if a_reason == PlantingReason::NeedsSleeping {
+                self.display_advice(
+                    "[ADVICE_PLANTING_NEED_SLEEPING]",
+                    a_hint_fast,
+                    AdviceType::PlantingNeedSleeping,
+                );
+            }
+
+            // C++ 3765-3770: 手套光标或打地鼠关 → 放回种子包
+            let a_ct = self.cursor_object.cursor_type;
+            let a_is_whack = self
+                .app
+                .map_or(false, |app| unsafe { (*app).is_whack_a_zombie_level() });
+            if a_ct == CursorType::PlantFromGlove || a_is_whack {
+                self.refresh_seed_packet_from_cursor();
+                if let Some(app) = self.app {
+                    unsafe {
+                        (*app).play_foley(crate::todlib::tod_foley::FoleyType::Drop as i32);
+                    }
+                }
+            }
+            return;
+        }
+
+        // C++ 3773-3795: 清除全部 23 条种植相关提示
+        self.clear_advice(AdviceType::PlantingNeedSleeping);
+        self.clear_advice(AdviceType::CantPlantThere);
+        self.clear_advice(AdviceType::PlantingNeedsGround);
+        self.clear_advice(AdviceType::PlantNotOnWater);
+        self.clear_advice(AdviceType::PlantNotOnCrater);
+        self.clear_advice(AdviceType::PlantNotOnGrave);
+        self.clear_advice(AdviceType::PlantNeedPot);
+        self.clear_advice(AdviceType::PlantWrongArtType);
+        self.clear_advice(AdviceType::PlantOnlyOnLilypad);
+        self.clear_advice(AdviceType::PlantOnlyOnMagnetshroom);
+        self.clear_advice(AdviceType::PlantOnlyOnFumeshroom);
+        self.clear_advice(AdviceType::PlantOnlyOnKernelpult);
+        self.clear_advice(AdviceType::PlantOnlyOnSunflower);
+        self.clear_advice(AdviceType::PlantOnlyOnSpikeweed);
+        self.clear_advice(AdviceType::PlantOnlyOnMelonpult);
+        self.clear_advice(AdviceType::PlantOnlyOnRepeaters);
+        self.clear_advice(AdviceType::PlantNotPassedLine);
+        self.clear_advice(AdviceType::PlantGravebustersOnGraves);
+        self.clear_advice(AdviceType::PlantLilypadOnWater);
+        self.clear_advice(AdviceType::PlantTanglekelpOnWater);
+        self.clear_advice(AdviceType::PlantSeashroomOnWater);
+        self.clear_advice(AdviceType::PlantPotatoeMineOnLily);
+        self.clear_advice(AdviceType::SurviveFlags);
+
+        // C++ 3797-3803: 仅"非作弊 + 种子槽光标 + 非传送带"时才扣阳光；扣款失败即放弃种植
+        let a_easy_cheat = self
+            .app
+            .map_or(false, |app| unsafe { (*app).m_easy_planting_cheat });
+        if !a_easy_cheat
+            && self.cursor_object.cursor_type == CursorType::PlantFromBank
+            && !self.has_conveyor_belt_seed_bank()
+        {
+            if !self.take_sun_money(self.get_current_plant_cost(a_planting_seed_type, SeedType::None))
+            {
+                return;
+            }
+        }
+
+        // C++ 3805-3853: 升级 / 替换时先让原有植物 Die
+        let mut a_is_awake = false;
+        let mut a_wake_up_counter = 0;
+        let a_plant_on_lawn = self.get_plants_on_lawn(a_grid_x, a_grid_y);
+        let a_normal_plant = a_plant_on_lawn.normal_plant;
+        let a_pumpkin_plant = a_plant_on_lawn.pumpkin_plant;
+
+        if let Some(a_normal_idx) = a_normal_plant {
+            if self.plants[a_normal_idx].is_upgradable_to(a_planting_seed_type) {
+                if a_planting_seed_type == SeedType::Gloomshroom {
+                    a_is_awake = !self.plants[a_normal_idx].is_asleep;
+                    a_wake_up_counter = self.plants[a_normal_idx].wake_up_counter;
+                }
+                self.plants[a_normal_idx].die();
+            }
+        }
+        if a_planting_seed_type == SeedType::Wallnut
+            || a_planting_seed_type == SeedType::Tallnut
+        {
+            if let Some(a_normal_idx) = a_normal_plant {
+                if self.plants[a_normal_idx].seed_type == a_planting_seed_type {
+                    self.plants[a_normal_idx].die();
+                }
+            }
+        }
+        if a_planting_seed_type == SeedType::Pumpkinshell {
+            if let Some(a_pumpkin_idx) = a_pumpkin_plant {
+                if self.plants[a_pumpkin_idx].seed_type == SeedType::Pumpkinshell {
+                    self.plants[a_pumpkin_idx].die();
+                }
+            }
+        }
+        if a_planting_seed_type == SeedType::Cobcannon {
+            // C++: 玉米炮会挤掉右侧一格的普通植物
+            let a_right_ptr = self
+                .get_top_plant_at(a_grid_x + 1, a_grid_y, PlantPriority::OnlyNormalPosition)
+                .map(|p| p as *const Plant);
+            if let Some(a_ptr) = a_right_ptr {
+                if let Some(idx) = self
+                    .plants
+                    .iter()
+                    .position(|p| std::ptr::eq(p as *const Plant, a_ptr))
+                {
+                    self.plants[idx].die();
+                }
+            }
+        }
+        if a_planting_seed_type == SeedType::Cattail {
+            // C++: 香蒲会挤掉下层植物（莲叶）与普通植物
+            if let Some(a_under_idx) = a_plant_on_lawn.under_plant {
+                self.plants[a_under_idx].die();
+            }
+            if let Some(a_normal_idx) = a_normal_plant {
+                self.plants[a_normal_idx].die();
+            }
+        }
+
+        // C++ 3855-3887: 四路光标分派
+        let a_ct = self.cursor_object.cursor_type;
+        if a_ct == CursorType::PlantFromGlove {
+            let a_glove_plant_id = self.cursor_object.glove_plant_id;
+            if let Some(app) = self.app {
+                unsafe {
+                    if let Some(a_zen_garden) = (*app).zen_garden {
+                        if (a_glove_plant_id as usize) < self.plants.len() {
+                            (&mut *a_zen_garden).move_plant(
+                                &mut self.plants[a_glove_plant_id as usize],
+                                a_grid_x,
+                                a_grid_y,
+                            );
+                        }
+                    }
+                }
+            }
+        } else if a_ct == CursorType::PlantFromWheelBarrow {
+            if let Some(app) = self.app {
+                unsafe {
+                    if let Some(a_zen_garden) = (*app).zen_garden {
+                        (&mut *a_zen_garden).mouse_down_with_full_wheel_barrow(x, y);
+                    }
+                }
+            }
+        } else if a_ct == CursorType::PlantFromUsableCoin {
+            // C++: 先种下可用种子包，再让对应的金币 Die
+            self.add_plant(
+                a_grid_x,
+                a_grid_y,
+                self.cursor_object.seed_type,
+                self.cursor_object.imitater_type,
+            );
+            let a_coin_id = self.cursor_object.coin_id;
+            self.cursor_object.coin_id = crate::lawn::game_enums::COINID_NULL;
+            if let Some(a_coin) = self.coins.get_mut(a_coin_id as usize) {
+                a_coin.die();
+            }
+        } else if a_ct == CursorType::PlantFromBank {
+            let a_new_idx = self.add_plant(
+                a_grid_x,
+                a_grid_y,
+                self.cursor_object.seed_type,
+                self.cursor_object.imitater_type,
+            );
+            // C++: 升级忧郁蘑菇时继承睡眠状态
+            if a_is_awake {
+                self.plants[a_new_idx].set_sleeping(false);
+            } else {
+                self.plants[a_new_idx].wake_up_counter = a_wake_up_counter;
+            }
+
+            let a_seed_bank_index = self.cursor_object.seed_bank_index;
+            if a_seed_bank_index >= 0 && (a_seed_bank_index as usize) < self.seed_bank.len() {
+                self.seed_bank[a_seed_bank_index as usize].was_planted();
+            }
+        }
+
+        // C++ 3889-3915: 整列种植关卡一次种一整列
+        let a_is_column = self
+            .app
+            .map_or(false, |app| unsafe { (*app).game_mode == GameMode::ChallengeColumns });
+        if a_is_column {
+            for a_row in 0..MAX_GRID_SIZE_Y as i32 {
+                if a_row == a_grid_y
+                    || self.can_plant_at(a_grid_x, a_row, a_planting_seed_type) != PlantingReason::Ok
+                {
+                    continue;
+                }
+
+                if a_planting_seed_type == SeedType::Wallnut
+                    || a_planting_seed_type == SeedType::Tallnut
+                {
+                    let a_normal_ptr = self
+                        .get_top_plant_at(a_grid_x, a_row, PlantPriority::OnlyNormalPosition)
+                        .map(|p| p as *const Plant);
+                    if let Some(a_ptr) = a_normal_ptr {
+                        if let Some(idx) = self
+                            .plants
+                            .iter()
+                            .position(|p| std::ptr::eq(p as *const Plant, a_ptr))
+                        {
+                            if self.plants[idx].seed_type == a_planting_seed_type {
+                                self.plants[idx].die();
+                            }
+                        }
+                    }
+                }
+                if a_planting_seed_type == SeedType::Pumpkinshell {
+                    let a_pumpkin_ptr = self
+                        .get_top_plant_at(a_grid_x, a_row, PlantPriority::OnlyPumpkin)
+                        .map(|p| p as *const Plant);
+                    if let Some(a_ptr) = a_pumpkin_ptr {
+                        if let Some(idx) = self
+                            .plants
+                            .iter()
+                            .position(|p| std::ptr::eq(p as *const Plant, a_ptr))
+                        {
+                            if self.plants[idx].seed_type == SeedType::Pumpkinshell {
+                                self.plants[idx].die();
+                            }
+                        }
+                    }
+                }
+
+                self.add_plant(
+                    a_grid_x,
+                    a_row,
+                    self.cursor_object.seed_type,
+                    self.cursor_object.imitater_type,
+                );
+            }
+        }
+
+        // C++ 3917-3965: 种植后教程状态推进
         let a_packet_2_can_pick_up = self.seed_bank.get(1).map_or(false, |p| p.can_pick_up());
         if self.m_tutorial_state == TutorialState::Level1PlantPeashooter {
             self.set_tutorial_state(if self.plants.len() >= 2 {
@@ -7052,7 +8057,7 @@ Spawn: {}
             });
         } else if self.m_tutorial_state == TutorialState::Level2PlantSunflower {
             let a_sun_flowers_count = self.count_sun_flowers();
-            if seed_type == SeedType::Sunflower && a_sun_flowers_count == 2 {
+            if a_planting_seed_type == SeedType::Sunflower && a_sun_flowers_count == 2 {
                 self.display_advice(
                     "[ADVICE_MORE_SUNFLOWERS]",
                     crate::lawn::game_enums::MessageStyle::TutorialLevel2 as i32,
@@ -7086,12 +8091,13 @@ Spawn: {}
             }
         }
 
-        // 对应 C++ Board.cpp:3965-3970: 保龄球关卡播放音效
+        // C++ 3967-3970: 保龄球关卡播放音效
         if self.app.map_or(false, |app| unsafe { (*app).is_wallnut_bowling_level() }) {
             // [TRANSLATION_NOTE]: C++ 此处 PlaySample(Sexy::SOUND_BOWLING)；Rust 资源表无 SOUND_BOWLING，暂缺
         }
 
-        // 清除光标状态
+        // C++ 3972: ClearCursor()
+        // [TRANSLATION_NOTE]: Rust 侧额外先 deactivate 光标对象（原实现的等价清理）。
         self.cursor_object.deactivate();
         self.clear_cursor();
     }
@@ -7439,98 +8445,380 @@ Spawn: {}
     }
 
     /// 更新工具提示（对应 C++ UpdateToolTip L3302 完整版）
-    /// 根据鼠标悬停的对象显示对应提示文本
+    /// 更新工具提示（对应 C++ Board::UpdateToolTip，Board.cpp:3222）
     pub fn update_tool_tip(&mut self, mouse_x: i32, mouse_y: i32) {
-        // C++ Board.cpp:3222-3230：!mMouseIn || !mActive || mTimeStopCounter > 0 ||
-        // GetDialogCount() > 0 || SCENE_ZOMBIES_WON → 隐藏并返回
+        // C++ 3224-3228: 鼠标不在窗口 / 非激活 / 时间停止 / 有对话框 / 僵尸获胜 → 隐藏
         let mouse_in = self.app.map_or(false, |app| unsafe {
             (*app).base.widget_manager.map_or(false, |wm| (*wm).mouse_in)
         });
         let active = self.app.map_or(false, |app| unsafe { (*app).base.active });
         let scene = self.app.map_or(crate::lawn::lawn_app::GameScenes::Playing, |app| unsafe { (*app).game_scene });
         let dialog_count = self.app.map_or(0, |app| unsafe { (*app).get_dialog_count() });
-        if !mouse_in || !active || self.m_time_stop_counter > 0 || dialog_count > 0 || scene == crate::lawn::lawn_app::GameScenes::ZombiesWon {
+        if !mouse_in
+            || !active
+            || self.m_time_stop_counter > 0
+            || dialog_count > 0
+            || scene == crate::lawn::lawn_app::GameScenes::ZombiesWon
+        {
             self.tool_tip.m_visible = false;
             return;
         }
 
-        if self.m_paused {
-            self.tool_tip.m_visible = false;
-            return;
-        }
-
-        // C++: int aMouseX = mApp->mWidgetManager->mLastMouseX - mX; 同理 aMouseY
+        // C++ 3230-3231: 鼠标坐标以棋盘为原点
         let a_mouse_x = mouse_x - self.m_x;
         let a_mouse_y = mouse_y - self.m_y;
 
-        // 获取 App 引用
-        let app = match self.app {
-            Some(a) => unsafe { &*a },
-            None => return,
-        };
+        // C++ 3233-3299: 关卡开场（SCENE_LEVEL_INTRO）—— 仅在选卡阶段显示僵尸名提示
+        // [TRANSLATION_NOTE]: 原 Rust 实现误写为 GameScenes::MainMenu，此处按 C++ 的
+        // SCENE_LEVEL_INTRO 修正（Rust 侧对应 GameScenes::LevelIntro）。
+        if scene == crate::lawn::lawn_app::GameScenes::LevelIntro {
+            // C++ 3235-3239: 不在选卡阶段 → 隐藏
+            let a_seed_choosing = self
+                .m_cut_scene
+                .map_or(false, |cs| unsafe { (*cs).m_seed_choosing });
+            if !a_seed_choosing {
+                self.tool_tip.m_visible = false;
+                return;
+            }
 
-        // 关卡开场（SCENE_LEVEL_INTRO）：显示僵尸名称提示
-        if app.game_scene == crate::lawn::lawn_app::GameScenes::MainMenu {
-            // 在选卡阶段显示僵尸提示
-            if let Some(z_idx) = self.zombie_hit_test(a_mouse_x, a_mouse_y) {
-                if let Some(z) = self.zombies.get(z_idx) {
-                    if z.from_wave == Zombie::ZOMBIE_WAVE_CUTSCENE {
-                        let def = get_zombie_definition(z.zombie_type);
-                        self.tool_tip.set_title(&format!("[{}]", def.zombie_name));
-                        self.tool_tip.set_label("[CLICK_TO_VIEW]");
-                        self.tool_tip.m_visible = true;
-                        self.tool_tip.m_center = true;
-                        let r = &z.zombie_rect;
-                        self.tool_tip.m_x = r.x + r.width / 2 + 5;
-                        self.tool_tip.m_y = r.y + r.height - 10;
-                        return;
+            // C++ 3241-3248: 鼠标落在种子银行或选卡界面三个按钮上 → 隐藏
+            let a_seed_bank_contains = self.seed_bank_contains_point(mouse_x, mouse_y);
+            let a_chooser_button_over = self.app.map_or(false, |app| unsafe {
+                match (*app).seed_chooser_screen {
+                    Some(sc) => {
+                        (*sc).almanac_button.map_or(false, |b| (*b).is_over)
+                            || (*sc).store_button.map_or(false, |b| (*b).is_over)
+                            || (*sc).imitater_button.map_or(false, |b| (*b).is_over)
+                    }
+                    None => false,
+                }
+            });
+            if a_seed_bank_contains || a_chooser_button_over {
+                self.tool_tip.m_visible = false;
+                return;
+            }
+
+            // C++ 3250-3255: 只有过场波僵尸才显示提示
+            let a_zombie_info = match self
+                .zombie_hit_test(a_mouse_x, a_mouse_y)
+                .and_then(|i| self.zombies.get(i))
+            {
+                Some(a_zombie) if a_zombie.from_wave == Zombie::ZOMBIE_WAVE_CUTSCENE => {
+                    Some((a_zombie.zombie_type, a_zombie.zombie_rect, a_zombie.base.y))
+                }
+                _ => None,
+            };
+            let (a_zombie_type, a_zombie_rect, a_zombie_y) = match a_zombie_info {
+                Some(a_info) => a_info,
+                None => {
+                    self.tool_tip.m_visible = false;
+                    return;
+                }
+            };
+
+            // C++ 3257-3267: 标题为僵尸名；可查看图鉴时提示点击（红眼巨人除外）
+            let a_def = get_zombie_definition(a_zombie_type);
+            self.tool_tip.set_title(&format!("[{}]", a_def.zombie_name));
+            let a_can_show_almanac = self
+                .app
+                .map_or(false, |app| unsafe { (*app).can_show_almanac() });
+            if a_can_show_almanac && a_zombie_type != ZombieType::RedeEyeGargantuar {
+                self.tool_tip.set_label("[CLICK_TO_VIEW]");
+            } else {
+                self.tool_tip.set_label("");
+            }
+            self.tool_tip.set_warning_text("");
+
+            // C++ 3269-3275: 定位（蹦极僵尸改用本体 y）
+            self.tool_tip.m_x = a_zombie_rect.x + a_zombie_rect.width / 2 + 5;
+            self.tool_tip.m_y = a_zombie_rect.y + a_zombie_rect.height - 10;
+            if a_zombie_type == ZombieType::Bungee {
+                self.tool_tip.m_y = a_zombie_y;
+            }
+
+            self.tool_tip.m_visible = true;
+            self.tool_tip.m_center = true;
+
+            // C++ 3280-3296: 左边界取选卡界面背景宽；下边界按三个按钮的显隐调整
+            let a_chooser_bg_width = match self.app {
+                Some(app) => {
+                    let a_img = crate::lawn::board::get_overlay_image(
+                        unsafe { &*app },
+                        "IMAGE_SEEDCHOOSER_BACKGROUND",
+                    );
+                    if a_img.is_null() {
+                        0
+                    } else {
+                        unsafe { (*a_img).width }
                     }
                 }
+                None => 0,
+            };
+            self.tool_tip.m_min_left = a_chooser_bg_width;
+
+            let (a_almanac_no_draw, a_store_no_draw, a_imitater_no_draw) =
+                self.app.map_or((false, false, false), |app| unsafe {
+                    match (*app).seed_chooser_screen {
+                        Some(sc) => (
+                            (*sc).almanac_button.map_or(false, |b| (*b).btn_no_draw),
+                            (*sc).store_button.map_or(false, |b| (*b).btn_no_draw),
+                            (*sc).imitater_button.map_or(false, |b| (*b).btn_no_draw),
+                        ),
+                        None => (false, false, false),
+                    }
+                });
+            if a_almanac_no_draw && a_store_no_draw {
+                self.tool_tip.m_max_bottom = 600;
+            } else {
+                self.tool_tip.m_max_bottom = 570;
             }
+            if !a_imitater_no_draw {
+                self.tool_tip.calculate_size();
+                if self.m_x + self.tool_tip.m_x - self.tool_tip.m_width / 2 < 524 {
+                    self.tool_tip.m_max_bottom = 503;
+                }
+            }
+
+            return;
+        }
+
+        // C++ 3301-3305: 无法与棋盘按钮交互 → 隐藏
+        if !self.can_interact_with_board_buttons() {
             self.tool_tip.m_visible = false;
             return;
         }
 
-        // 游戏进行中
-        if !self.can_interact_with_board_buttons() {
-            return;
-        }
-
-        // 重置提示
+        // C++ 3307-3312: 重置提示状态
+        self.tool_tip.m_min_left = 0;
+        self.tool_tip.m_max_bottom = BOARD_HEIGHT;
         self.tool_tip.set_title("");
         self.tool_tip.set_label("");
         self.tool_tip.set_warning_text("");
         self.tool_tip.m_center = false;
 
-        // 委托 Challenge::UpdateToolTip
+        // C++ 3313-3316: 交由 Challenge 处理
         if let Some(ref ch) = self.challenge {
             if ch.update_tool_tip(a_mouse_x, a_mouse_y) != 0 {
                 return;
             }
         }
 
-        // 命中检测
-        let mut hit_result = HitResult {
+        // C++ 3318-3319: 命中检测
+        let mut a_hit_result = HitResult {
             object: None,
             object_type: GameObjectType::None,
         };
-        self.mouse_hit_test(a_mouse_x, a_mouse_y, &mut hit_result);
+        self.mouse_hit_test(a_mouse_x, a_mouse_y, &mut a_hit_result);
 
-        // 根据命中对象类型设置提示
-        match hit_result.object_type {
-            GameObjectType::Coin => {
-                self.tool_tip.set_label("");
+        // C++ 3321-3377: 按命中类型选择文案
+        match a_hit_result.object_type {
+            GameObjectType::Shovel => {
+                self.tool_tip.set_label("[SHOVEL_TOOLTIP]");
+                let a_shovel_rect = self.get_shovel_button_rect();
+                self.tool_tip.m_x = a_shovel_rect.x + 35;
+                self.tool_tip.m_y = a_shovel_rect.y + 72;
+                self.tool_tip.m_center = true;
                 self.tool_tip.m_visible = true;
+                return;
             }
+            GameObjectType::NextGarden => {
+                self.tool_tip.set_label("[NEXT_GARDEN_TOOLTIP]");
+                let a_button_rect = self.get_shovel_button_rect();
+                self.tool_tip.m_x = 599;
+                self.tool_tip.m_y = a_button_rect.y + 52;
+                self.tool_tip.m_center = true;
+                self.tool_tip.m_visible = true;
+                return;
+            }
+            GameObjectType::WateringCan => self.tool_tip.set_label("[WATERING_CAN_TOOLTIP]"),
+            GameObjectType::Fertilizer => self.tool_tip.set_label("[FERTILIZER_TOOLTIP]"),
+            GameObjectType::BugSpray => self.tool_tip.set_label("[BUG_SPRAY_TOOLTIP]"),
+            GameObjectType::Phonograph => self.tool_tip.set_label("[PHONOGRAPH_TOOLTIP]"),
+            GameObjectType::Chocolate => self.tool_tip.set_label("[CHOCOLATE_TOOLTIP]"),
+            GameObjectType::Glove => self.tool_tip.set_label("[GLOVE_TOOLTIP]"),
+            GameObjectType::MoneySign => self.tool_tip.set_label("[MONEY_SIGN_TOOLTIP]"),
+            GameObjectType::Wheelbarrow => self.tool_tip.set_label("[WHEELBARROW_TOOLTIP]"),
+            GameObjectType::TreeFood => self.tool_tip.set_label("[TREE_FERTILIZER_TOOLTIP]"),
             GameObjectType::SeedPacket => {
-                // 种子包提示 — 依赖种子包字段，暂简化
-                // 对应 C++ L3470-3664 的完整逻辑
-                self.tool_tip.m_visible = false;
+                // C++: break —— 落到下方的种子包分支
             }
             _ => {
                 self.tool_tip.m_visible = false;
+                return;
             }
         }
+
+        // C++ 3379-3388: 非种子包 → 定位到对应的底部按钮
+        if a_hit_result.object_type != GameObjectType::SeedPacket {
+            let a_button_rect = self.get_zen_button_rect(a_hit_result.object_type);
+            self.tool_tip.m_x = a_button_rect.x + 35;
+            self.tool_tip.m_y = a_button_rect.y + 72;
+            self.tool_tip.m_center = true;
+            self.tool_tip.m_visible = true;
+            return;
+        }
+
+        // C++ 3390-3395: 取种子包与其「实际使用」的种子类型
+        let a_seed_packet_index = match a_hit_result.object {
+            Some(i) => i,
+            None => {
+                self.tool_tip.m_visible = false;
+                return;
+            }
+        };
+        let (
+            a_packet_type,
+            a_imitater_type,
+            a_packet_active,
+            a_packet_offset_x,
+            a_packet_x,
+            a_packet_y,
+        ) = match self.seed_bank.get(a_seed_packet_index) {
+            Some(a_seed_packet) => (
+                a_seed_packet.seed_type,
+                a_seed_packet.imitater_type,
+                a_seed_packet.active,
+                a_seed_packet.offset_x,
+                a_seed_packet.x,
+                a_seed_packet.y,
+            ),
+            None => {
+                self.tool_tip.m_visible = false;
+                return;
+            }
+        };
+
+        let mut a_use_seed_type = a_packet_type;
+        if a_packet_type == SeedType::Imitater && a_imitater_type != SeedType::None {
+            a_use_seed_type = a_imitater_type;
+        }
+
+        // C++ 3397-3499: 文案选择（Beghouled → SlotMachine → Zombiquarium → IZombie → 默认种子名）
+        let a_beghouled = matches!(
+            self.game_mode,
+            GameMode::ChallengeBeghouled | GameMode::ChallengeBeghouledTwist
+        );
+        if a_beghouled {
+            if a_use_seed_type == SeedType::Repeater {
+                self.tool_tip.set_label("[BEGHOULED_REPEATER_UPGRADE_TOOLTIP]");
+            } else if a_use_seed_type == SeedType::Fumeshroom {
+                self.tool_tip.set_label("[BEGHOULED_FUMESHROOM_UPGRADE_TOOLTIP]");
+            } else if a_use_seed_type == SeedType::Tallnut {
+                self.tool_tip.set_label("[BEGHOULED_TALLNUT_UPGRADE_TOOLTIP]");
+            } else if a_use_seed_type == SeedType::BeghouledButtonShuffle {
+                self.tool_tip.set_label("[BEGHOULED_SHUFFLE_TOOLTIP]");
+            } else if a_use_seed_type == SeedType::BeghouledButtonCrater {
+                self.tool_tip.set_label("[BEGHOULED_CRATER_TOOLTIP]");
+            }
+        } else if a_use_seed_type == SeedType::SlotMachineSun {
+            self.tool_tip.set_label("[SLOT_MACHINE_SUN_TOOLTIP]");
+        } else if a_use_seed_type == SeedType::SlotMachineDiamond {
+            self.tool_tip.set_label("[SLOT_MACHINE_DIAMOND_TOOLTIP]");
+        } else if a_use_seed_type == SeedType::ZombiquariumSnorkle {
+            self.tool_tip.set_label("[ZOMBIQUARIUM_SNORKEL_TOOLTIP]");
+        } else if a_use_seed_type == SeedType::ZombiquariumTrophy {
+            self.tool_tip.set_label("[ZOMBIQUARIUM_TROPHY_TOOLTIP]");
+        } else if a_use_seed_type == SeedType::ZombieNormal {
+            self.tool_tip.set_label("[ZOMBIE]");
+        } else if a_use_seed_type == SeedType::ZombieTrafficCone {
+            self.tool_tip.set_label("[CONEHEAD_ZOMBIE]");
+        } else if a_use_seed_type == SeedType::ZombiePolevaulter {
+            self.tool_tip.set_label("[POLE_VAULTING_ZOMBIE]");
+        } else if a_use_seed_type == SeedType::ZombiePail {
+            self.tool_tip.set_label("[BUCKETHEAD_ZOMBIE]");
+        } else if a_use_seed_type == SeedType::ZombieLadder {
+            self.tool_tip.set_label("[LADDER_ZOMBIE]");
+        } else if a_use_seed_type == SeedType::ZombieDigger {
+            self.tool_tip.set_label("[DIGGER_ZOMBIE]");
+        } else if a_use_seed_type == SeedType::ZombieBungee {
+            self.tool_tip.set_label("[BUNGEE_ZOMBIE]");
+        } else if a_use_seed_type == SeedType::ZombieFootball {
+            self.tool_tip.set_label("[FOOTBALL_ZOMBIE]");
+        } else if a_use_seed_type == SeedType::ZombieBalloon {
+            self.tool_tip.set_label("[BALLOON_ZOMBIE]");
+        } else if a_use_seed_type == SeedType::ZombieScreenDoor {
+            self.tool_tip.set_label("[SCREEN_DOOR_ZOMBIE]");
+        } else if a_use_seed_type == SeedType::Zomboni {
+            self.tool_tip.set_label("[ZOMBONI]");
+        } else if a_use_seed_type == SeedType::ZombiePogo {
+            self.tool_tip.set_label("[POGO_ZOMBIE]");
+        } else if a_use_seed_type == SeedType::ZombieDancer {
+            self.tool_tip.set_label("[DANCING_ZOMBIE]");
+        } else if a_use_seed_type == SeedType::ZombieGargantuar {
+            self.tool_tip.set_label("[GARGANTUAR]");
+        } else if a_use_seed_type == SeedType::ZombieImp {
+            self.tool_tip.set_label("[IMP]");
+        } else {
+            self.tool_tip.set_label(&crate::lawn::plant::Plant::get_name_string(
+                a_packet_type,
+                a_imitater_type,
+            ));
+        }
+
+        // C++ 3501-3580: 警告文本链
+        let a_plant_cost = self.get_current_plant_cost(a_packet_type, a_imitater_type);
+        let a_easy_cheat = self
+            .app
+            .map_or(false, |app| unsafe { (*app).m_easy_planting_cheat });
+        let a_is_slot = self
+            .app
+            .map_or(false, |app| unsafe { (*app).is_slot_machine_level() });
+        if a_easy_cheat {
+            self.tool_tip.set_warning_text("FREE_PLANTING_CHEAT");
+        } else if !a_packet_active && a_beghouled {
+            if a_packet_type == SeedType::BeghouledButtonCrater {
+                self.tool_tip.set_warning_text("[BEGHOULED_NO_CRATERS]");
+            } else {
+                self.tool_tip.set_warning_text("[BEGHOULED_SEED_ALREADY_PURCHASED]");
+            }
+        } else if !a_packet_active {
+            self.tool_tip.set_warning_text("[WAITING_FOR_SEED]");
+        } else if !self.can_take_sun_money(a_plant_cost)
+            && !self.has_conveyor_belt_seed_bank()
+            && !a_is_slot
+        {
+            self.tool_tip.set_warning_text("[NOT_ENOUGH_SUN]");
+        } else if a_use_seed_type == SeedType::Gatlingpea {
+            if !self.planting_requirements_met(a_use_seed_type) {
+                self.tool_tip.set_warning_text("[REQUIRES_REPEATER]");
+            }
+        } else if a_use_seed_type == SeedType::Wintermelon {
+            if !self.planting_requirements_met(a_use_seed_type) {
+                self.tool_tip.set_warning_text("[REQUIRES_MELONPULT]");
+            }
+        } else if a_use_seed_type == SeedType::Twinsunflower {
+            if !self.planting_requirements_met(a_use_seed_type) {
+                self.tool_tip.set_warning_text("[REQUIRES_SUNFLOWER]");
+            }
+        } else if a_use_seed_type == SeedType::Spikerock {
+            if !self.planting_requirements_met(a_use_seed_type) {
+                self.tool_tip.set_warning_text("[REQUIRES_SPIKEWEED]");
+            }
+        } else if a_use_seed_type == SeedType::Cobcannon {
+            if !self.planting_requirements_met(a_use_seed_type) {
+                self.tool_tip.set_warning_text("[REQUIRES_KERNELPULTS]");
+            }
+        } else if a_use_seed_type == SeedType::GoldMagnet {
+            if !self.planting_requirements_met(a_use_seed_type) {
+                self.tool_tip.set_warning_text("[REQUIRES_MAGNETSHROOM]");
+            }
+        } else if a_use_seed_type == SeedType::Gloomshroom {
+            if !self.planting_requirements_met(a_use_seed_type) {
+                self.tool_tip.set_warning_text("[REQUIRES_FUMESHROOM]");
+            }
+        } else if a_use_seed_type == SeedType::Cattail {
+            if !self.planting_requirements_met(a_use_seed_type) {
+                self.tool_tip.set_warning_text("[REQUIRES_LILY_PAD]");
+            }
+        }
+
+        // C++ 3582-3584: 定位到种子包上方并显示
+        self.tool_tip.m_x = (SEED_PACKET_WIDTH - self.tool_tip.m_width) / 2
+            + self.m_seed_bank_x
+            + a_packet_offset_x
+            + a_packet_x;
+        self.tool_tip.m_y = self.m_seed_bank_y + a_packet_y + 70;
+        self.tool_tip.m_visible = true;
     }
 
     // ========== 进度条 ==========
@@ -8587,7 +9875,7 @@ Spawn: {}
 
     /// 下一波到来（对应 C++ NextWaveComing）
     /// 触发最终波次动画和音效
-    fn next_wave_coming(&mut self) {
+    pub(crate) fn next_wave_coming(&mut self) {
         if self.m_current_wave + 1 == self.m_num_waves {
             let is_survival_repick = self.is_survival_stage_with_repick();
             let app_mode = self.app.map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
@@ -9885,7 +11173,11 @@ Spawn: {}
         rake.grid_item_initialize(GridItemType::Rake, a_grid_x, a_grid_y);
         rake.pos_x = self.grid_to_pixel_x(a_grid_x, a_grid_y) as f32;
         rake.pos_y = self.grid_to_pixel_y(a_grid_x, a_grid_y) as f32;
-        rake.render_order = make_render_order(301000/*RenderLayer::GraveStone*/, a_grid_y, 9);
+        rake.render_order = make_render_order(
+            crate::lawn::game_enums::RENDER_LAYER_GRAVE_STONE,
+            a_grid_y,
+            9,
+        );
         // C++: aRake->mGridItemReanimID = mApp->ReanimationGetID(CreateRakeReanim(aRake->mPosX, aRake->mPosY, 0));
         if let Some(app) = self.app {
             unsafe {
