@@ -177,6 +177,68 @@ impl WidgetContainer {
         }
     }
 
+    /// 从指定位置起按 z-order 插入（对应 C++ `InsertWidgetHelper(where, theWidget)`）
+    /// C++ 的循环条件是 `(*anItr)->mZOrder <= theWidget->mZOrder` —— 即**跳过** z 更小或相等的，
+    /// 插入到第一个 z 更大的之前（注意与上面 insert_widget_helper 的 `>=` 停止条件不同）。
+    fn insert_widget_helper_from(widgets: &mut ContainerList, from: usize, new_widget: WidgetContainerPtr) {
+        let z = unsafe { (*new_widget).zorder };
+        let mut a_target: Option<usize> = None;
+        for (idx, a_w) in widgets.iter().enumerate() {
+            if idx >= from && unsafe { (**a_w).zorder } > z {
+                a_target = Some(idx);
+                break;
+            }
+        }
+        match a_target {
+            Some(p) => {
+                let mut tail = widgets.split_off(p);
+                widgets.push_back(new_widget);
+                widgets.append(&mut tail);
+            }
+            None => widgets.push_back(new_widget),
+        }
+    }
+
+    /// 从列表中移除指定控件（按指针相等），返回是否命中
+    /// [TRANSLATION_NOTE]: `ContainerList` 是 `LinkedList`，它没有稳定的"按值/按下标删除"API，
+    /// 故用 `split_off` + `pop_front` 实现，语义等价于 C++ 的 `mWidgets.erase(anItr)`。
+    fn remove_widget(widgets: &mut ContainerList, the_widget: WidgetContainerPtr) -> bool {
+        if let Some(p) = widgets.iter().position(|w| *w == the_widget) {
+            let mut tail = widgets.split_off(p);
+            tail.pop_front();
+            widgets.append(&mut tail);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// 置于指定控件之后（对应 C++ WidgetContainer::PutBehind，WidgetContainer.cpp:301-318）
+    /// C++ 中参数顺序为 (theWidget, theRefWidget)：把 theWidget 移到 theRefWidget 的**原位置之前**。
+    pub fn put_behind(&mut self, the_widget: WidgetContainerPtr, the_ref_widget: WidgetContainerPtr) {
+        if Self::remove_widget(&mut self.widgets, the_widget) {
+            // C++: anItr = find(theRefWidget); InsertWidgetHelper(anItr, theWidget)
+            // ref 不存在时 anItr == end() → 直接插到末尾
+            let from = match self.widgets.iter().position(|w| *w == the_ref_widget) {
+                Some(p) => p,
+                None => self.widgets.len(),
+            };
+            Self::insert_widget_helper_from(&mut self.widgets, from, the_widget);
+        }
+    }
+
+    /// 置于指定控件之前（对应 C++ WidgetContainer::PutInfront，WidgetContainer.cpp:320-339）
+    pub fn put_infront(&mut self, the_widget: WidgetContainerPtr, the_ref_widget: WidgetContainerPtr) {
+        if Self::remove_widget(&mut self.widgets, the_widget) {
+            // C++: anItr = find(theRefWidget); if (anItr != end()) anItr++; InsertWidgetHelper(anItr, theWidget)
+            let from = match self.widgets.iter().position(|w| *w == the_ref_widget) {
+                Some(p) => p + 1,
+                None => self.widgets.len(),
+            };
+            Self::insert_widget_helper_from(&mut self.widgets, from, the_widget);
+        }
+    }
+
     /// 删除所有子容器
     pub fn remove_all_children(&mut self) {
         self.widgets.clear();
