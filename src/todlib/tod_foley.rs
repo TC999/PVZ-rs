@@ -314,30 +314,52 @@ impl TodFoley {
             (&mut (*(self as *const TodFoley as *mut TodFoley)).foley_type_data)[foley_type as usize].last_variation_played = a_variation;
         }
 
-        // [TRANSLATION_NOTE]: C++ 中经 gSexyAppBase->mSoundManager->GetSoundInstance(id)
-        // 创建 SoundInstance；Rust SoundManager trait 无该方法（sdl_sound_manager::get_sound_instance
-        // 为桩），此处以 SoundManager::PlaySound 直接播放近似，实例引用计数状态机保持结构。
+        // 对应 C++ PvzpFoley.cpp:284-297：经 mSoundManager->GetSoundInstance(id) 取实例，再 Play。
+        // [TRANSLATION_NOTE]: 原实现用 SoundManager::PlaySound 直接播放近似（当时 get_sound_instance
+        // 还是桩）。§6.2/§6.3 已实现 GetSoundInstance 与 SDLSoundInstance::Play/AdjustPitch，
+        // 故此处切回 C++ 的实例链路，ref_count/start_time/pause-resume 状态机才真正生效。
         let a_sfx_id = match a_foley_params.sfx_id[a_variation as usize] {
             Some(p) => unsafe { *p as i32 },
             None => 0,
         };
-        if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
-            if let Some(sm) = app.base.sound_manager {
-                unsafe {
-                    (*sm).play_sound(a_sfx_id);
+        let a_sound_instance = match crate::lawn::lawn_app::LawnApp::instance() {
+            Some(a_app) => unsafe {
+                match (*a_app).base.sound_manager {
+                    Some(a_sm) => (*a_sm).get_sound_instance(a_sfx_id),
+                    None => None,
                 }
-            }
-        }
+            },
+            None => None,
+        };
+        // C++: if (aSoundInstance == nullptr) return;
+        let a_sound_instance = match a_sound_instance {
+            Some(p) => p,
+            None => return,
+        };
 
         unsafe {
-            (*a_foley_instance).instance = None; // 实例句柄待音频层补全
+            let a_inst_ptr: *mut dyn SoundInstance = a_sound_instance;
+            (*a_foley_instance).instance = Some(a_inst_ptr);
             (*a_foley_instance).ref_count = 1;
             (*a_foley_instance).start_time = current_update_count();
+        }
+        // C++: if (thePitch != 0.0f) aSoundInstance->AdjustPitch(thePitch);
+        if pitch != 0.0 {
+            unsafe {
+                SoundInstance::adjust_pitch(&mut *a_sound_instance, pitch as f64);
+            }
         }
         // 对应 C++: USES_MUSIC_VOLUME 时按音乐音量播放
         if crate::lawn::zombie::test_bit(a_foley_params.foley_flags, FoleyFlags::UsesMusicVolume as u32) {
             let a_inst = unsafe { &*a_foley_instance };
             self.apply_music_volume(a_inst);
+        }
+        // C++: bool aIsLooping = TestBit(aFoleyParams->mFoleyFlags, FOLEYFLAGS_LOOP);
+        //      aSoundInstance->Play(aIsLooping, false);
+        let a_is_looping =
+            crate::lawn::zombie::test_bit(a_foley_params.foley_flags, FoleyFlags::Loop as u32);
+        unsafe {
+            SoundInstance::play(&mut *a_sound_instance, a_is_looping, false);
         }
     }
 
