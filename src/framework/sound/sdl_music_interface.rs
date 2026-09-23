@@ -16,6 +16,10 @@ struct MusicInfo {
     handle: *mut std::ffi::c_void,
     volume: f64,
     volume_cap: f64,
+    /// 对应 C++ SDLMusicInfo::mVolumeAdd（每帧音量增量）
+    volume_add: f64,
+    /// 对应 C++ SDLMusicInfo::mStopOnFade
+    stop_on_fade: bool,
 }
 
 pub struct SDLMusicInterface {
@@ -55,6 +59,7 @@ impl SDLMusicInterface {
                             let sm = &mut *(self as *const Self as *mut Self);
                             sm.music_map.insert(song_id, MusicInfo {
                                 filename: path, handle: h, volume: 1.0, volume_cap: 1.0,
+                                volume_add: 0.0, stop_on_fade: false,
                             });
                         }
                         return true;
@@ -150,6 +155,7 @@ impl SDLMusicInterface {
                     sm.music_map.insert(song_id, MusicInfo {
                         filename: format!("{} (libopenmpt decoded)", filename),
                         handle: h, volume: 1.0, volume_cap: 1.0,
+                        volume_add: 0.0, stop_on_fade: false,
                     });
                 }
                 return true;
@@ -170,6 +176,7 @@ impl MusicInterface for SDLMusicInterface {
             if !h.is_null() {
                 self.music_map.insert(song_id, MusicInfo {
                     filename: filename.to_string(), handle: h, volume: 1.0, volume_cap: 1.0,
+                    volume_add: 0.0, stop_on_fade: false,
                 });
                 return true;
             }
@@ -213,11 +220,51 @@ impl MusicInterface for SDLMusicInterface {
     fn pause_all_music(&self) { sdl_mixer::pause_music(); }
     fn resume_all_music(&self) { sdl_mixer::resume_music(); }
 
-    fn fade_in(&self, song_id: i32, _offset: i32, _speed: f64, no_loop: bool) {
-        self.play_music(song_id, 0, no_loop);
+    /// 对应 C++ SDLMusicInterface::FadeIn（SDLMusicInterface.cpp:177-193）
+    fn fade_in(&self, song_id: i32, offset: i32, speed: f64, no_loop: bool) {
+        unsafe {
+            let sm = &mut *(self as *const Self as *mut Self);
+            if let Some(info) = sm.music_map.get_mut(&song_id) {
+                info.volume_add = speed;
+                info.stop_on_fade = no_loop;
+
+                if info.handle.is_null() { return; }
+                // C++: Mix_HaltMusicStream(mHMusic); Mix_PlayMusicStream(mHMusic, noLoop ? 0 : -1);
+                sdl_mixer::halt_music();
+                sdl_mixer::play_music(info.handle, if no_loop { 0 } else { -1 });
+                if offset > 0 {
+                    // C++: Mix_ModMusicStreamJumpToOrder(mHMusic, theOffset);
+                    // [TRANSLATION_NOTE]: 该 API 属 SDL-Mixer-X 扩展，本项目链接的官方 SDL2_mixer 2.6.3
+                    // 不导出（见 ffi/sdl_mixer.rs 中的同名说明），故保留判定但跳过调用。
+                    let _ = offset;
+                }
+            }
+        }
     }
-    fn fade_out(&self, _song_id: i32, _stop_song: bool, _speed: f64) { sdl_mixer::halt_music(); }
-    fn fade_out_all(&self, _stop_song: bool, _speed: f64) { sdl_mixer::halt_music(); }
+
+    /// 对应 C++ SDLMusicInterface::FadeOut（SDLMusicInterface.cpp:195-209）
+    fn fade_out(&self, song_id: i32, stop_song: bool, speed: f64) {
+        unsafe {
+            let sm = &mut *(self as *const Self as *mut Self);
+            if let Some(info) = sm.music_map.get_mut(&song_id) {
+                if info.volume != 0.0 {
+                    info.volume_add = -speed;
+                }
+                info.stop_on_fade = stop_song;
+            }
+        }
+    }
+
+    /// 对应 C++ SDLMusicInterface::FadeOutAll（SDLMusicInterface.cpp:211-222）
+    fn fade_out_all(&self, stop_song: bool, speed: f64) {
+        unsafe {
+            let sm = &mut *(self as *const Self as *mut Self);
+            for (_song_id, info) in sm.music_map.iter_mut() {
+                info.volume_add = -speed;
+                info.stop_on_fade = stop_song;
+            }
+        }
+    }
 
     fn set_song_volume(&self, song_id: i32, volume: f64) {
         if let Some(info) = self.music_map.get(&song_id) {
@@ -236,7 +283,38 @@ impl MusicInterface for SDLMusicInterface {
         self.global_volume = volume;
         sdl_mixer::volume_music((volume * 128.0) as i32);
     }
-    fn update(&mut self) {}
+    /// 对应 C++ SDLMusicInterface::Update（SDLMusicInterface.cpp:272-305）
+    /// 每帧按 mVolumeAdd 推进各曲目音量，达到上限/下限时停止并（视 stopOnFade）停播。
+    fn update(&mut self) {
+        // C++: Mix_VolumeMusic(mGlobalVolume); Mix_VolumeMusicGeneral(mGlobalVolume);
+        sdl_mixer::volume_music((self.global_volume * 128.0) as i32);
+
+        for (_song_id, info) in self.music_map.iter_mut() {
+            if info.volume_add != 0.0 {
+                info.volume += info.volume_add;
+
+                if info.volume > info.volume_cap {
+                    info.volume = info.volume_cap;
+                    info.volume_add = 0.0;
+                } else if info.volume < 0.0 {
+                    info.volume = 0.0;
+                    info.volume_add = 0.0;
+
+                    if info.stop_on_fade {
+                        // C++: Mix_HaltMusicStream(aMusicInfo->mHMusic);
+                        sdl_mixer::halt_music();
+                    }
+                }
+
+                // C++: Mix_VolumeMusicStream(aMusicInfo->mHMusic, (int)(aMusicInfo->mVolume * 128));
+                // [TRANSLATION_NOTE]: Mixer X 的 per-stream 音量（Mix_VolumeMusicStream）未在
+                // ffi/sdl_mixer.rs 中绑定，此处以全局 Mix_VolumeMusic 近似（与该文件 play_music 的现有做法一致）。
+                if !info.handle.is_null() {
+                    sdl_mixer::volume_music((info.volume * 128.0) as i32);
+                }
+            }
+        }
+    }
 }
 
 impl Default for SDLMusicInterface { fn default() -> Self { SDLMusicInterface::new() } }

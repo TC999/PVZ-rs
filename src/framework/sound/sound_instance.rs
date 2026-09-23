@@ -21,8 +21,8 @@ pub trait SoundInstance {
     fn stop(&mut self);
     /// 是否播放中
     fn is_playing(&self) -> bool;
-    /// 是否已释放
-    fn is_released(&self) -> bool;
+    /// 是否已释放（对应 C++ `virtual bool IsReleased()`，C++ 为非 const：查询时可能触发 Release）
+    fn is_released(&mut self) -> bool;
     /// 获取音量
     fn get_volume(&self) -> f64;
 }

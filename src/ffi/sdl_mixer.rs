@@ -465,3 +465,71 @@ pub fn get_next_midi_device(device: *const c_char) -> *const c_char {
 pub fn set_midi_device(device: *const c_char) -> c_int {
     unsafe { Mix_SetMidiDevice(device) }
 }
+
+// ============ 音效实例播放链所需（sdl2-sys 未绑定，此处直接声明） ============
+// 对应 C++ SDLSoundInstance.cpp 使用的 Mix_RegisterEffect / Mix_Playing / Mix_VolumeChunk 等
+
+pub type MixEffectFunc =
+    unsafe extern "C" fn(chan: c_int, stream: *mut c_void, len: c_int, udata: *mut c_void);
+
+extern "C" {
+    fn Mix_RegisterEffect(
+        chan: c_int,
+        f: Option<MixEffectFunc>,
+        d: Option<unsafe extern "C" fn(chan: c_int, udata: *mut c_void)>,
+        arg: *mut c_void,
+    ) -> c_int;
+    fn Mix_UnregisterAllEffects(channel: c_int) -> c_int;
+    fn Mix_Playing(channel: c_int) -> c_int;
+    fn Mix_VolumeChunk(chunk: *mut c_void, volume: c_int) -> c_int;
+}
+
+/// C++: Mix_RegisterEffect(mChannel, PitchHandlerFuncCallback, 0, &mPitchHandler)
+pub fn register_effect(chan: c_int, f: MixEffectFunc, arg: *mut c_void) -> c_int {
+    unsafe { Mix_RegisterEffect(chan, Some(f), None, arg) }
+}
+
+/// C++: Mix_UnregisterAllEffects(mChannel)
+pub fn unregister_all_effects(channel: c_int) -> c_int {
+    unsafe { Mix_UnregisterAllEffects(channel) }
+}
+
+/// C++: Mix_Playing(mChannel)
+pub fn playing(channel: c_int) -> c_int {
+    unsafe { Mix_Playing(channel) }
+}
+
+/// C++: Mix_VolumeChunk(mMixChunk, vol)
+pub fn volume_chunk(chunk: *mut c_void, vol: c_int) -> c_int {
+    unsafe { Mix_VolumeChunk(chunk, vol) }
+}
+
+extern "C" {
+    fn Mix_MasterVolume(volume: c_int) -> c_int;
+}
+
+/// C++: Mix_MasterVolume(vol)（SDLSoundManager::SetMasterVolume）
+pub fn master_volume(volume: c_int) -> c_int {
+    unsafe { Mix_MasterVolume(volume) }
+}
+
+// [TRANSLATION_NOTE]: C++ SDLMusicInterface::FadeIn 中的
+// Mix_ModMusicStreamJumpToOrder(aMusicInfo->mHMusic, theOffset) 属 SDL-Mixer-X 扩展 API，
+// 本项目链接的官方 SDL2_mixer 2.6.3（SDL2_mixer-2.6.3/lib/x64/SDL2_mixer.lib）不导出该符号
+// （链接期 LNK2019 已实测），故此处不声明、FadeIn 中该分支亦不调用。
+
+/// 读取 Mix_Chunk::alen（对应 C++ chunk->alen）
+pub fn chunk_len(chunk: *mut c_void) -> u32 {
+    if chunk.is_null() {
+        return 0;
+    }
+    unsafe { (*(chunk as *mut sdl2::sys::mixer::Mix_Chunk)).alen }
+}
+
+/// 读取 Mix_Chunk::abuf（对应 C++ chunk->abuf）
+pub fn chunk_abuf(chunk: *mut c_void) -> *mut c_uchar {
+    if chunk.is_null() {
+        return std::ptr::null_mut();
+    }
+    unsafe { (*(chunk as *mut sdl2::sys::mixer::Mix_Chunk)).abuf }
+}
