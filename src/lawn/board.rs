@@ -3990,7 +3990,7 @@ Spawn: {}
         self.update_cursor();
     }
 
-    /// 键盘事件
+    /// 键盘按下（对应 C++ Board::KeyDown，Board.cpp:7653-7690）
     pub fn key_down(&mut self, key: i32) {
         // C++: 调试键启用时按键字符转发给 KeyChar（近似：ASCII 可打印键码转字符）
         if key >= 32 && key < 127 {
@@ -4002,6 +4002,81 @@ Spawn: {}
                 }
             }
         }
+
+        // C++: DoTypingCheck(theKey);
+        self.do_typing_check(key);
+
+        let (a_game_scene, a_game_mode, a_crazy_dave_message_index) = match self.app {
+            Some(app) => unsafe {
+                (
+                    (*app).game_scene,
+                    (*app).game_mode,
+                    (*app).m_crazy_dave_message_index,
+                )
+            },
+            None => return,
+        };
+
+        if a_game_scene == crate::lawn::lawn_app::GameScenes::LevelIntro
+            && a_game_mode != GameMode::ChallengeZenGarden
+            && a_game_mode != GameMode::ChallengeTreeOfWisdom
+        {
+            // C++: mCutScene->KeyDown(theKey);
+            if let Some(a_cut_scene) = self.m_cut_scene {
+                unsafe {
+                    (*a_cut_scene).key_down(key);
+                }
+            }
+        } else if key == crate::framework::key_codes::KEYCODE_RETURN
+            || key == crate::framework::key_codes::KEYCODE_SPACE
+        {
+            // C++: IsScaryPotterDaveTalking() && mApp->mCrazyDaveMessageIndex != -1
+            if self.is_scary_potter_dave_talking() && a_crazy_dave_message_index != -1 {
+                if let Some(a_challenge) = self.challenge.as_mut() {
+                    a_challenge.advance_crazy_dave_dialog();
+                }
+            } else if a_game_mode == GameMode::ChallengeZenGarden
+                || a_game_mode == GameMode::ChallengeTreeOfWisdom
+            {
+                // C++: mApp->mZenGarden->AdvanceCrazyDaveDialog();
+                if let Some(app) = self.app {
+                    if let Some(a_zen_garden) = unsafe { (*app).zen_garden } {
+                        unsafe {
+                            (*a_zen_garden).advance_crazy_dave_dialog();
+                        }
+                    }
+                }
+            } else if key == crate::framework::key_codes::KEYCODE_SPACE
+                && self
+                    .app
+                    .map_or(false, |app| unsafe { (*app).can_pause_now() })
+            {
+                // C++: mApp->PlaySample(Sexy::SOUND_PAUSE); mApp->DoPauseDialog();
+                if let Some(app) = self.app {
+                    unsafe {
+                        (*app).play_sample(crate::todlib::tod_foley::SOUND_PAUSE);
+                        (*app).do_pause_dialog();
+                    }
+                }
+            }
+        } else if key == crate::framework::key_codes::KEYCODE_ESCAPE {
+            if self.cursor_object.cursor_type != CursorType::Normal {
+                // C++: RefreshSeedPacketFromCursor();
+                self.refresh_seed_packet_from_cursor();
+            } else if self.can_interact_with_board_buttons()
+                && a_game_scene != crate::lawn::lawn_app::GameScenes::ZombiesWon
+            {
+                // C++: mApp->DoNewOptions(false);
+                if let Some(app) = self.app {
+                    unsafe {
+                        (*app).do_new_options(false);
+                    }
+                }
+            }
+        }
+
+        // [TRANSLATION_NOTE]: 以下 'P' 暂停切换是 Rust 侧既有的调试便利分支，
+        // C++ Board::KeyDown（7653-7690）中并无对应逻辑，为不改动既有行为予以保留。
         match key {
             // 暂停
             80 => { // 'P'
