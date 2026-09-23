@@ -351,6 +351,18 @@ pub fn tod_pick_from_smooth_array(arr: &mut [TodSmoothArray]) -> i32 {
     arr[pick_idx].item
 }
 
+/// 从数组中随机等概率挑选一项（对应 C++ PvzpPickFromArray，PvzpCommon.h:72-77）
+/// [TRANSLATION_NOTE]: C++ 模板在 theCount <= 0 时返回值初始化的 T{}；Rust 无统一的值
+/// 初始化语义，故此处返回 Option，由调用方以 `unwrap_or(默认值)` 提供等价默认值。
+pub fn tod_pick_from_array<T: Copy>(arr: &[T], count: i32) -> Option<T> {
+    debug_assert!(count > 0);
+    if count > 0 {
+        Some(arr[crate::framework::common::rand_range(count) as usize])
+    } else {
+        None
+    }
+}
+
 /// 从加权数组中随机选择一个项目并返回其索引（对应 C++ TodPickFromWeightedArray）
 pub fn tod_pick_from_weighted_array(arr: &[TodWeightedArray]) -> isize {
     tod_pick_array_item_from_weighted_array(arr).map_or(-1, |item| item.item as isize)

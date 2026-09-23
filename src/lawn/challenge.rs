@@ -311,7 +311,11 @@ impl Challenge {
             }
         }
         board_state.seed_type[grid_x as usize][grid_y as usize] = SeedType::None;
-        if count > 0 { pick_array[0] } else { SeedType::Peashooter }
+        // C++: return PvzpPickFromArray(aPickArray, aCount);
+        // [TRANSLATION_NOTE]: 原 Rust 实现恒取 pick_array[0]（既非等概率随机，也不消耗 RNG），
+        // 现改用 tod_pick_from_array 等概率挑选，以对齐 C++ 的随机序列消耗。
+        crate::todlib::tod_common::tod_pick_from_array(&pick_array, count as i32)
+            .unwrap_or(SeedType::Peashooter)
     }
 
     pub fn beghouled_board_has_match(&self, board_state: &BeghouledBoardState) -> i32 {
@@ -702,10 +706,19 @@ impl Challenge {
                     self.beghouled_flash_a_match();
                     self.challenge_state_counter = 1500;
                 } else if self.challenge_state == ChallengeState::BeghouledNoMatches {
-                    // [TRANSLATION_NOTE]: C++ 在此先调用
-                    // mApp->AddPvzpParticle(BOARD_WIDTH / 2, BOARD_HEIGHT / 2, RENDER_LAYER_TOP,
-                    // PARTICLE_SCREEN_FLASH) 再做洗牌；Rust 侧粒子系统 API 尚未移植
-                    // （报告 §7.2），故略过该调用。
+                    // C++: mApp->AddPvzpParticle(BOARD_WIDTH / 2, BOARD_HEIGHT / 2, RENDER_LAYER_TOP, PARTICLE_SCREEN_FLASH);
+                    // [TRANSLATION_NOTE]: 原注释称"Rust 侧粒子系统 API 尚未移植"已不成立（见 lawn_app.rs:1460
+                    // 的 add_tod_particle，即 C++ AddPvzpParticle）；此处补上洗牌前的全屏闪光。
+                    if let Some(a_app) = self.app {
+                        unsafe {
+                            (*a_app).add_tod_particle(
+                                (BOARD_WIDTH / 2) as f32,
+                                (BOARD_HEIGHT / 2) as f32,
+                                RENDER_LAYER_TOP,
+                                crate::lawn::game_enums::ParticleEffect::ScreenFlash as i32,
+                            );
+                        }
+                    }
                     self.beghouled_shuffle();
                 }
             }
@@ -969,10 +982,24 @@ impl Challenge {
     }
 
     pub fn plant_added(&mut self, plant: &mut Plant) {
-        let app = self.get_app();
-        if !app.is_art_challenge() { return; }
+        // 对应 C++ Challenge::PlantAdded（Challenge.cpp:2433-2445）
+        if !self.get_app().is_art_challenge() { return; }
         let art_seed = self.get_art_challenge_seed(plant.plant_col, plant.base.row);
         if art_seed != SeedType::None && art_seed == plant.seed_type {
+            // C++: mApp->PlayFoley(FOLEY_ART_CHALLENGE);
+            //      mApp->AddPvzpParticle(thePlant->mX + 40, thePlant->mY + 40, RENDER_LAYER_TOP, PARTICLE_PRESENT_PICKUP);
+            let (a_pos_x, a_pos_y) = ((plant.base.x + 40) as f32, (plant.base.y + 40) as f32);
+            if let Some(a_app) = self.app {
+                unsafe {
+                    (*a_app).play_foley(crate::todlib::tod_foley::FoleyType::ArtChallenge as i32);
+                    (*a_app).add_tod_particle(
+                        a_pos_x,
+                        a_pos_y,
+                        RENDER_LAYER_TOP,
+                        crate::lawn::game_enums::ParticleEffect::PresentPickup as i32,
+                    );
+                }
+            }
             self.check_for_complete_art_challenge(plant.plant_col, plant.base.row);
         }
     }
@@ -1172,23 +1199,72 @@ impl Challenge {
     }
 
     pub fn beghouled_check_stuck_state(&mut self) {
-        if self.challenge_state != ChallengeState::Normal { return; }
-        let board = self.get_board();
-        if board.has_level_award_dropped() { return; }
-        let mut board_state = BeghouledBoardState { seed_type: [[SeedType::None; 6]; 9] };
-        self.load_beghouled_board_state(&mut board_state);
-        if self.beghouled_check_for_possible_moves(&board_state) == 0 {
-            let board = self.get_board();
-            board.display_advice("[ADVICE_BEGHOULED_NO_MOVES]", 2, AdviceType::BeghouledNoMoves);
+        // 对应 C++ Challenge::BeghouledCheckStuckState（Challenge.cpp:2105-2118）
+        if self.challenge_state != ChallengeState::Normal
+            || self.get_board().has_level_award_dropped()
+        {
+            return;
+        }
+        let mut a_board_state = BeghouledBoardState { seed_type: [[SeedType::None; 6]; 9] };
+        self.load_beghouled_board_state(&mut a_board_state);
+        if self.beghouled_check_for_possible_moves(&a_board_state) == 0 {
             self.challenge_state = ChallengeState::BeghouledNoMatches;
-            self.challenge_state_counter = 1500;
+            // C++: mChallengeStateCounter = 500（原 Rust 误写为 1500）
+            self.challenge_state_counter = 500;
+            // C++: mBoard->DisplayAdviceAgain(...)（同一提示允许重复显示）
+            self.get_board().display_advice_again(
+                "[ADVICE_BEGHOULED_NO_MOVES]",
+                crate::lawn::game_enums::MessageStyle::HintFast as i32,
+                AdviceType::BeghouledNoMoves,
+            );
         }
     }
 
     pub fn init_zombie_waves_survival(&mut self) {
+        // 对应 C++ Challenge::InitZombieWavesSurvival（Challenge.cpp:2499-2530）
+        let a_game_mode = self.get_app().game_mode;
+        let a_is_survival_endless = self.get_app().is_survival_endless(a_game_mode);
+        let a_is_survival_normal = self.get_app().is_survival_normal(a_game_mode);
+        let a_survival_stage = self.survival_stage;
+
         let board = self.get_board();
         board.m_zombie_allowed[ZombieType::Normal as usize] = true;
-        board.m_zombie_allowed[ZombieType::TrafficCone as usize] = true;
+        // C++: MTRand aLevelRNG = MTRand(mBoard->GetLevelRandSeed());
+        // [TRANSLATION_NOTE]: C++ 的 MTRand::Next(range) 等价于 NextNoAssert() % range
+        // （MTRand.cpp:177-186），故这里用同一实例的 next_no_assert() 取模，
+        // 保持与 C++ 一致的随机序列（不得改用全局 rand_range）。
+        let mut a_level_rng =
+            crate::framework::mt_rand::MTRand::from_seed(board.get_level_rand_seed() as u32);
+
+        if a_level_rng.next_no_assert() % 5 == 0 {
+            board.m_zombie_allowed[ZombieType::Newspaper as usize] = true;
+        } else {
+            board.m_zombie_allowed[ZombieType::TrafficCone as usize] = true;
+        }
+
+        let mut a_capacity = std::cmp::min(a_survival_stage + 1, 9);
+        while a_capacity > 0 {
+            let a_rand_zombie = unsafe {
+                std::mem::transmute::<i32, ZombieType>(
+                    (a_level_rng.next_no_assert() % (NUM_ZOMBIE_TYPES as u32)) as i32,
+                )
+            };
+            if board.m_zombie_allowed[a_rand_zombie as usize] { continue; }
+            if crate::lawn::board::Board::is_zombie_type_pool_only(a_rand_zombie) && !board.stage_has_pool() { continue; }
+            if board.stage_has_roof() && (a_rand_zombie == ZombieType::Digger || a_rand_zombie == ZombieType::Dancer) { continue; }
+            if board.stage_has_grave_stones() && a_rand_zombie == ZombieType::Zamboni { continue; }
+            if !board.stage_has_roof() && !a_is_survival_endless && a_rand_zombie == ZombieType::Bungee { continue; }
+            if board.get_survival_flags_completed() < 10 && a_rand_zombie == ZombieType::RedeEyeGargantuar { continue; }
+            if a_is_survival_normal && (a_rand_zombie as i32) > (ZombieType::Snorkel as i32) { continue; }
+            if crate::lawn::board::Board::is_zombie_type_spawned_only(a_rand_zombie)
+                || Zombie::is_zombotany(a_rand_zombie)
+                || a_rand_zombie == ZombieType::DuckyTube
+                || a_rand_zombie == ZombieType::Yeti
+            { continue; }
+
+            board.m_zombie_allowed[a_rand_zombie as usize] = true;
+            a_capacity -= 1;
+        }
     }
 
     pub fn init_zombie_waves_from_list(&mut self, zombie_list: &[ZombieType]) {
@@ -1197,8 +1273,171 @@ impl Challenge {
     }
 
     pub fn init_zombie_waves(&mut self) {
+        // 对应 C++ Challenge::InitZombieWaves（Challenge.cpp:2540-2741）
+        let a_game_mode = self.get_app().game_mode;
+        let a_is_survival_mode = self.get_app().is_survival_mode();
+        let a_is_survival_normal = self.get_app().is_survival_normal(a_game_mode);
+        let a_is_bungee_blitz = self.get_app().is_bungee_blitz_level();
+        let a_is_little_trouble = self.get_app().is_little_trouble_level();
+        let a_is_whack_a_zombie = self.get_app().is_whack_a_zombie_level();
+        let a_is_shovel = self.get_app().is_shovel_level();
+        let a_is_wallnut_bowling = self.get_app().is_wallnut_bowling_level();
+        let a_is_stormy_night = self.get_app().is_stormy_night_level();
+        let a_is_adventure = self.get_app().is_adventure_mode();
+        let a_can_spawn_yetis = self.get_app().can_spawn_yetis();
+        let a_survival_stage = self.survival_stage;
+
+        // C++: if (mApp->IsSurvivalMode()) { if (mSurvivalStage == 0) {...} else InitZombieWavesSurvival(); }
+        // 其中 InitZombieWavesSurvival 需要 &mut self，故先单独处理，其余分支链只写 mZombieAllowed。
+        if a_is_survival_mode && a_survival_stage != 0 {
+            self.init_zombie_waves_survival();
+        }
+
         let board = self.get_board();
-        board.m_zombie_allowed[ZombieType::Normal as usize] = true;
+        if a_is_survival_mode {
+            if a_survival_stage == 0 {
+                if a_is_survival_normal {
+                    board.m_zombie_allowed[ZombieType::Normal as usize] = true;
+                    board.m_zombie_allowed[ZombieType::TrafficCone as usize] = true;
+                } else {
+                    board.m_zombie_allowed[ZombieType::Normal as usize] = true;
+                    board.m_zombie_allowed[ZombieType::TrafficCone as usize] = true;
+                    board.m_zombie_allowed[ZombieType::Pail as usize] = true;
+                }
+            }
+        } else if a_game_mode == GameMode::ChallengeSpeed {
+            board.m_zombie_allowed[ZombieType::Normal as usize] = true;
+            board.m_zombie_allowed[ZombieType::TrafficCone as usize] = true;
+            board.m_zombie_allowed[ZombieType::DolphinRider as usize] = true;
+            board.m_zombie_allowed[ZombieType::Polevaulter as usize] = true;
+        } else if a_game_mode == GameMode::ChallengePogoParty {
+            board.m_zombie_allowed[ZombieType::Pogo as usize] = true;
+        } else if a_is_bungee_blitz {
+            board.m_zombie_allowed[ZombieType::Normal as usize] = true;
+            board.m_zombie_allowed[ZombieType::TrafficCone as usize] = true;
+            board.m_zombie_allowed[ZombieType::Pail as usize] = true;
+            board.m_zombie_allowed[ZombieType::Ladder as usize] = true;
+        } else if a_game_mode == GameMode::ChallengeSunnyDay {
+            board.m_zombie_allowed[ZombieType::Normal as usize] = true;
+            board.m_zombie_allowed[ZombieType::Pail as usize] = true;
+            board.m_zombie_allowed[ZombieType::TrafficCone as usize] = true;
+            board.m_zombie_allowed[ZombieType::Football as usize] = true;
+            board.m_zombie_allowed[ZombieType::Polevaulter as usize] = true;
+            board.m_zombie_allowed[ZombieType::JackInTheBox as usize] = true;
+        } else if a_game_mode == GameMode::ChallengePortalCombat {
+            board.m_zombie_allowed[ZombieType::Normal as usize] = true;
+            board.m_zombie_allowed[ZombieType::Pail as usize] = true;
+            board.m_zombie_allowed[ZombieType::Football as usize] = true;
+            board.m_zombie_allowed[ZombieType::Balloon as usize] = true;
+        } else if a_is_little_trouble {
+            board.m_zombie_allowed[ZombieType::Normal as usize] = true;
+            board.m_zombie_allowed[ZombieType::TrafficCone as usize] = true;
+            board.m_zombie_allowed[ZombieType::Football as usize] = true;
+            board.m_zombie_allowed[ZombieType::Snorkel as usize] = true;
+        } else if a_game_mode == GameMode::ChallengeBigTime {
+            board.m_zombie_allowed[ZombieType::Normal as usize] = true;
+            board.m_zombie_allowed[ZombieType::TrafficCone as usize] = true;
+            board.m_zombie_allowed[ZombieType::Pail as usize] = true;
+            board.m_zombie_allowed[ZombieType::Door as usize] = true;
+            board.m_zombie_allowed[ZombieType::Football as usize] = true;
+            board.m_zombie_allowed[ZombieType::JackInTheBox as usize] = true;
+        } else if a_game_mode == GameMode::ChallengeRainingSeeds {
+            board.m_zombie_allowed[ZombieType::Normal as usize] = true;
+            board.m_zombie_allowed[ZombieType::TrafficCone as usize] = true;
+            board.m_zombie_allowed[ZombieType::Pail as usize] = true;
+            board.m_zombie_allowed[ZombieType::Door as usize] = true;
+            board.m_zombie_allowed[ZombieType::Football as usize] = true;
+            board.m_zombie_allowed[ZombieType::Newspaper as usize] = true;
+            board.m_zombie_allowed[ZombieType::JackInTheBox as usize] = true;
+            board.m_zombie_allowed[ZombieType::Bungee as usize] = true;
+        } else if a_game_mode == GameMode::ChallengeHighGravity {
+            board.m_zombie_allowed[ZombieType::Normal as usize] = true;
+            board.m_zombie_allowed[ZombieType::TrafficCone as usize] = true;
+            board.m_zombie_allowed[ZombieType::Pail as usize] = true;
+            board.m_zombie_allowed[ZombieType::Door as usize] = true;
+            board.m_zombie_allowed[ZombieType::Balloon as usize] = true;
+        } else if a_is_whack_a_zombie {
+            board.m_zombie_allowed[ZombieType::Normal as usize] = true;
+            board.m_zombie_allowed[ZombieType::TrafficCone as usize] = true;
+            board.m_zombie_allowed[ZombieType::Pail as usize] = true;
+        } else if a_game_mode == GameMode::ChallengeBobsledBonanza {
+            board.m_zombie_allowed[ZombieType::Bobsled as usize] = true;
+            board.m_zombie_allowed[ZombieType::Zamboni as usize] = true;
+        } else if a_game_mode == GameMode::ChallengeAirRaid {
+            board.m_zombie_allowed[ZombieType::Balloon as usize] = true;
+        } else if a_game_mode == GameMode::ChallengeBeghouled || a_game_mode == GameMode::ChallengeBeghouledTwist {
+            board.m_zombie_allowed[ZombieType::Normal as usize] = true;
+            board.m_zombie_allowed[ZombieType::TrafficCone as usize] = true;
+            board.m_zombie_allowed[ZombieType::Pail as usize] = true;
+            board.m_zombie_allowed[ZombieType::Door as usize] = true;
+            board.m_zombie_allowed[ZombieType::Football as usize] = true;
+            board.m_zombie_allowed[ZombieType::Newspaper as usize] = true;
+        } else if a_game_mode == GameMode::ChallengeLastStand {
+            board.m_zombie_allowed[ZombieType::Normal as usize] = true;
+            board.m_zombie_allowed[ZombieType::TrafficCone as usize] = true;
+            board.m_zombie_allowed[ZombieType::Pail as usize] = true;
+            board.m_zombie_allowed[ZombieType::Door as usize] = true;
+            board.m_zombie_allowed[ZombieType::Football as usize] = true;
+            board.m_zombie_allowed[ZombieType::Newspaper as usize] = true;
+            board.m_zombie_allowed[ZombieType::JackInTheBox as usize] = true;
+            board.m_zombie_allowed[ZombieType::Polevaulter as usize] = true;
+            board.m_zombie_allowed[ZombieType::DolphinRider as usize] = true;
+            board.m_zombie_allowed[ZombieType::Ladder as usize] = true;
+        } else if a_game_mode == GameMode::ChallengeColumns {
+            board.m_zombie_allowed[ZombieType::Normal as usize] = true;
+            board.m_zombie_allowed[ZombieType::TrafficCone as usize] = true;
+            board.m_zombie_allowed[ZombieType::Pail as usize] = true;
+            board.m_zombie_allowed[ZombieType::Football as usize] = true;
+        } else if a_game_mode == GameMode::ChallengeInvisighoul {
+            board.m_zombie_allowed[ZombieType::Normal as usize] = true;
+            board.m_zombie_allowed[ZombieType::TrafficCone as usize] = true;
+            board.m_zombie_allowed[ZombieType::Pail as usize] = true;
+            board.m_zombie_allowed[ZombieType::DolphinRider as usize] = true;
+            board.m_zombie_allowed[ZombieType::Zamboni as usize] = true;
+            board.m_zombie_allowed[ZombieType::JackInTheBox as usize] = true;
+        } else if a_game_mode == GameMode::ChallengeWarAndPeas {
+            board.m_zombie_allowed[ZombieType::PeaHead as usize] = true;
+            board.m_zombie_allowed[ZombieType::WallnutHead as usize] = true;
+        } else if a_game_mode == GameMode::ChallengeWarAndPeas2 {
+            board.m_zombie_allowed[ZombieType::PeaHead as usize] = true;
+            board.m_zombie_allowed[ZombieType::WallnutHead as usize] = true;
+            board.m_zombie_allowed[ZombieType::JalapenoHead as usize] = true;
+            board.m_zombie_allowed[ZombieType::GatlingHead as usize] = true;
+            board.m_zombie_allowed[ZombieType::SquashHead as usize] = true;
+            board.m_zombie_allowed[ZombieType::TallnutHead as usize] = true;
+        } else if a_is_shovel {
+            board.m_zombie_allowed[ZombieType::Normal as usize] = true;
+            board.m_zombie_allowed[ZombieType::TrafficCone as usize] = true;
+        } else if a_is_wallnut_bowling {
+            if a_game_mode == GameMode::ChallengeWallnutBowling || a_is_adventure {
+                board.m_zombie_allowed[ZombieType::Normal as usize] = true;
+                board.m_zombie_allowed[ZombieType::TrafficCone as usize] = true;
+                board.m_zombie_allowed[ZombieType::Pail as usize] = true;
+                board.m_zombie_allowed[ZombieType::Polevaulter as usize] = true;
+                board.m_zombie_allowed[ZombieType::Newspaper as usize] = true;
+            } else if a_game_mode == GameMode::ChallengeWallnutBowling2 {
+                board.m_zombie_allowed[ZombieType::Normal as usize] = true;
+                board.m_zombie_allowed[ZombieType::TrafficCone as usize] = true;
+                board.m_zombie_allowed[ZombieType::Pail as usize] = true;
+                board.m_zombie_allowed[ZombieType::Polevaulter as usize] = true;
+                board.m_zombie_allowed[ZombieType::Newspaper as usize] = true;
+                board.m_zombie_allowed[ZombieType::Dancer as usize] = true;
+                board.m_zombie_allowed[ZombieType::Door as usize] = true;
+            }
+        } else if a_is_stormy_night {
+            board.m_zombie_allowed[ZombieType::Normal as usize] = true;
+            board.m_zombie_allowed[ZombieType::TrafficCone as usize] = true;
+            board.m_zombie_allowed[ZombieType::DolphinRider as usize] = true;
+            board.m_zombie_allowed[ZombieType::Balloon as usize] = true;
+        } else {
+            board.m_zombie_allowed[ZombieType::Normal as usize] = true;
+            board.m_zombie_allowed[ZombieType::TrafficCone as usize] = true;
+            board.m_zombie_allowed[ZombieType::Pail as usize] = true;
+        }
+
+        if a_can_spawn_yetis && !a_is_whack_a_zombie && !a_is_little_trouble {
+            board.m_zombie_allowed[ZombieType::Yeti as usize] = true;
+        }
     }
 
     pub fn slot_machine_get_handle_rect(&self) -> crate::framework::rect::Rect {
@@ -1575,11 +1814,32 @@ impl Challenge {
     }
 
     pub fn update_zombie_spawning(&mut self) -> i32 {
+        // 对应 C++ Challenge::UpdateZombieSpawning（Challenge.cpp:2902-2920）
         if self.get_app().is_whack_a_zombie_level() {
             self.whack_a_zombie_spawning();
+            // C++: return true（阻止常规出怪）
             return 1;
         }
-        0
+
+        let a_game_mode = self.get_app().game_mode;
+        // C++: (mGameMode == GAMEMODE_CHALLENGE_LAST_STAND && mChallengeState != STATECHALLENGE_LAST_STAND_ONSLAUGHT)
+        let a_is_last_stand_not_onslaught = a_game_mode == GameMode::ChallengeLastStand
+            && self.challenge_state != ChallengeState::LastStandOnslaught;
+
+        if self.get_app().is_final_boss_level()
+            || a_game_mode == GameMode::ChallengeIceLevel
+            || a_game_mode == GameMode::ChallengeZenGarden
+            || a_game_mode == GameMode::ChallengeTreeOfWisdom
+            || a_game_mode == GameMode::ChallengeZombiquarium
+            || self.get_app().is_izombie_level()
+            || self.get_app().is_squirrel_level()
+            || self.get_app().is_scary_potter_level()
+            || a_is_last_stand_not_onslaught
+        {
+            1
+        } else {
+            0
+        }
     }
 
     pub fn beghouled_update_craters(&mut self) {
@@ -1610,42 +1870,189 @@ impl Challenge {
     }
 
     pub fn mouse_down_whack_a_zombie(&mut self, x: i32, y: i32) {
-        let board = self.get_board();
-        let mut top_zombie_idx = None;
-        for (idx, zombie) in board.zombies.iter().enumerate() {
-            if zombie.dead { continue; }
-            if !zombie.is_dead_or_dying() {
-                if crate::lawn::board::get_circle_rect_overlap(x, y - 20, 45, &zombie.get_zombie_rect()) {
-                    top_zombie_idx = Some(idx);
+        // 对应 C++ Challenge::MouseDownWhackAZombie（Challenge.cpp:1195-1241）
+        let a_app = match self.app {
+            Some(a) => a,
+            None => return,
+        };
+
+        // C++: mApp->ReanimationTryToGet(mBoard->mCursorObject->mReanimCursorID)->mAnimTime = 0.2f;
+        let a_cursor_reanim_id = self.get_board().cursor_object.reanim_cursor_id;
+        unsafe {
+            if let Some(a_reanim) = (*a_app).reanimation_get_mut(a_cursor_reanim_id) {
+                a_reanim.m_anim_time = 0.2;
+            }
+            // C++: mApp->PlayFoley(FOLEY_SWING);
+            (*a_app).play_foley(crate::todlib::tod_foley::FoleyType::Swing as i32);
+        }
+
+        // C++: 命中的僵尸中取 mRenderOrder 最大者（而非最后一个命中者）
+        let mut a_top_zombie_idx: Option<usize> = None;
+        {
+            let board = self.get_board();
+            for (idx, zombie) in board.zombies.iter().enumerate() {
+                if zombie.dead {
+                    continue;
+                }
+                if !zombie.is_dead_or_dying() {
+                    if crate::lawn::board::get_circle_rect_overlap(
+                        x,
+                        y - 20,
+                        45,
+                        &zombie.get_zombie_rect(),
+                    ) {
+                        // C++: if (aTopZombie == nullptr || aZombie->mRenderOrder >= aTopZombie->mRenderOrder)
+                        let a_is_better = match a_top_zombie_idx {
+                            None => true,
+                            Some(a_prev) => {
+                                zombie.base.render_order >= board.zombies[a_prev].base.render_order
+                            }
+                        };
+                        if a_is_better {
+                            a_top_zombie_idx = Some(idx);
+                        }
+                    }
                 }
             }
         }
-        if let Some(idx) = top_zombie_idx {
-            let zombie = &mut board.zombies[idx];
-            if zombie.helm_type != HelmType::None {
-                zombie.take_helm_damage(900, 0);
+
+        if let Some(idx) = a_top_zombie_idx {
+            let a_helm_type = self.get_board().zombies[idx].helm_type;
+            if a_helm_type != HelmType::None {
+                unsafe {
+                    if a_helm_type == HelmType::Pail {
+                        (*a_app)
+                            .play_foley(crate::todlib::tod_foley::FoleyType::ShieldHit as i32);
+                    } else if a_helm_type == HelmType::TrafficCone {
+                        (*a_app)
+                            .play_foley(crate::todlib::tod_foley::FoleyType::PlasticHit as i32);
+                    }
+                }
+                self.get_board().zombies[idx].take_helm_damage(900, 0);
             } else {
-                zombie.die_with_loot();
+                unsafe {
+                    // C++: mApp->PlayFoley(FOLEY_BONK);
+                    (*a_app).play_foley(crate::todlib::tod_foley::FoleyType::Bonk as i32);
+                    // C++: mApp->AddPvzpParticle(theX - 3, theY + 9, RENDER_LAYER_ABOVE_UI, PARTICLE_POW);
+                    (*a_app).add_tod_particle(
+                        (x - 3) as f32,
+                        (y + 9) as f32,
+                        RENDER_LAYER_ABOVE_UI,
+                        crate::lawn::game_enums::ParticleEffect::Pow as i32,
+                    );
+                }
+                self.get_board().zombies[idx].die_with_loot();
+                self.get_board().clear_cursor();
             }
         }
     }
 
     pub fn draw_storm_night(&self, g: &mut Graphics) {
+        // 对应 C++ Challenge::DrawStormNight（Challenge.cpp:3085-3114）
+        // C++ Challenge.cpp:65: constexpr const int STORM_FLASH_TIME = 150;
+        const STORM_FLASH_TIME: i32 = 150;
+
         if self.challenge_state == ChallengeState::StormFlash1 && self.challenge_state_counter < 300 {
+            if self.challenge_state_counter > STORM_FLASH_TIME {
+                self.draw_storm_flash(g, self.challenge_state_counter - STORM_FLASH_TIME, 255);
+            } else {
+                self.draw_storm_flash(g, self.challenge_state_counter, 92);
+            }
+        } else if self.challenge_state == ChallengeState::StormFlash2
+            && self.challenge_state_counter < 300
+        {
+            self.draw_storm_flash(g, self.challenge_state_counter / 2, 255);
+        } else if self.challenge_state == ChallengeState::StormFlash3
+            && self.challenge_state_counter < 150
+        {
             self.draw_storm_flash(g, self.challenge_state_counter, 255);
         } else {
-            g.set_color(&crate::framework::color::Color::new(0, 0, 0, 255));
-            g.fill_rect(&crate::framework::rect::Rect::new(-1000, -1000, 2800, 2600));
+            g.set_color(&crate::framework::color::Color::BLACK);
+            g.fill_rect(&crate::framework::rect::Rect::new(
+                -1000,
+                -1000,
+                BOARD_WIDTH + 2000,
+                BOARD_HEIGHT + 2000,
+            ));
+        }
+
+        // C++: mBoard->DrawUIBottom(g); mBoard->DrawTopRightUI(g);
+        // [TRANSLATION_NOTE]: 这两次重绘是 C++ 本函数的一部分，且必须有 —— 上面 else 分支的
+        // 全屏黑矩形会盖住底部 UI（种子栏/铲子/小推车栏）与右上 UI，C++ 靠这两次调用恢复。
+        if let Some(board) = self.board {
+            unsafe {
+                (*board).draw_ui_bottom(g);
+                (*board).draw_ui_top(g);
+            }
         }
     }
 
     pub fn update_stormy_night(&mut self) {
-        let board = self.get_board();
-        if board.m_paused { return; }
+        // 对应 C++ Challenge::UpdateStormyNight（Challenge.cpp:1961-2011）
+        // C++ Challenge.cpp:65: constexpr const int STORM_FLASH_TIME = 150;
+        const STORM_FLASH_TIME: i32 = 150;
+
+        if self.get_board().m_paused {
+            if self.challenge_state_counter == 1 {
+                return;
+            }
+            if self.challenge_state_counter == 150
+                && self.challenge_state == ChallengeState::StormFlash1
+            {
+                self.challenge_state_counter = 1;
+                return;
+            }
+        }
+
         self.challenge_state_counter -= 1;
-        if self.challenge_state_counter <= 0 {
-            self.challenge_state_counter = 150 + 300;
-            self.challenge_state = ChallengeState::StormFlash1;
+        if (self.challenge_state_counter == 300
+            && (self.challenge_state == ChallengeState::StormFlash1
+                || self.challenge_state == ChallengeState::StormFlash2))
+            || (self.challenge_state_counter == 150
+                && (self.challenge_state == ChallengeState::StormFlash1
+                    || self.challenge_state == ChallengeState::StormFlash3))
+        {
+            self.get_app()
+                .play_foley(crate::todlib::tod_foley::FoleyType::Thunder as i32);
+        }
+        if self.challenge_state_counter > 0 {
+            return;
+        }
+
+        let a_game_scene = self.get_app().game_scene;
+        if a_game_scene == crate::lawn::lawn_app::GameScenes::ZombiesWon {
+            self.challenge_state_counter =
+                STORM_FLASH_TIME + crate::framework::common::rand_range_int(-50, 50);
+            self.challenge_state = ChallengeState::StormFlash3;
+            return;
+        } else if a_game_scene != crate::lawn::lawn_app::GameScenes::Playing {
+            self.challenge_state = ChallengeState::Normal;
+            self.challenge_state_counter = 0;
+            return;
+        } else {
+            // C++: Yeti 在场时倒计时随机到 350~450，否则按 400/750 上限随机
+            if self.get_board().count_zombie_by_type(ZombieType::Yeti) != 0 {
+                self.challenge_state_counter =
+                    STORM_FLASH_TIME + crate::framework::common::rand_range_int(200, 300);
+            } else {
+                let a_max_dur = if crate::framework::common::rand_range(2) != 0 {
+                    400
+                } else {
+                    750
+                };
+                self.challenge_state_counter =
+                    STORM_FLASH_TIME + crate::framework::common::rand_range_int(300, a_max_dur);
+            }
+
+            // C++: mChallengeState = static_cast<ChallengeState>(RandRangeInt(FLASH_1, FLASH_3))
+            self.challenge_state = unsafe {
+                std::mem::transmute::<i32, ChallengeState>(
+                    crate::framework::common::rand_range_int(
+                        ChallengeState::StormFlash1 as i32,
+                        ChallengeState::StormFlash3 as i32,
+                    ),
+                )
+            };
         }
     }
 
@@ -1719,17 +2126,67 @@ impl Challenge {
     }
 
     pub fn grave_danger_spawn_random_grave(&mut self) {
-        self.grave_danger_spawn_grave_at(5, 2);
+        // 对应 C++ Challenge::GraveDangerSpawnRandomGrave（Challenge.cpp:2942-2967）
+        let mut a_picks = [crate::todlib::tod_common::TodWeightedGridArray {
+            x: 0,
+            y: 0,
+            weight: 0,
+        }; 30];
+        let mut a_pick_count = 0usize;
+
+        {
+            let board = self.get_board();
+            for a_col in 4..(crate::lawn::board::MAX_GRID_SIZE_X as i32) {
+                for a_row in 0..(crate::lawn::board::MAX_GRID_SIZE_Y as i32) {
+                    if board.can_add_grave_stone_at(a_col, a_row) {
+                        // Source: https://wiki.pvz1.com/doku.php?id=攻略:墓碑
+                        // 有植物权重 1、无植物权重 100000
+                        let a_has_plant = board
+                            .get_top_plant_at(a_col, a_row, PlantPriority::Any)
+                            .is_some();
+                        a_picks[a_pick_count].weight = if a_has_plant { 1 } else { 100000 };
+                        a_picks[a_pick_count].x = a_col;
+                        a_picks[a_pick_count].y = a_row;
+                        a_pick_count += 1;
+                    }
+                }
+            }
+        }
+
+        if a_pick_count != 0 {
+            let a_pick = crate::todlib::tod_common::tod_pick_from_weighted_grid_array(
+                &mut a_picks,
+                a_pick_count,
+            );
+            if let Some(a_pick) = a_pick {
+                let a_grid_x = a_picks[a_pick].x;
+                let a_grid_y = a_picks[a_pick].y;
+                self.grave_danger_spawn_grave_at(a_grid_x, a_grid_y);
+            }
+        }
     }
 
     pub fn grave_danger_spawn_grave_at(&mut self, grid_x: i32, grid_y: i32) {
+        // 对应 C++ Challenge::GraveDangerSpawnGraveAt（Challenge.cpp:2922-2940）
+        // C++: 先让该格上的植物 Die()
+        {
+            let board = self.get_board();
+            for a_plant in board.plants.iter_mut() {
+                if a_plant.dead {
+                    continue;
+                }
+                if a_plant.plant_col == grid_x && a_plant.base.row == grid_y {
+                    a_plant.die();
+                }
+            }
+        }
+
         let board = self.get_board();
         board.m_enable_grave_stones = true;
-        let mut stone = crate::lawn::grid_item::GridItem::new();
-        stone.grid_item_type = crate::lawn::grid_item::GridItemType::Gravestone;
-        stone.grid_x = grid_x;
-        stone.grid_y = grid_y;
-        board.grid_items.push(stone);
+        // C++: GridItem* aGraveStone = mBoard->AddAGraveStone(theGridX, theGridY);
+        board.add_grave_stone(grid_x, grid_y);
+        // C++: if (aGraveStone) aGraveStone->AddGraveStoneParticles();
+        // [TRANSLATION_NOTE]: AddGraveStoneParticles 依赖粒子系统（报告 §4.3），Rust 侧无等价入口，跳过。
     }
 
     pub fn spawn_level_award(&self, grid_x: i32, grid_y: i32) {
@@ -1753,7 +2210,13 @@ impl Challenge {
             app.board_result = BoardResult::Won;
             app.play_foley(crate::todlib::tod_foley::FoleyType::SpawnSun as i32);
             b.add_coin(pos_x as f32, pos_y as f32, coin_type, CoinMotion::Coin);
-            // AddPvzpParticle(PARTICLE_SCREEN_FLASH) 暂未接入粒子系统
+            // C++: mApp->AddPvzpParticle(BOARD_WIDTH / 2, BOARD_HEIGHT / 2, RENDER_LAYER_TOP, PARTICLE_SCREEN_FLASH);
+            app.add_tod_particle(
+                (BOARD_WIDTH / 2) as f32,
+                (BOARD_HEIGHT / 2) as f32,
+                RENDER_LAYER_TOP,
+                crate::lawn::game_enums::ParticleEffect::ScreenFlash as i32,
+            );
 
             if app.game_mode == GameMode::ChallengeZombiquarium {
                 if let Some(coin) = b.coins.last_mut() {
@@ -1771,40 +2234,221 @@ impl Challenge {
     }
 
     pub fn beghouled_score(&mut self, grid_x: i32, grid_y: i32, num_plants: i32, is_horizontal: i32) {
-        let pos_x;
-        let pos_y;
-        {
+        // 对应 C++ Challenge::BeghouledScore（Challenge.cpp:860-927）
+        // C++ Challenge.cpp:58: constexpr const int BEGHOULED_WINNING_SCORE = 75;
+        const BEGHOULED_WINNING_SCORE: i32 = 75;
+
+        // C++: mApp->PlayFoley(FOLEY_ART_CHALLENGE);
+        self.get_app()
+            .play_foley(crate::todlib::tod_foley::FoleyType::ArtChallenge as i32);
+
+        let (pos_x, pos_y) = {
             let board = self.get_board();
-            let px = board.grid_to_pixel_x(grid_x, grid_y) as f32;
-            let py = board.grid_to_pixel_y(grid_x, grid_y) as f32;
-            pos_x = if is_horizontal != 0 { px + if num_plants == 3 { 80.0 } else if num_plants == 4 { 120.0 } else { 160.0 } } else { px };
-            pos_y = if is_horizontal == 0 { py + if num_plants == 3 { 80.0 } else if num_plants == 4 { 120.0 } else { 160.0 } } else { py };
-        }
+            let mut px = board.grid_to_pixel_x(grid_x, grid_y) as f32;
+            let mut py = board.grid_to_pixel_y(grid_x, grid_y) as f32;
+            let a_offset = if num_plants == 3 {
+                80.0
+            } else if num_plants == 4 {
+                120.0
+            } else {
+                160.0
+            };
+            if is_horizontal != 0 {
+                px += a_offset;
+            } else {
+                py += a_offset;
+            }
+            (px, py)
+        };
+
         self.challenge_score += 1;
-        let score = self.challenge_score;
-        let num_suns = (num_plants - 2 + self.beghouled_matches_this_move).max(1).min(5);
-        self.beghouled_matches_this_move += 1;
-        if score >= 75 {
-            self.spawn_level_award(grid_x, grid_y);
+
+        // C++: if (mBoard->mSeedBank->mNumPackets == 0) —— 首次得分时才发放升级/洗牌/清弹坑按钮
+        if self.get_board().seed_bank.is_empty() {
+            let a_can_clear_crater = self.beghouled_can_clear_crater() != 0;
             let board = self.get_board();
-            board.clear_advice(AdviceType::None);
+            while board.seed_bank.len() < 4 {
+                board.seed_bank.push(SeedPacket::new());
+            }
+            board.seed_bank[0].set_packet_type(SeedType::Repeater, SeedType::None);
+            board.seed_bank[1].set_packet_type(SeedType::Fumeshroom, SeedType::None);
+            board.seed_bank[2].set_packet_type(SeedType::Tallnut, SeedType::None);
+            board.seed_bank[3].set_packet_type(SeedType::BeghouledButtonShuffle, SeedType::None);
+            // C++: mBoard->mSeedBank->mNumPackets = 4;
+
+            board.display_advice(
+                "[ADVICE_BEGHOULED_SAVE_SUN]",
+                crate::lawn::game_enums::MessageStyle::HintFast as i32,
+                AdviceType::BeghouledSaveSun,
+            );
+
+            if a_can_clear_crater {
+                while board.seed_bank.len() < 5 {
+                    board.seed_bank.push(SeedPacket::new());
+                }
+                board.seed_bank[4].set_packet_type(SeedType::BeghouledButtonCrater, SeedType::None);
+                // C++: mBoard->mSeedBank->mNumPackets = 5;
+            }
         } else {
-            let board = self.get_board();
-            for i in 0..num_suns {
-                board.add_coin(pos_x + 20.0 * i as f32 - 10.0, pos_y, CoinType::Sun, CoinMotion::Coin);
+            // C++: if (!mBoard->mAdvice->IsBeingDisplayed())
+            let a_advice_not_displayed = self.get_board().m_advice == AdviceType::None;
+            if a_advice_not_displayed {
+                // C++: PvzpReplaceNumberString("[ADVICE_BEGHOULED_MATCH_3]", "{SCORE}", BEGHOULED_WINNING_SCORE)
+                let a_msg =
+                    crate::todlib::tod_common::tod_string_translate("[ADVICE_BEGHOULED_MATCH_3]")
+                        .replace("{SCORE}", &BEGHOULED_WINNING_SCORE.to_string());
+                self.get_board().display_advice(
+                    &a_msg,
+                    crate::lawn::game_enums::MessageStyle::HintFast as i32,
+                    AdviceType::BeghouledMatch3,
+                );
+            }
+            if self.challenge_score >= BEGHOULED_WINNING_SCORE - 5 {
+                self.get_board().display_advice(
+                    "[ADVICE_BEGHOULED_ALMOST_THERE]",
+                    crate::lawn::game_enums::MessageStyle::HintFast as i32,
+                    AdviceType::AlmostThere,
+                );
             }
         }
+
+        if self.challenge_score >= BEGHOULED_WINNING_SCORE {
+            // C++: mChallengeScore = BEGHOULED_WINNING_SCORE（钳位）
+            self.challenge_score = BEGHOULED_WINNING_SCORE;
+            self.spawn_level_award(grid_x, grid_y);
+            self.get_board().clear_advice(AdviceType::None);
+        } else {
+            let mut a_num_suns = num_plants - 2 + self.beghouled_matches_this_move;
+            if num_plants >= 5 {
+                a_num_suns += 2;
+            }
+            let a_num_suns = a_num_suns.clamp(1, 5);
+
+            let board = self.get_board();
+            for i in 0..a_num_suns {
+                board.add_coin(
+                    pos_x + 20.0 * i as f32 - 10.0,
+                    pos_y,
+                    CoinType::Sun,
+                    CoinMotion::Coin,
+                );
+            }
+        }
+
+        self.beghouled_matches_this_move += 1;
     }
 
-    pub fn draw_storm_flash(&self, g: &mut Graphics, _time: i32, _max_amount: i32) {
-        g.set_color(&crate::framework::color::Color::new(0, 0, 0, 128));
+    pub fn draw_storm_flash(&self, g: &mut Graphics, the_time: i32, the_max_amount: i32) {
+        // 对应 C++ Challenge::DrawStormFlash（Challenge.cpp:3015-3024）
+        // C++: MTRand aDrawRand = MTRand(mBoard->mMainCounter / 6);
+        // [TRANSLATION_NOTE]: C++ 的 MTRand::NextNoAssert(range) 等价于 NextNoAssert() % range
+        // （MTRand.cpp:177-180），故用独立实例的 next_no_assert() 取模拟合。
+        let a_main_counter = match self.board {
+            Some(b) => unsafe { (*b).m_main_counter },
+            None => 0,
+        };
+        let mut a_draw_rand =
+            crate::framework::mt_rand::MTRand::from_seed(a_main_counter / 6);
+        let a_darkness = crate::todlib::tod_common::tod_animate_curve(
+            150,
+            0,
+            the_time,
+            255 - the_max_amount,
+            255,
+            TodCurves::Linear,
+        ) + (a_draw_rand.next_no_assert() % 64) as i32
+            - 32;
+        g.set_color(&crate::framework::color::Color::new(
+            0,
+            0,
+            0,
+            a_darkness.clamp(0, 255) as u8,
+        ));
+        g.fill_rect(&crate::framework::rect::Rect::new(-1000, -1000, 2800, 2600));
+
+        g.set_color(&crate::framework::color::Color::new(
+            255,
+            255,
+            255,
+            crate::todlib::tod_common::tod_animate_curve(
+                150,
+                75,
+                the_time,
+                the_max_amount,
+                0,
+                TodCurves::Linear,
+            ) as u8,
+        ));
         g.fill_rect(&crate::framework::rect::Rect::new(-1000, -1000, 2800, 2600));
     }
 
     pub fn update_raining_seeds(&mut self) {
-        let board = self.get_board();
-        if board.has_level_award_dropped() { return; }
+        // 对应 C++ Challenge::UpdateRainingSeeds（Challenge.cpp:1932-1960）
+        // C++: if (mBoard->HasLevelAwardDropped() || --mChallengeStateCounter != 0) return;
+        // 注意 || 短路，故 HasLevelAwardDropped 为真时不执行自减。
+        if self.get_board().has_level_award_dropped() {
+            return;
+        }
         self.challenge_state_counter -= 1;
+        if self.challenge_state_counter != 0 {
+            return;
+        }
+
+        self.challenge_state_counter = crate::framework::common::rand_range_int(500, 999);
+
+        // C++: mBoard->AddCoin(RandRangeInt(100, 649), 60, COIN_USABLE_SEED_PACKET, COIN_MOTION_FROM_SKY_SLOW)
+        let a_coin_x = crate::framework::common::rand_range_int(100, 649);
+        self.get_board().add_coin(
+            a_coin_x as f32,
+            60.0,
+            CoinType::UsableSeedPacket,
+            CoinMotion::FromSkySlow,
+        );
+
+        // C++: do aSeedType = (SeedType)Rand(mApp->GetSeedsAvailable()); while (…);
+        let a_seeds_available = self.get_app().get_seeds_available();
+        let mut a_seed_type;
+        loop {
+            a_seed_type = unsafe {
+                std::mem::transmute::<i32, SeedType>(
+                    crate::framework::common::rand_range(a_seeds_available),
+                )
+            };
+            let a_rejected = self.get_board().seed_not_recommended_for_level(a_seed_type) != 0
+                || !self.get_app().has_seed_type(a_seed_type)
+                || Plant::is_upgrade(a_seed_type)
+                || a_seed_type == SeedType::Sunflower
+                || a_seed_type == SeedType::Twinsunflower
+                || a_seed_type == SeedType::InstantCoffee
+                || a_seed_type == SeedType::Umbrella
+                || a_seed_type == SeedType::Sunshroom
+                || a_seed_type == SeedType::Imitater;
+            if !a_rejected {
+                break;
+            }
+        }
+
+        // C++: if (Rand(100) < PvzpAnimateCurve(0, 18, mBoard->CountPlantByType(SEED_LILYPAD), 30, 1, CURVE_LINEAR))
+        //         aSeedType = SEED_LILYPAD;
+        let a_lilypad_count = self.get_board().count_plant_by_type(SeedType::Lilypad);
+        let a_lilypad_chance = crate::todlib::tod_common::tod_animate_curve(
+            0,
+            18,
+            a_lilypad_count,
+            30,
+            1,
+            TodCurves::Linear,
+        );
+        let a_seed_type = if crate::framework::common::rand_range(100) < a_lilypad_chance {
+            SeedType::Lilypad
+        } else {
+            a_seed_type
+        };
+
+        // C++: aCoin->mUsableSeedType = aSeedType;
+        if let Some(a_coin) = self.get_board().coins.last_mut() {
+            a_coin.usable_seed_type = a_seed_type;
+        }
     }
 
     pub fn play_boss_enter(&self) {
@@ -2020,7 +2664,52 @@ impl Challenge {
     }
 
     pub fn portal_start(&mut self) {
+        // 对应 C++ Challenge::PortalStart（Challenge.cpp:3121-3157）
         self.challenge_state_counter = 9000;
+
+        // C++: GridItem* aPortal = mBoard->mGridItems.DataArrayAlloc(); ... OpenPortal()
+        // [TRANSLATION_NOTE]: C++ DataArrayAlloc 分配并绑定 mBoard；Rust 以 GridItem::new()
+        // 后显式赋值 board 等价（OpenPortal 内部需要 mBoard->GridToPixelY）。
+        let mut a_portal = GridItem::new();
+        a_portal.grid_item_type = crate::lawn::grid_item::GridItemType::PortalSquare;
+        a_portal.grid_x = 2;
+        a_portal.grid_y = 0;
+        a_portal.render_order =
+            crate::lawn::board::make_render_order(RENDER_LAYER_PARTICLE, a_portal.grid_y, 0);
+        a_portal.board = self.board;
+        a_portal.open_portal();
+        self.get_board().grid_items.push(a_portal);
+
+        let mut a_portal = GridItem::new();
+        a_portal.grid_item_type = crate::lawn::grid_item::GridItemType::PortalSquare;
+        a_portal.grid_x = 9;
+        a_portal.grid_y = 1;
+        a_portal.render_order =
+            crate::lawn::board::make_render_order(RENDER_LAYER_PARTICLE, a_portal.grid_y, 0);
+        a_portal.board = self.board;
+        a_portal.open_portal();
+        self.get_board().grid_items.push(a_portal);
+
+        let mut a_portal = GridItem::new();
+        a_portal.grid_item_type = crate::lawn::grid_item::GridItemType::PortalCircle;
+        a_portal.grid_x = 9;
+        a_portal.grid_y = 3;
+        a_portal.render_order =
+            crate::lawn::board::make_render_order(RENDER_LAYER_PARTICLE, a_portal.grid_y, 0);
+        a_portal.board = self.board;
+        a_portal.open_portal();
+        self.get_board().grid_items.push(a_portal);
+
+        let mut a_portal = GridItem::new();
+        a_portal.grid_item_type = crate::lawn::grid_item::GridItemType::PortalCircle;
+        a_portal.grid_x = 2;
+        a_portal.grid_y = 4;
+        a_portal.render_order =
+            crate::lawn::board::make_render_order(RENDER_LAYER_PARTICLE, a_portal.grid_y, 0);
+        a_portal.board = self.board;
+        a_portal.open_portal();
+        self.get_board().grid_items.push(a_portal);
+
         let board = self.get_board();
         board.m_zombie_count_down = 200;
         board.m_zombie_count_down_start = board.m_zombie_count_down;
@@ -2418,7 +3107,23 @@ impl Challenge {
                 board.clear_advice(AdviceType::ZombiquariumBuySnorkel);
                 board.m_tutorial_state = TutorialState::ZombiquariumBoughtSnorkel;
             }
-            let _zombie = self.zombiquarium_spawn_snorkle();
+            let a_zombie = self.zombiquarium_spawn_snorkle();
+            // C++: mApp->PlayFoley(FOLEY_ZOMBIESPLASH);
+            //      mApp->AddPvzpParticle(aZombie->mPosX + 60.0f, aZombie->mPosY + 20.0f, RENDER_LAYER_TOP, PARTICLE_PLANTING_POOL);
+            if let Some(a_app) = self.app {
+                unsafe {
+                    (*a_app)
+                        .play_foley(crate::todlib::tod_foley::FoleyType::ZombieSplash as i32);
+                    if let Some(a_zombie) = a_zombie {
+                        (*a_app).add_tod_particle(
+                            (*a_zombie).pos_x + 60.0,
+                            (*a_zombie).pos_y + 20.0,
+                            RENDER_LAYER_TOP,
+                            crate::lawn::game_enums::ParticleEffect::PlantingPool as i32,
+                        );
+                    }
+                }
+            }
         } else if seed_packet.seed_type == SeedType::ZombiquariumTrophy {
             self.spawn_level_award(2, 0);
             let board = self.get_board();
@@ -2545,8 +3250,52 @@ impl Challenge {
     }
 
     pub fn scary_potter_update(&mut self) {
+        // 对应 C++ Challenge::ScaryPotterUpdate（Challenge.cpp:4031-4051）
         if self.challenge_state == ChallengeState::ScaryPotterMaletting {
-            self.challenge_state = ChallengeState::Normal;
+            let a_app = match self.app {
+                Some(a) => a,
+                None => return,
+            };
+            unsafe {
+                // C++: Reanimation* aMalletReanim = mApp->ReanimationGet(mReanimChallenge);
+                //      if (aMalletReanim->mLoopCount > 0) —— 锤子动画播完一圈后才开罐
+                let a_loop_count = (*a_app)
+                    .reanimation_get(self.reanim_challenge)
+                    .map_or(0, |a_mallet_reanim| a_mallet_reanim.m_loop_count);
+                if a_loop_count > 0 {
+                    // C++: mBoard->GetGridItemAt(GRIDITEM_SCARY_POT, mChallengeGridX, mChallengeGridY)
+                    let a_scary_pot_idx = match self.board {
+                        Some(board) => (*board).grid_items.iter().position(|a_grid_item| {
+                            !a_grid_item.dead
+                                && a_grid_item.grid_item_type
+                                    == crate::lawn::grid_item::GridItemType::ScaryPot
+                                && a_grid_item.grid_x == self.challenge_grid_x
+                                && a_grid_item.grid_y == self.challenge_grid_y
+                        }),
+                        None => None,
+                    };
+                    if let Some(a_scary_pot_idx) = a_scary_pot_idx {
+                        if let Some(board) = self.board {
+                            // [TRANSLATION_NOTE]: 显式先取 &mut Board 再索引，避免
+                            // `(*raw).field[i]` 的隐式 autoref（dangerous_implicit_autorefs）。
+                            let a_board = &mut *board;
+                            let a_scary_pot = &mut a_board.grid_items[a_scary_pot_idx];
+                            self.scary_potter_open_pot(a_scary_pot);
+                        }
+                    }
+
+                    self.challenge_grid_x = 0;
+                    self.challenge_grid_y = 0;
+                    // C++: aMalletReanim->ReanimationDie(); mReanimChallenge = REANIMATIONID_NULL;
+                    if let Some(a_mallet_reanim) =
+                        (*a_app).reanimation_get_mut(self.reanim_challenge)
+                    {
+                        a_mallet_reanim.reanimation_die();
+                    }
+                    self.reanim_challenge = REANIMATIONID_NULL;
+                    self.challenge_state = ChallengeState::Normal;
+                }
+            }
         }
     }
 
@@ -2567,10 +3316,17 @@ impl Challenge {
         match pot_type {
             ScaryPotType::Seed => {
                 board.add_coin((a_pos_x + 20) as f32, a_pos_y as f32, CoinType::UsableSeedPacket, CoinMotion::FromPlant);
-                // 简化：mUsableSeedType 未单独存储
+                // C++: mBoard->AddCoin(...)->mUsableSeedType = theScaryPot->mSeedType;
+                if let Some(a_coin) = board.coins.last_mut() {
+                    a_coin.usable_seed_type = seed_type;
+                }
             }
             ScaryPotType::Zombie => {
                 board.add_zombie_in_row(zombie_type, grid_y, 0);
+                // C++: mBoard->AddZombieInRow(...)->mPosX = aXPos;
+                if let Some(a_zombie) = board.zombies.last_mut() {
+                    a_zombie.pos_x = a_pos_x as f32;
+                }
             }
             ScaryPotType::Sun => {
                 for i in 0..sun_count {
@@ -2579,9 +3335,13 @@ impl Challenge {
             }
             ScaryPotType::None => {}
         }
-        let _ = pot_state;
 
         scary_pot.grid_item_die();
+
+        // C++: if (mBoard->mHelpIndex == ADVICE_USE_SHOVEL_ON_POTS) DisplayAdvice("[ADVICE_DESTROY_POTS_TO_FINISH_LEVEL]", ...)
+        // [TRANSLATION_NOTE]: C++ 的 mHelpIndex 是 MessageWidget 的字符串下标，Rust 的 MessageWidget 消息表
+        // 未接入（报告 §3.7），无法等价判定"当前是否正显示 [USE_SHOVEL_ON_POTS]"，故该分支暂略。
+
         if self.scary_potter_is_completed() != 0 {
             if self.get_app().is_scary_potter_level() {
                 let board = self.get_board();
@@ -2593,6 +3353,31 @@ impl Challenge {
             } else {
                 self.spawn_level_award(grid_x, grid_y);
             }
+        }
+
+        // C++: mApp->PlaySample(Sexy::SOUND_BONK); mApp->PlayFoley(FOLEY_VASE_BREAKING);
+        //      anEffect = 按 mGridItemState 三选一；AddPvzpParticle(aXPos + 20, aYPos, RENDER_LAYER_GROUND, anEffect)
+        let a_app = match self.app {
+            Some(a) => a,
+            None => return,
+        };
+        unsafe {
+            (*a_app).play_sample(crate::todlib::tod_foley::SOUND_BONK);
+            (*a_app).play_foley(crate::todlib::tod_foley::FoleyType::VaseBreaking as i32);
+
+            let an_effect = if pot_state == GridItemState::ScaryPotLeaf {
+                crate::lawn::game_enums::ParticleEffect::VaseShatterLeaf
+            } else if pot_state == GridItemState::ScaryPotZombie {
+                crate::lawn::game_enums::ParticleEffect::VaseShatterZombie
+            } else {
+                crate::lawn::game_enums::ParticleEffect::VaseShatter
+            };
+            (*a_app).add_tod_particle(
+                (a_pos_x + 20) as f32,
+                a_pos_y as f32,
+                RENDER_LAYER_GROUND,
+                an_effect as i32,
+            );
         }
     }
 
@@ -3245,17 +4030,130 @@ impl Challenge {
     }
 
     pub fn puzzle_next_stage_clear(&mut self) {
+        // 对应 C++ Challenge::PuzzleNextStageClear（Challenge.cpp:4193-4250）
+        self.get_app()
+            .play_sample(unsafe { crate::todlib::tod_foley::SOUND_HUGE_WAVE });
+
+        {
+            let board = self.get_board();
+            board.m_next_survival_stage_counter = 0;
+            board.m_progress_meter_width = 0;
+        }
+
+        // C++: 场上僵尸 DieNoLoot()
+        {
+            let board = self.get_board();
+            for a_zombie in board.zombies.iter_mut() {
+                if a_zombie.dead {
+                    continue;
+                }
+                if a_zombie.is_on_board() {
+                    a_zombie.die_no_loot();
+                }
+            }
+        }
+
+        // C++: 场上植物 Die()
+        {
+            let board = self.get_board();
+            for a_plant in board.plants.iter_mut() {
+                if a_plant.dead {
+                    continue;
+                }
+                if a_plant.is_on_board() {
+                    a_plant.die();
+                }
+            }
+        }
+
+        // C++: mBoard->RefreshSeedPacketFromCursor()
+        self.get_board().refresh_seed_packet_from_cursor();
+
+        // C++: 种子包币 Die()，其余币 TryAutoCollectAfterLevelAward()
+        {
+            let board = self.get_board();
+            for a_coin in board.coins.iter_mut() {
+                if a_coin.dead {
+                    continue;
+                }
+                if a_coin.coin_type == CoinType::UsableSeedPacket {
+                    a_coin.die();
+                } else {
+                    a_coin.try_auto_collect_after_level_award();
+                }
+            }
+        }
+
+        // C++: 所有 GridItem 一律 GridItemDie()
+        {
+            let board = self.get_board();
+            for a_grid_item in board.grid_items.iter_mut() {
+                if a_grid_item.dead {
+                    continue;
+                }
+                a_grid_item.grid_item_die();
+            }
+        }
+
         self.survival_stage += 1;
         let board = self.get_board();
         board.clear_advice_immediately();
         board.m_level_award_spawned = false;
+
+        // C++: mApp->AddPvzpParticle(BOARD_WIDTH / 2, BOARD_HEIGHT / 2, RENDER_LAYER_TOP, PARTICLE_SCREEN_FLASH);
+        // [TRANSLATION_NOTE]: 报告 §4.3 所述"Rust 侧无等价入口"已不成立 —— 入口即
+        // LawnApp::add_tod_particle（lawn_app.rs:1460，对应 C++ AddPvzpParticle → AllocParticleSystem），
+        // 此处补上该全屏闪光粒子。
+        if let Some(a_app) = self.app {
+            unsafe {
+                (*a_app).add_tod_particle(
+                    (BOARD_WIDTH / 2) as f32,
+                    (BOARD_HEIGHT / 2) as f32,
+                    RENDER_LAYER_TOP,
+                    crate::lawn::game_enums::ParticleEffect::ScreenFlash as i32,
+                );
+            }
+        }
     }
 
     pub fn scary_potter_mallet_pot(&mut self, scary_pot: &mut GridItem) {
+        // 对应 C++ Challenge::ScaryPotterMalletPot（Challenge.cpp:4053-4064）
         self.challenge_grid_x = scary_pot.grid_x;
         self.challenge_grid_y = scary_pot.grid_y;
-        self.challenge_state = ChallengeState::ScaryPotterMaletting;
-        self.scary_potter_open_pot(scary_pot);
+        let (a_grid_x, a_grid_y) = (scary_pot.grid_x, scary_pot.grid_y);
+        // C++: int aXPos = mBoard->GridToPixelX(...); int aYPos = mBoard->GridToPixelY(...);
+        let (a_x_pos, a_y_pos) = {
+            let board = self.get_board();
+            (
+                board.grid_to_pixel_x(a_grid_x, a_grid_y),
+                board.grid_to_pixel_y(a_grid_x, a_grid_y),
+            )
+        };
+        let a_app = match self.app {
+            Some(a) => a,
+            None => return,
+        };
+        unsafe {
+            // C++: Reanimation* aMalletReanim = mApp->AddReanimation(aXPos, aYPos, RENDER_LAYER_TOP, REANIM_HAMMER);
+            if let Some(a_mallet_reanim) = (*a_app).add_reanimation(
+                a_x_pos as f32,
+                a_y_pos as f32,
+                RENDER_LAYER_TOP,
+                ReanimationType::Hammer as i32,
+            ) {
+                // C++: aMalletReanim->PlayReanim("anim_pot_open", REANIM_PLAY_ONCE_AND_HOLD, 0, 40.0f);
+                (*a_mallet_reanim).play_reanim(
+                    "anim_pot_open",
+                    crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,
+                    0,
+                    40.0,
+                );
+                self.reanim_challenge = (*a_app).reanimation_get_id(a_mallet_reanim);
+            }
+            self.challenge_state = ChallengeState::ScaryPotterMaletting;
+            // C++: mApp->PlayFoley(FOLEY_SWING);
+            (*a_app).play_foley(crate::todlib::tod_foley::FoleyType::Swing as i32);
+        }
     }
 
     pub fn i_zombie_seed_type_to_zombie_type(seed_type: SeedType) -> ZombieType {
@@ -4036,11 +4934,26 @@ impl Challenge {
     }
 
     pub fn squirrel_chew(&mut self, squirrel: &mut GridItem) {
+        // 对应 C++ Challenge::SquirrelChew（Challenge.cpp:4935-4950）
         squirrel.counter = 100 + crate::framework::common::rand_range(401);
         let (gx, gy) = (squirrel.grid_x, squirrel.grid_y);
         if let Some(board) = self.board { unsafe {
             let b = &mut *board;
+            // [TRANSLATION_NOTE]: C++ 的 GridToPixelX/Y 在拿到 aPlant 之后调用；Rust 侧因
+            // plants.iter_mut() 会借走 b 的可变借用，故先算好像素坐标再查找植物（无副作用，顺序等价）。
+            let (a_pos_x, a_pos_y) = (b.grid_to_pixel_x(gx, gy), b.grid_to_pixel_y(gx, gy));
+            let a_app = b.app;
             if let Some(plant) = b.plants.iter_mut().find(|p| !p.dead && p.plant_col == gx && p.base.row == gy) {
+                // C++: mApp->AddPvzpParticle(aPosX + 40, aPosY + 40, aPlant->mRenderOrder + 1, PARTICLE_WALLNUT_EAT_SMALL);
+                let a_render_order = plant.base.render_order + 1;
+                if let Some(a_app) = a_app {
+                    (*a_app).add_tod_particle(
+                        (a_pos_x + 40) as f32,
+                        (a_pos_y + 40) as f32,
+                        a_render_order,
+                        crate::lawn::game_enums::ParticleEffect::WallnutEatSmall as i32,
+                    );
+                }
                 if plant.eaten_flash_countdown <= 25 {
                     plant.eaten_flash_countdown = 25;
                 }
@@ -4116,9 +5029,89 @@ impl Challenge {
     }
 
     pub fn update_rain(&mut self) {
+        // 对应 C++ Challenge::UpdateRain（Challenge.cpp:5076-5106）
         self.rain_counter -= 1;
-        if self.rain_counter < 0 {
-            self.rain_counter = 15;
+        // C++: if (mRainCounter < 0 && !mBoard->mCutScene->IsBeforePreloading())
+        let a_before_preloading = match self.board {
+            Some(b) => unsafe { (*b).m_cut_scene.map_or(false, |cs| (*cs).is_before_preloading()) },
+            None => false,
+        };
+        if self.rain_counter < 0 && !a_before_preloading {
+            let app = match self.app {
+                Some(a) => a,
+                None => return,
+            };
+            unsafe {
+                // C++ 第一组：水花 reanim
+                let mut a_pos_x = crate::framework::common::rand_range_float(40.0, 740.0);
+                let mut a_pos_y = crate::framework::common::rand_range_float(90.0, 240.0);
+                let a_splash_reanim = (*app).add_reanimation(
+                    a_pos_x,
+                    a_pos_y,
+                    RENDER_LAYER_GROUND,
+                    ReanimationType::RainSplash as i32,
+                );
+                if let Some(a_reanim) = a_splash_reanim {
+                    (*a_reanim).m_color_override = Color::new(
+                        255,
+                        255,
+                        255,
+                        crate::framework::common::rand_range_int(100, 200) as u8,
+                    );
+                }
+                let mut a_scale = crate::framework::common::rand_range_float(0.7, 1.2);
+                if let Some(a_reanim) = a_splash_reanim {
+                    (*a_reanim).override_scale(a_scale, a_scale);
+                }
+
+                // C++ 第二组：新建彩虹圈 reanim（未被使用），但 ColorOverride/Scale 写到了
+                // aSplashReanim 上 —— 保持原样，不修正为 aCircleReanim。
+                a_pos_x = crate::framework::common::rand_range_float(40.0, 740.0);
+                a_pos_y = crate::framework::common::rand_range_float(290.0, 410.0);
+                let _a_circle_reanim = (*app).add_reanimation(
+                    a_pos_x,
+                    a_pos_y,
+                    RENDER_LAYER_GROUND,
+                    ReanimationType::RainCircle as i32,
+                );
+                if let Some(a_reanim) = a_splash_reanim {
+                    (*a_reanim).m_color_override = Color::new(
+                        255,
+                        255,
+                        255,
+                        crate::framework::common::rand_range_int(50, 150) as u8,
+                    );
+                }
+                a_scale = crate::framework::common::rand_range_float(0.7, 1.1);
+                if let Some(a_reanim) = a_splash_reanim {
+                    (*a_reanim).override_scale(a_scale, a_scale);
+                }
+
+                // C++ 第三组：新建水花 reanim（未被使用），ColorOverride/Scale 同样写到
+                // aSplashReanim 上 —— 保持原样。
+                a_pos_x = crate::framework::common::rand_range_float(40.0, 740.0);
+                a_pos_y = crate::framework::common::rand_range_float(450.0, 580.0);
+                let _a_rain_reanim = (*app).add_reanimation(
+                    a_pos_x,
+                    a_pos_y,
+                    RENDER_LAYER_GROUND,
+                    ReanimationType::RainSplash as i32,
+                );
+                if let Some(a_reanim) = a_splash_reanim {
+                    (*a_reanim).m_color_override = Color::new(
+                        255,
+                        255,
+                        255,
+                        crate::framework::common::rand_range_int(100, 200) as u8,
+                    );
+                }
+                a_scale = crate::framework::common::rand_range_float(0.7, 1.2);
+                if let Some(a_reanim) = a_splash_reanim {
+                    (*a_reanim).override_scale(a_scale, a_scale);
+                }
+
+                self.rain_counter = crate::framework::common::rand_range_int(10, 20);
+            }
         }
     }
 
@@ -4306,7 +5299,34 @@ impl Challenge {
     }
 
     pub fn last_stand_update(&mut self) {
-        if self.challenge_state == ChallengeState::LastStandOnslaught {
+        // 对应 C++ Challenge::LastStandUpdate（Challenge.cpp:5108-5130）
+        let a_show_store_button = self.get_board().m_next_survival_stage_counter == 0
+            && self.challenge_state == ChallengeState::Normal
+            && self
+                .get_board()
+                .store_button
+                .map_or(false, |b| unsafe { (*b).btn_no_draw });
+
+        if a_show_store_button {
+            if let Some(a_button) = self.get_board().store_button {
+                unsafe {
+                    (*a_button).btn_no_draw = false;
+                    (*a_button).disabled = false;
+
+                    if self.survival_stage == 0 {
+                        (*a_button).set_label("[START_ONSLAUGHT]");
+                        (*a_button).resize(300, 559, 210, 46);
+                    } else {
+                        (*a_button).set_label("[CONTINUE_ONSLAUGHT]");
+                        (*a_button).resize(270, 559, 257, 46);
+                    }
+                }
+            }
+        }
+
+        if self.challenge_state == ChallengeState::LastStandOnslaught
+            && self.get_app().game_scene == crate::lawn::lawn_app::GameScenes::Playing
+        {
             self.challenge_state_counter += 1;
         }
     }
@@ -4520,9 +5540,20 @@ impl Challenge {
     }
 
     pub fn beghouled_make_start_board(&mut self) {
-        let mut board_state = BeghouledBoardState { seed_type: [[SeedType::None; 6]; 9] };
-        self.load_beghouled_board_state(&mut board_state);
-        self.beghouled_fill_holes(&mut board_state, 0);
+        // 对应 C++ Challenge::BeghouledMakeStartBoard（Challenge.cpp:1069-1083）
+        let mut a_empty_board_state = BeghouledBoardState { seed_type: [[SeedType::None; 6]; 9] };
+        self.load_beghouled_board_state(&mut a_empty_board_state);
+        let mut a_board_state = BeghouledBoardState { seed_type: [[SeedType::None; 6]; 9] };
+        self.load_beghouled_board_state(&mut a_board_state);
+
+        self.beghouled_fill_holes(&mut a_board_state, 0);
+        // C++: PVZP_ASSERT(!BeghouledBoardHasMatch(&aBoardState));
+        debug_assert!(self.beghouled_board_has_match(&a_board_state) == 0);
+
+        // C++: if (!BeghouledBoardHasMatch(&aBoardState)) BeghouledCreatePlants(&aEmptyBoardState, &aBoardState);
+        if self.beghouled_board_has_match(&a_board_state) == 0 {
+            self.beghouled_create_plants(&a_empty_board_state, &a_board_state);
+        }
     }
 
     pub fn beghouled_create_plants(&mut self, old_board_state: &BeghouledBoardState, new_board_state: &BeghouledBoardState) {
@@ -4629,7 +5660,24 @@ impl Challenge {
     }
 
     pub fn tree_of_wisdom_update(&mut self) {
-        if self.challenge_state_counter > 0 {
+        // 对应 C++ Challenge::TreeOfWisdomUpdate（Challenge.cpp:5450-5507）
+        // C++: 先对全部未死亡 GridItem 执行 TreeOfWisdomToolUpdate
+        let a_item_ptrs: Vec<*mut GridItem> = {
+            let board = self.get_board();
+            board
+                .grid_items
+                .iter_mut()
+                .filter(|a_grid_item| !a_grid_item.dead)
+                .map(|a_grid_item| a_grid_item as *mut GridItem)
+                .collect()
+        };
+        for a_item_ptr in a_item_ptrs {
+            self.tree_of_wisdom_tool_update(unsafe { &mut *a_item_ptr });
+        }
+
+        if self.get_app().game_scene == crate::lawn::lawn_app::GameScenes::Playing
+            && self.challenge_state_counter > 0
+        {
             self.challenge_state_counter -= 1;
         }
         if self.challenge_state_counter == 0 {
@@ -4637,22 +5685,184 @@ impl Challenge {
                 self.tree_of_wisdom_give_wisdom();
             } else if self.challenge_state == ChallengeState::TreeWaitingToBabble {
                 self.tree_of_wisdom_babble();
-            } else {
-                self.challenge_state = ChallengeState::TreeWaitingToBabble;
-                self.challenge_state_counter = 1000;
+            } else if self.challenge_state == ChallengeState::TreeBabbling
+                || self.challenge_state == ChallengeState::TreeGiveWisdom
+            {
+                if self.tree_of_wisdom_talk_index == 500 {
+                    self.tree_of_wisdom_say_repeat();
+                } else {
+                    self.challenge_state = ChallengeState::TreeWaitingToBabble;
+                    self.challenge_state_counter =
+                        crate::framework::common::rand_range_int(700, 1000);
+                }
+            }
+        }
+
+        // C++: for (int i = 5; i >= 0; i--) // Off by one error!
+        let a_app = match self.app {
+            Some(a) => a,
+            None => return,
+        };
+        for i in (0..=5).rev() {
+            unsafe {
+                if let Some(a_reanim_cloud) =
+                    (*a_app).reanimation_get_mut(self.reanim_clouds[i as usize])
+                {
+                    if self.clouds_counter[i as usize] > 0 {
+                        self.clouds_counter[i as usize] -= 1;
+                        if self.clouds_counter[i as usize] == 0 {
+                            (*a_reanim_cloud).m_loop_count = 0;
+                            (*a_reanim_cloud).m_anim_time = 0.0;
+                            (*a_reanim_cloud).m_anim_rate = 0.2;
+                        }
+                    } else if (*a_reanim_cloud).m_loop_count > 0 {
+                        self.clouds_counter[i as usize] =
+                            crate::framework::common::rand_range_int(2000, 4000);
+                    }
+
+                    (*a_reanim_cloud).update();
+                }
             }
         }
     }
 
     pub fn tree_of_wisdom_fertilize(&mut self) {
+        // 对应 C++ Challenge::TreeOfWisdomFertilize（Challenge.cpp:5344-5362）
+        let a_app = match self.app {
+            Some(a) => a,
+            None => return,
+        };
+
+        // C++: GridItem* aTreeFood = mBoard->mGridItems.DataArrayAlloc();
+        let mut a_tree_food = GridItem::new();
+        a_tree_food.pos_x = 340.0;
+        a_tree_food.pos_y = 300.0;
+        a_tree_food.grid_item_type = crate::lawn::grid_item::GridItemType::ZenTool;
+        a_tree_food.grid_x = 0;
+        a_tree_food.grid_y = 0;
+        a_tree_food.render_order =
+            crate::lawn::board::make_render_order(RENDER_LAYER_ABOVE_UI, 0, 0);
+        a_tree_food.board = self.board;
+
+        unsafe {
+            // C++: Reanimation* aReanim = mApp->AddReanimation(340.0f, 300.0f, 0, REANIM_TREEOFWISDOM_TREEFOOD);
+            if let Some(a_reanim) = (*a_app).add_reanimation(
+                340.0,
+                300.0,
+                0,
+                ReanimationType::TreeofwisdomTreefood as i32,
+            ) {
+                (*a_reanim).m_loop_type = crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold;
+                a_tree_food.grid_item_reanim_id = (*a_app).reanimation_get_id(a_reanim);
+            }
+            a_tree_food.grid_item_state = GridItemState::ZenToolFertilizer;
+
+            (*a_app).play_foley(crate::todlib::tod_foley::FoleyType::Fertilizer as i32);
+            // C++: mApp->mPlayerInfo->mPurchases[STORE_ITEM_TREE_FOOD]--;
+            if let Some(a_player_info) = (*a_app).player_info.as_mut() {
+                a_player_info.m_purchases[StoreItem::TreeFood as usize] -= 1;
+            }
+        }
+
         self.challenge_state = ChallengeState::Normal;
-        let board = self.get_board();
-        board.clear_cursor();
+        self.get_board().grid_items.push(a_tree_food);
+        self.get_board().clear_cursor();
     }
 
     pub fn tree_of_wisdom_init(&mut self) {
-        self.challenge_state = ChallengeState::TreeWaitingToBabble;
-        self.challenge_state_counter = 1000;
+        // 对应 C++ Challenge::TreeOfWisdomInit（Challenge.cpp:5273-5321）
+        // 对应 C++ coin.rs 中的 PURCHASE_COUNT_OFFSET（购买计数偏移基线）
+        const PURCHASE_COUNT_OFFSET: i32 = 1000;
+
+        // C++: ReanimatorEnsureDefinitionLoaded(REANIM_TREEOFWISDOM, true);
+        crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(
+            ReanimationType::Treeofwisdom,
+        );
+
+        let a_app = match self.app {
+            Some(a) => a,
+            None => return,
+        };
+        let a_tree_size_raw = self.tree_of_wisdom_get_size();
+
+        unsafe {
+            // C++: Reanimation* aReanimTree = mApp->AddReanimation(0.5f, 0.5f, 0, REANIM_TREEOFWISDOM);
+            let a_reanim_tree = match (*a_app).add_reanimation(
+                0.5,
+                0.5,
+                0,
+                ReanimationType::Treeofwisdom as i32,
+            ) {
+                Some(r) => r,
+                None => return,
+            };
+            (*a_reanim_tree).m_is_attachment = true;
+            (*a_reanim_tree).assign_render_group_to_prefix("bg", 0);
+            (*a_reanim_tree).assign_render_group_to_prefix("tree", 2);
+            (*a_reanim_tree).assign_render_group_to_prefix("grass", 3);
+            (*a_reanim_tree).assign_render_group_to_prefix("overlay", 4);
+            (*a_reanim_tree).assign_render_group_to_prefix("leaf", 4);
+            (*a_reanim_tree).assign_render_group_to_prefix("bunch", 4);
+            (*a_reanim_tree).set_truncate_disappearing_frames(None, false);
+            self.reanim_challenge = (*a_app).reanimation_get_id(a_reanim_tree);
+
+            // C++: int aTreeSize = std::clamp(TreeOfWisdomGetSize(), 1, 50);
+            let a_tree_size = a_tree_size_raw.clamp(1, 50);
+            let a_track_name = format!("anim_grow{}", a_tree_size);
+            (*a_reanim_tree).play_reanim(
+                &a_track_name,
+                crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,
+                0,
+                18.0,
+            );
+
+            let a_purchases_below_offset = match (*a_app).player_info.as_ref() {
+                Some(a_player_info) => {
+                    a_player_info.m_purchases[StoreItem::TreeFood as usize] < PURCHASE_COUNT_OFFSET
+                }
+                None => false,
+            };
+            if a_tree_size == 0 && a_purchases_below_offset {
+                (*a_reanim_tree).m_frame_count += (*a_reanim_tree).m_frame_start;
+                (*a_reanim_tree).m_frame_start = 0;
+            } else {
+                (*a_reanim_tree).m_anim_time = 0.99;
+            }
+
+            for i in 0..6 {
+                // C++: Reanimation* aReanimCloud = mApp->AddReanimation(0, 0, 0, REANIM_TREEOFWISDOM_CLOUDS);
+                let a_reanim_cloud = match (*a_app).add_reanimation(
+                    0.0,
+                    0.0,
+                    0,
+                    ReanimationType::TreeofwisdomClouds as i32,
+                ) {
+                    Some(r) => r,
+                    None => continue,
+                };
+                let a_track_name = format!("Cloud{}", i + 1);
+                (*a_reanim_cloud).play_reanim(
+                    &a_track_name,
+                    crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,
+                    0,
+                    0.0,
+                );
+                self.reanim_clouds[i as usize] = (*a_app).reanimation_get_id(a_reanim_cloud);
+
+                let a_cloud_counter = crate::framework::common::rand_range_int(-6000, 2000);
+                self.clouds_counter[i as usize] = a_cloud_counter;
+                if a_cloud_counter < 0 {
+                    (*a_reanim_cloud).m_anim_time = -(a_cloud_counter as f32) / 6000.0;
+                    (*a_reanim_cloud).m_anim_rate = 0.2;
+                    self.clouds_counter[i as usize] = 0;
+                } else {
+                    (*a_reanim_cloud).m_anim_rate = 0.0;
+                }
+            }
+
+            self.challenge_state = ChallengeState::TreeWaitingToBabble;
+            self.challenge_state_counter = crate::framework::common::rand_range_int(700, 1500);
+        }
     }
 
     pub fn tree_of_wisdom_mouse_on(&self, x: i32, y: i32) -> i32 {
