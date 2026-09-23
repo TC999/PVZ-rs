@@ -295,8 +295,14 @@ impl Drop for SDLSoundManager {
 
 /// 设置音乐放大（对应 C++ SetMusicAmplify）
 pub fn set_music_amplify(_music_id: i32, _amplify: f64) {}
-/// 加载 AU 音效（对应 C++ LoadAUSound）
-/// [TRANSLATION_NOTE]: .au 解码器尚未移植（报告 §6.1），保留桩。
+/// 加载 AU 音效（对应 C++ LoadAUSound，SDLSoundManager.cpp:85-245，161 行）
+/// [TRANSLATION_NOTE]: 保留为桩。两点说明：
+/// 1) C++ 中它是**兜底路径** —— LoadSound 先试 .wav/.mp3/.ogg，全部失败才 LoadAUSound(path + ".au")，
+///    因此只有"在 pak 内仅以 .au 形式提供"的音效才会走到这里。
+/// 2) 是否存在这类音效**未能确证**：`main.pak` 的文件名表已压缩/编码（头部非明文，资源路径无法
+///    静态枚举），无法用字符串检索判定。若要确证，可用运行期证据：`load_into_slot` 在每次尝试时
+///    都会 eprintln 出 "尝试加载: <path>"，加载失败即会打出路径 —— 若日志中不存在任何
+///    只在 .au 下命中的音效，则本函数无需实现。
 pub fn load_au_sound(_data: &[u8]) -> i32 { 0 }
 /// 获取音效数量（对应 C++ GetNumSounds）
 pub fn get_num_sounds() -> i32 { 0 }
