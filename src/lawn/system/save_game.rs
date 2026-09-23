@@ -679,6 +679,19 @@ fn header_v4_to_bytes(header: &SaveFileHeaderV4) -> [u8; 24] {
 /// 加载游戏存档（对应 C++ LawnLoadGame）
 /// 实现 V4 格式文件头验证和 chunk 分发
 pub fn lawn_load_game(board: Option<*mut Board>, file_path: &str) -> bool {
+    // [TRANSLATION_NOTE]: 这里**不**实现 C++ LawnLoadGame（SaveGame.cpp:3079-3112）的
+    // "v4 失败 → 回退旧格式（0xFEEDDEAD / version 2）" 分支，原因是旧格式在本 Rust 版中
+    // 无法实现、也不应实现：核对 C++ 的旧格式 SyncBoard（SaveGame.cpp:3017-3077）后可见，
+    // 它是 **C++ 结构体的整块内存转储** ——
+    //     size_t offset = size_t(&theBoard->mPaused) - size_t(theBoard);
+    //     theContext.SyncBytes(&theBoard->mPaused, sizeof(Board) - offset);
+    //     theContext.SyncBytes(theBoard->mCursorObject, sizeof(CursorObject)); ...
+    // 即直接把 Board / CursorObject / MessageWidget / SeedBank / Challenge / Music 的
+    // 内存镜像（含 padding、指针宽度、裸地址）写进文件。它依赖精确的同构内存布局，
+    // 本质上不可移植 —— 这也正是 PvZ-Portable 后来引入 PVZP_SAVE4 便携格式（chunk + TLV）
+    // 的原因。Rust 的 Board 由 Vec/Option/指针构成，布局与 C++ 完全不同，无法按该镜像解析；
+    // 即便强行写出偏移解析，也只能读"与 C++ 同一次构建"产生的存档，且指针字段全是垃圾值。
+    // 因此旧格式一律拒绝（返回 false），仅支持 PVZP_SAVE4。
     // 首先读取文件
     let file_data = match std::fs::read(file_path) {
         Ok(data) => data,
