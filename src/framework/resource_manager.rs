@@ -430,6 +430,43 @@ impl ResourceManager {
             }
         }
 
+        // 依次加载所有属于该组的声音资源（对应 C++ LoadGroup 对 Sound 的处理）
+        // [TRANSLATION_NOTE]: 原实现只在 lawn_app 中对 "LoadingSounds" 组硬编码加载声音，
+        // 其它组的 Sound **永不加载**（SOUND_* 变量保持 -1 → 播放时 get_sound_instance(-1)
+        // 返回 None → play_foley 直接 return，静默无声）。此处按组统一处理，与 C++ 一致。
+        let sound_keys: Vec<String> = self.sound_map.keys()
+            .filter(|k| {
+                if let Some(ptr) = self.sound_map.get(*k) {
+                    unsafe {
+                        let res = &*(*ptr as *const SoundRes);
+                        string_to_lower(&res.base.res_group) == lower_group
+                    }
+                } else { false }
+            })
+            .cloned()
+            .collect();
+
+        for key in &sound_keys {
+            if let Some(&ptr) = self.sound_map.get(key) {
+                unsafe {
+                    let res = &mut *(ptr as *mut SoundRes);
+                    if res.base.path.is_empty() || res.sound_id != -1 {
+                        continue;
+                    }
+                    let a_sm = match self.app.and_then(|a| (*a).sound_manager) {
+                        Some(sm) => sm,
+                        None => continue,
+                    };
+                    let a_id = (*a_sm).load_sound(&res.base.path);
+                    if a_id >= 0 {
+                        res.sound_id = a_id as isize;
+                        // C++ GetSoundThrow：把 SoundManager 槽位 id 赋给对应 SOUND_XXX 变量
+                        crate::todlib::tod_foley::assign_sound_id(key, a_id);
+                    }
+                }
+            }
+        }
+
         self.loaded_groups.insert(lower_group);
         true
     }
