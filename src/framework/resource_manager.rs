@@ -110,6 +110,15 @@ pub struct ResourceManager {
     pub default_id_prefix: String,
     /// 允许缺失程序资源
     pub allow_missing_program_resources: bool,
+
+    /// 资源 id（小写字符串）→ 数字编号
+    /// 对应 C++ 由 resources.xml codegen 出的 `ResourceId` 枚举（Resources.h:35），
+    /// 此处按 XML 解析顺序分配编号 —— 顺序与 codegen 一致，故编号与 C++ 相同。
+    pub resource_id_map: HashMap<String, u32>,
+    /// 按编号索引的资源指针表（对应 C++ 的 `gResources[]`，Resources.cpp:3206）
+    pub resource_ptrs: Vec<*mut BaseRes>,
+    /// 下一个待分配的资源编号
+    pub next_resource_id: u32,
 }
 
 impl ResourceManager {
@@ -126,6 +135,9 @@ impl ResourceManager {
             default_path: String::new(),
             default_id_prefix: String::new(),
             allow_missing_program_resources: false,
+            resource_id_map: HashMap::new(),
+            resource_ptrs: Vec::new(),
+            next_resource_id: 0,
         }
     }
 
@@ -227,7 +239,9 @@ impl ResourceManager {
                 res.base.path = path;
                 res.base.res_group = self.cur_res_group.clone();
                 let key = string_to_lower(id);
-                self.image_map.insert(key, Box::into_raw(res) as *mut BaseRes);
+                let a_ptr = Box::into_raw(res) as *mut BaseRes;
+                self.image_map.insert(key.clone(), a_ptr);
+                self.register_resource_id(&key, a_ptr);
             }
             "Sound" => {
                 let path = element.attributes.get("path").cloned().unwrap_or_default();
@@ -242,7 +256,9 @@ impl ResourceManager {
                 res.base.path = path;
                 res.base.res_group = self.cur_res_group.clone();
                 let key = string_to_lower(id);
-                self.sound_map.insert(key, Box::into_raw(res) as *mut BaseRes);
+                let a_ptr = Box::into_raw(res) as *mut BaseRes;
+                self.sound_map.insert(key.clone(), a_ptr);
+                self.register_resource_id(&key, a_ptr);
             }
             "Font" => {
                 let path = element.attributes.get("path").cloned().unwrap_or_default();
@@ -263,10 +279,59 @@ impl ResourceManager {
                 res.base.path = path;
                 res.base.res_group = self.cur_res_group.clone();
                 let key = string_to_lower(id);
-                self.font_map.insert(key, Box::into_raw(res) as *mut BaseRes);
+                let a_ptr = Box::into_raw(res) as *mut BaseRes;
+                self.font_map.insert(key.clone(), a_ptr);
+                self.register_resource_id(&key, a_ptr);
             }
             _ => {} // 未知类型忽略
         }
+    }
+
+    /// 为资源登记编号（对应 C++ 由 resources.xml codegen 生成的 ResourceId 顺序）
+    /// [TRANSLATION_NOTE]: C++ 的 ResourceId 是编译期枚举，此处按 XML 解析顺序运行时分配 ——
+    /// 同一份 resources.xml 下两者编号一致，故存档中的资源 id 可互通。
+    fn register_resource_id(&mut self, key: &str, ptr: *mut BaseRes) {
+        let a_id = self.next_resource_id;
+        self.next_resource_id += 1;
+        self.resource_id_map.insert(key.to_string(), a_id);
+        self.resource_ptrs.push(ptr);
+    }
+
+    /// 按编号取图像（对应 C++ Sexy::GetImageById，Resources.cpp:3204-3207）
+    pub fn get_image_by_id(&self, id: u32) -> *mut crate::framework::graphics::image::Image {
+        let a_ptr = match self.resource_ptrs.get(id as usize) {
+            Some(p) => *p,
+            None => return std::ptr::null_mut(),
+        };
+        if a_ptr.is_null() {
+            return std::ptr::null_mut();
+        }
+        unsafe {
+            let a_res = &*(a_ptr as *const ImageRes);
+            a_res.image.as_image_ptr()
+        }
+    }
+
+    /// 由图像指针反查编号（对应 C++ Sexy::GetIdByImage → GetIdByVariable，Resources.cpp:3234-3260）
+    /// 未命中返回 -1（对应 C++ 的 `ResourceId::RESOURCE_ID_MAX`）。
+    /// [TRANSLATION_NOTE]: C++ 用带失效标志的 `static std::map<void*,int>` 缓存；Rust 侧每次线性遍历
+    /// （资源量级为百，开销可忽略），避免引入全局可变缓存带来的借用问题。
+    pub fn get_id_by_image(&self, image: *mut crate::framework::graphics::image::Image) -> i32 {
+        if image.is_null() {
+            return -1;
+        }
+        for (i, a_ptr) in self.resource_ptrs.iter().enumerate() {
+            if a_ptr.is_null() {
+                continue;
+            }
+            unsafe {
+                let a_res = &*(*a_ptr as *const ImageRes);
+                if a_res.image.as_image_ptr() == image {
+                    return i as i32;
+                }
+            }
+        }
+        -1
     }
 
     /// 解析带子元素的资源容器（如 <Font ...>...</Font>）

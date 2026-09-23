@@ -2397,9 +2397,36 @@ fn sync_reanim_transform_portable(ctx: &mut PortableSaveContext, transform: &mut
     ctx.sync_f32(&mut transform.m_alpha);
 }
 
+/// 由图像指针反查资源 id（对应 C++ `Sexy::GetIdByImage`，Resources.cpp:3234-3237）
+/// 未命中返回 -1（对应 C++ 的 `ResourceId::RESOURCE_ID_MAX`）。
+fn image_resource_id(image: *mut crate::framework::graphics::image::Image) -> i32 {
+    if image.is_null() {
+        return -1;
+    }
+    if let Some(a_app) = crate::lawn::lawn_app::LawnApp::instance() {
+        unsafe {
+            if let Some(a_rm) = (*a_app).base.resource_manager {
+                return (*a_rm).get_id_by_image(image);
+            }
+        }
+    }
+    -1
+}
+
+/// 按资源 id 取图像（对应 C++ `Sexy::GetImageById`，Resources.cpp:3204-3207）
+fn image_from_resource_id(id: u32) -> *mut crate::framework::graphics::image::Image {
+    if let Some(a_app) = crate::lawn::lawn_app::LawnApp::instance() {
+        unsafe {
+            if let Some(a_rm) = (*a_app).base.resource_manager {
+                return (*a_rm).get_image_by_id(id);
+            }
+        }
+    }
+    std::ptr::null_mut()
+}
+
 /// 同步动画轨道实例（对应 C++ SyncReanimTrackInstancePortable，SaveGame.cpp:1122）
-/// [TRANSLATION_NOTE]: Rust m_blend_count 为 f32（C++ mBlendCounter 为 int32），以 i32 中转保位；
-/// m_image_override 为 *mut Image 无法反查资源 ID，以 0 占位写、读侧置空
+/// [TRANSLATION_NOTE]: Rust m_blend_count 为 f32（C++ mBlendCounter 为 int32），以 i32 中转保位。
 fn sync_reanim_track_instance_portable(ctx: &mut PortableSaveContext, track: &mut ReanimatorTrackInstance) {
     let mut blend_counter = track.m_blend_count as i32;
     ctx.sync_i32(&mut blend_counter);
@@ -2413,11 +2440,22 @@ fn sync_reanim_track_instance_portable(ctx: &mut PortableSaveContext, track: &mu
     ctx.sync_f32(&mut track.m_shake_y);
     // C++ reinterpret_cast<int32_t&>(mAttachmentID)；Rust AttachmentID = i32
     ctx.sync_i32(&mut track.m_attachment_id);
-    // C++ SyncImagePortable(mImageOverride)——Rust 无资源反查，占位
-    let mut image_override = 0i32;
+    // 对应 C++ SyncImagePortable（SaveGame.cpp:477-500）：ResourceId ↔ Image* 双向。
+    // [TRANSLATION_NOTE]: 原实现以 0 占位（当时无资源 id 体系）；现已由
+    // ResourceManager::get_id_by_image / get_image_by_id 提供（对应 C++ GetIdByImage / GetImageById）。
+    let mut image_override = if ctx.reading {
+        0i32
+    } else {
+        image_resource_id(track.m_image_override)
+    };
     ctx.sync_i32(&mut image_override);
     if ctx.reading {
-        track.m_image_override = std::ptr::null_mut();
+        if image_override < 0 {
+            // C++: aResID == RESOURCE_ID_MAX → theImage = nullptr
+            track.m_image_override = std::ptr::null_mut();
+        } else {
+            track.m_image_override = image_from_resource_id(image_override as u32);
+        }
     }
     ctx.sync_i32(&mut track.m_render_group);
     sync_color_portable(ctx, &mut track.m_track_color);
