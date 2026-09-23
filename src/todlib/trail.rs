@@ -352,9 +352,19 @@ impl TrailHolder {
         self.m_trails.dispose();
     }
 
-    pub fn alloc_trail(&mut self, _render_order: i32, trail_type: TrailType) -> *mut Trail {
-        // TODO: 使用全局轨迹定义数组 gTrailDefArray
-        self.alloc_trail_from_def(_render_order, std::ptr::null_mut())
+    /// 按类型分配轨迹（对应 C++ `TrailHolder::AllocTrail`，Trail.cpp:285-289）
+    /// [TRANSLATION_NOTE]: 原为 TODO（直接传 null 定义）。C++ 的实现是
+    /// `return AllocTrailFromDef(theRenderOrder, &gTrailDefArray[theTrailType]);`
+    /// —— 即按 TrailType 从全局定义数组取定义。现照此实现；越界或定义表未加载时
+    /// 退回 null 定义（C++ 不检查下标，Rust 侧避免越界）。
+    pub fn alloc_trail(&mut self, render_order: i32, trail_type: TrailType) -> *mut Trail {
+        unsafe {
+            if trail_type < 0 || G_TRAIL_DEF_ARRAY.is_null() || trail_type >= G_TRAIL_DEF_COUNT {
+                return self.alloc_trail_from_def(render_order, std::ptr::null_mut());
+            }
+            let a_def = G_TRAIL_DEF_ARRAY.add(trail_type as usize);
+            self.alloc_trail_from_def(render_order, a_def)
+        }
     }
 
     pub fn alloc_trail_from_def(&mut self, _render_order: i32, _definition: *mut TrailDefinition) -> *mut Trail {
