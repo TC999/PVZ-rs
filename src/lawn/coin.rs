@@ -1226,7 +1226,13 @@ impl Coin {
                     if let Some(board) = board_ptr {
                         (*board).m_chocolate_collected += 1;
                     }
-                    // [TRANSLATION_NOTE]: AddPvzpParticle 未实现
+                    // C++ Coin.cpp:1134: mApp->AddPvzpParticle(mPosX + 30.0f, mPosY + 30.0f, mRenderOrder + 1, PARTICLE_PRESENT_PICKUP);
+                    (*app).add_tod_particle(
+                        self.pos_x + 30.0,
+                        self.pos_y + 30.0,
+                        self.base.render_order + 1,
+                        crate::lawn::game_enums::ParticleEffect::PresentPickup as i32,
+                    );
                     let chocolate_idx = crate::lawn::game_enums::StoreItem::Chocolate as usize;
                     let cur = (*app).player_info.as_ref().map_or(0, |pi| pi.m_purchases.get(chocolate_idx).map_or(0, |v| *v));
                     if cur < PURCHASE_COUNT_OFFSET {

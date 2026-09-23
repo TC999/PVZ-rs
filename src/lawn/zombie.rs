@@ -2253,10 +2253,21 @@ impl Zombie {
                             a_row, a_pos_x, a_pos_y, 115, 1, true, 255);
                         board.kill_all_plants_in_radius(a_pos_x, a_pos_y, 90);
                     }
-                    // 对应 C++: mBoard->ShakeBoard(4, -6)
+                }
+
+                // C++: mApp->AddPvzpParticle(aPosX, aPosY, Board::MakeRenderOrder(RENDER_LAYER_TOP, 0, 0), PARTICLE_JACKEXPLODE);
+                //      mBoard->ShakeBoard(4, -6);   ← 注意 C++ 中 ShakeBoard 在粒子之后
+                if let Some(app) = self.base.get_app_mut() {
+                    app.add_tod_particle(
+                        a_pos_x as f32,
+                        a_pos_y as f32,
+                        crate::lawn::board::make_render_order(RENDER_LAYER_TOP, 0, 0),
+                        ParticleEffect::Jackexplode as i32,
+                    );
+                }
+                if let Some(board) = self.base.get_board_mut() {
                     board.shake_board(4, -6);
                 }
-                // [TRANSLATION_NOTE]: C++ 的 PARTICLE_JACKEXPLODE 粒子依赖 AddPvzpParticle，暂略
 
                 self.die_no_loot();
 
@@ -2599,13 +2610,62 @@ impl Zombie {
 
     /// 更新雪橇僵尸（对应 C++ BobsledCrash）
     pub fn bobsled_crash(&mut self) {
+        // 对应 C++ Zombie::BobsledCrash（Zombie.cpp:2611-2637）
+        // C++ Zombie.h:30: #define NUM_BOBSLED_FOLLOWERS 3（注意与 MAX_ZOMBIE_FOLLOWERS=4 不同）
+        const NUM_BOBSLED_FOLLOWERS: usize = 3;
+
         self.altitude = 0.0;
         self.zombie_rect = Rect::new(36, 0, 42, 115);
         self.zombie_phase = ZombiePhase::BobsledCrashing;
         self.phase_counter = BOBSLED_CRASH_TIME;
         self.start_walk_anim(0);
 
-        // 依赖底层系统
+        let a_app = match self.base.app {
+            Some(a) => a,
+            None => return,
+        };
+        let a_board = match self.base.board {
+            Some(b) => b,
+            None => return,
+        };
+        let a_row = self.base.row;
+        let a_vel_x = self.vel_x;
+        // C++: Reanimation* aLeaderReanim = mApp->ReanimationGet(mBodyReanimID);
+        //      aFollowerReanim->mAnimRate = aLeaderReanim->mAnimRate;
+        let a_leader_anim_rate = unsafe {
+            (*a_app)
+                .reanimation_get(self.body_reanim_id)
+                .map_or(0.0, |a_leader_reanim| a_leader_reanim.m_anim_rate)
+        };
+
+        for i in 0..NUM_BOBSLED_FOLLOWERS {
+            let a_follower_id = self.follower_zombie_ids[i];
+            unsafe {
+                let a_board = &mut *a_board;
+                let a_follower_zombie = match a_board.zombies.get_mut(a_follower_id as usize) {
+                    Some(a_follower) => a_follower,
+                    None => continue,
+                };
+
+                a_follower_zombie.zombie_phase = ZombiePhase::BobsledCrashing;
+                a_follower_zombie.phase_counter = BOBSLED_CRASH_TIME;
+                // C++: aFollowerZombie->mPosY = GetPosYBasedOnRow(mRow);（用领队所在行）
+                a_follower_zombie.pos_y = a_follower_zombie.get_pos_y_based_on_row(a_row);
+                a_follower_zombie.altitude = 0.0;
+                a_follower_zombie.start_walk_anim(0);
+
+                // C++: Reanimation* aFollowerReanim = mApp->ReanimationGet(aFollowerZombie->mBodyReanimID);
+                let a_follower_reanim_id = a_follower_zombie.body_reanim_id;
+                if let Some(a_follower_reanim) =
+                    (*a_app).reanimation_get_mut(a_follower_reanim_id)
+                {
+                    a_follower_zombie.vel_x = a_vel_x;
+                    a_follower_reanim.m_anim_time =
+                        crate::framework::common::rand_range_float(0.0, 1.0);
+                    a_follower_reanim.m_anim_rate = a_leader_anim_rate;
+                }
+            }
+        }
     }
 
     /// 更新雪橇僵尸（对应 C++ UpdateZombieBobsled）

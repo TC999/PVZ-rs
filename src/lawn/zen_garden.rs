@@ -1342,9 +1342,15 @@ impl ZenGarden {
                 unsafe {
                     if (*stinky_ptr).highlighted {
                         self.wake_stinky();
-                        // [TRANSLATION_NOTE]: C++ 中 AddPvzpParticle(stinky, PARTICLE_PRESENT_PICKUP)
-                        // 粒子附加未接入，暂略
+                        // C++ ZenGarden.cpp:934: mApp->AddPvzpParticle(aStinky->mPosX + 40.0f,
+                        //   aStinky->mPosY + 40.0f, aStinky->mRenderOrder + 1, PARTICLE_PRESENT_PICKUP);
                         if let Some(app) = self.app {
+                            (*app).add_tod_particle(
+                                (*stinky_ptr).pos_x + 40.0,
+                                (*stinky_ptr).pos_y + 40.0,
+                                (*stinky_ptr).render_order + 1,
+                                ParticleEffect::PresentPickup as i32,
+                            );
                             if let Some(info) = (*app).player_info.as_mut() {
                                 info.m_last_stinky_chocolate_time = self.now_time as u32;
                                 let idx = StoreItem::Chocolate as usize;
@@ -2742,8 +2748,18 @@ impl ZenGarden {
             unsafe { (*pp).last_chocolate_time = self.now_time; }
         }
         plant.launch_counter = 60;
-        // [TRANSLATION_NOTE]: C++ 中 AddPvzpParticle(PARTICLE_PRESENT_PICKUP) 附加粒子；
-        // Rust 侧粒子附加未接入，暂略
+        // C++ ZenGarden.cpp:1022: mApp->AddPvzpParticle(thePlant->mX + 40.0f, thePlant->mY + 40.0f,
+        //   thePlant->mRenderOrder + 1, PARTICLE_PRESENT_PICKUP);
+        if let Some(app) = self.app {
+            unsafe {
+                (*app).add_tod_particle(
+                    (plant.base.x + 40) as f32,
+                    (plant.base.y + 40) as f32,
+                    plant.base.render_order + 1,
+                    ParticleEffect::PresentPickup as i32,
+                );
+            }
+        }
     }
 
     pub fn set_plant_anim_speed(&self, plant: &mut Plant) {

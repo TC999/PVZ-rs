@@ -7,6 +7,7 @@ use crate::framework::graphics::graphics::Graphics;
 use crate::framework::rect::Rect;
 use crate::framework::common::{Rand, RandRange, RandFloat};
 use crate::framework::sexy_matrix::SexyMatrix3;
+use crate::lawn::zombie::Zombie;
 
 /// 缩放旋转矩阵（对应 C++ PvzpLib/PvzpCommon.cpp PvzpScaleRotateTransformMatrix，同 zombie.rs 副本）
 fn pvzp_scale_rotate_transform_matrix(m: &mut SexyMatrix3, x: f32, y: f32, rad: f32, the_scale_x: f32, the_scale_y: f32) {
@@ -1263,14 +1264,47 @@ impl Projectile {
         }
     }
 
-    /// 获取伤害标志（对应 C++ GetDamageFlags）
-    pub fn get_damage_flags(&self) -> u32 {
-        let mut flags = 0u32;
-        // [TRANSLATION_NOTE]: 溅射/抛物线/倒走/星星+倒走 的盾牌穿越标志暂未实现
-        if self.projectile_type == ProjectileType::Snowpea {
-            flags |= 1 << 2; // DAMAGE_FREEZE = 2
+    /// 获取伤害标志（对应 C++ Projectile::GetDamageFlags，Projectile.cpp:401-424）
+    /// C++ ConstEnums.h:250-252: DAMAGE_BYPASSES_SHIELD=0, DAMAGE_HITS_SHIELD_AND_BODY=1, DAMAGE_FREEZE=2
+    /// [TRANSLATION_NOTE]: C++ 签名为 `GetDamageFlags(Zombie* theZombie)`（用于 IsSplashDamage
+    /// 的火抗豁免判定），Rust 侧改为可选僵尸引用；本函数原先无调用点，故签名变更无影响。
+    pub fn get_damage_flags(&self, the_zombie: Option<&Zombie>) -> u32 {
+        const DAMAGE_BYPASSES_SHIELD: u32 = 1 << 0;
+        const DAMAGE_HITS_SHIELD_AND_BODY: u32 = 1 << 1;
+        const DAMAGE_FREEZE: u32 = 1 << 2;
+
+        let mut a_damage_flags = 0u32;
+
+        // C++: if (IsSplashDamage(theZombie)) SetBit(DAMAGE_HITS_SHIELD_AND_BODY)
+        // IsSplashDamage（Projectile.cpp:390-399）：火球对火抗僵尸返回 false，
+        // 否则 Melon / Wintermelon / Fireball 为 true。
+        let a_is_splash = if self.projectile_type == ProjectileType::Fireball
+            && the_zombie.map_or(false, |a_zombie| a_zombie.is_fire_resistant())
+        {
+            false
+        } else {
+            self.projectile_type == ProjectileType::Melon
+                || self.projectile_type == ProjectileType::Wintermelon
+                || self.projectile_type == ProjectileType::Fireball
+        };
+
+        if a_is_splash {
+            a_damage_flags |= DAMAGE_HITS_SHIELD_AND_BODY;
+        } else if self.motion == ProjectileMotion::Lobbed
+            || self.motion == ProjectileMotion::Backwards
+        {
+            a_damage_flags |= DAMAGE_BYPASSES_SHIELD;
+        } else if self.motion == ProjectileMotion::Star && self.vel_x < 0.0 {
+            a_damage_flags |= DAMAGE_BYPASSES_SHIELD;
         }
-        flags
+
+        if self.projectile_type == ProjectileType::Snowpea
+            || self.projectile_type == ProjectileType::Wintermelon
+        {
+            a_damage_flags |= DAMAGE_FREEZE;
+        }
+
+        a_damage_flags
     }
 
     /// 无法击中高台（对应 C++ CantHitHighGround）

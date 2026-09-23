@@ -2032,7 +2032,9 @@ impl Plant {
             a_pos_y -= 32;
         }
 
-        // C++: aBodyReanim->GetImageOverride / SetImageOverride + AddPvzpParticle
+        // C++ Plant.cpp:3126/3134 —— 覆盖图变更时
+        // mApp->AddPvzpParticle(aPosX, aPosY, mRenderOrder + 4, ParticleEffect::PARTICLE_WALLNUT_EAT_LARGE)；
+        // 该粒子由下方 a_spawn_particle 分支（本函数末尾）实现。
         let mut a_spawn_particle = false;
         if let Some(a_body_reanim) = self
             .base
