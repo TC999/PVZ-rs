@@ -46,6 +46,38 @@ pub fn particle_get_definition(effect: ParticleEffect) -> Option<*mut TodParticl
 pub fn particle_def_count() -> usize {
     unsafe { G_PARTICLE_DEF_ARRAY.len() }
 }
+
+/// 由定义指针反查 ParticleEffect 下标（对应 C++ `SyncParticleDefPortable` 写侧的
+/// `for (i...) if (theDefinition == &gParticleDefArray[i])` 遍历，SaveGame.cpp:428-438）。
+/// 空指针或未命中时返回 -1（对应 C++ 写入的 `PARTICLE_NONE = -1`，见 ConstEnums.h:626）。
+pub fn particle_def_index_for_ptr(def: *mut TodParticleDefinition) -> i32 {
+    if def.is_null() {
+        return -1;
+    }
+    unsafe {
+        for i in 0..G_PARTICLE_DEF_ARRAY.len() {
+            if std::ptr::eq(
+                &G_PARTICLE_DEF_ARRAY[i] as *const TodParticleDefinition,
+                def as *const TodParticleDefinition,
+            ) {
+                return i as i32;
+            }
+        }
+    }
+    -1
+}
+
+/// 按下标取粒子定义指针（对应 C++ `&gParticleDefArray[aParticleType]`，SaveGame.cpp:419）
+pub fn particle_def_ptr_for_index(index: i32) -> Option<*mut TodParticleDefinition> {
+    if index < 0 {
+        return None;
+    }
+    unsafe {
+        G_PARTICLE_DEF_ARRAY
+            .get_mut(index as usize)
+            .map(|a_def| a_def as *mut TodParticleDefinition)
+    }
+}
 pub const MAX_PARTICLE_FIELDS: usize = 4;
 
 // ============================================================

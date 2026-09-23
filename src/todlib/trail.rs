@@ -400,6 +400,36 @@ pub static mut G_LAWN_TRAIL_ARRAY: [TrailParams; 1] = [TrailParams::new(TRAIL_IC
 
 // ======== 自由函数 ========
 
+/// 由定义指针反查 TrailType 下标（对应 C++ `SyncTrailDefPortable` 写侧的
+/// `for (i...) if (theDefinition == &gTrailDefArray[i])` 遍历，SaveGame.cpp:462-473）。
+/// 空指针或未命中时返回 -1（对应 C++ 写入的 `TRAIL_NONE = -1`，见 PvzpLib/Trail.h:32）。
+pub fn trail_def_index_for_ptr(def: *mut TrailDefinition) -> i32 {
+    if def.is_null() {
+        return -1;
+    }
+    unsafe {
+        if G_TRAIL_DEF_ARRAY.is_null() {
+            return -1;
+        }
+        for i in 0..G_TRAIL_DEF_COUNT {
+            if G_TRAIL_DEF_ARRAY.add(i as usize) == def {
+                return i;
+            }
+        }
+    }
+    -1
+}
+
+/// 按下标取轨迹定义指针（对应 C++ `&gTrailDefArray[aTrailType]`，SaveGame.cpp:454）
+pub fn trail_def_ptr_for_index(index: i32) -> Option<*mut TrailDefinition> {
+    unsafe {
+        if index < 0 || index >= G_TRAIL_DEF_COUNT || G_TRAIL_DEF_ARRAY.is_null() {
+            return None;
+        }
+        Some(G_TRAIL_DEF_ARRAY.add(index as usize))
+    }
+}
+
 /// 加载单条轨迹定义（对应 C++ TrailLoadADef，Trail.cpp:45：
 /// DefinitionLoadXML + FloatTrackSetDefault 默认值阶段）
 pub fn trail_load_a_def(

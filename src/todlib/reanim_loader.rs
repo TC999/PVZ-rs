@@ -368,6 +368,39 @@ pub fn reanimator_ensure_definition_loaded(reanim_type: ReanimationType) {
     }
 }
 
+/// 由定义指针反查其在定义数组中的下标（对应 C++ `SyncReanimationDefPortable` 写侧的
+/// `for (i...) if (theDefinition == &gReanimatorDefArray[i])` 遍历，SaveGame.cpp:391-404）。
+/// 空指针或未命中时返回 -1（对应 C++ 写入的 `REANIM_NONE`，其值为 (uint32_t)-1）。
+pub fn reanim_def_index_for_ptr(def: *mut ReanimatorDefinition) -> i32 {
+    if def.is_null() {
+        return -1;
+    }
+    unsafe {
+        for (i, slot) in REANIM_DEF_CACHE.iter().enumerate() {
+            if let Some(a_def) = slot {
+                if (&**a_def as *const ReanimatorDefinition) == (def as *const ReanimatorDefinition) {
+                    return i as i32;
+                }
+            }
+        }
+    }
+    -1
+}
+
+/// 按下标取定义指针（对应 C++ `&gReanimatorDefArray[aReanimType]`，SaveGame.cpp:384）。
+/// 下标非法或该槽尚未加载时返回 None（调用方应先 ensure_definition_loaded）。
+pub fn reanim_def_ptr_for_index(index: i32) -> Option<*mut ReanimatorDefinition> {
+    if index < 0 {
+        return None;
+    }
+    unsafe {
+        REANIM_DEF_CACHE
+            .get_mut(index as usize)
+            .and_then(|slot| slot.as_deref_mut())
+            .map(|a_def| a_def as *mut ReanimatorDefinition)
+    }
+}
+
 fn load_reanim_definition(reanim_type: ReanimationType) -> Option<Box<ReanimatorDefinition>> {
     let path = get_reanim_file_path(reanim_type)?;
     let data = with_pak_interface(|pak| pak.load_file(path))?;

@@ -27,6 +27,7 @@ use crate::todlib::definition::{ReanimatorTrackInstance, ReanimatorTransform};
 use crate::todlib::effect_system::EffectSystem;
 use crate::todlib::reanimator::Reanimation;
 use crate::todlib::tod_particle::TodParticleSystem;
+use crate::todlib::trail::Trail;
 use crate::lawn::game_enums::*;
 use crate::lawn::game_object::GameObject;
 use crate::todlib::tod_common::TodSmoothArray;
@@ -833,7 +834,7 @@ fn read_chunk_v4(chunk_type: u32, data: &[u8], board: &mut Board) -> bool {
                 SaveChunkTypeV4::ParticleParticles => sync_particles_portable(&mut a_context),
                 SaveChunkTypeV4::ParticleSystems => sync_particle_systems_portable(&mut a_context, board),
                 SaveChunkTypeV4::Reanimations => sync_reanimations_portable(&mut a_context, board),
-                SaveChunkTypeV4::Trails => sync_trails_portable(&mut a_context),
+                SaveChunkTypeV4::Trails => sync_trails_portable(&mut a_context, board),
                 SaveChunkTypeV4::Attachments => sync_attachments_portable(&mut a_context, board),
                 _ => {}
             }
@@ -1393,7 +1394,7 @@ fn write_chunk_v4(payload: &mut Vec<u8>, chunk_type: u32, board: &mut Board) -> 
             SaveChunkTypeV4::ParticleParticles => sync_particles_portable(&mut field_ctx),
             SaveChunkTypeV4::ParticleSystems => sync_particle_systems_portable(&mut field_ctx, board),
             SaveChunkTypeV4::Reanimations => sync_reanimations_portable(&mut field_ctx, board),
-            SaveChunkTypeV4::Trails => sync_trails_portable(&mut field_ctx),
+            SaveChunkTypeV4::Trails => sync_trails_portable(&mut field_ctx, board),
             SaveChunkTypeV4::Attachments => sync_attachments_portable(&mut field_ctx, board),
             _ => return true,
         }
@@ -1705,13 +1706,16 @@ fn sync_grid_items_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
     );
 }
 
-/// 同步磁铁吸附物（对应 C++ SyncMagnetItemPortable，SaveGame.cpp:643）
-/// C++ 仅同步 4 个 f32（mItemType 不入档）
+/// 同步磁铁吸附物（对应 C++ SyncMagnetItemPortable，SaveGame.cpp:644-651）
+/// [TRANSLATION_NOTE]: 原注释称"C++ 仅同步 4 个 f32（mItemType 不入档）"是**错的** ——
+/// C++ 第 650 行还有 `SyncEnum32(theContext, theItem.mItemType);`。此前 Rust 漏同步该字段，
+/// 导致读档后磁力菇吸附物的类型被默认化（报告 §8.7）。现按 C++ 补上第 5 个字段。
 fn sync_magnet_item_portable(ctx: &mut PortableSaveContext, item: &mut crate::lawn::plant::MagnetItem) {
     ctx.sync_f32(&mut item.pos_x);
     ctx.sync_f32(&mut item.pos_y);
     ctx.sync_f32(&mut item.dest_offset_x);
     ctx.sync_f32(&mut item.dest_offset_y);
+    ctx.sync_enum(&mut item.item_type);
 }
 
 /// 同步植物尾部字段（对应 C++ SyncPlantTailPortable，SaveGame.cpp:866）
@@ -2428,11 +2432,33 @@ fn sync_reanim_track_instance_portable(ctx: &mut PortableSaveContext, track: &mu
 /// reanim_type 写入并在读取时丢弃；轨道实例数不显式入档（C++ 由 def->mTracks.count 决定，
 /// Rust 同进程内与 m_track_instances 一致）
 fn sync_reanimation_portable(ctx: &mut PortableSaveContext, reanimation: &mut Reanimation) {
-    // C++ SyncReanimationDefPortable（int32 定义索引）
-    let mut def_index = reanimation.reanim_type as i32;
+    // 对应 C++ SyncReanimationDefPortable（SaveGame.cpp:371-405）
+    // [TRANSLATION_NOTE]: 原实现写 `reanim_type as i32` 当定义索引 —— 语义上多数情况相同
+    // （gReanimatorDefArray 按类型索引），但 C++ 是从 **mDefinition 指针反查**下标，
+    // 指针为空或不在数组内时写 REANIM_NONE(-1)。Rust 的 Reanimation 已有 m_definition，
+    // 故此处改为同样的指针反查，读侧再按 ensure_definition_loaded + 取数组元素还原。
+    let mut def_index = if ctx.reading {
+        0i32
+    } else {
+        crate::todlib::reanim_loader::reanim_def_index_for_ptr(
+            reanimation.m_definition.unwrap_or(std::ptr::null_mut()),
+        )
+    };
     ctx.sync_i32(&mut def_index);
     if ctx.reading {
-        let _ = def_index;
+        if def_index < 0 {
+            // C++: aReanimType == REANIM_NONE → theDefinition = nullptr
+            reanimation.m_definition = None;
+        } else if (def_index as usize) < 144 {
+            // C++: ReanimatorEnsureDefinitionLoaded(type, true); mDefinition = &gReanimatorDefArray[type];
+            let a_type = unsafe { std::mem::transmute::<i32, ReanimationType>(def_index) };
+            crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(a_type);
+            reanimation.m_definition =
+                crate::todlib::reanim_loader::reanim_def_ptr_for_index(def_index);
+        } else {
+            // C++: 越界 → theContext.mFailed = true
+            ctx.failed = true;
+        }
     }
     ctx.sync_enum(&mut reanimation.reanim_type);
     ctx.sync_f32(&mut reanimation.m_anim_time);
@@ -2547,11 +2573,81 @@ fn sync_attachments_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
     );
 }
 
-/// 同步轨迹 chunk（对应 C++ SyncTrailsPortable，SaveGame.cpp:1967）
-/// [TRANSLATION_NOTE]: Rust EffectSystem 无 Trail 存储（TrailHolder 未实例化），
-/// 仅写 DataArray 头部（全 0）并读取忽略，保持 chunk 流位置
-fn sync_trails_portable(ctx: &mut PortableSaveContext) {
-    sync_data_array_headers_only(ctx);
+/// 同步轨迹 chunk（对应 C++ SyncTrailsPortable，SaveGame.cpp:1967-1990）
+/// [TRANSLATION_NOTE]: 原实现只写 DataArray 头部（全 0）并读取忽略，理由是"Rust EffectSystem
+/// 无 Trail 存储"。实际 `EffectSystem::trails: Vec<Trail>` 是存在的（effect_system.rs:31），
+/// 故改为按 C++ 的方式逐条同步（与 sync_particle_systems_portable 同一模式）。
+/// 注意：trails 的上游创建点（C++ AddTrail 一族）在 Rust 中尚未接入，集合通常为空，
+/// 因此运行时字节流仍多为空数组 —— 但同步逻辑本身已与 C++ 对齐。
+fn sync_trails_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
+    let app = match board.app {
+        Some(ptr) => ptr,
+        None => return,
+    };
+    let effect_system = match unsafe { &mut (*app).effect_system } {
+        Some(es) => es,
+        None => return,
+    };
+    sync_data_array_tlv(
+        ctx,
+        &mut effect_system.trails,
+        |out, trail| {
+            // C++ field 1U：SyncTrailPortable
+            append_field_with_sync(out, 1, |c| sync_trail_portable(c, trail));
+        },
+        |field_id, data, trail| {
+            if field_id == 1 {
+                apply_field_with_sync(data, |c| sync_trail_portable(c, trail));
+            }
+        },
+    );
+}
+
+/// 同步单条轨迹（对应 C++ SyncTrailPortable，SaveGame.cpp:1328-1348）
+fn sync_trail_portable(ctx: &mut PortableSaveContext, trail: &mut Trail) {
+    // C++ 第 1 项：SyncTrailDefPortable(theContext, theTrail->mDefinition)
+    // [TRANSLATION_NOTE]: C++ 读到定义后还有 `theTrail->mTrailHolder = mEffectSystem->mTrailHolder.get();`
+    // Rust 侧没有独立的 TrailHolder 类型（trail 直接挂在 EffectSystem::trails 上，见 effect_system.rs:31），
+    // 故该行无对应物；Trail 的 m_trail_holder 字段保持原样。
+    let mut def_index = if ctx.reading {
+        0i32
+    } else {
+        crate::todlib::trail::trail_def_index_for_ptr(trail.m_definition)
+    };
+    ctx.sync_i32(&mut def_index);
+    if ctx.reading {
+        if def_index < 0 {
+            // C++: aTrailType == TRAIL_NONE(-1) → theDefinition = nullptr
+            trail.m_definition = std::ptr::null_mut();
+        } else if def_index < unsafe { crate::todlib::trail::G_TRAIL_DEF_COUNT } {
+            // C++: theDefinition = &gTrailDefArray[aTrailType];
+            trail.m_definition = crate::todlib::trail::trail_def_ptr_for_index(def_index)
+                .unwrap_or(std::ptr::null_mut());
+        } else {
+            // C++: 越界 → theContext.mFailed = true
+            ctx.failed = true;
+        }
+    }
+
+    // C++: for (int i = 0; i < 20; i++) SyncVector2Portable(theContext, theTrail->mTrailPoints[i].aPos);
+    for i in 0..20 {
+        sync_vector2_portable(ctx, &mut trail.m_trail_points[i].a_pos);
+    }
+
+    ctx.sync_i32(&mut trail.m_num_trail_points);
+    ctx.sync_bool(&mut trail.m_dead);
+    ctx.sync_i32(&mut trail.m_render_order);
+    ctx.sync_i32(&mut trail.m_trail_age);
+    ctx.sync_i32(&mut trail.m_trail_duration);
+
+    // C++: for (int i = 0; i < 4; i++) SyncFloat(theTrail->mTrailInterp[i]);
+    for i in 0..4 {
+        ctx.sync_f32(&mut trail.m_trail_interp[i]);
+    }
+
+    sync_vector2_portable(ctx, &mut trail.m_trail_center);
+    ctx.sync_bool(&mut trail.m_is_attachment);
+    sync_color_portable(ctx, &mut trail.m_color_override);
 }
 
 /// 同步数据数组头部（空数组：C++ DataArray 5 个 u32 头部全为 0）
@@ -2591,13 +2687,28 @@ fn sync_particle_systems_portable(ctx: &mut PortableSaveContext, board: &mut Boa
 
 /// 同步单个粒子系统（对应 C++ SyncParticleSystemPortable，SaveGame.cpp:1306）
 /// [TRANSLATION_NOTE]: C++ 先 SyncParticleDefPortable 再 SyncDataIDListPortable(mEmitterList)；
-/// Rust 无 def 反查与 emitter 存储，分别以 effect_type 索引占位与头部占位替代
+/// Rust 的 emitter 存储仍以头部占位表示（未实现），但 def 已改为真正的指针反查（见下）。
 fn sync_particle_system_portable(ctx: &mut PortableSaveContext, system: &mut TodParticleSystem) {
-    // C++ SyncParticleDefPortable（int32 定义索引）——以 effect_type 占位
-    let mut def_index = system.effect_type as i32;
+    // 对应 C++ SyncParticleDefPortable（SaveGame.cpp:407-440）
+    let mut def_index = if ctx.reading {
+        0i32
+    } else {
+        crate::todlib::tod_particle::particle_def_index_for_ptr(system.particle_def)
+    };
     ctx.sync_i32(&mut def_index);
     if ctx.reading {
-        let _ = def_index;
+        if def_index < 0 {
+            // C++: aParticleType == PARTICLE_NONE(-1) → theDefinition = nullptr
+            system.particle_def = std::ptr::null_mut();
+        } else if (def_index as usize) < crate::todlib::tod_particle::particle_def_count() {
+            // C++: theDefinition = &gParticleDefArray[aParticleType];
+            system.particle_def =
+                crate::todlib::tod_particle::particle_def_ptr_for_index(def_index)
+                    .unwrap_or(std::ptr::null_mut());
+        } else {
+            // C++: 越界 → theContext.mFailed = true
+            ctx.failed = true;
+        }
     }
     // C++ SyncDataIDListPortable(mEmitterList)——Rust 无 emitter 数据，写头部占位
     sync_data_array_headers_only(ctx);
