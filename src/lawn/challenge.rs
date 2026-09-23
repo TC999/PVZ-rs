@@ -3105,6 +3105,10 @@ impl Challenge {
             if self.get_board().m_tutorial_state == TutorialState::ZombiquariumBuySnorkel {
                 let board = self.get_board();
                 board.clear_advice(AdviceType::ZombiquariumBuySnorkel);
+                // C++ Challenge.cpp:3579: mBoard->TutorialArrowRemove();
+                // [TRANSLATION_NOTE]: 先前误记为"Rust 无对应实现"——实际 board.rs:5574 已有
+                // tutorial_arrow_remove，此处只是漏了调用。
+                board.tutorial_arrow_remove();
                 board.m_tutorial_state = TutorialState::ZombiquariumBoughtSnorkel;
             }
             let a_zombie = self.zombiquarium_spawn_snorkle();

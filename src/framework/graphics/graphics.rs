@@ -746,12 +746,16 @@ impl Graphics {
     // 旋转绘制
     // ====================================================================
 
-    /// DrawImageRotated(image, x, y, rot, srcRect)（对应 C++）
+    /// DrawImageRotated(image, x, y, rot, srcRect)（对应 C++ Graphics.cpp:792-808 的 int 版重载）
+    /// [TRANSLATION_NOTE]: C++ 这个重载用 **int 除法** 求旋转中心（`mWidth / 2` 截断），
+    /// 与 F 版的 `mWidth / 2.0f`（精确半值）不同 —— 奇数尺寸时会差半个像素。
+    /// 原实现统一用 f32 除法，此处按 int 除法对齐 C++（本函数在仓库内暂无调用点）。
     pub fn draw_image_rotated(&mut self, image: &Image, x: i32, y: i32, rot: f64, src_rect: Option<&Rect>) {
         let (cx, cy) = match src_rect {
-            Some(r) => (r.width as f32 / 2.0, r.height as f32 / 2.0),
-            None => (image.width as f32 / 2.0, image.height as f32 / 2.0),
+            Some(r) => ((r.width / 2) as f32, (r.height / 2) as f32),
+            None => ((image.width / 2) as f32, (image.height / 2) as f32),
         };
+        // C++: DrawImageRotatedF(theImage, theX, theY, theRot, aRotCenterX, aRotCenterY, theSrcRect)
         self.draw_image_rotated_f(image, x as f32, y as f32, rot, cx, cy, src_rect);
     }
 
