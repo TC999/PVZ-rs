@@ -4,7 +4,17 @@
 // 这些是软件渲染器的三角形绘制变体（像素格式/纹理/混合模式组合），
 // 在 OpenGL 硬件渲染路径下不会实际调用。
 // 此处用宏生成所有变体作为占位，引用 GLInterface 中的已有实现。
-
+//
+// [TRANSLATION_NOTE]: 本文件**不是**「软件三角形绘制缺失」的缺口 —— 它是 C++
+// `SWTri.cpp` 那套按「像素格式 × TEXTURE × TALPHA × MOD × GLOB × BLEND」展开的
+// 函数指针表（`TodDrawTriangle_8888_TEX1_...` / `SWTri_AddAllDrawTriFuncs`）的占位。
+// Rust 侧的**等价功能已经实现**，位于 `framework/graphics/image.rs`：
+//   - `Image::blt_triangles_tex`（MemoryImage 软件路径入口，GLImage 覆写走 GL）
+//   - `Image::blt_triangles_flat` / `blt_triangles_impl` / `blt_triangle_scanline`
+//     （扫描线光栅化 + u/v 线性插值 + 纹理采样 + 顶点色调制）
+// 也就是说：C++ 用「为每种格式生成一份特化代码」换取速度，Rust 用统一的扫描线函数
+// 覆盖同样的绘制，二者行为等价。因此这些变体在 Rust 中没有任何调用点（死代码）。
+// 仅当将来需要按像素格式做特化加速时，才有必要把它们接到统一入口上。
 #![allow(unused_variables, dead_code, non_snake_case)]
 
 /// SW 顶点（对应 C++ SWHelper::SWVertex）

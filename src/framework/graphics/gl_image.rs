@@ -248,7 +248,12 @@ impl GLImage {
         }
     }
 
-    /// 旋转 Blt（对应 C++ BltRotated）
+    /// 旋转 Blt（对应 C++ GLImage::BltRotated，GLImage.cpp:162-169）
+    /// [TRANSLATION_NOTE]: 这不是「缺软件回退」——C++ 的同名函数同样是
+    /// `mGLInterface->BltRotated(...)` 直接解引用（既无空检查、也无软件实现）。
+    /// 软件实现始终由 MemoryImage 承担：C++ 在无 3D 加速时根本不创建 GLImage
+    /// （见 ResourceManager 的图像创建分支），Rust 侧亦然 —— 运行期只创建 MemoryImage
+    /// （§5.10），故本分支实际不可达。多出的 `is_null()` 判断仅为安全冗余。
     pub fn blt_rotated(
         &mut self,
         src: &Image,
@@ -274,7 +279,8 @@ impl GLImage {
         }
     }
 
-    /// 拉伸 Blt（对应 C++ StretchBlt）
+    /// 拉伸 Blt（对应 C++ GLImage::StretchBlt，GLImage.cpp:171-178）
+    /// [TRANSLATION_NOTE]: 同 blt_rotated —— C++ 也无软件回退，软件路径由 MemoryImage 承担。
     pub fn stretch_blt(&mut self, src: &Image, dest_rect: &Rect, src_rect: &Rect, clip_rect: &Rect, color: &Color, draw_mode: i32, fast_stretch: bool) {
         self.commit_bits_internal();
         if !self.gl_interface.is_null() {

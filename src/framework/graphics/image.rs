@@ -1225,50 +1225,276 @@ impl Image {
         }
     }
 
-    /// 慢速拉伸 Blt（对应 C++ MemoryImage::SlowStretchBlt，MemoryImage.cpp:1528-1571）
-    /// [TRANSLATION_NOTE]: C++ 的实现（inc_routines/MI_SlowStretchBlt.inc，278 行）是"水平一趟 +
-    /// 垂直一趟"的定点加权缩放（0x101/256 因子 + 临时缓冲累积）。Rust 侧此处先对**裁剪后的**源矩形
-    /// 做最近邻采样（裁剪行为已与 C++ 一致），两趟加权缩放尚未移植 —— 属报告 §5.3 慢速路径的残留项。
+    /// 慢速拉伸 Blt（对应 C++ MemoryImage::SlowStretchBlt，MemoryImage.cpp:1528-1571 +
+    /// inc_routines/MI_SlowStretchBlt.inc，278 行）
+    ///
+    /// 算法：先把源区域**水平**缩放进一张临时缓冲（每像素 4 个 u32 累加器，顺序 B,G,R,A），
+    /// 再**垂直**缩放进第二张缓冲，最后以 (累加值 >> 16)、按 `(dest*oma>>8) + (src*a>>8)`
+    /// 与目标混合。缩小与放大走两条不同分支（缩小用 257 因子把每个源列摊到目标列上，
+    /// 放大用 257/256 因子在两列/两行间线性插值）。
+    ///
+    /// 注意 C++ 忽略了 theColor/theDrawMode（`(void)theColor;(void)theDrawMode;`），此处一致。
     fn slow_stretch_blt(
         &mut self,
         src: &Image,
         dest_rect: &Rect,
         src_rect: &(f64, f64, f64, f64),
-        color: &Color,
-        draw_mode: i32,
+        _color: &Color,
+        _draw_mode: i32,
     ) {
-        let (a_src_x0, a_src_y0, a_src_wf, a_src_hf) = *src_rect;
-        let a_src_w = src.width as i32;
+        let (a_src_xf, a_src_yf, a_src_wf, a_src_hf) = *src_rect;
+        let a_src_w = src.width;
+        let a_src_h = src.height;
 
-        let scale_x = a_src_wf / dest_rect.width as f64;
-        let scale_y = a_src_hf / dest_rect.height as f64;
+        // C++: floor/ceil 后按图像边界裁剪
+        let mut a_src_xi = a_src_xf.floor() as i32;
+        let mut a_src_yi = a_src_yf.floor() as i32;
+        let mut a_src_wi = (a_src_wf + (a_src_xf - a_src_xi as f64)).ceil() as i32;
+        let mut a_src_hi = (a_src_hf + (a_src_yf - a_src_yi as f64)).ceil() as i32;
 
-        for dy in 0..dest_rect.height {
-            for dx in 0..dest_rect.width {
-                let sx = a_src_x0 as i32 + (dx as f64 * scale_x) as i32;
-                let sy = a_src_y0 as i32 + (dy as f64 * scale_y) as i32;
-                let src_idx_i = sy * a_src_w + sx;
-                let dst_x = dest_rect.x + dx;
-                let dst_y = dest_rect.y + dy;
-                if src_idx_i < 0 || dst_x < 0 || dst_x >= self.width || dst_y < 0 || dst_y >= self.height {
-                    continue;
-                }
-                let src_idx = src_idx_i as usize;
-                if src_idx * 4 + 3 >= src.pixels.len() {
-                    continue;
-                }
-                let src_color = Color::new(
-                    src.pixels[src_idx * 4],
-                    src.pixels[src_idx * 4 + 1],
-                    src.pixels[src_idx * 4 + 2],
-                    src.pixels[src_idx * 4 + 3],
-                );
-                let final_color = if *color != Color::WHITE || draw_mode != 0 {
-                    self.blend_color(&src_color, color, draw_mode)
+        if a_src_xi < 0 {
+            a_src_xi = 0;
+        }
+        if a_src_yi < 0 {
+            a_src_yi = 0;
+        }
+        if a_src_xi + a_src_wi > a_src_w as i32 {
+            a_src_wi = a_src_w as i32 - a_src_xi;
+        }
+        if a_src_yi + a_src_hi > a_src_h as i32 {
+            a_src_hi = a_src_h as i32 - a_src_yi;
+        }
+        if a_src_wi <= 0 || a_src_hi <= 0 {
+            return;
+        }
+
+        let a_temp_w = dest_rect.width + 4;
+        let a_temp_h = dest_rect.height + 4;
+        let a_stride4 = (a_temp_w * 4) as usize;
+        let a_src_row_w = a_src_w as i32;
+
+        // ---- 水平一趟 ----
+        let mut a_horz = vec![0u32; (a_temp_w * a_src_hi * 4) as usize];
+
+        if a_src_wf >= dest_rect.width as f64 {
+            // 缩小：把每个源列按 257 因子分摊到它覆盖的目标列
+            let a_dest_x_factor = dest_rect.width as f64 / a_src_wf;
+            let a_dest_x_offset = 1.0 + (a_src_xi as f64 - a_src_xf) * a_dest_x_factor;
+
+            for a_src_x in 0..a_src_wi {
+                let a_dest_x1 = a_dest_x_factor * a_src_x as f64 + a_dest_x_offset;
+                let a_dest_x2 = a_dest_x1 + a_dest_x_factor;
+                let a_dest_xi1 = a_dest_x1 as i32;
+                let a_dest_xi2 = a_dest_x2 as i32;
+
+                let mut s1 = a_src_yi * a_src_row_w + a_src_xi + a_src_x;
+
+                if a_dest_xi1 == a_dest_xi2 {
+                    let mut d = (a_dest_xi1 * 4) as usize;
+                    let a_factor = (257.0 * a_dest_x_factor) as i32;
+                    for _ in 0..a_src_hi {
+                        let a_pixel = Self::read_packed_pixel_raw(&src.pixels, s1 as usize);
+                        a_horz[d] = a_horz[d]
+                            .wrapping_add((a_factor * ((a_pixel & 0xFF) as i32)) as u32);
+                        a_horz[d + 1] = a_horz[d + 1]
+                            .wrapping_add((a_factor * (((a_pixel >> 8) & 0xFF) as i32)) as u32);
+                        a_horz[d + 2] = a_horz[d + 2]
+                            .wrapping_add((a_factor * (((a_pixel >> 16) & 0xFF) as i32)) as u32);
+                        a_horz[d + 3] = a_horz[d + 3]
+                            .wrapping_add((a_factor * (((a_pixel >> 24) & 0xFF) as i32)) as u32);
+                        d += a_stride4;
+                        s1 += a_src_row_w;
+                    }
                 } else {
-                    src_color
+                    let a_factor1 = (257.0 * (a_dest_xi2 as f64 - a_dest_x1)) as i32;
+                    let a_factor2 = (257.0 * (a_dest_x2 - a_dest_xi2 as f64)) as i32;
+                    let mut d = (a_dest_xi1 * 4) as usize;
+                    for _ in 0..a_src_hi {
+                        let a_pixel = Self::read_packed_pixel_raw(&src.pixels, s1 as usize);
+
+                        a_horz[d] = a_horz[d]
+                            .wrapping_add((a_factor1 * ((a_pixel & 0xFF) as i32)) as u32);
+                        a_horz[d + 1] = a_horz[d + 1]
+                            .wrapping_add((a_factor1 * (((a_pixel >> 8) & 0xFF) as i32)) as u32);
+                        a_horz[d + 2] = a_horz[d + 2]
+                            .wrapping_add((a_factor1 * (((a_pixel >> 16) & 0xFF) as i32)) as u32);
+                        a_horz[d + 3] = a_horz[d + 3]
+                            .wrapping_add((a_factor1 * (((a_pixel >> 24) & 0xFF) as i32)) as u32);
+
+                        a_horz[d + 4] = a_horz[d + 4]
+                            .wrapping_add((a_factor2 * ((a_pixel & 0xFF) as i32)) as u32);
+                        a_horz[d + 5] = a_horz[d + 5]
+                            .wrapping_add((a_factor2 * (((a_pixel >> 8) & 0xFF) as i32)) as u32);
+                        a_horz[d + 6] = a_horz[d + 6]
+                            .wrapping_add((a_factor2 * (((a_pixel >> 16) & 0xFF) as i32)) as u32);
+                        a_horz[d + 7] = a_horz[d + 7]
+                            .wrapping_add((a_factor2 * (((a_pixel >> 24) & 0xFF) as i32)) as u32);
+
+                        d += a_stride4;
+                        s1 += a_src_row_w;
+                    }
+                }
+            }
+        } else {
+            // 放大：目标列在两相邻源列之间线性插值
+            let a_src_x_factor = if dest_rect.width != 1 {
+                (a_src_wf - 1.0) / (dest_rect.width as f64 - 1.0)
+            } else {
+                a_src_wf / dest_rect.width as f64
+            };
+
+            for a_dest_x in 1..(a_temp_w - 1) {
+                let mut d = (a_dest_x * 4) as usize;
+                let a_src_x = (a_dest_x - 1) as f64 * a_src_x_factor + a_src_xf;
+                let a_src_xi_sub = a_src_x as i32;
+                let a_factor1 = (257.0 * (1.0 - (a_src_x - a_src_xi_sub as f64))) as i32;
+                let a_factor2 = 257 - a_factor1;
+
+                let mut s = a_src_yi * a_src_row_w + a_src_xi_sub;
+                for _ in 0..a_src_hi {
+                    let a_pixel1 = Self::read_packed_pixel_raw(&src.pixels, s as usize);
+                    s += 1;
+                    let a_pixel2 = Self::read_packed_pixel_raw(&src.pixels, s as usize);
+
+                    a_horz[d] = ((a_factor1 * ((a_pixel1 & 0xFF) as i32))
+                        + (a_factor2 * ((a_pixel2 & 0xFF) as i32))) as u32;
+                    a_horz[d + 1] = ((a_factor1 * (((a_pixel1 >> 8) & 0xFF) as i32))
+                        + (a_factor2 * (((a_pixel2 >> 8) & 0xFF) as i32)))
+                        as u32;
+                    a_horz[d + 2] = ((a_factor1 * (((a_pixel1 >> 16) & 0xFF) as i32))
+                        + (a_factor2 * (((a_pixel2 >> 16) & 0xFF) as i32)))
+                        as u32;
+                    a_horz[d + 3] = ((a_factor1 * (((a_pixel1 >> 24) & 0xFF) as i32))
+                        + (a_factor2 * (((a_pixel2 >> 24) & 0xFF) as i32)))
+                        as u32;
+
+                    d += a_stride4;
+                    s += a_src_row_w - 1;
+                }
+            }
+        }
+
+        // ---- 垂直一趟 ----
+        let mut a_new_pixels = vec![0u32; (a_temp_w * a_temp_h * 4) as usize];
+
+        if a_src_hf >= dest_rect.height as f64 {
+            let a_dest_y_factor = dest_rect.height as f64 / a_src_hf;
+            let a_dest_y_offset = 1.0 + (a_src_yi as f64 - a_src_yf) * a_dest_y_factor;
+
+            for a_src_y in 0..a_src_hi {
+                let a_dest_y1 = a_dest_y_factor * a_src_y as f64 + a_dest_y_offset;
+                let a_dest_y2 = a_dest_y1 + a_dest_y_factor;
+                let a_dest_yi1 = a_dest_y1.floor() as i32;
+                let a_dest_yi2 = a_dest_y2.floor() as i32;
+
+                let mut s = (a_src_y * a_temp_w * 4) as usize;
+
+                if a_dest_yi1 == a_dest_yi2 {
+                    let mut d = (a_dest_yi1 * a_temp_w * 4) as usize;
+                    let a_factor = (256.0 * a_dest_y_factor) as i32;
+                    for _ in 0..a_temp_w {
+                        for k in 0..4 {
+                            a_new_pixels[d + k] = a_new_pixels[d + k]
+                                .wrapping_add((a_factor * a_horz[s + k] as i32) as u32);
+                        }
+                        d += 4;
+                        s += 4;
+                    }
+                } else {
+                    let a_factor1 = (256.0 * (a_dest_yi2 as f64 - a_dest_y1)) as i32;
+                    let a_factor2 = (256.0 * (a_dest_y2 - a_dest_yi2 as f64)) as i32;
+                    let mut d1 = (a_dest_yi1 * a_temp_w * 4) as usize;
+                    let mut d2 = (a_dest_yi2 * a_temp_w * 4) as usize;
+                    for _ in 0..a_temp_w {
+                        for k in 0..4 {
+                            a_new_pixels[d1 + k] = a_new_pixels[d1 + k]
+                                .wrapping_add((a_factor1 * a_horz[s + k] as i32) as u32);
+                            a_new_pixels[d2 + k] = a_new_pixels[d2 + k]
+                                .wrapping_add((a_factor2 * a_horz[s + k] as i32) as u32);
+                        }
+                        d1 += 4;
+                        d2 += 4;
+                        s += 4;
+                    }
+                }
+            }
+        } else {
+            // 垂直放大：目标行在两相邻源行之间线性插值（C++ 的写入形式是 `=` 而非 `+=`）
+            let a_src_y_factor = if dest_rect.height != 1 {
+                (a_src_hf - 1.0) / (dest_rect.height as f64 - 1.0)
+            } else {
+                a_src_hf / dest_rect.height as f64
+            };
+
+            for a_dest_y in 1..(dest_rect.height + 1) {
+                let mut d = ((a_dest_y * a_temp_w + 1) * 4) as usize;
+
+                let a_src_y = (a_dest_y - 1) as f64 * a_src_y_factor
+                    + (a_src_yf - (a_src_yf as i32) as f64);
+                let a_src_yi_sub = a_src_y as i32;
+
+                let a_factor1 = (256.0 * (1.0 - (a_src_y - a_src_yi_sub as f64))) as i32;
+                let a_factor2 = 256 - a_factor1;
+
+                let s1_base = (a_src_yi_sub * a_temp_w + 1) * 4;
+                let mut s1 = s1_base as usize;
+                let a_is_last_row = a_src_yi_sub == a_src_hi - 1;
+                let mut s2 = if a_is_last_row {
+                    s1_base as usize
+                } else {
+                    ((a_src_yi_sub + 1) * a_temp_w + 1) as usize * 4
                 };
-                self.set_pixel(dst_x, dst_y, &final_color, 0);
+
+                for _ in 1..(a_temp_w - 1) {
+                    for k in 0..4 {
+                        a_new_pixels[d + k] = ((a_factor1 * a_horz[s1 + k] as i32)
+                            + (a_factor2 * a_horz[s2 + k] as i32))
+                            as u32;
+                    }
+                    d += 4;
+                    s1 += 4;
+                    s2 += 4;
+                }
+            }
+        }
+
+        // ---- 合成到目标 ----
+        let a_self_width = self.width as i32;
+        let a_dest_len = self.pixels.len();
+
+        for y in 0..dest_rect.height {
+            for x in 0..dest_rect.width {
+                let base = (((y + 1) * a_temp_w + x + 1) * 4) as usize;
+                // C++ 的 4 分量顺序为 B,G,R,A，且各自 >> 16 还原
+                let b = (a_new_pixels[base] >> 16) as i32;
+                let g = (a_new_pixels[base + 1] >> 16) as i32;
+                let r = (a_new_pixels[base + 2] >> 16) as i32;
+                let a = (a_new_pixels[base + 3] >> 16) as i32;
+
+                if a == 0 {
+                    continue;
+                }
+
+                let a_dest_idx_i = (dest_rect.y + y) * a_self_width + dest_rect.x + x;
+                if a_dest_idx_i < 0 || ((a_dest_idx_i as usize) * 4 + 3) >= a_dest_len {
+                    continue;
+                }
+                let a_dest_idx = a_dest_idx_i as usize;
+
+                let dest = Self::read_packed_pixel_raw(&self.pixels, a_dest_idx);
+                let a_dest_alpha = (dest >> 24) as i32;
+                let a_new_dest_alpha = a_dest_alpha + ((255 - a_dest_alpha) * a) / 255;
+                let oma = (256 - a) as u32;
+
+                let a_out = ((a_new_dest_alpha as u32) << 24)
+                    | (((((dest & 0x0000FF) * oma) >> 8) & 0x0000FF)
+                        .wrapping_add(((b * a) >> 8) as u32))
+                    | (((((dest & 0x00FF00) * oma) >> 8) & 0x00FF00)
+                        .wrapping_add((((g * a) >> 8) as u32) << 8))
+                    | (((((dest & 0xFF0000) * oma) >> 8) & 0xFF0000)
+                        .wrapping_add((((r * a) >> 8) as u32) << 16));
+
+                Self::write_packed_pixel(&mut self.pixels, a_dest_idx, a_out);
             }
         }
     }
