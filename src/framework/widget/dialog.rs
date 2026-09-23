@@ -173,7 +173,47 @@ impl Dialog {
     pub fn mouse_up_btn(&mut self, _x: i32, _y: i32, _b: i32, _c: i32) { self.dragging = false; }
     pub fn update(&mut self) {}
     pub fn is_modal(&self) -> bool { self.is_modal }
-    pub fn wait_for_result(&mut self, _auto_kill: bool) -> i32 { self.result }
+    /// 模态等待对话框结果（对应 C++ `Dialog::WaitForResult`，Widget/Dialog.cpp:397-429）
+    ///
+    /// C++ 的写法是**在函数内驱动整个应用主循环**，直到对话框产生结果：
+    /// ```cpp
+    /// while ((gSexyAppBase->UpdateAppStep(nullptr)) && (mWidgetManager != nullptr)
+    ///        && (mResult == 0x7FFFFFFF));
+    /// if (autoKill) gSexyAppBase->KillDialog(mId);
+    /// return mResult;
+    /// ```
+    /// [TRANSLATION_NOTE]: 原桩实现直接 `return self.result` —— 而 `result` 的初值就是哨兵
+    /// `0x7FFFFFFF`（见本文件 new()），因此会把"仍在等待"当成最终结果交给调用方
+    /// （`lawn_app.rs:2510` 正是取用其返回值，`zen_garden.rs:566`、`lawn_app.rs:1399` 同）。
+    /// Rust 侧可同样实现该嵌套循环：`LawnApp::update_app_step` 已存在（lawn_app.rs:449）。
+    /// 与 C++ 的差异：循环条件中 C++ 还有 `mWidgetManager != nullptr`，而 Rust 的 Dialog
+    /// 不带 `widget_manager` 字段（由 WidgetManager 统一持有），故省略该项检查。
+    pub fn wait_for_result(&mut self, auto_kill: bool) -> i32 {
+        const WAITING: i32 = 0x7FFFFFFF;
+
+        if self.result == WAITING {
+            if let Some(a_app) = crate::lawn::lawn_app::LawnApp::instance() {
+                unsafe {
+                    while (*a_app).update_app_step(None) && self.result == WAITING {
+                        // 循环体即 C++ 的 UpdateAppStep
+                    }
+                }
+            }
+        }
+
+        if auto_kill {
+            if let Some(a_app) = crate::lawn::lawn_app::LawnApp::instance() {
+                unsafe {
+                    // C++: gSexyAppBase->KillDialog(mId)（Rust 侧签名为枚举，Dialog::id 为其数值）
+                    let a_dialog_id =
+                        std::mem::transmute::<i32, crate::lawn::game_enums::Dialogs>(self.id);
+                    (*a_app).kill_dialog(a_dialog_id);
+                }
+            }
+        }
+
+        self.result
+    }
 
     pub fn button_press(&mut self, the_id: i32) {
         if (the_id == ID_YES || the_id == ID_NO) && self.dialog_listener.is_some() {
