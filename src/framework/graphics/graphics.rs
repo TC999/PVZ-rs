@@ -830,8 +830,16 @@ impl Graphics {
         y: f32,
         use_float: bool,
     ) {
-        if transform.complex {
-            // 复杂变换 → 使用矩阵方法
+        // C++ Graphics.cpp:860: if (mComplex || (GLImage::Check3D(mDestImage) && useFloat))
+        // [TRANSLATION_NOTE]: 原实现只判 mComplex，漏掉了「目标为 GLImage 且要求浮点」这一条 ——
+        // GL 加速 + 浮点绘制时应走矩阵路径（GLImage::check_3d 已存在但此前未接线）。
+        let a_dest_is_3d = if self.dest_image.is_null() {
+            false
+        } else {
+            unsafe { crate::framework::graphics::gl_image::GLImage::check_3d(&*self.dest_image) }
+        };
+        if transform.complex || (a_dest_is_3d && use_float) {
+            // 复杂变换 / GL 3D → 使用矩阵方法
             self.draw_image_matrix_src(image, &transform.get_matrix(), src_rect, x, y);
             return;
         }
@@ -848,7 +856,18 @@ impl Graphics {
             if use_float {
                 self.draw_image_rotated_f(image, nx, ny, transform.rot as f64, rx, ry, Some(src_rect));
             } else {
-                self.draw_image_rotated_f(image, nx, ny, transform.rot as f64, rx, ry, Some(src_rect));
+                // C++: DrawImageRotated(theImage, x, y, mRot, rx, ry, &theSrcRect)
+                // Graphics::DrawImageRotated（Graphics.cpp:828-831）先按 int 截断 x/y 与旋转中心，
+                // 再转调 DrawImageRotatedF —— 此处照此实现（此前两个分支都走浮点版，整型路径从未被使用）。
+                self.draw_image_rotated_f(
+                    image,
+                    (nx as i32) as f32,
+                    (ny as i32) as f32,
+                    transform.rot as f64,
+                    (rx as i32) as f32,
+                    (ry as i32) as f32,
+                    Some(src_rect),
+                );
             }
         } else if transform.have_scale {
             let mut mirror = false;
