@@ -780,6 +780,18 @@ impl SexyAppBase {
     }
 
     /// 对应 C++ `SexyAppBase::UpdateFrames`（含到 LawnApp 覆写的虚分派部分）
+    ///
+    /// [TRANSLATION_NOTE]: 与 C++ 的**时间模型差异**（报告 §7.11 的实质）—— C++ 在
+    /// `SexyAppBase::UpdateFTimeAcc()`（SexyAppBase.cpp:2555-2570）里用 `mUpdateFTimeAcc`
+    /// 累积真实时间（上限 200ms），并配合 `mRelaxUpdateBacklogCount` 与
+    /// `ClearUpdateBacklog()`（:453-460，调用点 :1918 EndPopup / :2607 fast-forward 循环）
+    /// 实现"掉帧补跑逻辑帧 + 暂停/快进后清理积压"。Rust 侧**没有** `clear_update_backlog`
+    /// 与 relax 机制，且**这不是缺口**：本实现采用"事件循环每轮推进一帧"的模型
+    /// （见 `update_app` / `do_update_frames`），不累积时间，故不存在"积压"这一概念。
+    /// 附带的行为差异（属模型选择、非遗漏）：C++ 掉帧时会补跑逻辑帧以维持逻辑速率，
+    /// Rust 不补跑 —— 卡顿时游戏逻辑随之变慢，而非追赶。
+    /// 另注：结构体保留的 `last_time_check` / `update_f_time_acc`（:159-160）是该模型的遗留字段，
+    /// 在当前实现中未被使用。
     fn update_frames_internal(&mut self) {
         // 对应 C++ UpdateFrames: mWidgetManager->UpdateFrame()
         if let Some(wm) = self.widget_manager {
