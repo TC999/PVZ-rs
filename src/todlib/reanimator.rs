@@ -232,6 +232,21 @@ impl Reanimation {
         self.draw_render_group(g, 0); // RENDER_GROUP_NORMAL
     }
 
+    /// 绘制全部渲染组（对应 C++ Reanimation::DrawAllRenderGroups，PvzpLib/Reanimator.cpp:944-948）
+    /// C++: `for (aRenderGroup = RENDER_GROUP_NORMAL; aRenderGroup <= RENDER_GROUP_MAX; aRenderGroup++)
+    ///          DrawRenderGroup(g, aRenderGroup);`
+    /// 即 0..=17（见 PvzpLib/Reanimator.h:118-119）—— 注意 Reanimation::Draw **只画 NORMAL 组**，
+    /// 需要全部渲染组时必须调本函数（Attachment 的 Reanim 分支即属此列）。
+    pub fn draw_all_render_groups(&self, g: &mut Graphics) {
+        const RENDER_GROUP_NORMAL: i32 = 0;
+        const RENDER_GROUP_MAX: i32 = 17;
+        let mut a_render_group = RENDER_GROUP_NORMAL;
+        while a_render_group <= RENDER_GROUP_MAX {
+            self.draw_render_group(g, a_render_group);
+            a_render_group += 1;
+        }
+    }
+
     /// 按渲染组绘制（对应 C++ Reanimation::DrawRenderGroup + DrawTrack，Reanimator.cpp:635-937）
     /// 完整矩阵链：pivot 居中 → MatrixFromTransform → × mOverlayMatrix → 平移(shake + g 平移)
     pub fn draw_render_group(&self, g: &mut Graphics, the_render_group: i32) {

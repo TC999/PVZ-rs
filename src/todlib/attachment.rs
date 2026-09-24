@@ -343,12 +343,14 @@ impl Attachment {
                 }
                 // 对应 C++ Attachment::Draw 的 Reanim 分支：aReanimation->DrawAllRenderGroups(g)
                 EffectType::Reanim => {
-                    // [TRANSLATION_NOTE]: C++ 中 aReanimation->DrawAllRenderGroups(g)；
-                    // Rust 以 Reanimation::draw 近似（渲染组遍历依赖 reanim 完整实现）
+                    // 对应 C++ Attachment::Draw 的 Reanim 分支：aReanimation->DrawAllRenderGroups(g)
+                    // [TRANSLATION_NOTE]: 先前这里用 Reanimation::draw 近似（那只画 NORMAL 组，
+                    // 会漏掉 1..17 号渲染组）；现已补齐 Reanimation::draw_all_render_groups
+                    // （对应 C++ Reanimator.cpp:944-948），故改为直接调用它。
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_ref() {
                             if let Some(a_reanim) = es.reanimations.get(a_attach_effect.effect_id as usize) {
-                                a_reanim.draw(g);
+                                a_reanim.draw_all_render_groups(g);
                             }
                         }
                     }
