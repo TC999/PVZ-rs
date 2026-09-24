@@ -1,5 +1,12 @@
 // PvZ Portable Rust 翻译 — TextWidget 文本显示控件
 // 对应 C++ SexyAppFramework/widget/TextWidget.h / TextWidget.cpp
+//
+// [TRANSLATION_NOTE]: 本文件是**未接线的桩组件**（报告 §7.7 称其"缺选择"）：
+//   - 全库无使用者（`rg "text_widget::TextWidget"` 无命中）；
+//   - 交互方法 mouse_down / mouse_drag / key_down 均为**空体**，滚动仅记录 position；
+//   - 缺 C++ 的文本选择族：SelectionReversed / GetSelectedIndices / GetStringIndex /
+//     DrawColorStringHilited（TextWidget.cpp:93/113/309/316）。
+// 因此补齐选择功能对运行行为没有影响；实际的文本显示由 message_widget 等其它路径承担。
 
 #![allow(dead_code)]
 

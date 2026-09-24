@@ -377,9 +377,13 @@ impl ResourceManager {
     }
 
     /// 加载下一个资源（对应 C++ LoadNextResource）
+    /// [TRANSLATION_NOTE]: 桩（恒 false）。**全库无调用点**（报告 §7.1）—— C++ 中它是
+    /// "加载线程每次推进一个资源"的分步接口（配合 mLoadingThread 状态机），Rust 侧的资源加载
+    /// 是同步一次性完成的（`load_resources` 逐组处理图像与声音），没有分步队列，故无对应调用方。
     pub fn load_next_resource(&mut self) -> bool { false }
 
-    /// 开始加载资源组
+    /// 开始加载资源组（对应 C++ StartLoadResources）
+    /// [TRANSLATION_NOTE]: 空实现且无调用点；Rust 侧直接调用 `load_resources(group)` 完成加载。
     pub fn start_load_resources(&mut self, _group: &str) {}
 
     /// 加载整个资源组（对应 C++ LoadResources）
@@ -668,15 +672,17 @@ impl ResourceManager {
     }
 
     /// 替换图像（对应 C++ ReplaceImage）
+    /// [TRANSLATION_NOTE]: 桩（恒 false）。**全库无调用点**（报告 §7.2），属未接线的框架 API ——
+    /// 补齐它不会改变任何运行行为。C++ 中用于运行期替换已注册资源（编辑器/热重载场景），
+    /// 本游戏运行期不使用；若将来需要，实现方式是在 image_map 中替换对应 BaseRes 的 image。
     pub fn replace_image(&mut self, _id: &str, _image: *mut Image) -> bool { false }
 
-    /// 替换声音
+    /// 替换声音（同 replace_image，桩且无调用点）
     pub fn replace_sound(&mut self, _id: &str, _sound: isize) -> bool { false }
 
-    /// 替换字体
+    /// 替换字体（同 replace_image，桩且无调用点）
     pub fn replace_font(&mut self, _id: &str, _font: *mut Font) -> bool { false }
 
-    /// 删除图像资源（对应 C++ DeleteImage）
     /// 删除图像资源（对应 C++ DeleteImage）
     pub fn delete_image(&mut self, name: &str) {
         let lower = string_to_lower(name);
@@ -689,9 +695,14 @@ impl ResourceManager {
     }
 
     /// 加载图像（对应 C++ LoadImage）
+    /// [TRANSLATION_NOTE]: 桩（返回空 SharedImageRef）。**全库无调用点**（报告 §7.3）——
+    /// 实际取图走 `get_image(&str)`（本文件 :707），后者是 image_map 查询，而非 C++ 那种
+    /// "未注册则按需加载"的语义。
     pub fn load_image(&mut self, _name: &str) -> SharedImageRef { SharedImageRef::new() }
 
-    /// 删除声音资源
+    /// 删除声音资源（对应 C++ DeleteSound）
+    /// [TRANSLATION_NOTE]: 空实现且**无调用点**（报告 §7.3）；声音的实际释放走
+    /// `SoundManager::ReleaseSound`（sdl_sound_manager.rs）。
     pub fn delete_sound(&mut self, _name: &str) {}
 
     /// 删除字体资源
@@ -715,7 +726,10 @@ impl ResourceManager {
         SharedImageRef::new()
     }
 
-    /// 获取声音
+    /// 获取声音（对应 C++ GetSound）
+    /// [TRANSLATION_NOTE]: 恒返回 0 且**无调用点**（报告 §7.3）—— 实际音效经 tod_foley 的
+    /// `SOUND_*` 全局变量 + `SoundManager` 槽位访问（见 lawn_app 的资源加载与 `assign_sound_id`），
+    /// 不经由本函数。
     pub fn get_sound(&self, _id: &str) -> isize { 0 }
 
     /// 获取字体（对应 C++ GetFont；经全局字体缓存加载位图字库）
