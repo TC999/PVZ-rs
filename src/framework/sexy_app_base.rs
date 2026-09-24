@@ -1346,10 +1346,16 @@ impl SexyAppBase {
     /// 设置光标类型（对应 C++ SetCursor 的完整版本）
     pub fn set_cursor_type(&mut self, _cursor_type: i32) {}
 
-    /// 开始文本输入（对应 C++ StartTextInput）
+    /// 开始文本输入（对应 C++ `SexyAppBase::StartTextInput`，platform/default/Input.cpp:492）
+    /// [TRANSLATION_NOTE]: 桩（恒 false）。这是 §7.8 中 platform 输入层**唯一未落地的部分** ——
+    /// C++ 侧的实现是 `SDL_StartTextInput()` + 记录初始文本与输入框（另配 StopTextInput /
+    /// SetTextInputRect，Input.cpp:492-527），用于弹出系统 IME/软键盘。Rust 侧未接入，
+    /// 因此需要键入文本的场合（如 UserDialog 的存档名）无法获得系统输入法。
+    /// 其余 Input.cpp 职责（事件分发、`SDLKeyToKeyCode`、demo 录制、窗口创建）均已在本文件实现，
+    /// 见 `process_deferred_messages` / `sdl_keycode_to_keycode` / `record_demo_event`。
     pub fn start_text_input(&mut self, _initial_text: &str) -> bool { false }
 
-    /// 停止文本输入（对应 C++ StopTextInput）
+    /// 停止文本输入（对应 C++ StopTextInput，platform/default/Input.cpp:504）—— 同上的桩
     pub fn stop_text_input(&mut self) {}
 
     /// 检查是否已关闭
