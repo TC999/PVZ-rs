@@ -144,6 +144,18 @@ impl XMLParser {
     /// 读取下一个 XML 元素
     ///
     /// 返回 true 表示成功读取了一个元素，false 表示遇到结束或错误。
+    ///
+    /// [TRANSLATION_NOTE]: 本函数与 C++ `XMLParser::NextElement`（misc/XMLParser.cpp:335-717）
+    /// **不是逐行对应，而是语义等价的重新实现**，已核对的三点差异如下：
+    /// 1) **section 的语义不同**：C++ 的 `mSection` 是"父节**路径**"，由 548-575 处在进出标签时
+    ///    用 `/` 拼接/截断维护（形如 `Resources/Image`），元素返回的是该路径；而 Rust 的
+    ///    `element.section` 只是**标签名本身**（开始标签名或结束标签名）。两者在**单层**判断下等价
+    ///    （Rust 侧的调用方 parse_resources_file 只用单层名比较：`"Resources"`/`"Image"`/`"Font"`/`"Sound"`），
+    ///    但**不要**在 Rust 里按 C++ 语义去比较多层路径（如 `"Resources/Image"`），那样不会命中。
+    /// 2) **注释的处理不同**：C++ 在注释结束时 `break` 并**返回 TYPE_COMMENT 元素**；Rust 把它
+    ///    push 进 `element.value` 后**递归取下一个元素**（跳过注释）。因所有调用方都忽略
+    ///    TYPE_COMMENT（parse_resources_file 无该分支），行为等价。
+    /// 3) C++ 的 `mBufferedText`（回退缓冲）在 Rust 中无需存在 —— 本实现用 `pos` 单向下标扫描。
     pub fn next_element(&mut self, element: &mut XMLElement) -> bool {
         // 重置元素
         element.elem_type = XMLElement::TYPE_NONE;
