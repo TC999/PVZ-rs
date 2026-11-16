@@ -80,7 +80,9 @@ pub fn rand() -> i32 {
 }
 
 pub fn rand_range(range: i32) -> i32 {
-    if range <= 0 { return 0; }
+    if range <= 0 {
+        return 0;
+    }
     rand() % range
 }
 
@@ -92,7 +94,9 @@ pub fn rand_range_int(min: i32, max: i32) -> i32 {
 }
 
 pub fn rand_float(range: f32) -> f32 {
-    if range <= 0.0 { return 0.0; }
+    if range <= 0.0 {
+        return 0.0;
+    }
     (rand() as f32 / SEXY_RAND_MAX as f32) * range
 }
 
@@ -172,16 +176,23 @@ pub fn file_exists(path: &str) -> bool {
 pub fn get_file_name(path: &str, no_extension: bool) -> String {
     let p = std::path::Path::new(path);
     if no_extension {
-        p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()
+        p.file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default()
     } else {
-        p.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()
+        p.file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default()
     }
 }
 
 /// 获取文件所在目录
 pub fn get_file_dir(path: &str, with_slash: bool) -> String {
     let p = std::path::Path::new(path);
-    let parent = p.parent().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let parent = p
+        .parent()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
     if with_slash && !parent.is_empty() {
         parent + "/"
     } else {
@@ -207,22 +218,22 @@ pub const fn byte_swap16(v: u16) -> u16 {
 
 #[inline]
 pub const fn byte_swap32(v: u32) -> u32 {
-    ((v & 0x000000FF) << 24) |
-    ((v & 0x0000FF00) << 8) |
-    ((v & 0x00FF0000) >> 8) |
-    ((v & 0xFF000000) >> 24)
+    ((v & 0x000000FF) << 24)
+        | ((v & 0x0000FF00) << 8)
+        | ((v & 0x00FF0000) >> 8)
+        | ((v & 0xFF000000) >> 24)
 }
 
 #[inline]
 pub const fn byte_swap64(v: u64) -> u64 {
-    ((v & 0x00000000000000FF) << 56) |
-    ((v & 0x000000000000FF00) << 40) |
-    ((v & 0x0000000000FF0000) << 24) |
-    ((v & 0x00000000FF000000) << 8) |
-    ((v & 0x000000FF00000000) >> 8) |
-    ((v & 0x0000FF0000000000) >> 24) |
-    ((v & 0x00FF000000000000) >> 40) |
-    ((v & 0xFF00000000000000) >> 56)
+    ((v & 0x00000000000000FF) << 56)
+        | ((v & 0x000000000000FF00) << 40)
+        | ((v & 0x0000000000FF0000) << 24)
+        | ((v & 0x00000000FF000000) << 8)
+        | ((v & 0x000000FF00000000) >> 8)
+        | ((v & 0x0000FF0000000000) >> 24)
+        | ((v & 0x00FF000000000000) >> 40)
+        | ((v & 0xFF00000000000000) >> 56)
 }
 
 // ============================================================
@@ -252,26 +263,39 @@ impl SexyVector2 {
     /// 归一化（对应 C++ SexyVector2::Normalize）
     pub fn normalize(self) -> SexyVector2 {
         let mag = self.magnitude();
-        if mag != 0.0 { self / mag } else { self }
+        if mag != 0.0 {
+            self / mag
+        } else {
+            self
+        }
     }
 
     /// 垂直向量（对应 C++ SexyVector2::Perp：逆时针旋转 90°）
     pub fn perp(self) -> SexyVector2 {
-        SexyVector2 { x: -self.y, y: self.x }
+        SexyVector2 {
+            x: -self.y,
+            y: self.x,
+        }
     }
 }
 
 impl std::ops::Div<f32> for SexyVector2 {
     type Output = Self;
     fn div(self, rhs: f32) -> Self {
-        SexyVector2 { x: self.x / rhs, y: self.y / rhs }
+        SexyVector2 {
+            x: self.x / rhs,
+            y: self.y / rhs,
+        }
     }
 }
 
 impl std::ops::Mul<f32> for SexyVector2 {
     type Output = Self;
     fn mul(self, rhs: f32) -> Self {
-        SexyVector2 { x: self.x * rhs, y: self.y * rhs }
+        SexyVector2 {
+            x: self.x * rhs,
+            y: self.y * rhs,
+        }
     }
 }
 
@@ -285,21 +309,30 @@ impl std::ops::AddAssign for SexyVector2 {
 impl std::ops::Neg for SexyVector2 {
     type Output = Self;
     fn neg(self) -> Self {
-        SexyVector2 { x: -self.x, y: -self.y }
+        SexyVector2 {
+            x: -self.x,
+            y: -self.y,
+        }
     }
 }
 
 impl std::ops::Add for SexyVector2 {
     type Output = Self;
     fn add(self, rhs: Self) -> Self {
-        SexyVector2 { x: self.x + rhs.x, y: self.y + rhs.y }
+        SexyVector2 {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+        }
     }
 }
 
 impl std::ops::Sub for SexyVector2 {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self {
-        SexyVector2 { x: self.x - rhs.x, y: self.y - rhs.y }
+        SexyVector2 {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+        }
     }
 }
 
@@ -317,7 +350,11 @@ pub struct SexyVector3 {
 }
 
 impl SexyVector3 {
-    pub const ZERO: SexyVector3 = SexyVector3 { x: 0.0, y: 0.0, z: 0.0 };
+    pub const ZERO: SexyVector3 = SexyVector3 {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+    };
 
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
         SexyVector3 { x, y, z }
@@ -345,35 +382,55 @@ impl SexyVector3 {
     /// 归一化（对应 C++ Normalize）
     pub fn normalize(self) -> SexyVector3 {
         let mag = self.magnitude();
-        if mag != 0.0 { self / mag } else { self }
+        if mag != 0.0 {
+            self / mag
+        } else {
+            self
+        }
     }
 }
 
 impl std::ops::Add for SexyVector3 {
     type Output = Self;
     fn add(self, rhs: Self) -> Self {
-        SexyVector3 { x: self.x + rhs.x, y: self.y + rhs.y, z: self.z + rhs.z }
+        SexyVector3 {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+            z: self.z + rhs.z,
+        }
     }
 }
 
 impl std::ops::Sub for SexyVector3 {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self {
-        SexyVector3 { x: self.x - rhs.x, y: self.y - rhs.y, z: self.z - rhs.z }
+        SexyVector3 {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+            z: self.z - rhs.z,
+        }
     }
 }
 
 impl std::ops::Mul<f32> for SexyVector3 {
     type Output = Self;
     fn mul(self, rhs: f32) -> Self {
-        SexyVector3 { x: self.x * rhs, y: self.y * rhs, z: self.z * rhs }
+        SexyVector3 {
+            x: self.x * rhs,
+            y: self.y * rhs,
+            z: self.z * rhs,
+        }
     }
 }
 
 impl std::ops::Div<f32> for SexyVector3 {
     type Output = Self;
     fn div(self, rhs: f32) -> Self {
-        SexyVector3 { x: self.x / rhs, y: self.y / rhs, z: self.z / rhs }
+        SexyVector3 {
+            x: self.x / rhs,
+            y: self.y / rhs,
+            z: self.z / rhs,
+        }
     }
 }
 
@@ -444,9 +501,21 @@ pub fn utf8_decode_next_str(s: &str, offset: &mut usize) -> Option<char> {
 pub fn is_opening_punctuation(c: char) -> bool {
     matches!(
         c,
-        '〈' | '《' | '「' | '『' | '【' | '〔' | '〖' | '〘' | '〚'
-            | '（' | '［' | '｛'
-            | '\u{2018}' | '\u{201A}' | '\u{201B}' | '\u{201C}'
+        '〈' | '《'
+            | '「'
+            | '『'
+            | '【'
+            | '〔'
+            | '〖'
+            | '〘'
+            | '〚'
+            | '（'
+            | '［'
+            | '｛'
+            | '\u{2018}'
+            | '\u{201A}'
+            | '\u{201B}'
+            | '\u{201C}'
     )
 }
 
@@ -454,13 +523,27 @@ pub fn is_opening_punctuation(c: char) -> bool {
 pub fn is_closing_punctuation(c: char) -> bool {
     matches!(
         c,
-        '〉' | '》' | '」' | '』' | '】' | '〕' | '〗' | '〙' | '〛'
-            | '）' | '］' | '｝'
-            | '\u{2019}' | '\u{201D}'
-            | '、' | '。'
-            | '，' | '．'
-            | '！' | '？'
-            | '：' | '；'
+        '〉' | '》'
+            | '」'
+            | '』'
+            | '】'
+            | '〕'
+            | '〗'
+            | '〙'
+            | '〛'
+            | '）'
+            | '］'
+            | '｝'
+            | '\u{2019}'
+            | '\u{201D}'
+            | '、'
+            | '。'
+            | '，'
+            | '．'
+            | '！'
+            | '？'
+            | '：'
+            | '；'
     )
 }
 
@@ -573,5 +656,15 @@ pub fn local_time() -> (i32, i32, i32, i32, i32, i32, i32, i32, i32) {
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let year = if m <= 2 { y + 1 } else { y };
     let wday = (days + 4).rem_euclid(7) as i32; // 1970-01-01 是周四
-    (year as i32, m as i32, d as i32, hour, min, sec, wday, doy as i32, 0)
+    (
+        year as i32,
+        m as i32,
+        d as i32,
+        hour,
+        min,
+        sec,
+        wday,
+        doy as i32,
+        0,
+    )
 }

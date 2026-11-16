@@ -9,13 +9,13 @@ use std::collections::{HashMap, HashSet, LinkedList};
 use std::ptr;
 
 use crate::framework::common::string_to_lower;
-use crate::framework::graphics::image::Image;
+use crate::framework::graphics::font::Font;
 use crate::framework::graphics::gl_image::GLImage;
+use crate::framework::graphics::image::Image;
 use crate::framework::graphics::memory_image::MemoryImage;
 use crate::framework::graphics::shared_image::{SharedImage, SharedImageRef};
-use crate::framework::graphics::font::Font;
 use crate::framework::sexy_app_base::SexyAppBase;
-use crate::framework::xml_parser::{XMLParser, XMLElement};
+use crate::framework::xml_parser::{XMLElement, XMLParser};
 
 /// 资源类型枚举
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,7 +37,13 @@ pub struct BaseRes {
 
 impl BaseRes {
     pub fn new(res_type: ResType) -> Self {
-        BaseRes { res_type, id: String::new(), res_group: String::new(), path: String::new(), from_program: false }
+        BaseRes {
+            res_type,
+            id: String::new(),
+            res_group: String::new(),
+            path: String::new(),
+            from_program: false,
+        }
     }
     pub fn delete_resource(&mut self) {}
 }
@@ -104,9 +110,10 @@ pub struct ResourceManager {
     pub app: Option<*mut SexyAppBase>,
     /// 当前资源组
     pub cur_res_group: String,
-    /// 默认路径
+
+    /// 默认路径（对应 C++ mDefaultPath；由 <SetDefaults path=..> 维护）
     pub default_path: String,
-    /// 默认 ID 前缀
+    /// 默认 ID 前缀（对应 C++ mDefaultIdPrefix；由 <SetDefaults idprefix=..> 维护）
     pub default_id_prefix: String,
     /// 允许缺失程序资源
     pub allow_missing_program_resources: bool,
@@ -149,11 +156,19 @@ impl ResourceManager {
         // 先检查 PAK 中是否有该文件
         crate::framework::paklib::with_pak_interface(|pak| {
             let key = crate::framework::paklib::normalize_pak_path(filename);
-            eprintln!("  PAK 中查找: '{}' → exists={}", key, pak.file_exists(filename));
+            eprintln!(
+                "  PAK 中查找: '{}' → exists={}",
+                key,
+                pak.file_exists(filename)
+            );
         });
 
         if !parser.open_file(filename) {
-            return self.fail(&format!("无法打开资源文件 '{}': {}", filename, parser.get_error_text()));
+            return self.fail(&format!(
+                "无法打开资源文件 '{}': {}",
+                filename,
+                parser.get_error_text()
+            ));
         }
         eprintln!("  parse_resources_file: 文件打开成功");
 
@@ -163,15 +178,24 @@ impl ResourceManager {
         eprintln!("  parse_resources_file: 查找 <Resources> 根元素...");
         loop {
             if !parser.next_element(&mut element) {
-                return self.fail(&format!("资源文件 '{}' 中未找到 <Resources> 根元素", filename));
+                return self.fail(&format!(
+                    "资源文件 '{}' 中未找到 <Resources> 根元素",
+                    filename
+                ));
             }
-            if element.elem_type == XMLElement::TYPE_START && (element.section == "Resources" || element.section == "ResourceManifest") {
-                break; // 找到根元素
+            if element.elem_type == XMLElement::TYPE_START && element.section == "ResourceManifest"
+            {
+                break; // 找到根元素（对应 C++ ResourceManager.cpp:597-602，仅 <ResourceManifest> 为根）
             }
             // 跳过 注释、处理指令 等非元素节点
-            if element.elem_type == XMLElement::TYPE_ELEMENT || element.elem_type == XMLElement::TYPE_START {
-            // 遇到了非 Resources/ResourceManifest 的元素 — 格式错误
-                return self.fail(&format!("资源文件 '{}' 的根元素应为 <ResourceManifest>，但找到 <{}>", filename, element.section));
+            if element.elem_type == XMLElement::TYPE_ELEMENT
+                || element.elem_type == XMLElement::TYPE_START
+            {
+                // 遇到了非 Resources/ResourceManifest 的元素 — 格式错误
+                return self.fail(&format!(
+                    "资源文件 '{}' 的根元素应为 <ResourceManifest>，但找到 <{}>",
+                    filename, element.section
+                ));
             }
         }
         eprintln!("  parse_resources_file: 找到 <Resources>");
@@ -184,6 +208,16 @@ impl ResourceManager {
 
             match element.elem_type {
                 XMLElement::TYPE_START => {
+                    // 对应 C++ DoParseResources（ResourceManager.cpp:546-561）：
+                    // <Resources id="组名"> 开启一个资源组，组名取 id 属性
+                    if element.section == "Resources" {
+                        self.cur_res_group =
+                            element.attributes.get("id").cloned().unwrap_or_default();
+                        if self.cur_res_group.is_empty() {
+                            return self.fail("No id specified.");
+                        }
+                        continue;
+                    }
                     // 遇到带子元素的标签（如 <Font> 可能有子标签）
                     self.parse_resource_container(&mut parser, &element);
                 }
@@ -192,8 +226,8 @@ impl ResourceManager {
                     self.parse_resource(&element);
                 }
                 XMLElement::TYPE_END => {
-                    // </ResourceManifest> 或 </Resources> 结束
-                    if element.section == "Resources" || element.section == "ResourceManifest" {
+                    // </ResourceManifest> 根结束（对应 C++ DoParseResources 的退出）
+                    if element.section == "ResourceManifest" {
                         return true;
                     }
                 }
@@ -214,23 +248,52 @@ impl ResourceManager {
         match element.section.as_str() {
             "Image" => {
                 let path = element.attributes.get("path").cloned().unwrap_or_default();
-                let rows: i32 = element.attributes.get("rows").and_then(|v| v.parse::<i32>().ok()).unwrap_or(1);
-                let cols: i32 = element.attributes.get("cols").and_then(|v| v.parse::<i32>().ok()).unwrap_or(1);
-                let alpha_color_str = element.attributes.get("alphaColor").cloned().unwrap_or_default();
-                let alpha_color: u32 = if alpha_color_str.starts_with("0x") || alpha_color_str.starts_with("0X") {
-                    u32::from_str_radix(&alpha_color_str[2..], 16).unwrap_or(0)
-                } else {
-                    0
-                };
+                let rows: i32 = element
+                    .attributes
+                    .get("rows")
+                    .and_then(|v| v.parse::<i32>().ok())
+                    .unwrap_or(1);
+                let cols: i32 = element
+                    .attributes
+                    .get("cols")
+                    .and_then(|v| v.parse::<i32>().ok())
+                    .unwrap_or(1);
+                let alpha_color_str = element
+                    .attributes
+                    .get("alphaColor")
+                    .cloned()
+                    .unwrap_or_default();
+                let alpha_color: u32 =
+                    if alpha_color_str.starts_with("0x") || alpha_color_str.starts_with("0X") {
+                        u32::from_str_radix(&alpha_color_str[2..], 16).unwrap_or(0)
+                    } else {
+                        0
+                    };
 
                 let mut res = Box::new(ImageRes {
                     base: BaseRes::new(ResType::Image),
                     image: crate::framework::graphics::shared_image::SharedImageRef::new(),
-                    alpha_image: element.attributes.get("alphaImage").cloned().unwrap_or_default(),
-                    alpha_grid_image: element.attributes.get("alphaGridImage").cloned().unwrap_or_default(),
+                    alpha_image: element
+                        .attributes
+                        .get("alphaImage")
+                        .cloned()
+                        .unwrap_or_default(),
+                    alpha_grid_image: element
+                        .attributes
+                        .get("alphaGridImage")
+                        .cloned()
+                        .unwrap_or_default(),
                     variant: String::new(),
-                    auto_find_alpha: element.attributes.get("autoFindAlpha").map(|v| v == "true").unwrap_or(false),
-                    palletize: element.attributes.get("palletize").map(|v| v == "true").unwrap_or(false),
+                    auto_find_alpha: element
+                        .attributes
+                        .get("autoFindAlpha")
+                        .map(|v| v == "true")
+                        .unwrap_or(false),
+                    palletize: element
+                        .attributes
+                        .get("palletize")
+                        .map(|v| v == "true")
+                        .unwrap_or(false),
                     rows,
                     cols,
                     alpha_color,
@@ -238,14 +301,22 @@ impl ResourceManager {
                 res.base.id = id.clone();
                 res.base.path = path;
                 res.base.res_group = self.cur_res_group.clone();
-                let key = string_to_lower(id);
+                // 对应 C++ ParseCommonResource（ResourceManager.cpp:198-203）：
+                // 注册键 = SetDefaults 的 idprefix + id；文件路径 = 缺省路径 + path
+                let full_id = format!("{}{}", self.default_id_prefix, id);
+                res.base.path = format!("{}{}", self.default_path, res.base.path);
+                let key = string_to_lower(&full_id);
                 let a_ptr = Box::into_raw(res) as *mut BaseRes;
                 self.image_map.insert(key.clone(), a_ptr);
                 self.register_resource_id(&key, a_ptr);
             }
             "Sound" => {
                 let path = element.attributes.get("path").cloned().unwrap_or_default();
-                let volume: f64 = element.attributes.get("volume").and_then(|v| v.parse::<f64>().ok()).unwrap_or(1.0);
+                let volume: f64 = element
+                    .attributes
+                    .get("volume")
+                    .and_then(|v| v.parse::<f64>().ok())
+                    .unwrap_or(1.0);
                 let mut res = Box::new(SoundRes {
                     base: BaseRes::new(ResType::Sound),
                     sound_id: -1,
@@ -255,14 +326,21 @@ impl ResourceManager {
                 res.base.id = id.clone();
                 res.base.path = path;
                 res.base.res_group = self.cur_res_group.clone();
-                let key = string_to_lower(id);
+                // 对应 C++ ParseCommonResource：idprefix + id、缺省路径 + path
+                let full_id = format!("{}{}", self.default_id_prefix, id);
+                res.base.path = format!("{}{}", self.default_path, res.base.path);
+                let key = string_to_lower(&full_id);
                 let a_ptr = Box::into_raw(res) as *mut BaseRes;
                 self.sound_map.insert(key.clone(), a_ptr);
                 self.register_resource_id(&key, a_ptr);
             }
             "Font" => {
                 let path = element.attributes.get("path").cloned().unwrap_or_default();
-                let size: i32 = element.attributes.get("size").and_then(|v| v.parse::<i32>().ok()).unwrap_or(16);
+                let size: i32 = element
+                    .attributes
+                    .get("size")
+                    .and_then(|v| v.parse::<i32>().ok())
+                    .unwrap_or(16);
 
                 let mut res = Box::new(FontRes {
                     base: BaseRes::new(ResType::Font),
@@ -270,15 +348,30 @@ impl ResourceManager {
                     image: std::ptr::null_mut(),
                     image_path: element.attributes.get("image").cloned().unwrap_or_default(),
                     tags: element.attributes.get("tags").cloned().unwrap_or_default(),
-                    sys_font: element.attributes.get("sysFont").map(|v| v == "true").unwrap_or(false),
-                    bold: element.attributes.get("bold").map(|v| v == "true").unwrap_or(false),
-                    italic: element.attributes.get("italic").map(|v| v == "true").unwrap_or(false),
+                    sys_font: element
+                        .attributes
+                        .get("sysFont")
+                        .map(|v| v == "true")
+                        .unwrap_or(false),
+                    bold: element
+                        .attributes
+                        .get("bold")
+                        .map(|v| v == "true")
+                        .unwrap_or(false),
+                    italic: element
+                        .attributes
+                        .get("italic")
+                        .map(|v| v == "true")
+                        .unwrap_or(false),
                     size,
                 });
                 res.base.id = id.clone();
                 res.base.path = path;
                 res.base.res_group = self.cur_res_group.clone();
-                let key = string_to_lower(id);
+                // 对应 C++ ParseCommonResource：idprefix + id、缺省路径 + path
+                let full_id = format!("{}{}", self.default_id_prefix, id);
+                res.base.path = format!("{}{}", self.default_path, res.base.path);
+                let key = string_to_lower(&full_id);
                 let a_ptr = Box::into_raw(res) as *mut BaseRes;
                 self.font_map.insert(key.clone(), a_ptr);
                 self.register_resource_id(&key, a_ptr);
@@ -346,7 +439,20 @@ impl ResourceManager {
                 break;
             }
             match element.elem_type {
-                XMLElement::TYPE_START => depth += 1,
+                XMLElement::TYPE_START => {
+                    // 对应 C++ ParseResources → ParseSetDefaults（ResourceManager.cpp:507-517, 450-462）：
+                    // <SetDefaults path="images" idprefix="IMAGE_" /> 设置后续资源的缺省路径与 id 前缀
+                    if element.section == "SetDefaults" {
+                        if let Some(p) = element.attributes.get("path") {
+                            self.default_path = format!("{}/", p.trim_end_matches('/'));
+                        }
+                        if let Some(p) = element.attributes.get("idprefix") {
+                            self.default_id_prefix = p.clone();
+                        }
+                        continue;
+                    }
+                    depth += 1;
+                }
                 XMLElement::TYPE_END => {
                     depth -= 1;
                     if depth == 0 {
@@ -363,13 +469,19 @@ impl ResourceManager {
     }
 
     /// 重新解析资源文件
-    pub fn reparse_resources_file(&mut self, _filename: &str) -> bool { true }
+    pub fn reparse_resources_file(&mut self, _filename: &str) -> bool {
+        true
+    }
 
     /// 获取错误文本
-    pub fn get_error_text(&self) -> &str { &self.error }
+    pub fn get_error_text(&self) -> &str {
+        &self.error
+    }
 
     /// 是否有错误
-    pub fn had_error(&self) -> bool { self.has_failed }
+    pub fn had_error(&self) -> bool {
+        self.has_failed
+    }
 
     /// 检查组是否已加载
     pub fn is_group_loaded(&self, group: &str) -> bool {
@@ -380,7 +492,9 @@ impl ResourceManager {
     /// [TRANSLATION_NOTE]: 桩（恒 false）。**全库无调用点**（报告 §7.1）—— C++ 中它是
     /// "加载线程每次推进一个资源"的分步接口（配合 mLoadingThread 状态机），Rust 侧的资源加载
     /// 是同步一次性完成的（`load_resources` 逐组处理图像与声音），没有分步队列，故无对应调用方。
-    pub fn load_next_resource(&mut self) -> bool { false }
+    pub fn load_next_resource(&mut self) -> bool {
+        false
+    }
 
     /// 开始加载资源组（对应 C++ StartLoadResources）
     /// [TRANSLATION_NOTE]: 空实现且无调用点；Rust 侧直接调用 `load_resources(group)` 完成加载。
@@ -411,14 +525,18 @@ impl ResourceManager {
         let lower_group = string_to_lower(group);
 
         // 依次加载所有属于该组的图像资源
-        let image_keys: Vec<String> = self.image_map.keys()
+        let image_keys: Vec<String> = self
+            .image_map
+            .keys()
             .filter(|k| {
                 if let Some(ptr) = self.image_map.get(*k) {
                     unsafe {
                         let res = &*(*ptr as *const ImageRes);
                         string_to_lower(&res.base.res_group) == lower_group
                     }
-                } else { false }
+                } else {
+                    false
+                }
             })
             .cloned()
             .collect();
@@ -427,7 +545,10 @@ impl ResourceManager {
             if let Some(&ptr) = self.image_map.get(key) {
                 unsafe {
                     let res = &mut *(ptr as *mut ImageRes);
-                    if !res.base.path.is_empty() && res.image.unshared_image.is_null() && res.image.shared_image.is_null() {
+                    if !res.base.path.is_empty()
+                        && res.image.unshared_image.is_null()
+                        && res.image.shared_image.is_null()
+                    {
                         self.load_single_image(res);
                     }
                 }
@@ -438,14 +559,18 @@ impl ResourceManager {
         // [TRANSLATION_NOTE]: 原实现只在 lawn_app 中对 "LoadingSounds" 组硬编码加载声音，
         // 其它组的 Sound **永不加载**（SOUND_* 变量保持 -1 → 播放时 get_sound_instance(-1)
         // 返回 None → play_foley 直接 return，静默无声）。此处按组统一处理，与 C++ 一致。
-        let sound_keys: Vec<String> = self.sound_map.keys()
+        let sound_keys: Vec<String> = self
+            .sound_map
+            .keys()
             .filter(|k| {
                 if let Some(ptr) = self.sound_map.get(*k) {
                     unsafe {
                         let res = &*(*ptr as *const SoundRes);
                         string_to_lower(&res.base.res_group) == lower_group
                     }
-                } else { false }
+                } else {
+                    false
+                }
             })
             .cloned()
             .collect();
@@ -489,7 +614,10 @@ impl ResourceManager {
             return;
         }
 
-        eprintln!("    load_image: id='{}' path='{}'", res.base.id, res.base.path);
+        eprintln!(
+            "    load_image: id='{}' path='{}'",
+            res.base.id, res.base.path
+        );
 
         // 从 PAK 读取图像文件（尝试常见路径模式）
         let base_name = &res.base.path;
@@ -513,11 +641,16 @@ impl ResourceManager {
             let exists_no_ext = pak.records.contains_key(&normalized);
             let normalized_png = crate::framework::paklib::normalize_pak_path(&try_paths[1]);
             let exists_png = pak.records.contains_key(&normalized_png);
-            eprintln!("    load_image: PAK 中 '{}' → {}  '{}' → {}", 
-                normalized, exists_no_ext, normalized_png, exists_png);
-            
+            eprintln!(
+                "    load_image: PAK 中 '{}' → {}  '{}' → {}",
+                normalized, exists_no_ext, normalized_png, exists_png
+            );
+
             // 搜索包含 POPCAP 或 LOGO 的记录
-            if try_paths[0].to_uppercase().contains("POPCAP") || try_paths[0].to_uppercase().contains("LOGO") || try_paths[0].to_uppercase().contains("TITLE") {
+            if try_paths[0].to_uppercase().contains("POPCAP")
+                || try_paths[0].to_uppercase().contains("LOGO")
+                || try_paths[0].to_uppercase().contains("TITLE")
+            {
                 eprintln!("    load_image: PAK 记录匹配搜索:");
                 for (k, _v) in pak.records.iter() {
                     let ku = k.to_uppercase();
@@ -569,9 +702,7 @@ impl ResourceManager {
 
         // 用 image crate 解码
         let decoded = match image::load_from_memory(&image_data) {
-            Ok(img) => {
-                img.to_rgba8()
-            }
+            Ok(img) => img.to_rgba8(),
             Err(_) => {
                 return;
             }
@@ -582,13 +713,16 @@ impl ResourceManager {
         let raw = decoded.as_raw();
 
         // 将 RGBA 字节数据转换为 u32 像素 (ARGB 格式)
-        let mut pixels: Vec<u32> = raw.chunks(4).map(|chunk| {
-            let r = chunk[0] as u32;
-            let g = chunk[1] as u32;
-            let b = chunk[2] as u32;
-            let a = chunk[3] as u32;
-            (a << 24) | (r << 16) | (g << 8) | b
-        }).collect();
+        let mut pixels: Vec<u32> = raw
+            .chunks(4)
+            .map(|chunk| {
+                let r = chunk[0] as u32;
+                let g = chunk[1] as u32;
+                let b = chunk[2] as u32;
+                let a = chunk[3] as u32;
+                (a << 24) | (r << 16) | (g << 8) | b
+            })
+            .collect();
 
         // ===== 查找并合成独立的 Alpha 遮罩（对应 C++ ImageLib::GetImage 逻辑）=====
         // C++ GetImage 会查找 `_filename` 或 `filename_`（同级目录下）作为 alpha 遮罩
@@ -675,18 +809,30 @@ impl ResourceManager {
     /// [TRANSLATION_NOTE]: 桩（恒 false）。**全库无调用点**（报告 §7.2），属未接线的框架 API ——
     /// 补齐它不会改变任何运行行为。C++ 中用于运行期替换已注册资源（编辑器/热重载场景），
     /// 本游戏运行期不使用；若将来需要，实现方式是在 image_map 中替换对应 BaseRes 的 image。
-    pub fn replace_image(&mut self, _id: &str, _image: *mut Image) -> bool { false }
+    pub fn replace_image(&mut self, _id: &str, _image: *mut Image) -> bool {
+        false
+    }
 
     /// 替换声音（同 replace_image，桩且无调用点）
-    pub fn replace_sound(&mut self, _id: &str, _sound: isize) -> bool { false }
+    pub fn replace_sound(&mut self, _id: &str, _sound: isize) -> bool {
+        false
+    }
 
     /// 替换字体（同 replace_image，桩且无调用点）
-    pub fn replace_font(&mut self, _id: &str, _font: *mut Font) -> bool { false }
+    pub fn replace_font(&mut self, _id: &str, _font: *mut Font) -> bool {
+        false
+    }
 
     /// 删除图像资源（对应 C++ DeleteImage）
     pub fn delete_image(&mut self, name: &str) {
         let lower = string_to_lower(name);
-        if let Some(res_ptr) = self.image_map.remove(&lower) {
+        // 与 get_image 一致：未命中时补试 "IMAGE_" 前缀（见 get_image 的 TRANSLATION_NOTE）
+        let key = if self.image_map.contains_key(&lower) {
+            lower
+        } else {
+            format!("image_{}", lower)
+        };
+        if let Some(res_ptr) = self.image_map.remove(&key) {
             unsafe {
                 // 释放资源（SharedImageRef 在 drop 时会自动释放图像内存）
                 let _ = Box::from_raw(res_ptr);
@@ -698,7 +844,9 @@ impl ResourceManager {
     /// [TRANSLATION_NOTE]: 桩（返回空 SharedImageRef）。**全库无调用点**（报告 §7.3）——
     /// 实际取图走 `get_image(&str)`（本文件 :707），后者是 image_map 查询，而非 C++ 那种
     /// "未注册则按需加载"的语义。
-    pub fn load_image(&mut self, _name: &str) -> SharedImageRef { SharedImageRef::new() }
+    pub fn load_image(&mut self, _name: &str) -> SharedImageRef {
+        SharedImageRef::new()
+    }
 
     /// 删除声音资源（对应 C++ DeleteSound）
     /// [TRANSLATION_NOTE]: 空实现且**无调用点**（报告 §7.3）；声音的实际释放走
@@ -711,13 +859,28 @@ impl ResourceManager {
     /// 加载字体（对应 C++ LoadFont；经全局字体缓存加载位图字库）
     pub fn load_font(&mut self, name: &str) -> Option<*mut Font> {
         let ptr = crate::framework::graphics::bitmap_font::font_global(name);
-        if ptr.is_null() { None } else { Some(ptr) }
+        if ptr.is_null() {
+            None
+        } else {
+            Some(ptr)
+        }
     }
 
     /// 获取图像（对应 C++ GetImage）
+    ///
+    /// [TRANSLATION_NOTE]: C++ 调用方一律传完整 id（如 "IMAGE_TITLESCREEN"）。Rust 存量
+    /// 调用点有传短名（如 "titlescreen"）的历史状态；解析器修复后注册键带 idprefix，
+    /// 故此处对未命中键补试 "IMAGE_" 前缀，保持两类调用点都能命中。
     pub fn get_image(&self, the_id: &str) -> SharedImageRef {
         let lower = string_to_lower(the_id);
         if let Some(res_ptr) = self.image_map.get(&lower) {
+            unsafe {
+                let res = &*(*res_ptr as *const ImageRes);
+                return res.image.clone();
+            }
+        }
+        let prefixed = format!("image_{}", lower);
+        if let Some(res_ptr) = self.image_map.get(&prefixed) {
             unsafe {
                 let res = &*(*res_ptr as *const ImageRes);
                 return res.image.clone();
@@ -730,12 +893,18 @@ impl ResourceManager {
     /// [TRANSLATION_NOTE]: 恒返回 0 且**无调用点**（报告 §7.3）—— 实际音效经 tod_foley 的
     /// `SOUND_*` 全局变量 + `SoundManager` 槽位访问（见 lawn_app 的资源加载与 `assign_sound_id`），
     /// 不经由本函数。
-    pub fn get_sound(&self, _id: &str) -> isize { 0 }
+    pub fn get_sound(&self, _id: &str) -> isize {
+        0
+    }
 
     /// 获取字体（对应 C++ GetFont；经全局字体缓存加载位图字库）
     pub fn get_font(&self, id: &str) -> Option<*mut Font> {
         let ptr = crate::framework::graphics::bitmap_font::font_global(id);
-        if ptr.is_null() { None } else { Some(ptr) }
+        if ptr.is_null() {
+            None
+        } else {
+            Some(ptr)
+        }
     }
 
     /// 获取图像（抛出异常版本）
@@ -745,7 +914,9 @@ impl ResourceManager {
     }
 
     /// 获取声音（抛出异常版本）
-    pub fn get_sound_throw(&self, _id: &str) -> isize { 0 }
+    pub fn get_sound_throw(&self, _id: &str) -> isize {
+        0
+    }
 
     /// 获取字体（抛出异常版本；对应 C++ GetFontThrow）
     pub fn get_font_throw(&self, id: &str) -> Option<*mut Font> {
@@ -777,14 +948,19 @@ impl Drop for ResourceManager {
     fn drop(&mut self) {
         // 清理资源映射
         for (_, ptr) in self.image_map.drain() {
-            unsafe { let _ = Box::from_raw(ptr); }
+            unsafe {
+                let _ = Box::from_raw(ptr);
+            }
         }
         for (_, ptr) in self.sound_map.drain() {
-            unsafe { let _ = Box::from_raw(ptr); }
+            unsafe {
+                let _ = Box::from_raw(ptr);
+            }
         }
         for (_, ptr) in self.font_map.drain() {
-            unsafe { let _ = Box::from_raw(ptr); }
+            unsafe {
+                let _ = Box::from_raw(ptr);
+            }
         }
     }
 }
-

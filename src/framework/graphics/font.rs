@@ -4,8 +4,8 @@
 #![allow(dead_code)]
 
 use crate::framework::color::Color;
-use crate::framework::rect::Rect;
 use crate::framework::graphics::bitmap_font::BitmapFont;
+use crate::framework::rect::Rect;
 
 /// 字体基类（对应 C++ _Font）
 /// 在 C++ 中 Font 是基类，由 SysFont 和 ImageFont 继承。
@@ -75,7 +75,9 @@ impl Font {
     /// 获取字符串宽度（默认计算；已绑定位图字库时用真实字形宽度）
     pub fn string_width(&self, text: &str) -> i32 {
         if !self.bitmap.is_null() {
-            unsafe { return (*self.bitmap).string_width(text); }
+            unsafe {
+                return (*self.bitmap).string_width(text);
+            }
         }
         let mut width = 0;
         let mut prev: char = '\0';

@@ -14,10 +14,22 @@ pub struct Image {
 }
 
 impl Image {
-    pub fn new() -> Self { Image { width: 0, height: 0, bits: Vec::new() } }
-    pub fn get_width(&self) -> i32 { self.width }
-    pub fn get_height(&self) -> i32 { self.height }
-    pub fn get_bits(&self) -> &[u32] { &self.bits }
+    pub fn new() -> Self {
+        Image {
+            width: 0,
+            height: 0,
+            bits: Vec::new(),
+        }
+    }
+    pub fn get_width(&self) -> i32 {
+        self.width
+    }
+    pub fn get_height(&self) -> i32 {
+        self.height
+    }
+    pub fn get_bits(&self) -> &[u32] {
+        &self.bits
+    }
 }
 
 /// 全局标志（对应 C++ gAlphaComposeColor = 0xFFFFFF）
@@ -77,11 +89,16 @@ fn load_image_file(file_name: &str) -> Option<Box<Image>> {
             let px = rgba.get_pixel(x as u32, y as u32);
             let idx = (y * w + x) as usize;
             // 存储为 ARGB (0xAARRGGBB)
-            bits[idx] = (px[3] as u32) << 24 | (px[0] as u32) << 16 | (px[1] as u32) << 8 | px[2] as u32;
+            bits[idx] =
+                (px[3] as u32) << 24 | (px[0] as u32) << 16 | (px[1] as u32) << 8 | px[2] as u32;
         }
     }
 
-    Some(Box::new(Image { width: w, height: h, bits }))
+    Some(Box::new(Image {
+        width: w,
+        height: h,
+        bits,
+    }))
 }
 
 /// 查找 Alpha 通道图像（对应 C++ 的 alpha 查找逻辑）
@@ -92,18 +109,15 @@ fn find_alpha_image(file_name: &str) -> Option<Box<Image>> {
     let last_dot = file_name.rfind('.');
 
     // 确定扩展名位置
-    let has_ext = last_dot.is_some() && (last_slash.is_none() || last_dot.unwrap() > last_slash.unwrap());
+    let has_ext =
+        last_dot.is_some() && (last_slash.is_none() || last_dot.unwrap() > last_slash.unwrap());
 
     // 模式1：_filename.ext（前缀下划线，在目录名后插入）
     let slash_end = match last_slash {
         Some(pos) => pos + 1,
         None => 0,
     };
-    let alpha_path1 = format!(
-        "{}_{}",
-        &file_name[..slash_end],
-        &file_name[slash_end..]
-    );
+    let alpha_path1 = format!("{}_{}", &file_name[..slash_end], &file_name[slash_end..]);
     if std::path::Path::new(&alpha_path1).exists() {
         if let Some(img) = load_image_file(&alpha_path1) {
             return Some(img);
@@ -223,13 +237,19 @@ pub fn my_error_exit(_cinfo: *mut std::ffi::c_void) {}
 /// 初始化源（对应 C++ init_source）
 pub fn init_source(_cinfo: *mut std::ffi::c_void) {}
 /// 填充输入缓冲（对应 C++ fill_input_buffer）
-pub fn fill_input_buffer(_cinfo: *mut std::ffi::c_void) -> i32 { 1 }
+pub fn fill_input_buffer(_cinfo: *mut std::ffi::c_void) -> i32 {
+    1
+}
 /// 跳过输入数据（对应 C++ skip_input_data）
 pub fn skip_input_data(_cinfo: *mut std::ffi::c_void, _num_bytes: i64) {}
 /// 终止源（对应 C++ term_source）
 pub fn term_source(_cinfo: *mut std::ffi::c_void) {}
 
 /// 从流读取字节（对应 C++ FGetC）
-pub fn f_get_c(_stream: *mut std::ffi::c_void) -> i32 { -1 }
+pub fn f_get_c(_stream: *mut std::ffi::c_void) -> i32 {
+    -1
+}
 /// 从流读取字符串（对应 C++ FGetS）
-pub fn f_get_s(_buf: *mut i8, _max: i32, _stream: *mut std::ffi::c_void) -> *mut i8 { std::ptr::null_mut() }
+pub fn f_get_s(_buf: *mut i8, _max: i32, _stream: *mut std::ffi::c_void) -> *mut i8 {
+    std::ptr::null_mut()
+}

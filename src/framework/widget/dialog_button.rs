@@ -6,12 +6,12 @@
 #![allow(dead_code)]
 
 use crate::framework::color::Color;
-use crate::framework::rect::Rect;
-use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::font::Font;
+use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
-use crate::framework::widget::widget::Widget;
+use crate::framework::rect::Rect;
 use crate::framework::widget::button_listener::ButtonListener;
+use crate::framework::widget::widget::Widget;
 
 /// 对话框按钮颜色索引（与 ButtonWidget 共用）
 pub const DIALOG_BUTTON_COLOR_LABEL: usize = 0;
@@ -24,8 +24,12 @@ pub const DIALOG_BUTTON_NUM_COLORS: usize = 6;
 
 /// 默认对话框按钮颜色表（对应 C++ gDialogButtonColors）
 const G_DIALOG_BUTTON_COLORS: [[u8; 3]; DIALOG_BUTTON_NUM_COLORS] = [
-    [255, 255, 255], [255, 255, 255], [0, 0, 0],
-    [255, 255, 255], [132, 132, 132], [212, 212, 212],
+    [255, 255, 255],
+    [255, 255, 255],
+    [0, 0, 0],
+    [255, 255, 255],
+    [132, 132, 132],
+    [212, 212, 212],
 ];
 
 /// 对话框按钮（对应 C++ DialogButton）
@@ -146,7 +150,9 @@ impl DialogButton {
 
     /// 绘制（对应 C++ Draw）
     pub fn draw(&mut self, g: &mut Graphics) {
-        if self.btn_no_draw { return; }
+        if self.btn_no_draw {
+            return;
+        }
 
         // 无组件图片时回退到基本绘制
         if self.component_image.is_null() {
@@ -154,9 +160,17 @@ impl DialogButton {
             if let Some(ref font) = self.font {
                 let fw = font.string_width(&self.label);
                 let fx = (self.width - fw) / 2;
-                let fy = (self.height + font.get_ascent() - font.ascent_padding - font.get_ascent() / 6 - 1) / 2;
+                let fy = (self.height + font.get_ascent()
+                    - font.ascent_padding
+                    - font.get_ascent() / 6
+                    - 1)
+                    / 2;
                 g.set_color(&self.get_color(DIALOG_BUTTON_COLOR_LABEL));
-                g.draw_string(&self.label, fx + self.text_offset_x, fy + self.text_offset_y);
+                g.draw_string(
+                    &self.label,
+                    fx + self.text_offset_x,
+                    fy + self.text_offset_y,
+                );
             }
             return;
         }
@@ -248,7 +262,9 @@ impl DialogButton {
         if let Some(ref font) = self.font {
             let fw = font.string_width(&self.label);
             let fx = (self.width - fw) / 2;
-            let fy = (self.height + font.get_ascent() - font.ascent_padding - font.get_ascent() / 6 - 1) / 2;
+            let fy =
+                (self.height + font.get_ascent() - font.ascent_padding - font.get_ascent() / 6 - 1)
+                    / 2;
 
             let font_ref: &Font = &**font;
             let fptr = font_ref as *const Font as *mut Font;
@@ -259,7 +275,11 @@ impl DialogButton {
             } else {
                 g.set_color(&self.get_color(DIALOG_BUTTON_COLOR_LABEL));
             }
-            g.draw_string(&self.label, fx + self.text_offset_x, fy + self.text_offset_y);
+            g.draw_string(
+                &self.label,
+                fx + self.text_offset_x,
+                fy + self.text_offset_y,
+            );
         }
 
         // 恢复平移

@@ -12,8 +12,8 @@
 
 use crate::framework::color::Color;
 use crate::framework::graphics::image::{Image, ImageKind, Span};
-use crate::framework::rect::Rect;
 use crate::framework::point::Point;
+use crate::framework::rect::Rect;
 use crate::framework::sexy_matrix::SexyMatrix3;
 
 /// 内存图像（像素数据在系统内存中）
@@ -87,7 +87,11 @@ impl MemoryImage {
     }
 
     /// 带应用指针的构造（对应 C++ MemoryImage(SexyAppBase* theApp)）
-    pub fn new_with_app(width: i32, height: i32, app: *mut crate::framework::sexy_app_base::SexyAppBase) -> Self {
+    pub fn new_with_app(
+        width: i32,
+        height: i32,
+        app: *mut crate::framework::sexy_app_base::SexyAppBase,
+    ) -> Self {
         let mut mem = Self::new(width, height);
         mem.app = app;
         mem
@@ -133,13 +137,31 @@ impl MemoryImage {
     }
 
     /// 绘制线段（对应 C++ DrawLine）
-    pub fn draw_line(&mut self, start_x: f64, start_y: f64, end_x: f64, end_y: f64, color: &Color, draw_mode: i32) {
-        self.base.draw_line(start_x, start_y, end_x, end_y, color, draw_mode);
+    pub fn draw_line(
+        &mut self,
+        start_x: f64,
+        start_y: f64,
+        end_x: f64,
+        end_y: f64,
+        color: &Color,
+        draw_mode: i32,
+    ) {
+        self.base
+            .draw_line(start_x, start_y, end_x, end_y, color, draw_mode);
     }
 
     /// 绘制抗锯齿线段（对应 C++ DrawLineAA）
-    pub fn draw_line_aa(&mut self, start_x: f64, start_y: f64, end_x: f64, end_y: f64, color: &Color, draw_mode: i32) {
-        self.base.draw_line_aa(start_x, start_y, end_x, end_y, color, draw_mode);
+    pub fn draw_line_aa(
+        &mut self,
+        start_x: f64,
+        start_y: f64,
+        end_x: f64,
+        end_y: f64,
+        color: &Color,
+        draw_mode: i32,
+    ) {
+        self.base
+            .draw_line_aa(start_x, start_y, end_x, end_y, color, draw_mode);
     }
 
     // ====================================================================
@@ -147,17 +169,42 @@ impl MemoryImage {
     // ====================================================================
 
     /// 普通 Blt（对应 C++ NormalBlt）
-    fn normal_blt(&mut self, src: &Image, dest_x: i32, dest_y: i32, src_rect: &Rect, color: &Color) {
-        self.base.blt(src, dest_x, dest_y, src_rect, color, 0, false);
+    fn normal_blt(
+        &mut self,
+        src: &Image,
+        dest_x: i32,
+        dest_y: i32,
+        src_rect: &Rect,
+        color: &Color,
+    ) {
+        self.base
+            .blt(src, dest_x, dest_y, src_rect, color, 0, false);
     }
 
     /// 叠加 Blt（对应 C++ AdditiveBlt）
-    fn additive_blt(&mut self, src: &Image, dest_x: i32, dest_y: i32, src_rect: &Rect, color: &Color) {
-        self.base.blt(src, dest_x, dest_y, src_rect, color, 1, false);
+    fn additive_blt(
+        &mut self,
+        src: &Image,
+        dest_x: i32,
+        dest_y: i32,
+        src_rect: &Rect,
+        color: &Color,
+    ) {
+        self.base
+            .blt(src, dest_x, dest_y, src_rect, color, 1, false);
     }
 
     /// 主 Blt 入口（对应 C++ Blt）
-    pub fn blt(&mut self, src: &Image, dest_x: i32, dest_y: i32, src_rect: &Rect, color: &Color, draw_mode: i32, linear_filter: bool) {
+    pub fn blt(
+        &mut self,
+        src: &Image,
+        dest_x: i32,
+        dest_y: i32,
+        src_rect: &Rect,
+        color: &Color,
+        draw_mode: i32,
+        linear_filter: bool,
+    ) {
         match draw_mode {
             0 => self.normal_blt(src, dest_x, dest_y, src_rect, color),
             1 => self.additive_blt(src, dest_x, dest_y, src_rect, color),
@@ -166,8 +213,18 @@ impl MemoryImage {
     }
 
     /// 浮点 Blt（对应 C++ BltF）
-    pub fn blt_f(&mut self, src: &Image, dest_x: f32, dest_y: f32, src_rect: &Rect, clip_rect: &Rect, color: &Color, draw_mode: i32) {
-        self.base.blt_f(src, dest_x, dest_y, src_rect, clip_rect, color, draw_mode);
+    pub fn blt_f(
+        &mut self,
+        src: &Image,
+        dest_x: f32,
+        dest_y: f32,
+        src_rect: &Rect,
+        clip_rect: &Rect,
+        color: &Color,
+        draw_mode: i32,
+    ) {
+        self.base
+            .blt_f(src, dest_x, dest_y, src_rect, clip_rect, color, draw_mode);
     }
 
     /// 旋转 Blt（对应 C++ BltRotated）
@@ -184,12 +241,40 @@ impl MemoryImage {
         rot_center_x: f32,
         rot_center_y: f32,
     ) {
-        self.base.blt_rotated(src, dest_x, dest_y, src_rect, clip_rect, color, draw_mode, rot, rot_center_x, rot_center_y);
+        self.base.blt_rotated(
+            src,
+            dest_x,
+            dest_y,
+            src_rect,
+            clip_rect,
+            color,
+            draw_mode,
+            rot,
+            rot_center_x,
+            rot_center_y,
+        );
     }
 
     /// 拉伸 Blt（对应 C++ StretchBlt）
-    pub fn stretch_blt(&mut self, src: &Image, dest_rect: &Rect, src_rect: &Rect, clip_rect: &Rect, color: &Color, draw_mode: i32, fast_stretch: bool) {
-        self.base.stretch_blt(src, dest_rect, src_rect, clip_rect, color, draw_mode, fast_stretch);
+    pub fn stretch_blt(
+        &mut self,
+        src: &Image,
+        dest_rect: &Rect,
+        src_rect: &Rect,
+        clip_rect: &Rect,
+        color: &Color,
+        draw_mode: i32,
+        fast_stretch: bool,
+    ) {
+        self.base.stretch_blt(
+            src,
+            dest_rect,
+            src_rect,
+            clip_rect,
+            color,
+            draw_mode,
+            fast_stretch,
+        );
     }
 
     /// 矩阵 Blt（对应 C++ BltMatrix）
@@ -205,7 +290,9 @@ impl MemoryImage {
         src_rect: &Rect,
         blend: bool,
     ) {
-        self.base.blt_matrix(src, x, y, matrix, clip_rect, color, draw_mode, src_rect, blend);
+        self.base.blt_matrix(
+            src, x, y, matrix, clip_rect, color, draw_mode, src_rect, blend,
+        );
     }
 
     /// 三角纹理（对应 C++ BltTrianglesTex）
@@ -221,17 +308,61 @@ impl MemoryImage {
         ty: f32,
         blend: bool,
     ) {
-        self.base.blt_triangles_tex(texture, vertices, num_triangles, clip_rect, color, draw_mode, tx, ty, blend);
+        self.base.blt_triangles_tex(
+            texture,
+            vertices,
+            num_triangles,
+            clip_rect,
+            color,
+            draw_mode,
+            tx,
+            ty,
+            blend,
+        );
     }
 
     /// 镜像 Blt（对应 C++ BltMirror）
-    pub fn blt_mirror(&mut self, src: &Image, dest_x: i32, dest_y: i32, src_rect: &Rect, color: &Color, draw_mode: i32, linear_filter: bool) {
-        self.base.blt_mirror(src, dest_x, dest_y, src_rect, color, draw_mode, linear_filter);
+    pub fn blt_mirror(
+        &mut self,
+        src: &Image,
+        dest_x: i32,
+        dest_y: i32,
+        src_rect: &Rect,
+        color: &Color,
+        draw_mode: i32,
+        linear_filter: bool,
+    ) {
+        self.base.blt_mirror(
+            src,
+            dest_x,
+            dest_y,
+            src_rect,
+            color,
+            draw_mode,
+            linear_filter,
+        );
     }
 
     /// 拉伸镜像 Blt（对应 C++ StretchBltMirror）
-    pub fn stretch_blt_mirror(&mut self, src: &Image, dest_rect: &Rect, src_rect: &Rect, clip_rect: &Rect, color: &Color, draw_mode: i32, fast_stretch: bool) {
-        self.base.stretch_blt_mirror(src, dest_rect, src_rect, clip_rect, color, draw_mode, fast_stretch);
+    pub fn stretch_blt_mirror(
+        &mut self,
+        src: &Image,
+        dest_rect: &Rect,
+        src_rect: &Rect,
+        clip_rect: &Rect,
+        color: &Color,
+        draw_mode: i32,
+        fast_stretch: bool,
+    ) {
+        self.base.stretch_blt_mirror(
+            src,
+            dest_rect,
+            src_rect,
+            clip_rect,
+            color,
+            draw_mode,
+            fast_stretch,
+        );
     }
 
     // ====================================================================
@@ -388,7 +519,14 @@ impl MemoryImage {
     /// 计算透明像素附近非透明像素的平均 RGB 颜色（对应 C++ AverageNearByPixels）
     /// `pixels`：RGBA 字节数组，`stride`：每行字节数（width * 4）
     /// 扫描上方一行和下方一行共6个相邻像素，忽略透明像素和自身
-    fn average_nearby_pixels(pixels: &[u8], stride: i32, x: i32, y: i32, width: i32, height: i32) -> (u8, u8, u8) {
+    fn average_nearby_pixels(
+        pixels: &[u8],
+        stride: i32,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+    ) -> (u8, u8, u8) {
         let mut r_sum: u32 = 0;
         let mut g_sum: u32 = 0;
         let mut b_sum: u32 = 0;
@@ -455,9 +593,8 @@ impl MemoryImage {
                 }
                 // 如果像素完全不透明（alpha == 0）
                 if self.base.pixels[idx_u + 3] == 0 {
-                    let (avg_r, avg_g, avg_b) = Self::average_nearby_pixels(
-                        &self.base.pixels, stride, x, y, width, height,
-                    );
+                    let (avg_r, avg_g, avg_b) =
+                        Self::average_nearby_pixels(&self.base.pixels, stride, x, y, width, height);
                     self.base.pixels[idx_u] = avg_r;
                     self.base.pixels[idx_u + 1] = avg_g;
                     self.base.pixels[idx_u + 2] = avg_b;
@@ -497,7 +634,10 @@ impl MemoryImage {
     }
 
     /// 获取原生 alpha 数据（对应 C++ GetNativeAlphaData）
-    pub fn get_native_alpha_data(&mut self, _native: *mut crate::framework::graphics::native_display::NativeDisplay) -> Option<&mut Vec<u32>> {
+    pub fn get_native_alpha_data(
+        &mut self,
+        _native: *mut crate::framework::graphics::native_display::NativeDisplay,
+    ) -> Option<&mut Vec<u32>> {
         // 生成 alpha 数据
         if self.native_alpha_data.is_none() {
             let pixel_count = (self.base.width * self.base.height) as usize;
@@ -550,7 +690,10 @@ impl MemoryImage {
     }
 
     /// 获取游程编码附加数据（对应 C++ GetRLAdditiveData）
-    pub fn get_rl_additive_data(&mut self, _native: *mut crate::framework::graphics::native_display::NativeDisplay) -> Option<&Vec<u8>> {
+    pub fn get_rl_additive_data(
+        &mut self,
+        _native: *mut crate::framework::graphics::native_display::NativeDisplay,
+    ) -> Option<&Vec<u8>> {
         if self.rl_additive_data.is_none() {
             let mut data = Vec::new();
             let pixel_count = (self.base.width * self.base.height) as usize;
@@ -559,7 +702,9 @@ impl MemoryImage {
                 let idx = i * 4;
                 // 附加数据 = R+G+B 之和
                 let sum = if idx + 2 < self.base.pixels.len() {
-                    (self.base.pixels[idx] as u32 + self.base.pixels[idx + 1] as u32 + self.base.pixels[idx + 2] as u32) as u8
+                    (self.base.pixels[idx] as u32
+                        + self.base.pixels[idx + 1] as u32
+                        + self.base.pixels[idx + 2] as u32) as u8
                 } else {
                     0
                 };
@@ -567,7 +712,9 @@ impl MemoryImage {
                 while i + (run_len as usize) < pixel_count {
                     let next_idx = (i + run_len as usize) * 4;
                     let next_sum = if next_idx + 2 < self.base.pixels.len() {
-                        (self.base.pixels[next_idx] as u32 + self.base.pixels[next_idx + 1] as u32 + self.base.pixels[next_idx + 2] as u32) as u8
+                        (self.base.pixels[next_idx] as u32
+                            + self.base.pixels[next_idx + 1] as u32
+                            + self.base.pixels[next_idx + 2] as u32) as u8
                     } else {
                         0
                     };

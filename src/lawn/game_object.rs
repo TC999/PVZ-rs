@@ -1,9 +1,9 @@
 // PvZ Portable Rust 翻译 — GameObject（游戏对象基类）
 // 对应 C++ src/Lawn/GameObject.h / GameObject.cpp
 
-use crate::lawn::lawn_app::LawnApp;
-use crate::lawn::board::Board;
 use crate::framework::graphics::graphics::Graphics;
+use crate::lawn::board::Board;
+use crate::lawn::lawn_app::LawnApp;
 
 /// 游戏对象基类（所有游戏实体的基类）
 #[derive(Debug)]

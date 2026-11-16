@@ -1,22 +1,22 @@
 // PvZ Portable Rust 翻译 — Widget 模块
 
+pub mod button_listener;
+pub mod button_widget;
+pub mod checkbox;
+pub mod dialog;
+pub mod dialog_button;
+pub mod dialog_listener;
+pub mod edit_widget;
+pub mod hyperlink_widget;
+pub mod insets;
+pub mod list_widget;
+pub mod scrollbar_widget;
+pub mod scrollbutton_widget;
+pub mod slider;
+pub mod text_widget;
 pub mod widget;
 pub mod widget_container;
 pub mod widget_manager;
-pub mod dialog;
-pub mod button_widget;
-pub mod button_listener;
-pub mod dialog_listener;
-pub mod edit_widget;
-pub mod list_widget;
-pub mod checkbox;
-pub mod slider;
-pub mod scrollbar_widget;
-pub mod scrollbutton_widget;
-pub mod text_widget;
-pub mod hyperlink_widget;
-pub mod insets;
-pub mod dialog_button;
 
 // ── 通用 Widget 辅助函数（对应 C++ Widget 相关函数） ──
 
@@ -35,6 +35,10 @@ pub fn remove_all_widgets(_free_widgets: bool, _delete_widgets: bool) {}
 /// 释放资源（对应 C++ FreeResources）
 pub fn free_resources() {}
 /// 获取控件标志（对应 C++ GetWidgetFlags）
-pub fn get_widget_flags() -> i32 { 0 }
+pub fn get_widget_flags() -> i32 {
+    0
+}
 /// 获取排序键（对应 C++ GetSortKey）
-pub fn get_sort_key(_index: i32) -> i32 { 0 }
+pub fn get_sort_key(_index: i32) -> i32 {
+    0
+}

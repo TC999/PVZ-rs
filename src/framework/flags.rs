@@ -11,7 +11,12 @@ pub struct FlagsMod {
 }
 
 impl FlagsMod {
-    pub const fn new() -> Self { FlagsMod { add_flags: 0, remove_flags: 0 } }
+    pub const fn new() -> Self {
+        FlagsMod {
+            add_flags: 0,
+            remove_flags: 0,
+        }
+    }
 }
 
 /// 修改标志位（对应 C++ ModFlags）
@@ -33,7 +38,13 @@ pub struct ModalFlags {
 }
 
 impl ModalFlags {
-    pub fn new() -> Self { ModalFlags { over_flags: 0, under_flags: 0, is_over: false } }
+    pub fn new() -> Self {
+        ModalFlags {
+            over_flags: 0,
+            under_flags: 0,
+            is_over: false,
+        }
+    }
 
     pub fn mod_flags_self(&mut self, fm: &FlagsMod) {
         mod_flags(&mut self.over_flags, fm);
@@ -41,7 +52,11 @@ impl ModalFlags {
     }
 
     pub fn get_flags(&self) -> i32 {
-        if self.is_over { self.over_flags } else { self.under_flags }
+        if self.is_over {
+            self.over_flags
+        } else {
+            self.under_flags
+        }
     }
 }
 
@@ -56,8 +71,14 @@ impl AutoModalFlags {
     pub fn new(modal_flags: *mut ModalFlags, fm: &FlagsMod) -> Self {
         let old_over = unsafe { (*modal_flags).over_flags };
         let old_under = unsafe { (*modal_flags).under_flags };
-        unsafe { (*modal_flags).mod_flags_self(fm); }
-        AutoModalFlags { modal_flags, old_over, old_under }
+        unsafe {
+            (*modal_flags).mod_flags_self(fm);
+        }
+        AutoModalFlags {
+            modal_flags,
+            old_over,
+            old_under,
+        }
     }
 }
 

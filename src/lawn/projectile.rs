@@ -1,16 +1,23 @@
 // PvZ Portable Rust 翻译 — Projectile（子弹/投射物）
 // 对应 C++ src/Lawn/Projectile.h / Projectile.cpp
 
-use crate::lawn::game_object::GameObject;
-use crate::lawn::game_enums::*;
+use crate::framework::common::{Rand, RandFloat, RandRange};
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::rect::Rect;
-use crate::framework::common::{Rand, RandRange, RandFloat};
 use crate::framework::sexy_matrix::SexyMatrix3;
+use crate::lawn::game_enums::*;
+use crate::lawn::game_object::GameObject;
 use crate::lawn::zombie::Zombie;
 
 /// 缩放旋转矩阵（对应 C++ PvzpLib/PvzpCommon.cpp PvzpScaleRotateTransformMatrix，同 zombie.rs 副本）
-fn pvzp_scale_rotate_transform_matrix(m: &mut SexyMatrix3, x: f32, y: f32, rad: f32, the_scale_x: f32, the_scale_y: f32) {
+fn pvzp_scale_rotate_transform_matrix(
+    m: &mut SexyMatrix3,
+    x: f32,
+    y: f32,
+    rad: f32,
+    the_scale_x: f32,
+    the_scale_y: f32,
+) {
     m.m[0][0] = rad.cos() * the_scale_x;
     m.m[1][0] = -rad.sin() * the_scale_x;
     m.m[2][0] = 0.0;
@@ -25,16 +32,16 @@ fn pvzp_scale_rotate_transform_matrix(m: &mut SexyMatrix3, x: f32, y: f32, rad: 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum ProjectileMotion {
-    Straight = 0,      // MOTION_STRAIGHT
-    Lobbed = 1,        // MOTION_LOBBED
-    Threepeater = 2,   // MOTION_THREEPEATER
-    Bee = 3,           // MOTION_BEE
-    BeeBackwards = 4,  // MOTION_BEE_BACKWARDS（蜜蜂向后飞，绘制时需镜像）
-    Puff = 5,          // MOTION_PUFF（直飞，随时间淡出）
-    Backwards = 6,     // MOTION_BACKWARDS（ZombiePea 向左直飞）
-    Star = 7,          // MOTION_STAR（斜向）
-    Floating = 8,      // MOTION_FLOAT_OVER（慢速漂浮，无碰撞）
-    Homing = 9,        // MOTION_HOMING（追踪）
+    Straight = 0,     // MOTION_STRAIGHT
+    Lobbed = 1,       // MOTION_LOBBED
+    Threepeater = 2,  // MOTION_THREEPEATER
+    Bee = 3,          // MOTION_BEE
+    BeeBackwards = 4, // MOTION_BEE_BACKWARDS（蜜蜂向后飞，绘制时需镜像）
+    Puff = 5,         // MOTION_PUFF（直飞，随时间淡出）
+    Backwards = 6,    // MOTION_BACKWARDS（ZombiePea 向左直飞）
+    Star = 7,         // MOTION_STAR（斜向）
+    Floating = 8,     // MOTION_FLOAT_OVER（慢速漂浮，无碰撞）
+    Homing = 9,       // MOTION_HOMING（追踪）
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -159,8 +166,11 @@ impl Projectile {
     /// 初始化子弹（对应 C++ Projectile::ProjectileInitialize）
     pub fn projectile_initialize(&mut self, x: f32, y: f32, row: i32, seed_type: SeedType) {
         self.projectile_type = match seed_type {
-            SeedType::Peashooter | SeedType::Repeater | SeedType::Gatlingpea |
-            SeedType::Threepeater | SeedType::Splitpea => ProjectileType::Pea,
+            SeedType::Peashooter
+            | SeedType::Repeater
+            | SeedType::Gatlingpea
+            | SeedType::Threepeater
+            | SeedType::Splitpea => ProjectileType::Pea,
             SeedType::Snowpea => ProjectileType::Snowpea,
             SeedType::Cabbagepult => ProjectileType::Cabbage,
             SeedType::Melonpult => ProjectileType::Melon,
@@ -202,7 +212,8 @@ impl Projectile {
         if let Some(board) = self.base.get_board() {
             let a_grid_x = board.pixel_to_grid_x_keep_on_board(x as i32, y as i32);
             self.shadow_y = board.grid_to_pixel_y(a_grid_x, row) as f32 + 67.0;
-            self.on_high_ground = board.grid_square_type[row as usize][a_grid_x as usize] == GridSquareType::HighGround;
+            self.on_high_ground = board.grid_square_type[row as usize][a_grid_x as usize]
+                == GridSquareType::HighGround;
             if board.stage_has_roof() && x < 480.0 {
                 self.shadow_y -= 12.0;
             }
@@ -216,7 +227,9 @@ impl Projectile {
 
     /// 更新子弹（对应 C++ Projectile::Update）
     pub fn update(&mut self) {
-        if self.dead { return; }
+        if self.dead {
+            return;
+        }
 
         self.projectile_age += 1;
         // [TRANSLATION_NOTE]: Scene/UpdateBoard 游戏场景检查暂略
@@ -231,7 +244,8 @@ impl Projectile {
     pub fn update_motion(&mut self) {
         // 动画帧更新
         if self.anim_ticks_per_frame > 0 {
-            self.anim_counter = (self.anim_counter + 1) % (self.num_frames * self.anim_ticks_per_frame);
+            self.anim_counter =
+                (self.anim_counter + 1) % (self.num_frames * self.anim_ticks_per_frame);
             self.frame = self.anim_counter / self.anim_ticks_per_frame;
         }
 
@@ -282,7 +296,8 @@ impl Projectile {
                 if self.vel_y != 0.0 {
                     // C++: mRow = mBoard->PixelToGridYKeepOnBoard(mPosX, mPosY)
                     if let Some(board) = self.base.get_board() {
-                        self.base.row = board.pixel_to_grid_y_keep_on_board(self.pos_x as i32, self.pos_y as i32);
+                        self.base.row = board
+                            .pixel_to_grid_y_keep_on_board(self.pos_x as i32, self.pos_y as i32);
                     }
                 }
             }
@@ -298,22 +313,28 @@ impl Projectile {
                             // C++: aTargetCenter(ZombieTargetLeadX(0), aZombieRect.mY + height/2)
                             let a_zombie_rect = a_zombie.get_zombie_rect();
                             let a_target_center_x = a_zombie.zombie_target_lead_x(0.0);
-                            let a_target_center_y = (a_zombie_rect.y + a_zombie_rect.height / 2) as f32;
+                            let a_target_center_y =
+                                (a_zombie_rect.y + a_zombie_rect.height / 2) as f32;
                             // C++: aProjectileCenter(mPosX + width/2, mPosY + height/2)
                             let a_projectile_center_x = self.pos_x + self.base.width as f32 / 2.0;
                             let a_projectile_center_y = self.pos_y + self.base.height as f32 / 2.0;
                             // C++: aToTarget = (aTargetCenter - aProjectileCenter).Normalize()
                             let mut a_to_target_x = a_target_center_x - a_projectile_center_x;
                             let mut a_to_target_y = a_target_center_y - a_projectile_center_y;
-                            let a_to_target_len = (a_to_target_x * a_to_target_x + a_to_target_y * a_to_target_y).sqrt();
+                            let a_to_target_len = (a_to_target_x * a_to_target_x
+                                + a_to_target_y * a_to_target_y)
+                                .sqrt();
                             if a_to_target_len > 0.0001 {
                                 a_to_target_x /= a_to_target_len;
                                 a_to_target_y /= a_to_target_len;
                             }
                             // C++: aMotion(mVelX, mVelY) += aToTarget * (0.001 * mProjectileAge); Normalize; * 2
-                            let mut a_motion_x = self.vel_x + a_to_target_x * (0.001 * self.projectile_age as f32);
-                            let mut a_motion_y = self.vel_y + a_to_target_y * (0.001 * self.projectile_age as f32);
-                            let a_motion_len = (a_motion_x * a_motion_x + a_motion_y * a_motion_y).sqrt();
+                            let mut a_motion_x =
+                                self.vel_x + a_to_target_x * (0.001 * self.projectile_age as f32);
+                            let mut a_motion_y =
+                                self.vel_y + a_to_target_y * (0.001 * self.projectile_age as f32);
+                            let a_motion_len =
+                                (a_motion_x * a_motion_x + a_motion_y * a_motion_y).sqrt();
                             if a_motion_len > 0.0001 {
                                 a_motion_x = a_motion_x / a_motion_len * 2.0;
                                 a_motion_y = a_motion_y / a_motion_len * 2.0;
@@ -329,7 +350,8 @@ impl Projectile {
                 self.pos_x += self.vel_x;
                 self.shadow_y += self.vel_y;
                 if let Some(board) = self.base.get_board() {
-                    self.base.row = board.pixel_to_grid_y_keep_on_board(self.pos_x as i32, self.pos_y as i32);
+                    self.base.row =
+                        board.pixel_to_grid_y_keep_on_board(self.pos_x as i32, self.pos_y as i32);
                 }
             }
             ProjectileMotion::Bee => {
@@ -375,7 +397,8 @@ impl Projectile {
             self.base.row = self.cob_target_row;
             self.pos_x = self.cob_target_x;
             if let Some(board) = self.base.get_board() {
-                let a_cob_target_col = board.pixel_to_grid_x_keep_on_board(self.cob_target_x as i32, 0);
+                let a_cob_target_col =
+                    board.pixel_to_grid_x_keep_on_board(self.cob_target_x as i32, 0);
                 self.pos_y = board.grid_to_pixel_y(a_cob_target_col, self.cob_target_row) as f32;
                 self.shadow_y = self.pos_y + 67.0;
             }
@@ -437,9 +460,13 @@ impl Projectile {
         if let Some(board) = self.base.get_board() {
             let proj_rect = Rect::new(my_pos_x - 5, my_pos_y - 5, 10, 10);
             for (idx, zombie) in board.zombies.iter().enumerate() {
-                if zombie.dead { continue; }
+                if zombie.dead {
+                    continue;
+                }
                 if zombie.zombie_type == ZombieType::Boss || zombie.base.row == my_row {
-                    if zombie.is_dead_or_dying() { continue; }
+                    if zombie.is_dead_or_dying() {
+                        continue;
+                    }
                     let z_rect = zombie.get_zombie_rect();
                     if crate::lawn::board::get_rect_overlap(&proj_rect, &z_rect) >= 0 {
                         hit_zombie_idx = Some(idx);
@@ -469,13 +496,24 @@ impl Projectile {
             }
             // 对应 C++ DoImpact(nullptr) COBBIG 分支（Projectile.cpp:855-861）：
             // BLASTMARK/POPCORNSPLASH 粒子 + PlaySample(SOUND_DOOMSHROOM) + ShakeBoard(3, -4)
-            let a_render_order = crate::lawn::board::make_render_order(RENDER_LAYER_GROUND, self.cob_target_row, 2);
+            let a_render_order =
+                crate::lawn::board::make_render_order(RENDER_LAYER_GROUND, self.cob_target_row, 2);
             let a_particle_x = self.pos_x + 80.0;
             let a_particle_y = self.pos_y + 40.0;
             let a_projectile_render_order = self.base.render_order + 1;
             if let Some(app) = self.base.get_app_mut() {
-                app.add_tod_particle(a_particle_x, a_particle_y, a_render_order, ParticleEffect::Blastmark as i32);
-                app.add_tod_particle(a_particle_x, a_particle_y, a_projectile_render_order, ParticleEffect::Popcornsplash as i32);
+                app.add_tod_particle(
+                    a_particle_x,
+                    a_particle_y,
+                    a_render_order,
+                    ParticleEffect::Blastmark as i32,
+                );
+                app.add_tod_particle(
+                    a_particle_x,
+                    a_particle_y,
+                    a_projectile_render_order,
+                    ParticleEffect::Popcornsplash as i32,
+                );
             }
             // PlaySample(SOUND_DOOMSHROOM)（Rust 音效系统用 FoleyType::Explosion 近似）
             if let Some(app) = self.base.get_app() {
@@ -529,7 +567,8 @@ impl Projectile {
                         let a_zombie_rect = a_zombie.get_zombie_rect();
                         // C++: GetRectOverlap(aProjectileRect, aZombieRect) >= 0
                         //      && mPosY > aZombieRect.mY && mPosY < aZombieRect.mY + mHeight → DoImpact
-                        if crate::lawn::board::get_rect_overlap(&a_projectile_rect, &a_zombie_rect) >= 0
+                        if crate::lawn::board::get_rect_overlap(&a_projectile_rect, &a_zombie_rect)
+                            >= 0
                             && my_pos_y > a_zombie_rect.y as f32
                             && my_pos_y < (a_zombie_rect.y + a_zombie_rect.height) as f32
                         {
@@ -632,7 +671,11 @@ impl Projectile {
 
         if a_play_helm_sound {
             if let Some(idx) = zombie_idx {
-                let helm_type = self.base.get_board().and_then(|b| b.zombies.get(idx)).map(|z| z.helm_type);
+                let helm_type = self
+                    .base
+                    .get_board()
+                    .and_then(|b| b.zombies.get(idx))
+                    .map(|z| z.helm_type);
                 match helm_type {
                     Some(HelmType::Pail) => {
                         if let Some(app) = self.base.get_app() {
@@ -640,7 +683,9 @@ impl Projectile {
                         }
                         a_play_splat_sound = false;
                     }
-                    Some(HelmType::TrafficCone) | Some(HelmType::Digger) | Some(HelmType::FootballHelmet) => {
+                    Some(HelmType::TrafficCone)
+                    | Some(HelmType::Digger)
+                    | Some(HelmType::FootballHelmet) => {
                         if let Some(app) = self.base.get_app() {
                             app.play_foley(crate::todlib::tod_foley::FoleyType::PlasticHit as i32);
                         }
@@ -705,7 +750,9 @@ impl Projectile {
             ProjectileType::Melon => {
                 if let Some(app) = self.base.get_app_mut() {
                     app.add_tod_particle(
-                        a_last_pos_x + 30.0, a_last_pos_y + 30.0, a_render_order,
+                        a_last_pos_x + 30.0,
+                        a_last_pos_y + 30.0,
+                        a_render_order,
                         ParticleEffect::Melonsplash as i32,
                     );
                 }
@@ -713,7 +760,9 @@ impl Projectile {
             ProjectileType::Wintermelon => {
                 if let Some(app) = self.base.get_app_mut() {
                     app.add_tod_particle(
-                        a_last_pos_x + 30.0, a_last_pos_y + 30.0, a_render_order,
+                        a_last_pos_x + 30.0,
+                        a_last_pos_y + 30.0,
+                        a_render_order,
                         ParticleEffect::Wintermelon as i32,
                     );
                 }
@@ -730,7 +779,9 @@ impl Projectile {
                 if is_splash {
                     if let Some(app) = self.base.get_app_mut() {
                         if let Some(a_fire_reanim) = app.add_reanimation(
-                            self.pos_x + 38.0, self.pos_y - 20.0, a_render_order,
+                            self.pos_x + 38.0,
+                            self.pos_y - 20.0,
+                            a_render_order,
                             ReanimationType::JalapenoFire as i32,
                         ) {
                             // C++: mAnimTime = 0.25f; mAnimRate = 24.0f; OverrideScale(0.7f, 0.4f)
@@ -795,7 +846,10 @@ impl Projectile {
             if !a_particle_applied {
                 if let Some(app) = self.base.get_app_mut() {
                     app.add_tod_particle(
-                        a_splat_pos_x, a_splat_pos_y, a_render_order, a_effect as i32,
+                        a_splat_pos_x,
+                        a_splat_pos_y,
+                        a_render_order,
+                        a_effect as i32,
                     );
                 }
             }
@@ -844,7 +898,12 @@ impl Projectile {
             ProjectileType::Puff => {
                 a_image = get_projectile_image("IMAGE_PUFFSHROOM_PUFF1");
                 a_scale = crate::todlib::tod_common::tod_animate_curve_float(
-                    0, 30, self.projectile_age, 0.3, 1.0, crate::lawn::game_enums::TodCurves::Linear,
+                    0,
+                    30,
+                    self.projectile_age,
+                    0.3,
+                    1.0,
+                    crate::lawn::game_enums::TodCurves::Linear,
                 );
             }
             ProjectileType::Basketball => {
@@ -937,7 +996,9 @@ impl Projectile {
         if let Some(board) = self.base.get_board() {
             let a_grid_x = board.pixel_to_grid_x_keep_on_board(self.base.x, self.base.y);
             if a_grid_x >= 0 && (a_grid_x as usize) < crate::lawn::board::MAX_GRID_SIZE_X as usize {
-                if board.grid_square_type[my_row as usize][a_grid_x as usize] == GridSquareType::HighGround {
+                if board.grid_square_type[my_row as usize][a_grid_x as usize]
+                    == GridSquareType::HighGround
+                {
                     is_high_ground = true;
                 }
             }
@@ -965,8 +1026,11 @@ impl Projectile {
             ProjectileType::Star => {
                 a_offset_x += 7.0;
             }
-            ProjectileType::Cabbage | ProjectileType::Kernel | ProjectileType::Butter
-            | ProjectileType::Melon | ProjectileType::Wintermelon => {
+            ProjectileType::Cabbage
+            | ProjectileType::Kernel
+            | ProjectileType::Butter
+            | ProjectileType::Melon
+            | ProjectileType::Wintermelon => {
                 a_offset_x += 3.0;
                 a_offset_y += 10.0;
                 a_scale = 1.6;
@@ -1020,8 +1084,12 @@ impl Projectile {
 
         if let Some(board) = self.base.get_board() {
             for (idx, plant) in board.plants.iter().enumerate() {
-                if plant.dead { continue; }
-                if plant.base.row != my_row { continue; }
+                if plant.dead {
+                    continue;
+                }
+                if plant.base.row != my_row {
+                    continue;
+                }
 
                 // 僵尸豌豆不能打低矮植物（Puffshroom/Sunshroom/PotatoMine/Spikeweed/Spikerock/Lilypad）
                 // [TRANSLATION_NOTE]: 低矮植物检查暂未实现
@@ -1048,12 +1116,9 @@ impl Projectile {
                 Rect::new(m_x - 15, m_y, m_width + 15, m_height)
             }
             // C++: PROJECTILE_COBBIG
-            ProjectileType::Cobbig => Rect::new(
-                m_x + m_width / 2 - 115,
-                m_y + m_height / 2 - 115,
-                230,
-                230,
-            ),
+            ProjectileType::Cobbig => {
+                Rect::new(m_x + m_width / 2 - 115, m_y + m_height / 2 - 115, 230, 230)
+            }
             // C++: PROJECTILE_MELON / PROJECTILE_WINTERMELON
             ProjectileType::Melon | ProjectileType::Wintermelon => {
                 Rect::new(m_x + 20, m_y, 60, m_height)
@@ -1081,7 +1146,9 @@ impl Projectile {
 
         if let Some(board) = self.base.get_board_mut() {
             for (idx, zombie) in board.zombies.iter_mut().enumerate() {
-                if zombie.dead { continue; }
+                if zombie.dead {
+                    continue;
+                }
                 let a_row_deviation = zombie.base.row - my_row;
                 if proj_type == ProjectileType::Melon {
                     if a_row_deviation > 1 || a_row_deviation < -1 {
@@ -1103,7 +1170,9 @@ impl Projectile {
 
     /// 转换为火球（对应 C++ ConvertToFireball）
     pub fn convert_to_fireball(&mut self, grid_x: i32) {
-        if self.hit_torchwood_grid_x == grid_x { return; }
+        if self.hit_torchwood_grid_x == grid_x {
+            return;
+        }
         self.projectile_type = ProjectileType::Fireball;
         self.hit_torchwood_grid_x = grid_x;
         self.damage = 40;
@@ -1116,7 +1185,9 @@ impl Projectile {
 
     /// 转换为普通豌豆（对应 C++ ConvertToPea）
     pub fn convert_to_pea(&mut self, grid_x: i32) {
-        if self.hit_torchwood_grid_x == grid_x { return; }
+        if self.hit_torchwood_grid_x == grid_x {
+            return;
+        }
         self.projectile_type = ProjectileType::Pea;
         self.hit_torchwood_grid_x = grid_x;
         self.damage = 20;
@@ -1159,7 +1230,9 @@ impl Projectile {
             return false;
         }
 
-        if self.projectile_type != ProjectileType::Pea && self.projectile_type != ProjectileType::Snowpea {
+        if self.projectile_type != ProjectileType::Pea
+            && self.projectile_type != ProjectileType::Snowpea
+        {
             return false;
         }
 
@@ -1171,14 +1244,18 @@ impl Projectile {
             if plant.dead {
                 continue;
             }
-            if plant.seed_type == SeedType::Torchwood && plant.base.row == self.base.row
-                && !plant.not_on_ground() && self.hit_torchwood_grid_x != plant.plant_col
+            if plant.seed_type == SeedType::Torchwood
+                && plant.base.row == self.base.row
+                && !plant.not_on_ground()
+                && self.hit_torchwood_grid_x != plant.plant_col
             {
                 let a_plant_attack_rect = plant.get_plant_attack_rect(PlantWeapon::Primary);
                 let mut a_projectile_rect = self.get_projectile_rect();
                 a_projectile_rect.x += 40;
 
-                if crate::lawn::board::get_rect_overlap(&a_plant_attack_rect, &a_projectile_rect) > 10 {
+                if crate::lawn::board::get_rect_overlap(&a_plant_attack_rect, &a_projectile_rect)
+                    > 10
+                {
                     return true;
                 }
             }
@@ -1219,7 +1296,9 @@ impl Projectile {
                     continue;
                 }
 
-                if proj_type == ProjectileType::Star && proj_age < 25 && vel_x >= 0.0
+                if proj_type == ProjectileType::Star
+                    && proj_age < 25
+                    && vel_x >= 0.0
                     && zombie.zombie_type == ZombieType::Digger
                 {
                     continue;
@@ -1240,27 +1319,47 @@ impl Projectile {
     /// 获取子弹定义（对应 C++ GetProjectileDef）
     pub fn get_projectile_def(&self) -> ProjectileDefinition {
         match self.projectile_type {
-            ProjectileType::Pea | ProjectileType::Snowpea | ProjectileType::Star | ProjectileType::Spike | ProjectileType::Puff => {
-                ProjectileDefinition { projectile_type: self.projectile_type, image_row: 0, damage: 20 }
-            }
+            ProjectileType::Pea
+            | ProjectileType::Snowpea
+            | ProjectileType::Star
+            | ProjectileType::Spike
+            | ProjectileType::Puff => ProjectileDefinition {
+                projectile_type: self.projectile_type,
+                image_row: 0,
+                damage: 20,
+            },
             ProjectileType::Cabbage | ProjectileType::Butter | ProjectileType::Fireball => {
-                ProjectileDefinition { projectile_type: self.projectile_type, image_row: 0, damage: 40 }
+                ProjectileDefinition {
+                    projectile_type: self.projectile_type,
+                    image_row: 0,
+                    damage: 40,
+                }
             }
-            ProjectileType::Melon | ProjectileType::Wintermelon => {
-                ProjectileDefinition { projectile_type: self.projectile_type, image_row: 0, damage: 80 }
-            }
-            ProjectileType::Kernel => {
-                ProjectileDefinition { projectile_type: self.projectile_type, image_row: 0, damage: 20 }
-            }
-            ProjectileType::Cobcannon => {
-                ProjectileDefinition { projectile_type: self.projectile_type, image_row: 0, damage: 300 }
-            }
-            ProjectileType::Basketball => {
-                ProjectileDefinition { projectile_type: self.projectile_type, image_row: 0, damage: 75 }
-            }
-            _ => {
-                ProjectileDefinition { projectile_type: self.projectile_type, image_row: 0, damage: 20 }
-            }
+            ProjectileType::Melon | ProjectileType::Wintermelon => ProjectileDefinition {
+                projectile_type: self.projectile_type,
+                image_row: 0,
+                damage: 80,
+            },
+            ProjectileType::Kernel => ProjectileDefinition {
+                projectile_type: self.projectile_type,
+                image_row: 0,
+                damage: 20,
+            },
+            ProjectileType::Cobcannon => ProjectileDefinition {
+                projectile_type: self.projectile_type,
+                image_row: 0,
+                damage: 300,
+            },
+            ProjectileType::Basketball => ProjectileDefinition {
+                projectile_type: self.projectile_type,
+                image_row: 0,
+                damage: 75,
+            },
+            _ => ProjectileDefinition {
+                projectile_type: self.projectile_type,
+                image_row: 0,
+                damage: 20,
+            },
         }
     }
 
@@ -1358,10 +1457,8 @@ impl Projectile {
         // C++: CantHitHighGround() 且所在格为 GRIDSQUARE_HIGH_GROUND → DoImpact(nullptr)
         if self.cant_hit_high_ground() {
             if let Some(board) = self.base.get_board() {
-                let a_grid_x = board.pixel_to_grid_x_keep_on_board(
-                    (self.pos_x + 30.0) as i32,
-                    self.pos_y as i32,
-                );
+                let a_grid_x = board
+                    .pixel_to_grid_x_keep_on_board((self.pos_x + 30.0) as i32, self.pos_y as i32);
                 if board.grid_square_type[a_grid_x as usize][self.base.row as usize]
                     == GridSquareType::HighGround
                 {

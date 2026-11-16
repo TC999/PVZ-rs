@@ -10,8 +10,8 @@ use crate::framework::common::SexyVector2;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
 use crate::todlib::data_array::DataArray;
-use crate::todlib::tod_particle::FloatParameterTrack;
 use crate::todlib::tod_common::{clamp_int, rand_range_float};
+use crate::todlib::tod_particle::FloatParameterTrack;
 
 /// 最大轨迹三角形数量
 const MAX_TRAIL_TRIANGLES: usize = 38;
@@ -253,22 +253,46 @@ impl Trail {
             let u_cur = 1.0 - i as f32 / (self.m_num_trail_points - 1).max(1) as f32;
             let u_next = 1.0 - (i + 1) as f32 / (self.m_num_trail_points - 1).max(1) as f32;
 
-            let width_len_cur = def.m_width_over_length.evaluate(u_cur, self.m_trail_interp[TRACK_WIDTH_OVER_LENGTH as usize]);
-            let width_len_next = def.m_width_over_length.evaluate(u_next, self.m_trail_interp[TRACK_WIDTH_OVER_LENGTH as usize]);
-            let width_time_cur = def.m_width_over_time.evaluate(time_value, self.m_trail_interp[TRACK_WIDTH_OVER_TIME as usize]);
-            let width_time_next = def.m_width_over_time.evaluate(time_value, self.m_trail_interp[TRACK_WIDTH_OVER_TIME as usize]);
-            let alpha_len_cur = def.m_alpha_over_length.evaluate(u_cur, self.m_trail_interp[TRACK_ALPHA_OVER_LENGTH as usize]);
-            let alpha_len_next = def.m_alpha_over_length.evaluate(u_next, self.m_trail_interp[TRACK_ALPHA_OVER_LENGTH as usize]);
-            let alpha_time_cur = def.m_alpha_over_time.evaluate(time_value, self.m_trail_interp[TRACK_ALPHA_OVER_TIME as usize]);
-            let alpha_time_next = def.m_alpha_over_time.evaluate(time_value, self.m_trail_interp[TRACK_ALPHA_OVER_TIME as usize]);
+            let width_len_cur = def
+                .m_width_over_length
+                .evaluate(u_cur, self.m_trail_interp[TRACK_WIDTH_OVER_LENGTH as usize]);
+            let width_len_next = def.m_width_over_length.evaluate(
+                u_next,
+                self.m_trail_interp[TRACK_WIDTH_OVER_LENGTH as usize],
+            );
+            let width_time_cur = def.m_width_over_time.evaluate(
+                time_value,
+                self.m_trail_interp[TRACK_WIDTH_OVER_TIME as usize],
+            );
+            let width_time_next = def.m_width_over_time.evaluate(
+                time_value,
+                self.m_trail_interp[TRACK_WIDTH_OVER_TIME as usize],
+            );
+            let alpha_len_cur = def
+                .m_alpha_over_length
+                .evaluate(u_cur, self.m_trail_interp[TRACK_ALPHA_OVER_LENGTH as usize]);
+            let alpha_len_next = def.m_alpha_over_length.evaluate(
+                u_next,
+                self.m_trail_interp[TRACK_ALPHA_OVER_LENGTH as usize],
+            );
+            let alpha_time_cur = def.m_alpha_over_time.evaluate(
+                time_value,
+                self.m_trail_interp[TRACK_ALPHA_OVER_TIME as usize],
+            );
+            let alpha_time_next = def.m_alpha_over_time.evaluate(
+                time_value,
+                self.m_trail_interp[TRACK_ALPHA_OVER_TIME as usize],
+            );
 
             let alpha_cur = clamp_int(
                 (alpha_len_cur * alpha_time_cur * self.m_color_override.a as f32) as i32,
-                0, 255,
+                0,
+                255,
             );
             let alpha_next = clamp_int(
                 (alpha_len_next * alpha_time_next * self.m_color_override.a as f32) as i32,
-                0, 255,
+                0,
+                255,
             );
 
             let color_cur = Color::new(
@@ -311,14 +335,50 @@ impl Trail {
                 | (color_next.b as u32);
             let a_verts = [
                 [
-                    crate::framework::graphics::gl_interface::TriVertex { x: x0, y: y0, u: 0.0, v: 1.0, color: color_cur_argb },
-                    crate::framework::graphics::gl_interface::TriVertex { x: x1, y: y1, u: 0.0, v: 0.0, color: color_cur_argb },
-                    crate::framework::graphics::gl_interface::TriVertex { x: x2, y: y2, u: 0.0, v: 1.0, color: color_next_argb },
+                    crate::framework::graphics::gl_interface::TriVertex {
+                        x: x0,
+                        y: y0,
+                        u: 0.0,
+                        v: 1.0,
+                        color: color_cur_argb,
+                    },
+                    crate::framework::graphics::gl_interface::TriVertex {
+                        x: x1,
+                        y: y1,
+                        u: 0.0,
+                        v: 0.0,
+                        color: color_cur_argb,
+                    },
+                    crate::framework::graphics::gl_interface::TriVertex {
+                        x: x2,
+                        y: y2,
+                        u: 0.0,
+                        v: 1.0,
+                        color: color_next_argb,
+                    },
                 ],
                 [
-                    crate::framework::graphics::gl_interface::TriVertex { x: x2, y: y2, u: 0.0, v: 1.0, color: color_next_argb },
-                    crate::framework::graphics::gl_interface::TriVertex { x: x1, y: y1, u: 0.0, v: 0.0, color: color_cur_argb },
-                    crate::framework::graphics::gl_interface::TriVertex { x: x3, y: y3, u: 0.0, v: 0.0, color: color_next_argb },
+                    crate::framework::graphics::gl_interface::TriVertex {
+                        x: x2,
+                        y: y2,
+                        u: 0.0,
+                        v: 1.0,
+                        color: color_next_argb,
+                    },
+                    crate::framework::graphics::gl_interface::TriVertex {
+                        x: x1,
+                        y: y1,
+                        u: 0.0,
+                        v: 0.0,
+                        color: color_cur_argb,
+                    },
+                    crate::framework::graphics::gl_interface::TriVertex {
+                        x: x3,
+                        y: y3,
+                        u: 0.0,
+                        v: 0.0,
+                        color: color_next_argb,
+                    },
                 ],
             ];
             g.draw_triangles_flat(&a_verts, 2);
@@ -367,7 +427,11 @@ impl TrailHolder {
         }
     }
 
-    pub fn alloc_trail_from_def(&mut self, _render_order: i32, _definition: *mut TrailDefinition) -> *mut Trail {
+    pub fn alloc_trail_from_def(
+        &mut self,
+        _render_order: i32,
+        _definition: *mut TrailDefinition,
+    ) -> *mut Trail {
         if self.m_trails.len() == self.m_trails.max_size() {
             return std::ptr::null_mut();
         }
@@ -379,8 +443,10 @@ impl TrailHolder {
                 (*trail).m_definition = _definition;
                 let duration_interp = rand_range_float(0.0, 1.0);
                 if !_definition.is_null() {
-                    (*trail).m_trail_duration =
-                        (*_definition).m_trail_duration.evaluate(0.0, duration_interp) as i32;
+                    (*trail).m_trail_duration = (*_definition)
+                        .m_trail_duration
+                        .evaluate(0.0, duration_interp)
+                        as i32;
                 }
             }
         }
@@ -406,7 +472,8 @@ pub static mut G_TRAIL_PARAM_ARRAY_SIZE: i32 = 0;
 pub static mut G_TRAIL_PARAM_ARRAY: *mut TrailParams = std::ptr::null_mut();
 
 /// 草坪轨迹参数数组
-pub static mut G_LAWN_TRAIL_ARRAY: [TrailParams; 1] = [TrailParams::new(TRAIL_ICE, "particles/IceTrail.trail")];
+pub static mut G_LAWN_TRAIL_ARRAY: [TrailParams; 1] =
+    [TrailParams::new(TRAIL_ICE, "particles/IceTrail.trail")];
 
 // ======== 自由函数 ========
 
@@ -442,12 +509,10 @@ pub fn trail_def_ptr_for_index(index: i32) -> Option<*mut TrailDefinition> {
 
 /// 加载单条轨迹定义（对应 C++ TrailLoadADef，Trail.cpp:45：
 /// DefinitionLoadXML + FloatTrackSetDefault 默认值阶段）
-pub fn trail_load_a_def(
-    trail_def: &mut TrailDefinition,
-    trail_file_name: &str,
-) -> bool {
+pub fn trail_load_a_def(trail_def: &mut TrailDefinition, trail_file_name: &str) -> bool {
     // 对应 C++ DefinitionLoadXML(theTrailFileName, &gTrailDefMap, theTrailDef)
-    let xml_data = crate::framework::paklib::with_pak_interface(|pak| pak.load_file(trail_file_name));
+    let xml_data =
+        crate::framework::paklib::with_pak_interface(|pak| pak.load_file(trail_file_name));
     let xml = match xml_data {
         Some(data) => String::from_utf8_lossy(&data).to_string(),
         None => return false,
@@ -575,7 +640,9 @@ mod trail_tests {
     #[test]
     fn test_trail_load_ice() {
         crate::framework::paklib::init_pak_interface();
-        crate::framework::paklib::with_pak_interface_mut(|pak| { pak.add_pak_file("main.pak"); });
+        crate::framework::paklib::with_pak_interface_mut(|pak| {
+            pak.add_pak_file("main.pak");
+        });
         let mut def = TrailDefinition::new();
         let ok = trail_load_a_def(&mut def, "particles/IceTrail.trail");
         assert!(ok, "IceTrail.trail 应加载成功");

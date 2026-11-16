@@ -8,7 +8,7 @@
 
 #![allow(non_camel_case_types, dead_code)]
 
-use std::os::raw::{c_int, c_uchar, c_void, c_char};
+use std::os::raw::{c_char, c_int, c_uchar, c_void};
 
 // 为向后兼容保留的类型别名（调用方以 *mut c_void 方式使用）
 // sdl2-sys 中的实际类型是 mixer::Mix_Chunk (struct) 和 _Mix_Music (opaque)
@@ -42,7 +42,12 @@ pub fn free_chunk(c: *mut c_void) {
 
 pub fn play_channel(ch: c_int, ck: *mut c_void, loops: c_int) -> c_int {
     unsafe {
-        sdl2::sys::mixer::Mix_PlayChannelTimed(ch, ck as *mut sdl2::sys::mixer::Mix_Chunk, loops, -1)
+        sdl2::sys::mixer::Mix_PlayChannelTimed(
+            ch,
+            ck as *mut sdl2::sys::mixer::Mix_Chunk,
+            loops,
+            -1,
+        )
     }
 }
 

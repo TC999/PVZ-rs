@@ -5,9 +5,9 @@
 
 #![allow(dead_code)]
 
-use std::collections::HashMap;
 use crate::framework::graphics::image::Image;
 use crate::framework::graphics::memory_image::MemoryImage;
+use std::collections::HashMap;
 
 /// 滤镜效果枚举（对应 C++ FilterEffect）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,14 +28,18 @@ pub static mut G_FILTER_MAP: [Option<HashMap<*mut Image, *mut Image>>; NUM_FILTE
 /// 初始化滤镜系统（对应 C++ FilterEffectInitForApp）
 pub fn filter_effect_init_for_app() {
     for i in 0..NUM_FILTER_EFFECTS {
-        unsafe { G_FILTER_MAP[i] = Some(HashMap::new()); }
+        unsafe {
+            G_FILTER_MAP[i] = Some(HashMap::new());
+        }
     }
 }
 
 /// 清理滤镜系统（对应 C++ FilterEffectDisposeForApp）
 pub fn filter_effect_dispose_for_app() {
     for i in 0..NUM_FILTER_EFFECTS {
-        unsafe { G_FILTER_MAP[i] = None; }
+        unsafe {
+            G_FILTER_MAP[i] = None;
+        }
     }
 }
 
@@ -52,9 +56,12 @@ pub fn filter_effect_do_lum_sat(image: &mut MemoryImage, lum: f32, sat: f32) {
         let gray = (0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32) as i32;
 
         // 饱和度调整
-        let nr = ((gray as f32 + (r as f32 - gray as f32) * sat) + lum * 255.0).clamp(0.0, 255.0) as u8;
-        let ng = ((gray as f32 + (g as f32 - gray as f32) * sat) + lum * 255.0).clamp(0.0, 255.0) as u8;
-        let nb = ((gray as f32 + (b as f32 - gray as f32) * sat) + lum * 255.0).clamp(0.0, 255.0) as u8;
+        let nr =
+            ((gray as f32 + (r as f32 - gray as f32) * sat) + lum * 255.0).clamp(0.0, 255.0) as u8;
+        let ng =
+            ((gray as f32 + (g as f32 - gray as f32) * sat) + lum * 255.0).clamp(0.0, 255.0) as u8;
+        let nb =
+            ((gray as f32 + (b as f32 - gray as f32) * sat) + lum * 255.0).clamp(0.0, 255.0) as u8;
 
         *pixel = (a as u32) << 24 | (nr as u32) << 16 | (ng as u32) << 8 | nb as u32;
     }
@@ -97,7 +104,9 @@ pub fn filter_effect_create_image(src: &Image, effect: FilterEffectType) -> *mut
 
 /// 获取滤镜图像（带缓存，对应 C++ FilterEffectGetImage）
 pub fn filter_effect_get_image(src: *mut Image, effect: FilterEffectType) -> *mut Image {
-    if effect == FilterEffectType::None { return src; }
+    if effect == FilterEffectType::None {
+        return src;
+    }
     let idx = effect as usize;
     unsafe {
         if let Some(ref map) = G_FILTER_MAP[idx] {

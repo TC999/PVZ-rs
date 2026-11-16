@@ -3,8 +3,8 @@
 
 #![allow(dead_code)]
 
-use crate::framework::graphics::memory_image::MemoryImage;
 use crate::framework::graphics::graphics::Graphics;
+use crate::framework::graphics::memory_image::MemoryImage;
 use crate::lawn::game_enums::*;
 use crate::todlib::reanimator::Reanimation;
 use crate::todlib::tod_list::TodList;
@@ -21,9 +21,9 @@ pub type ImageVariationList = TodList<ReanimCacheImageVariation>;
 
 /// 重动画缓存（对应 C++ ReanimatorCache）
 pub struct ReanimatorCache {
-    pub plant_images: [Option<*mut MemoryImage>; NUM_SEED_TYPES],  // 对应 C++ mPlantImages[SeedType::NUM_SEED_TYPES]
+    pub plant_images: [Option<*mut MemoryImage>; NUM_SEED_TYPES], // 对应 C++ mPlantImages[SeedType::NUM_SEED_TYPES]
     pub image_variation_list: ImageVariationList,
-    pub lawn_mowers: [Option<*mut MemoryImage>; 4],    // NUM_MOWER_TYPES
+    pub lawn_mowers: [Option<*mut MemoryImage>; 4], // NUM_MOWER_TYPES
     pub zombie_images: [Option<*mut MemoryImage>; NUM_CACHED_ZOMBIE_TYPES], // 对应 C++ mZombieImages[ZombieType::NUM_CACHED_ZOMBIE_TYPES]
     pub app: Option<*mut crate::lawn::lawn_app::LawnApp>,
 }
@@ -57,10 +57,16 @@ impl ReanimatorCache {
         self.zombie_images = [None; NUM_CACHED_ZOMBIE_TYPES];
     }
 
-    pub fn update_reanimation_for_variation(&self, reanim: &mut Reanimation, draw_variation: DrawVariation) {
+    pub fn update_reanimation_for_variation(
+        &self,
+        reanim: &mut Reanimation,
+        draw_variation: DrawVariation,
+    ) {
         // 对应 C++ UpdateReanimationForVariation
         let dv = draw_variation as i32;
-        if dv >= DrawVariation::MarigoldWhite as i32 && dv <= DrawVariation::MarigoldLightGreen as i32 {
+        if dv >= DrawVariation::MarigoldWhite as i32
+            && dv <= DrawVariation::MarigoldLightGreen as i32
+        {
             let a_variation_index = (dv - DrawVariation::MarigoldWhite as i32) as usize;
             let marigold_variations = [
                 crate::framework::color::Color::new(255, 255, 255, 255),
@@ -82,10 +88,12 @@ impl ReanimatorCache {
             match draw_variation {
                 DrawVariation::Imitater => {
                     // [TRANSLATION_NOTE]: FILTER_EFFECT_WASHED_OUT 依赖滤镜系统，暂以颜色近似
-                    reanim.m_color_override = crate::framework::color::Color::new(200, 200, 200, 255);
+                    reanim.m_color_override =
+                        crate::framework::color::Color::new(200, 200, 200, 255);
                 }
                 DrawVariation::ImitaterLess => {
-                    reanim.m_color_override = crate::framework::color::Color::new(220, 220, 220, 255);
+                    reanim.m_color_override =
+                        crate::framework::color::Color::new(220, 220, 220, 255);
                 }
                 DrawVariation::ZenGarden => {
                     reanim.set_frames_for_layer("anim_zengarden");
@@ -104,7 +112,15 @@ impl ReanimatorCache {
         }
     }
 
-    pub fn draw_reanimator_frame(&self, g: &mut Graphics, pos_x: f32, pos_y: f32, reanimation_type: ReanimationType, track_name: &str, draw_variation: DrawVariation) {
+    pub fn draw_reanimator_frame(
+        &self,
+        g: &mut Graphics,
+        pos_x: f32,
+        pos_y: f32,
+        reanimation_type: ReanimationType,
+        track_name: &str,
+        draw_variation: DrawVariation,
+    ) {
         // 对应 C++ DrawReanimatorFrame（实时创建 reanim 绘制，绕过内存缓存）
         let mut a_reanim = Reanimation::new();
         a_reanim.reanimation_initialize_type(pos_x, pos_y, reanimation_type);
@@ -121,7 +137,14 @@ impl ReanimatorCache {
         a_reanim.draw(g);
     }
 
-    pub fn draw_cached_plant(&mut self, g: &mut Graphics, pos_x: f32, pos_y: f32, seed_type: SeedType, draw_variation: DrawVariation) {
+    pub fn draw_cached_plant(
+        &mut self,
+        g: &mut Graphics,
+        pos_x: f32,
+        pos_y: f32,
+        seed_type: SeedType,
+        draw_variation: DrawVariation,
+    ) {
         // 对应 C++ DrawCachedPlant（ReanimationLawn.cpp:377）
         // C++: PVZP_ASSERT(theSeedType >= 0 && theSeedType < SeedType::NUM_SEED_TYPES)
         let a_seed_idx = seed_type as i32;
@@ -137,7 +160,9 @@ impl ReanimatorCache {
             while !a_node.is_null() {
                 unsafe {
                     let a_image_variation = &(*a_node).value;
-                    if a_image_variation.seed_type == seed_type && a_image_variation.draw_variation == draw_variation {
+                    if a_image_variation.seed_type == seed_type
+                        && a_image_variation.draw_variation == draw_variation
+                    {
                         a_image = a_image_variation.image;
                         break;
                     }
@@ -152,7 +177,8 @@ impl ReanimatorCache {
                     image: a_image,
                 };
                 // C++: mImageVariationList.AddHead(aNewImageVariation)
-                self.image_variation_list.add_head_value(a_new_image_variation);
+                self.image_variation_list
+                    .add_head_value(a_new_image_variation);
             }
         } else {
             a_image = self.plant_images[a_seed_idx];
@@ -168,14 +194,30 @@ impl ReanimatorCache {
             let mut a_offset_y = 0i32;
             let mut a_width = 0i32;
             let mut a_height = 0i32;
-            self.get_plant_image_size(seed_type, &mut a_offset_x, &mut a_offset_y, &mut a_width, &mut a_height);
+            self.get_plant_image_size(
+                seed_type,
+                &mut a_offset_x,
+                &mut a_offset_y,
+                &mut a_width,
+                &mut a_height,
+            );
             unsafe {
-                g.draw_image_f_xy(&(*img).base, pos_x + a_offset_x as f32, pos_y + a_offset_y as f32);
+                g.draw_image_f_xy(
+                    &(*img).base,
+                    pos_x + a_offset_x as f32,
+                    pos_y + a_offset_y as f32,
+                );
             }
         }
     }
 
-    pub fn draw_cached_mower(&mut self, g: &mut Graphics, pos_x: f32, pos_y: f32, mower_type: LawnMowerType) {
+    pub fn draw_cached_mower(
+        &mut self,
+        g: &mut Graphics,
+        pos_x: f32,
+        pos_y: f32,
+        mower_type: LawnMowerType,
+    ) {
         // 对应 C++ DrawCachedMower（ReanimationLawn.cpp:422）
         // C++: PVZP_ASSERT(theMowerType >= 0 && theMowerType < LawnMowerType::NUM_MOWER_TYPES)
         let a_mower_idx = mower_type as usize;
@@ -193,7 +235,13 @@ impl ReanimatorCache {
         }
     }
 
-    pub fn draw_cached_zombie(&mut self, g: &mut Graphics, pos_x: f32, pos_y: f32, zombie_type: ZombieType) {
+    pub fn draw_cached_zombie(
+        &mut self,
+        g: &mut Graphics,
+        pos_x: f32,
+        pos_y: f32,
+        zombie_type: ZombieType,
+    ) {
         // 对应 C++ DrawCachedZombie（ReanimationLawn.cpp:431）
         // C++: PVZP_ASSERT(theZombieType >= 0 && theZombieType < ZombieType::NUM_CACHED_ZOMBIE_TYPES)
         let a_zombie_idx = zombie_type as i32;
@@ -222,45 +270,128 @@ impl ReanimatorCache {
         Some(Box::into_raw(img))
     }
 
-    pub fn make_cached_plant_frame(&self, seed_type: SeedType, draw_variation: DrawVariation) -> Option<*mut MemoryImage> {
+    pub fn make_cached_plant_frame(
+        &self,
+        seed_type: SeedType,
+        draw_variation: DrawVariation,
+    ) -> Option<*mut MemoryImage> {
         // 对应 C++ MakeCachedPlantFrame（ReanimationLawn.cpp:205）
         let mut a_offset_x = 0i32;
         let mut a_offset_y = 0i32;
         let mut a_width = 0i32;
         let mut a_height = 0i32;
-        self.get_plant_image_size(seed_type, &mut a_offset_x, &mut a_offset_y, &mut a_width, &mut a_height);
+        self.get_plant_image_size(
+            seed_type,
+            &mut a_offset_x,
+            &mut a_offset_y,
+            &mut a_width,
+            &mut a_height,
+        );
         let mut a_memory_image = self.make_blank_memory_image(a_width, a_height)?;
         let img_ptr = a_memory_image as *mut MemoryImage;
-        let mut a_memory_graphics = Graphics::new_with_image(unsafe { &mut (*img_ptr).base } as *mut _);
+        let mut a_memory_graphics =
+            Graphics::new_with_image(unsafe { &mut (*img_ptr).base } as *mut _);
         a_memory_graphics.set_linear_blend(true);
 
         let a_plant_def = crate::lawn::plant::get_plant_definition(seed_type);
         if seed_type == SeedType::PotatoMine {
             a_memory_graphics.scale_x = 0.85;
             a_memory_graphics.scale_y = 0.85;
-            self.draw_reanimator_frame(&mut a_memory_graphics, -(a_offset_x - 12) as f32, -(a_offset_y - 12) as f32, a_plant_def.reanimation_type, "anim_armed", draw_variation);
+            self.draw_reanimator_frame(
+                &mut a_memory_graphics,
+                -(a_offset_x - 12) as f32,
+                -(a_offset_y - 12) as f32,
+                a_plant_def.reanimation_type,
+                "anim_armed",
+                draw_variation,
+            );
         } else if seed_type == SeedType::InstantCoffee {
             a_memory_graphics.scale_x = 0.8;
             a_memory_graphics.scale_y = 0.8;
-            self.draw_reanimator_frame(&mut a_memory_graphics, -(a_offset_x - 12) as f32, -(a_offset_y - 12) as f32, a_plant_def.reanimation_type, "anim_idle", draw_variation);
+            self.draw_reanimator_frame(
+                &mut a_memory_graphics,
+                -(a_offset_x - 12) as f32,
+                -(a_offset_y - 12) as f32,
+                a_plant_def.reanimation_type,
+                "anim_idle",
+                draw_variation,
+            );
         } else if seed_type == SeedType::ExplodeONut {
             a_memory_graphics.set_colorize_images(true);
             a_memory_graphics.set_color(&crate::framework::color::Color::new(255, 64, 64, 255));
-            self.draw_reanimator_frame(&mut a_memory_graphics, -a_offset_x as f32, -a_offset_y as f32, a_plant_def.reanimation_type, "anim_idle", draw_variation);
+            self.draw_reanimator_frame(
+                &mut a_memory_graphics,
+                -a_offset_x as f32,
+                -a_offset_y as f32,
+                a_plant_def.reanimation_type,
+                "anim_idle",
+                draw_variation,
+            );
         } else {
-            self.draw_reanimator_frame(&mut a_memory_graphics, -a_offset_x as f32, -a_offset_y as f32, a_plant_def.reanimation_type, "anim_idle", draw_variation);
-            if seed_type == SeedType::Peashooter || seed_type == SeedType::Snowpea
-                || seed_type == SeedType::Repeater || seed_type == SeedType::Leftpeater
+            self.draw_reanimator_frame(
+                &mut a_memory_graphics,
+                -a_offset_x as f32,
+                -a_offset_y as f32,
+                a_plant_def.reanimation_type,
+                "anim_idle",
+                draw_variation,
+            );
+            if seed_type == SeedType::Peashooter
+                || seed_type == SeedType::Snowpea
+                || seed_type == SeedType::Repeater
+                || seed_type == SeedType::Leftpeater
                 || seed_type == SeedType::Gatlingpea
             {
-                self.draw_reanimator_frame(&mut a_memory_graphics, -a_offset_x as f32, -a_offset_y as f32, a_plant_def.reanimation_type, "anim_head_idle", draw_variation);
+                self.draw_reanimator_frame(
+                    &mut a_memory_graphics,
+                    -a_offset_x as f32,
+                    -a_offset_y as f32,
+                    a_plant_def.reanimation_type,
+                    "anim_head_idle",
+                    draw_variation,
+                );
             } else if seed_type == SeedType::Splitpea {
-                self.draw_reanimator_frame(&mut a_memory_graphics, -a_offset_x as f32, -a_offset_y as f32, a_plant_def.reanimation_type, "anim_head_idle", draw_variation);
-                self.draw_reanimator_frame(&mut a_memory_graphics, -a_offset_x as f32, -a_offset_y as f32, a_plant_def.reanimation_type, "anim_splitpea_idle", draw_variation);
+                self.draw_reanimator_frame(
+                    &mut a_memory_graphics,
+                    -a_offset_x as f32,
+                    -a_offset_y as f32,
+                    a_plant_def.reanimation_type,
+                    "anim_head_idle",
+                    draw_variation,
+                );
+                self.draw_reanimator_frame(
+                    &mut a_memory_graphics,
+                    -a_offset_x as f32,
+                    -a_offset_y as f32,
+                    a_plant_def.reanimation_type,
+                    "anim_splitpea_idle",
+                    draw_variation,
+                );
             } else if seed_type == SeedType::Threepeater {
-                self.draw_reanimator_frame(&mut a_memory_graphics, -a_offset_x as f32, -a_offset_y as f32, a_plant_def.reanimation_type, "anim_head_idle1", draw_variation);
-                self.draw_reanimator_frame(&mut a_memory_graphics, -a_offset_x as f32, -a_offset_y as f32, a_plant_def.reanimation_type, "anim_head_idle3", draw_variation);
-                self.draw_reanimator_frame(&mut a_memory_graphics, -a_offset_x as f32, -a_offset_y as f32, a_plant_def.reanimation_type, "anim_head_idle2", draw_variation);
+                self.draw_reanimator_frame(
+                    &mut a_memory_graphics,
+                    -a_offset_x as f32,
+                    -a_offset_y as f32,
+                    a_plant_def.reanimation_type,
+                    "anim_head_idle1",
+                    draw_variation,
+                );
+                self.draw_reanimator_frame(
+                    &mut a_memory_graphics,
+                    -a_offset_x as f32,
+                    -a_offset_y as f32,
+                    a_plant_def.reanimation_type,
+                    "anim_head_idle3",
+                    draw_variation,
+                );
+                self.draw_reanimator_frame(
+                    &mut a_memory_graphics,
+                    -a_offset_x as f32,
+                    -a_offset_y as f32,
+                    a_plant_def.reanimation_type,
+                    "anim_head_idle2",
+                    draw_variation,
+                );
             }
         }
         Some(a_memory_image)
@@ -270,29 +401,58 @@ impl ReanimatorCache {
         // 对应 C++ MakeCachedMowerFrame（ReanimationLawn.cpp:149）
         let mut a_memory_image = self.make_blank_memory_image(90, 100)?;
         let img_ptr = a_memory_image as *mut MemoryImage;
-        let mut a_memory_graphics = Graphics::new_with_image(unsafe { &mut (*img_ptr).base } as *mut _);
+        let mut a_memory_graphics =
+            Graphics::new_with_image(unsafe { &mut (*img_ptr).base } as *mut _);
         a_memory_graphics.set_linear_blend(true);
 
         match mower_type {
             LawnMowerType::Lawn => {
                 a_memory_graphics.scale_x = 0.85;
                 a_memory_graphics.scale_y = 0.85;
-                self.draw_reanimator_frame(&mut a_memory_graphics, 10.0, 0.0, ReanimationType::Lawnmower, "anim_normal", DrawVariation::Normal);
+                self.draw_reanimator_frame(
+                    &mut a_memory_graphics,
+                    10.0,
+                    0.0,
+                    ReanimationType::Lawnmower,
+                    "anim_normal",
+                    DrawVariation::Normal,
+                );
             }
             LawnMowerType::Pool => {
                 a_memory_graphics.scale_x = 0.8;
                 a_memory_graphics.scale_y = 0.8;
-                self.draw_reanimator_frame(&mut a_memory_graphics, 10.0, 25.0, ReanimationType::PoolCleaner, "", DrawVariation::Normal);
+                self.draw_reanimator_frame(
+                    &mut a_memory_graphics,
+                    10.0,
+                    25.0,
+                    ReanimationType::PoolCleaner,
+                    "",
+                    DrawVariation::Normal,
+                );
             }
             LawnMowerType::Roof => {
                 a_memory_graphics.scale_x = 0.85;
                 a_memory_graphics.scale_y = 0.85;
-                self.draw_reanimator_frame(&mut a_memory_graphics, 10.0, 0.0, ReanimationType::RoofCleaner, "", DrawVariation::Normal);
+                self.draw_reanimator_frame(
+                    &mut a_memory_graphics,
+                    10.0,
+                    0.0,
+                    ReanimationType::RoofCleaner,
+                    "",
+                    DrawVariation::Normal,
+                );
             }
             LawnMowerType::SuperMower => {
                 a_memory_graphics.scale_x = 0.85;
                 a_memory_graphics.scale_y = 0.85;
-                self.draw_reanimator_frame(&mut a_memory_graphics, 10.0, 0.0, ReanimationType::Lawnmower, "anim_tricked", DrawVariation::Normal);
+                self.draw_reanimator_frame(
+                    &mut a_memory_graphics,
+                    10.0,
+                    0.0,
+                    ReanimationType::Lawnmower,
+                    "anim_tricked",
+                    DrawVariation::Normal,
+                );
             }
             // C++ default: PVZP_ASSERT(false)
             _ => return None,
@@ -304,7 +464,8 @@ impl ReanimatorCache {
         // 对应 C++ MakeCachedZombieFrame（ReanimationLawn.cpp:261）
         let mut a_memory_image = self.make_blank_memory_image(200, 210)?;
         let img_ptr = a_memory_image as *mut MemoryImage;
-        let mut a_memory_graphics = Graphics::new_with_image(unsafe { &mut (*img_ptr).base } as *mut _);
+        let mut a_memory_graphics =
+            Graphics::new_with_image(unsafe { &mut (*img_ptr).base } as *mut _);
         a_memory_graphics.set_linear_blend(true);
 
         // C++: theZombieType == ZOMBIE_CACHED_POLEVAULTER_WITH_POLE → aUseZombieType = ZOMBIE_POLEVAULTER
@@ -325,7 +486,10 @@ impl ReanimatorCache {
             let mut a_reanim = Reanimation::new();
             a_reanim.reanimation_initialize_type(a_pos_x, a_pos_y, a_zombie_def.reanimation_type);
             a_reanim.set_frames_for_layer("anim_idle");
-            crate::lawn::zombie::Zombie::setup_reanim_layers(&mut a_reanim as *mut Reanimation, a_use_zombie_type);
+            crate::lawn::zombie::Zombie::setup_reanim_layers(
+                &mut a_reanim as *mut Reanimation,
+                a_use_zombie_type,
+            );
 
             // C++: theZombieType == ZOMBIE_DOOR 时门板渲染组归位
             if zombie_type == ZombieType::Door {
@@ -364,12 +528,26 @@ impl ReanimatorCache {
             } else if zombie_type == ZombieType::Gargantuar {
                 a_pos_y = 60.0;
             }
-            self.draw_reanimator_frame(&mut a_memory_graphics, a_pos_x, a_pos_y, a_zombie_def.reanimation_type, a_track_name, DrawVariation::Normal);
+            self.draw_reanimator_frame(
+                &mut a_memory_graphics,
+                a_pos_x,
+                a_pos_y,
+                a_zombie_def.reanimation_type,
+                a_track_name,
+                DrawVariation::Normal,
+            );
         }
         Some(a_memory_image)
     }
 
-    pub fn get_plant_image_size(&self, seed_type: SeedType, offset_x: &mut i32, offset_y: &mut i32, width: &mut i32, height: &mut i32) {
+    pub fn get_plant_image_size(
+        &self,
+        seed_type: SeedType,
+        offset_x: &mut i32,
+        offset_y: &mut i32,
+        width: &mut i32,
+        height: &mut i32,
+    ) {
         // 对应 C++ GetPlantImageSize（ReanimationLawn.cpp:133）
         *offset_x = -20;
         *offset_y = -20;

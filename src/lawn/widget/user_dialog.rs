@@ -23,11 +23,11 @@ pub const USER_DIALOG_DELETE_USER: i32 = 1;
 
 // C++ gUserListWidgetColors（UserDialog.cpp:37-43）
 const USER_LIST_WIDGET_COLORS: [[u8; 3]; 5] = [
-    [23,  24,  35],
-    [0,   0,   0],
+    [23, 24, 35],
+    [0, 0, 0],
     [235, 225, 180],
     [255, 255, 255],
-    [20,  180, 15],
+    [20, 180, 15],
 ];
 
 // C++ 构造函数使用的对话框 ID
@@ -130,13 +130,24 @@ impl ListWidget {
 
     /// 设置颜色数组（对应 C++ SetColors）
     pub fn set_colors(&mut self, colors: &[[u8; 3]]) {
-        self.colors = colors.iter().map(|c| Color::from_rgb(c[0], c[1], c[2])).collect();
+        self.colors = colors
+            .iter()
+            .map(|c| Color::from_rgb(c[0], c[1], c[2]))
+            .collect();
     }
 
     /// 布局（对应 C++ ListWidget::Layout——简化版，仅记录 flags 与参考 Widget 的相对位置）
     /// [TRANSLATION_NOTE]: C++ ListWidget::Layout 基于 flags 位运算计算目标 x/y/w/h；
     /// 此处简化为将 self 与 target 对齐到同一位置。
-    pub fn layout(&mut self, _flags: i32, target: &DialogButton, _dx: i32, _dy: i32, _dx2: i32, _dy2: i32) {
+    pub fn layout(
+        &mut self,
+        _flags: i32,
+        target: &DialogButton,
+        _dx: i32,
+        _dy: i32,
+        _dx2: i32,
+        _dy2: i32,
+    ) {
         // 简化：直接对齐到 target 的 x/y/w/h
         self.x = target.widget.x;
         self.y = target.widget.y;
@@ -177,10 +188,18 @@ impl ButtonListener for WeakButtonListener {
         }
     }
 
-    fn button_down_tick(&mut self, the_id: i32) { let _ = the_id; }
-    fn button_mouse_enter(&mut self, the_id: i32) { let _ = the_id; }
-    fn button_mouse_leave(&mut self, the_id: i32) { let _ = the_id; }
-    fn button_mouse_move(&mut self, the_id: i32, x: i32, y: i32) { let _ = (the_id, x, y); }
+    fn button_down_tick(&mut self, the_id: i32) {
+        let _ = the_id;
+    }
+    fn button_mouse_enter(&mut self, the_id: i32) {
+        let _ = the_id;
+    }
+    fn button_mouse_leave(&mut self, the_id: i32) {
+        let _ = the_id;
+    }
+    fn button_mouse_move(&mut self, the_id: i32, x: i32, y: i32) {
+        let _ = (the_id, x, y);
+    }
 }
 
 /// 用户管理对话框 — 重命名/删除用户
@@ -286,7 +305,11 @@ impl UserDialog {
         {
             let weak = Rc::downgrade(&wrapper);
             let listener: Box<dyn ButtonListener> = Box::new(WeakButtonListener { host: weak });
-            let mut no_btn = DialogButton::new(std::ptr::null_mut(), crate::framework::widget::dialog::ID_NO, Some(listener));
+            let mut no_btn = DialogButton::new(
+                std::ptr::null_mut(),
+                crate::framework::widget::dialog::ID_NO,
+                Some(listener),
+            );
             no_btn.label = "Cancel".to_string();
             no_btn.has_alpha = true;
             no_btn.has_transparencies = true;
@@ -297,7 +320,11 @@ impl UserDialog {
         {
             let weak = Rc::downgrade(&wrapper);
             let listener: Box<dyn ButtonListener> = Box::new(WeakButtonListener { host: weak });
-            let mut db = DialogButton::new(std::ptr::null_mut(), USER_DIALOG_RENAME_USER, Some(listener));
+            let mut db = DialogButton::new(
+                std::ptr::null_mut(),
+                USER_DIALOG_RENAME_USER,
+                Some(listener),
+            );
             db.label = "Rename".to_string();
             db.has_alpha = true;
             db.has_transparencies = true;
@@ -308,7 +335,11 @@ impl UserDialog {
         {
             let weak = Rc::downgrade(&wrapper);
             let listener: Box<dyn ButtonListener> = Box::new(WeakButtonListener { host: weak });
-            let mut db = DialogButton::new(std::ptr::null_mut(), USER_DIALOG_DELETE_USER, Some(listener));
+            let mut db = DialogButton::new(
+                std::ptr::null_mut(),
+                USER_DIALOG_DELETE_USER,
+                Some(listener),
+            );
             db.label = "Delete".to_string();
             db.has_alpha = true;
             db.has_transparencies = true;
@@ -320,12 +351,13 @@ impl UserDialog {
             let mut h = wrapper.borrow_mut();
             h.num_users = 0;
             // C++: if (theApp->mPlayerInfo) { mUserList->SetSelect(mUserList->AddLine(theApp->mPlayerInfo->mName, false)); mNumUsers++; }
-            let cur_name = unsafe {
-                app.and_then(|p| (*p).player_info.as_ref().map(|pi| pi.name.clone()))
-            };
+            let cur_name =
+                unsafe { app.and_then(|p| (*p).player_info.as_ref().map(|pi| pi.name.clone())) };
             if let Some(cur) = cur_name {
                 let idx = unsafe { (*h.user_list.unwrap()).add_line(&cur) };
-                unsafe { (*h.user_list.unwrap()).set_select(idx); }
+                unsafe {
+                    (*h.user_list.unwrap()).set_select(idx);
+                }
                 h.num_users += 1;
             }
 
@@ -339,7 +371,9 @@ impl UserDialog {
         {
             let mut h = wrapper.borrow_mut();
             if h.num_users < 8 {
-                unsafe { (*h.user_list.unwrap()).add_line("(Create a New User)"); }
+                unsafe {
+                    (*h.user_list.unwrap()).add_line("(Create a New User)");
+                }
             }
             // C++: mTallBottom = true
             h.dialog.tall_bottom = true;
@@ -377,11 +411,7 @@ impl UserDialog {
             if let Some(font) = &self.lines_font {
                 let avail = the_width - ci.left - ci.right - bi.left - bi.right - 4;
                 let line_spacing = font.line_spacing + self.line_spacing_offset;
-                let approx_chars_per_line = if avail > 0 {
-                    (avail / 8).max(1)
-                } else {
-                    1
-                };
+                let approx_chars_per_line = if avail > 0 { (avail / 8).max(1) } else { 1 };
                 let approx_lines = (self.dialog_lines.len() as i32 / approx_chars_per_line).max(1);
                 a_height += approx_lines * line_spacing;
             }
@@ -513,7 +543,9 @@ impl UserDialog {
     /// }
     /// ```
     pub fn get_sel_name(&self) -> String {
-        let Some(list) = self.user_list else { return String::new() };
+        let Some(list) = self.user_list else {
+            return String::new();
+        };
         let sel_idx = unsafe { (*list).select_index };
         if sel_idx < 0 || sel_idx >= self.num_users {
             return String::new();
@@ -569,16 +601,22 @@ impl UserDialog {
         if the_idx == self.num_users {
             // C++: mApp->DoCreateUserDialog();
             if let Some(app) = self.app {
-                unsafe { (*app).do_create_user_dialog(); }
+                unsafe {
+                    (*app).do_create_user_dialog();
+                }
             }
         } else {
             if let Some(list) = self.user_list {
-                unsafe { (*list).set_select(the_idx); }
+                unsafe {
+                    (*list).set_select(the_idx);
+                }
             }
             if the_click_count == 2 {
                 // C++: mApp->FinishUserDialog(true);
                 if let Some(app) = self.app {
-                    unsafe { (*app).finish_user_dialog(true); }
+                    unsafe {
+                        (*app).finish_user_dialog(true);
+                    }
                 }
             }
         }
@@ -676,13 +714,19 @@ impl UserDialog {
     /// 释放内部三个子部件（对应 C++ ~UserDialog 的 delete mUserList/mRenameButton/mDeleteButton）
     pub fn clear_widgets(&mut self) {
         if let Some(pw) = self.user_list.take() {
-            unsafe { drop(Box::from_raw(pw)); }
+            unsafe {
+                drop(Box::from_raw(pw));
+            }
         }
         if let Some(pw) = self.rename_button.take() {
-            unsafe { drop(Box::from_raw(pw)); }
+            unsafe {
+                drop(Box::from_raw(pw));
+            }
         }
         if let Some(pw) = self.delete_button.take() {
-            unsafe { drop(Box::from_raw(pw)); }
+            unsafe {
+                drop(Box::from_raw(pw));
+            }
         }
     }
 }
@@ -693,10 +737,14 @@ impl Drop for UserDialog {
         self.clear_widgets();
         // LawnDialog 构造函数显式创建的 mLawnYesButton / mLawnNoButton
         if let Some(pw) = self.dialog.lawn_yes_button.take() {
-            unsafe { drop(Box::from_raw(pw)); }
+            unsafe {
+                drop(Box::from_raw(pw));
+            }
         }
         if let Some(pw) = self.dialog.lawn_no_button.take() {
-            unsafe { drop(Box::from_raw(pw)); }
+            unsafe {
+                drop(Box::from_raw(pw));
+            }
         }
     }
 }

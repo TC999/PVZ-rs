@@ -6,18 +6,24 @@
 #![allow(dead_code)]
 
 use crate::framework::color::Color;
-use crate::framework::rect::Rect;
 use crate::framework::graphics::graphics::Graphics;
+use crate::framework::rect::Rect;
+use crate::framework::widget::button_listener::ButtonListener;
 use crate::framework::widget::insets::Insets;
 use crate::framework::widget::widget_manager::WidgetManager;
-use crate::framework::widget::button_listener::ButtonListener;
 
 /// 滚动按钮（对应 C++ ScrollbuttonWidget）
 pub struct ScrollbuttonWidget {
-    pub x: i32, pub y: i32, pub width: i32, pub height: i32,
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
     pub widget_manager: Option<*mut WidgetManager>,
-    pub visible: bool, pub disabled: bool,
-    pub has_focus: bool, pub is_down: bool, pub is_over: bool,
+    pub visible: bool,
+    pub disabled: bool,
+    pub has_focus: bool,
+    pub is_down: bool,
+    pub is_over: bool,
     pub has_alpha: bool,
     pub colors: Vec<Color>,
     pub mouse_insets: Insets,
@@ -35,10 +41,16 @@ pub struct ScrollbuttonWidget {
 impl ScrollbuttonWidget {
     pub fn new(the_id: i32, _listener: Option<Box<dyn ButtonListener>>, the_type: i32) -> Self {
         ScrollbuttonWidget {
-            x: 0, y: 0, width: 0, height: 0,
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
             widget_manager: None,
-            visible: true, disabled: false,
-            has_focus: false, is_down: false, is_over: false,
+            visible: true,
+            disabled: false,
+            has_focus: false,
+            is_down: false,
+            is_over: false,
             has_alpha: true,
             colors: Vec::new(),
             mouse_insets: Insets::new(0, 0, 0, 0),
@@ -96,14 +108,16 @@ impl ScrollbuttonWidget {
                     g.fill_rect_xywh(
                         i + (self.width - 4) / 2 + arrow_offset,
                         self.height / 2 - i - 1 + arrow_offset,
-                        1, 1 + i * 2,
+                        1,
+                        1 + i * 2,
                     );
                 } else {
                     // 右箭头
                     g.fill_rect_xywh(
                         (3 - i) + (self.width - 4) / 2 + arrow_offset,
                         self.height / 2 - i - 1 + arrow_offset,
-                        1, 1 + i * 2,
+                        1,
+                        1 + i * 2,
                     );
                 }
             }
@@ -115,14 +129,16 @@ impl ScrollbuttonWidget {
                     g.fill_rect_xywh(
                         self.width / 2 - i - 1 + arrow_offset,
                         i + (self.height - 4) / 2 + arrow_offset,
-                        1 + i * 2, 1,
+                        1 + i * 2,
+                        1,
                     );
                 } else {
                     // 下箭头
                     g.fill_rect_xywh(
                         self.width / 2 - i - 1 + arrow_offset,
                         (3 - i) + (self.height - 4) / 2 + arrow_offset,
-                        1 + i * 2, 1,
+                        1 + i * 2,
+                        1,
                     );
                 }
             }

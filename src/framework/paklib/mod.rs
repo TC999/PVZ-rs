@@ -102,7 +102,9 @@ where
     F: FnOnce(&PakInterface) -> R,
 {
     let guard = G_PAK_INTERFACE.lock().unwrap();
-    let pak = guard.as_ref().expect("PakInterface 未初始化，请先调用 init_pak_interface()");
+    let pak = guard
+        .as_ref()
+        .expect("PakInterface 未初始化，请先调用 init_pak_interface()");
     f(pak)
 }
 
@@ -112,7 +114,9 @@ where
     F: FnOnce(&mut PakInterface) -> R,
 {
     let mut guard = G_PAK_INTERFACE.lock().unwrap();
-    let pak = guard.as_mut().expect("PakInterface 未初始化，请先调用 init_pak_interface()");
+    let pak = guard
+        .as_mut()
+        .expect("PakInterface 未初始化，请先调用 init_pak_interface()");
     f(pak)
 }
 
@@ -138,7 +142,9 @@ fn read_le_i32(data: &[u8], offset: &mut usize) -> i32 {
 fn read_le_i64(data: &[u8], offset: &mut usize) -> i64 {
     let bytes = &data[*offset..*offset + 8];
     *offset += 8;
-    i64::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7]])
+    i64::from_le_bytes([
+        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+    ])
 }
 
 /// 对字节缓冲区进行 XOR 解密/加密（与 0xF7 异或，可逆操作）
@@ -227,7 +233,9 @@ fn get_global_resource_folder() -> String {
 pub fn set_resource_folder(path: &str) {
     let resource_dir = path.replace('\\', "/");
     // set_var 在 Rust 2024 中是不安全函数（可能造成数据竞争）
-    unsafe { std::env::set_var("PVZ_RESOURCE_FOLDER", &resource_dir); }
+    unsafe {
+        std::env::set_var("PVZ_RESOURCE_FOLDER", &resource_dir);
+    }
 }
 
 // ============================================================
@@ -285,7 +293,11 @@ impl PakInterface {
         let file_path = if Path::new(the_file_name).is_absolute() {
             the_file_name.to_string()
         } else if !self.resource_folder.is_empty() {
-            format!("{}/{}", self.resource_folder.trim_end_matches('/'), the_file_name)
+            format!(
+                "{}/{}",
+                self.resource_folder.trim_end_matches('/'),
+                the_file_name
+            )
         } else {
             the_file_name.to_string()
         };
@@ -363,7 +375,8 @@ impl PakInterface {
             start_pos: 0,
             size: data_len as i64,
         };
-        self.records.insert(pak_record.file_name.clone(), pak_record);
+        self.records
+            .insert(pak_record.file_name.clone(), pak_record);
 
         // 解析目录条目
         let mut current_pos: i64 = 0;
@@ -463,11 +476,16 @@ impl PakInterface {
 
         // 2. 尝试从真实文件系统打开
         // 先尝试相对于资源文件夹
-        let file_path = if !self.resource_folder.is_empty() && !Path::new(the_file_name).is_absolute() {
-            format!("{}/{}", self.resource_folder.trim_end_matches('/'), the_file_name)
-        } else {
-            the_file_name.to_string()
-        };
+        let file_path =
+            if !self.resource_folder.is_empty() && !Path::new(the_file_name).is_absolute() {
+                format!(
+                    "{}/{}",
+                    self.resource_folder.trim_end_matches('/'),
+                    the_file_name
+                )
+            } else {
+                the_file_name.to_string()
+            };
 
         match std::fs::File::open(&file_path) {
             Ok(file) => Some(PakFileHandle::RealFile {
@@ -498,9 +516,9 @@ impl PakInterface {
                 let result = with_pak_interface(|pak| {
                     let record = pak.records.get(record_key)?;
                     let new_pos = match the_origin {
-                        0 => the_offset,                          // SEEK_SET
-                        1 => *pos + the_offset,                   // SEEK_CUR
-                        2 => record.size - the_offset,            // SEEK_END
+                        0 => the_offset,               // SEEK_SET
+                        1 => *pos + the_offset,        // SEEK_CUR
+                        2 => record.size - the_offset, // SEEK_END
                         _ => return None,
                     };
                     // 限制在 [0, record.size] 范围内
@@ -518,9 +536,9 @@ impl PakInterface {
             }
             PakFileHandle::RealFile { file, .. } => {
                 let seek_pos = match the_origin {
-                    0 => SeekFrom::Start(the_offset as u64),   // SEEK_SET
-                    1 => SeekFrom::Current(the_offset),         // SEEK_CUR
-                    2 => SeekFrom::End(the_offset),             // SEEK_END
+                    0 => SeekFrom::Start(the_offset as u64), // SEEK_SET
+                    1 => SeekFrom::Current(the_offset),      // SEEK_CUR
+                    2 => SeekFrom::End(the_offset),          // SEEK_END
                     _ => return -1,
                 };
                 match file.seek(seek_pos) {
@@ -537,16 +555,19 @@ impl PakInterface {
     pub fn f_tell(file: &mut PakFileHandle) -> i64 {
         match file {
             PakFileHandle::PakFile { pos, .. } => *pos,
-            PakFileHandle::RealFile { file: f, .. } => {
-                f.stream_position().unwrap_or(0) as i64
-            }
+            PakFileHandle::RealFile { file: f, .. } => f.stream_position().unwrap_or(0) as i64,
         }
     }
 
     /// 从文件读取数据
     ///
     /// 对应 C++ PakInterface::FRead()
-    pub fn f_read(file: &mut PakFileHandle, buffer: &mut [u8], elem_size: i32, count: i32) -> usize {
+    pub fn f_read(
+        file: &mut PakFileHandle,
+        buffer: &mut [u8],
+        elem_size: i32,
+        count: i32,
+    ) -> usize {
         let total_bytes = (elem_size * count) as usize;
         if buffer.len() < total_bytes {
             // buffer 太小，只读取能容纳的大小
@@ -624,8 +645,7 @@ impl PakInterface {
                         let src_pos = (record.start_pos + *pos) as usize;
                         let c = collection.data[src_pos] as char;
                         *pos += 1;
-                        if c != '\r' {
-                        }
+                        if c != '\r' {}
                     }
                 })
             }
@@ -764,26 +784,22 @@ impl PakInterface {
     /// 对应 C++ PakInterface::FEof()
     pub fn f_eof(file: &mut PakFileHandle) -> bool {
         match file {
-            PakFileHandle::PakFile { record_key, pos } => {
-                with_pak_interface(|pak| {
-                    let record = pak.records.get(record_key)?;
-                    Some(*pos >= record.size)
-                })
-                .unwrap_or(true)
-            }
-            PakFileHandle::RealFile { file: f, .. } => {
-                match f.stream_position() {
-                    Ok(pos) => {
-                        if let Ok(_) = f.seek(SeekFrom::End(0)) {
-                            let len = f.stream_position().unwrap_or(0);
-                            let _ = f.seek(SeekFrom::Start(pos));
-                            return pos >= len;
-                        }
-                        false
+            PakFileHandle::PakFile { record_key, pos } => with_pak_interface(|pak| {
+                let record = pak.records.get(record_key)?;
+                Some(*pos >= record.size)
+            })
+            .unwrap_or(true),
+            PakFileHandle::RealFile { file: f, .. } => match f.stream_position() {
+                Ok(pos) => {
+                    if let Ok(_) = f.seek(SeekFrom::End(0)) {
+                        let len = f.stream_position().unwrap_or(0);
+                        let _ = f.seek(SeekFrom::Start(pos));
+                        return pos >= len;
                     }
-                    Err(_) => true,
+                    false
                 }
-            }
+                Err(_) => true,
+            },
         }
     }
 
@@ -796,7 +812,7 @@ impl PakInterface {
     /// 注意：此方法可直接从 &self 读取，不通过 f_read（避免嵌套 Mutex 锁）
     pub fn load_file(&self, path: &str) -> Option<Vec<u8>> {
         let key = normalize_pak_path(path);
-        
+
         // 先查 PAK 记录
         if let Some(record) = self.records.get(&key) {
             if let Some(collection) = self.collections.get(record.collection_index) {
@@ -810,23 +826,22 @@ impl PakInterface {
         }
 
         // 尝试从真实文件系统读取
-        let file_path = if !self.resource_folder.is_empty() && !std::path::Path::new(path).is_absolute() {
-            format!("{}/{}", self.resource_folder.trim_end_matches('/'), path)
-        } else {
-            path.to_string()
-        };
+        let file_path =
+            if !self.resource_folder.is_empty() && !std::path::Path::new(path).is_absolute() {
+                format!("{}/{}", self.resource_folder.trim_end_matches('/'), path)
+            } else {
+                path.to_string()
+            };
         std::fs::read(&file_path).ok()
     }
 
     /// 获取文件大小
     pub fn f_get_size(file: &mut PakFileHandle) -> Option<i64> {
         match file {
-            PakFileHandle::PakFile { record_key, .. } => {
-                with_pak_interface(|pak| {
-                    let record = pak.records.get(record_key)?;
-                    Some(record.size)
-                })
-            }
+            PakFileHandle::PakFile { record_key, .. } => with_pak_interface(|pak| {
+                let record = pak.records.get(record_key)?;
+                Some(record.size)
+            }),
             PakFileHandle::RealFile { file, .. } => {
                 let current_pos = file.stream_position().ok()?;
                 let size = file.seek(SeekFrom::End(0)).ok()?;
@@ -960,5 +975,28 @@ mod tests {
     fn test_f_open_nonexistent() {
         let pak = PakInterface::new();
         assert!(pak.f_open("nonexistent.txt", "rb").is_none());
+    }
+
+    /// 诊断: BG_CENTER 的 JPG/PNG 两个文件尺寸与解码尺寸
+    #[test]
+    fn test_image_candidates_bg_center() {
+        let mut pak = PakInterface::new();
+        if !pak.add_pak_file("main.pak") {
+            eprintln!("(no main.pak, skip)");
+            return;
+        }
+        for (c, label) in [
+            ("reanim/SELECTORSCREEN_BG_CENTER.JPG", "jpg"),
+            ("reanim/SELECTORSCREEN_BG_CENTER_.PNG", "png_"),
+        ] {
+            if let Some(bytes) = pak.load_file(c) {
+                let dims = image::load_from_memory(&bytes)
+                    .map(|d| (d.width(), d.height()))
+                    .map_err(|e| e.to_string());
+                eprintln!("{} {} bytes={:?} dims={:?}", label, c, bytes.len(), dims);
+            } else {
+                eprintln!("{} {} -> miss", label, c);
+            }
+        }
     }
 }

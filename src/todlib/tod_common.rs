@@ -3,9 +3,9 @@
 
 #![allow(dead_code)]
 
-use crate::framework::graphics::graphics::Graphics;
-use crate::framework::graphics::font::Font;
 use crate::framework::color::Color;
+use crate::framework::graphics::font::Font;
+use crate::framework::graphics::graphics::Graphics;
 use crate::lawn::game_enums::*;
 
 /// 通用工具类型 — 加权数组（对应 C++ TodWeightedArray）
@@ -34,11 +34,23 @@ pub struct TodSmoothArray {
 
 /// 夹值
 pub fn clamp_float(val: f32, min: f32, max: f32) -> f32 {
-    if val < min { min } else if val > max { max } else { val }
+    if val < min {
+        min
+    } else if val > max {
+        max
+    } else {
+        val
+    }
 }
 
 pub fn clamp_int(val: i32, min: i32, max: i32) -> i32 {
-    if val < min { min } else if val > max { max } else { val }
+    if val < min {
+        min
+    } else if val > max {
+        max
+    } else {
+        val
+    }
 }
 
 /// 线性插值
@@ -55,22 +67,30 @@ pub fn evaluate_curve(curve: TodCurves, start: f32, end: f32, time: f32) -> f32 
         TodCurves::EaseIn => t * t,
         TodCurves::EaseOut => t * (2.0 - t),
         TodCurves::EaseInOut => {
-            if t < 0.5 { 2.0 * t * t } else { -1.0 + (4.0 - 2.0 * t) * t }
-        },
+            if t < 0.5 {
+                2.0 * t * t
+            } else {
+                -1.0 + (4.0 - 2.0 * t) * t
+            }
+        }
         TodCurves::EaseInOutWeak => {
-            if t < 0.5 { 0.5 * t * t * 4.0 } else { 1.0 - 0.5 * (1.0 - t) * (1.0 - t) * 4.0 }
-        },
+            if t < 0.5 {
+                0.5 * t * t * 4.0
+            } else {
+                1.0 - 0.5 * (1.0 - t) * (1.0 - t) * 4.0
+            }
+        }
         TodCurves::FastInOut => t * t * (3.0 - 2.0 * t), // smoothstep
         TodCurves::FastInOutWeak => t * t * (3.0 - 2.0 * t),
         TodCurves::Bounce => {
             let y = 1.0 - t;
             1.0 - (y * y * (3.0 - 2.0 * y))
-        },
+        }
         TodCurves::SinWave => ((t * std::f32::consts::PI * 2.0).sin() + 1.0) * 0.5,
         TodCurves::EaseSinWave => {
             let s = (t * std::f32::consts::PI).sin();
             s * s
-        },
+        }
         _ => t,
     };
     start + (end - start) * v
@@ -182,14 +202,18 @@ pub fn distance(x1: f32, y1: f32, x2: f32, y2: f32) -> f32 {
 
 /// 随机范围浮点
 pub fn rand_range_float(min: f32, max: f32) -> f32 {
-    if min >= max { return min; }
+    if min >= max {
+        return min;
+    }
     let r = crate::framework::common::rand() as f32 / 0x7FFFFFFF as f32;
     min + r * (max - min)
 }
 
 /// 随机范围整数
 pub fn rand_range_int(min: i32, max: i32) -> i32 {
-    if min >= max { return min; }
+    if min >= max {
+        return min;
+    }
     crate::framework::common::rand_range(max - min + 1) + min
 }
 
@@ -205,8 +229,12 @@ pub fn deg_to_rad(deg: f32) -> f32 {
 
 /// 动画曲线（时间范围为整数，值范围为浮点数，对应 C++ TodAnimateCurveFloat）
 pub fn tod_animate_curve_float(
-    time_start: i32, time_end: i32, time_age: i32,
-    pos_start: f32, pos_end: f32, curve: TodCurves,
+    time_start: i32,
+    time_end: i32,
+    time_age: i32,
+    pos_start: f32,
+    pos_end: f32,
+    curve: TodCurves,
 ) -> f32 {
     // src/todlib/tod_common.rs 第 115-127 行
     // 改为：先计算 t，再 clamp
@@ -217,10 +245,21 @@ pub fn tod_animate_curve_float(
 
 /// 动画曲线（全整数版本，对应 C++ TodAnimateCurve）
 pub fn tod_animate_curve(
-    time_start: i32, time_end: i32, time_age: i32,
-    pos_start: i32, pos_end: i32, curve: TodCurves,
+    time_start: i32,
+    time_end: i32,
+    time_age: i32,
+    pos_start: i32,
+    pos_end: i32,
+    curve: TodCurves,
 ) -> i32 {
-    tod_animate_curve_float(time_start, time_end, time_age, pos_start as f32, pos_end as f32, curve) as i32
+    tod_animate_curve_float(
+        time_start,
+        time_end,
+        time_age,
+        pos_start as f32,
+        pos_end as f32,
+        curve,
+    ) as i32
 }
 
 /// 字符串列表查找（对应 C++ PvzpStringListFind，PvzpStringFile.cpp:162）
@@ -278,8 +317,12 @@ pub fn tod_draw_string(
 
 /// 动画曲线（全浮点时间版本，对应 C++ TodAnimateCurveFloatTime）
 pub fn tod_animate_curve_float_time(
-    time_start: f32, time_end: f32, time_age: f32,
-    pos_start: f32, pos_end: f32, curve: TodCurves,
+    time_start: f32,
+    time_end: f32,
+    time_age: f32,
+    pos_start: f32,
+    pos_end: f32,
+    curve: TodCurves,
 ) -> f32 {
     if (time_end - time_start).abs() < 0.0001 {
         return pos_start;
@@ -301,9 +344,9 @@ fn tod_calc_smooth_weight(weight: f32, last_picked: f32, second_last_picked: f32
         return 0.0;
     }
 
-    let expected_length1 = 1.0 / weight;                          // last_picked 的期望值
-    let expected_length2 = expected_length1 * 2.0;                 // second_last_picked 的期望值
-    let advanced_length1 = last_picked + 1.0 - expected_length1;   // 相较于期望值的提前轮数
+    let expected_length1 = 1.0 / weight; // last_picked 的期望值
+    let expected_length2 = expected_length1 * 2.0; // second_last_picked 的期望值
+    let advanced_length1 = last_picked + 1.0 - expected_length1; // 相较于期望值的提前轮数
     let advanced_length2 = second_last_picked + 1.0 - expected_length2;
     let factor1 = 1.0 + advanced_length1 / expected_length1 * 2.0;
     let factor2 = 1.0 + advanced_length2 / expected_length2 * 2.0;
@@ -326,9 +369,16 @@ pub fn tod_pick_from_smooth_array(arr: &mut [TodSmoothArray]) -> i32 {
     let normalize_factor = 1.0 / total_weight;
 
     // 计算调整后的总权重
-    let total_adjusted_weight: f32 = arr.iter().map(|a| {
-        tod_calc_smooth_weight(a.weight * normalize_factor, a.last_picked, a.second_last_picked)
-    }).sum();
+    let total_adjusted_weight: f32 = arr
+        .iter()
+        .map(|a| {
+            tod_calc_smooth_weight(
+                a.weight * normalize_factor,
+                a.last_picked,
+                a.second_last_picked,
+            )
+        })
+        .sum();
     debug_assert!(total_adjusted_weight > 0.0);
 
     // 随机选择
@@ -339,7 +389,11 @@ pub fn tod_pick_from_smooth_array(arr: &mut [TodSmoothArray]) -> i32 {
         if i == count - 1 {
             break;
         }
-        accumulated_weight += tod_calc_smooth_weight(a.weight * normalize_factor, a.last_picked, a.second_last_picked);
+        accumulated_weight += tod_calc_smooth_weight(
+            a.weight * normalize_factor,
+            a.last_picked,
+            a.second_last_picked,
+        );
         if rand_weight <= accumulated_weight {
             pick_idx = i;
             break;
@@ -370,7 +424,10 @@ pub fn tod_pick_from_weighted_array(arr: &[TodWeightedArray]) -> isize {
 
 /// 从加权网格数组中随机选择一个项目（对应 C++ TodPickFromWeightedGridArray）
 /// 返回被选中项目的索引，并将其权重清零。失败返回 None。
-pub fn tod_pick_from_weighted_grid_array(arr: &mut [TodWeightedGridArray], count: usize) -> Option<usize> {
+pub fn tod_pick_from_weighted_grid_array(
+    arr: &mut [TodWeightedGridArray],
+    count: usize,
+) -> Option<usize> {
     if count == 0 {
         return None;
     }
@@ -394,7 +451,9 @@ pub fn tod_pick_from_weighted_grid_array(arr: &mut [TodWeightedGridArray], count
 }
 
 /// 从加权数组中随机选择一个项目并返回其引用（对应 C++ TodPickArrayItemFromWeightedArray）
-pub fn tod_pick_array_item_from_weighted_array(arr: &[TodWeightedArray]) -> Option<&TodWeightedArray> {
+pub fn tod_pick_array_item_from_weighted_array(
+    arr: &[TodWeightedArray],
+) -> Option<&TodWeightedArray> {
     let count = arr.len();
     if count == 0 {
         return None;
@@ -412,7 +471,10 @@ pub fn tod_pick_array_item_from_weighted_array(arr: &[TodWeightedArray]) -> Opti
         }
     }
 
-    debug_assert!(false, "TodPickArrayItemFromWeightedArray: should not reach here");
+    debug_assert!(
+        false,
+        "TodPickArrayItemFromWeightedArray: should not reach here"
+    );
     None
 }
 
@@ -453,18 +515,34 @@ pub fn rgb_to_hsl(r: f32, g: f32, b: f32) -> (f32, f32, f32) {
     if s <= 0.0 {
         return (0.0, 0.0, l);
     }
-    s /= if l <= 0.5 { minval + maxval } else { 2.0 - minval - maxval };
+    s /= if l <= 0.5 {
+        minval + maxval
+    } else {
+        2.0 - minval - maxval
+    };
 
     let r2 = (maxval - r) / delta;
     let g2 = (maxval - g) / delta;
     let b2 = (maxval - b) / delta;
 
     let h = if maxval == r {
-        if g == minval { 5.0 + b2 } else { 1.0 - g2 }
+        if g == minval {
+            5.0 + b2
+        } else {
+            1.0 - g2
+        }
     } else if maxval == g {
-        if b == minval { 1.0 + r2 } else { 3.0 - b2 }
+        if b == minval {
+            1.0 + r2
+        } else {
+            3.0 - b2
+        }
     } else {
-        if r == minval { 3.0 + g2 } else { 5.0 - r2 }
+        if r == minval {
+            3.0 + g2
+        } else {
+            5.0 - r2
+        }
     } / 6.0;
 
     (h, s, l)

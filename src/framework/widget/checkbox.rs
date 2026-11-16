@@ -4,9 +4,9 @@
 #![allow(dead_code)]
 
 use crate::framework::color::Color;
-use crate::framework::rect::Rect;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
+use crate::framework::rect::Rect;
 use crate::framework::widget::insets::Insets;
 use crate::framework::widget::widget_manager::WidgetManager;
 
@@ -17,11 +17,18 @@ pub trait CheckboxListener {
 
 /// 复选框控件（对应 C++ Checkbox）
 pub struct Checkbox {
-    pub x: i32, pub y: i32, pub width: i32, pub height: i32,
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
     pub widget_manager: Option<*mut WidgetManager>,
-    pub visible: bool, pub disabled: bool,
-    pub has_focus: bool, pub is_down: bool, pub is_over: bool,
-    pub has_alpha: bool, pub has_transparencies: bool,
+    pub visible: bool,
+    pub disabled: bool,
+    pub has_focus: bool,
+    pub is_down: bool,
+    pub is_over: bool,
+    pub has_alpha: bool,
+    pub has_transparencies: bool,
     pub colors: Vec<Color>,
     pub mouse_insets: Insets,
     pub do_finger: bool,
@@ -41,15 +48,24 @@ pub struct Checkbox {
 
 impl Checkbox {
     pub fn new(
-        unchecked_img: *mut Image, checked_img: *mut Image,
-        the_id: i32, the_listener: Option<Box<dyn CheckboxListener>>,
+        unchecked_img: *mut Image,
+        checked_img: *mut Image,
+        the_id: i32,
+        the_listener: Option<Box<dyn CheckboxListener>>,
     ) -> Self {
         Checkbox {
-            x: 0, y: 0, width: 0, height: 0,
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
             widget_manager: None,
-            visible: true, disabled: false,
-            has_focus: false, is_down: false, is_over: false,
-            has_alpha: true, has_transparencies: false,
+            visible: true,
+            disabled: false,
+            has_focus: false,
+            is_down: false,
+            is_over: false,
+            has_alpha: true,
+            has_transparencies: false,
             colors: Vec::new(),
             mouse_insets: Insets::new(0, 0, 0, 0),
             do_finger: true,
@@ -79,23 +95,36 @@ impl Checkbox {
     }
 
     /// 是否选中（对应 C++ IsChecked）
-    pub fn is_checked(&self) -> bool { self.checked }
+    pub fn is_checked(&self) -> bool {
+        self.checked
+    }
 
     /// 绘制（对应 C++ Draw）
     pub fn draw(&self, g: &mut Graphics) {
-        if self.checked_rect.width == 0 && !self.checked_image.is_null() && !self.unchecked_image.is_null() {
+        if self.checked_rect.width == 0
+            && !self.checked_image.is_null()
+            && !self.unchecked_image.is_null()
+        {
             // 直接绘制整张图片
             if self.checked {
-                unsafe { g.draw_image_xy(&*self.checked_image, 0, 0); }
+                unsafe {
+                    g.draw_image_xy(&*self.checked_image, 0, 0);
+                }
             } else {
-                unsafe { g.draw_image_xy(&*self.unchecked_image, 0, 0); }
+                unsafe {
+                    g.draw_image_xy(&*self.unchecked_image, 0, 0);
+                }
             }
         } else if self.checked_rect.width != 0 && !self.unchecked_image.is_null() {
             // 从图集中截取对应矩形
             if self.checked {
-                unsafe { g.draw_image_src(&*self.unchecked_image, 0, 0, &self.checked_rect); }
+                unsafe {
+                    g.draw_image_src(&*self.unchecked_image, 0, 0, &self.checked_rect);
+                }
             } else {
-                unsafe { g.draw_image_src(&*self.unchecked_image, 0, 0, &self.unchecked_rect); }
+                unsafe {
+                    g.draw_image_src(&*self.unchecked_image, 0, 0, &self.unchecked_rect);
+                }
             }
         } else if self.unchecked_image.is_null() && self.checked_image.is_null() {
             // 无图片：用颜色绘制

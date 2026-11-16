@@ -3,17 +3,17 @@
 
 #![allow(dead_code)]
 
-use crate::framework::widget::widget::{Widget, WidgetImpl};
+use crate::framework::color::Color;
 use crate::framework::graphics::graphics::Graphics;
-use crate::lawn::system::music::MusicTune;
-use crate::todlib::tod_foley::FoleyType;
-use crate::framework::widget::widget_manager::WidgetManager;
 use crate::framework::key_codes::KeyCode;
 use crate::framework::widget::dialog_button::DialogButton;
-use crate::framework::color::Color;
+use crate::framework::widget::widget::{Widget, WidgetImpl};
+use crate::framework::widget::widget_manager::WidgetManager;
 use crate::lawn::game_enums::*;
+use crate::lawn::system::music::MusicTune;
 use crate::lawn::widget::game_button::GameButton;
 use crate::todlib::reanimator::Reanimation;
+use crate::todlib::tod_foley::FoleyType;
 
 /// 制作人员阶段（对应 C++ CreditsPhase）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,274 +62,1614 @@ pub struct CreditsTiming {
 }
 
 pub static CREDITS_TIMING: [CreditsTiming; 268] = [
-    CreditsTiming { frame: 128.5, word_type: CreditWordType::Aw, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 133.0, word_type: CreditWordType::Oh, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 136.5, word_type: CreditWordType::Ee, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 140.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 141.0, word_type: CreditWordType::Aw, word_x: 214, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 143.0, word_type: CreditWordType::Aw, word_x: 297, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 145.0, word_type: CreditWordType::Aw, word_x: 348, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 149.0, word_type: CreditWordType::Ee, word_x: 400, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 153.0, word_type: CreditWordType::Aw, word_x: 455, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 155.0, word_type: CreditWordType::Oh, word_x: 523, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 159.0, word_type: CreditWordType::Aw, word_x: 593, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 163.0, word_type: CreditWordType::Aw, word_x: 619, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 171.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FlyOff },
-    CreditsTiming { frame: 172.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 173.0, word_type: CreditWordType::Aw, word_x: 214, brain_type: CreditBrainType::FastOn },
-    CreditsTiming { frame: 175.0, word_type: CreditWordType::Aw, word_x: 297, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 177.0, word_type: CreditWordType::Aw, word_x: 348, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 181.0, word_type: CreditWordType::Ee, word_x: 400, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 185.0, word_type: CreditWordType::Aw, word_x: 455, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 187.0, word_type: CreditWordType::Oh, word_x: 523, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 191.0, word_type: CreditWordType::Aw, word_x: 593, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 193.0, word_type: CreditWordType::Aw, word_x: 619, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 199.0, word_type: CreditWordType::Aa, word_x: 0, brain_type: CreditBrainType::FlyOff },
-    CreditsTiming { frame: 203.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 205.0, word_type: CreditWordType::Aw, word_x: 214, brain_type: CreditBrainType::FlyOn },
-    CreditsTiming { frame: 207.0, word_type: CreditWordType::Aw, word_x: 297, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 209.0, word_type: CreditWordType::Aw, word_x: 348, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 213.0, word_type: CreditWordType::Ee, word_x: 400, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 217.0, word_type: CreditWordType::Aw, word_x: 455, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 219.0, word_type: CreditWordType::Oh, word_x: 523, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 223.0, word_type: CreditWordType::Aw, word_x: 593, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 227.0, word_type: CreditWordType::Aw, word_x: 619, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 231.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FlyOff },
-    CreditsTiming { frame: 234.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 235.0, word_type: CreditWordType::Ee, word_x: 150, brain_type: CreditBrainType::FastOn },
-    CreditsTiming { frame: 237.0, word_type: CreditWordType::Oh, word_x: 220, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 239.0, word_type: CreditWordType::Aw, word_x: 307, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 241.0, word_type: CreditWordType::Aw, word_x: 390, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 245.0, word_type: CreditWordType::Ee, word_x: 452, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 249.0, word_type: CreditWordType::Aw, word_x: 512, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 251.0, word_type: CreditWordType::Aw, word_x: 573, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 255.0, word_type: CreditWordType::Aw, word_x: 630, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 257.0, word_type: CreditWordType::Aw, word_x: 656, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 261.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FlyOff },
-    CreditsTiming { frame: 262.0, word_type: CreditWordType::Aa, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 266.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 266.5, word_type: CreditWordType::Aw, word_x: 96, brain_type: CreditBrainType::FastOn },
-    CreditsTiming { frame: 268.5, word_type: CreditWordType::Oh, word_x: 154, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 270.5, word_type: CreditWordType::Oh, word_x: 244, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 272.5, word_type: CreditWordType::Aw, word_x: 329, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 276.5, word_type: CreditWordType::Aw, word_x: 419, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 279.5, word_type: CreditWordType::Aw, word_x: 506, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 281.5, word_type: CreditWordType::Aw, word_x: 597, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 284.5, word_type: CreditWordType::Aw, word_x: 671, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 286.5, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FlyOff },
-    CreditsTiming { frame: 287.0, word_type: CreditWordType::Oh, word_x: 48, brain_type: CreditBrainType::FastOn },
-    CreditsTiming { frame: 288.0, word_type: CreditWordType::Aw, word_x: 125, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 290.0, word_type: CreditWordType::Oh, word_x: 193, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 291.0, word_type: CreditWordType::Ee, word_x: 254, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 294.5, word_type: CreditWordType::Aw, word_x: 318, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 295.0, word_type: CreditWordType::Aw, word_x: 375, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 296.0, word_type: CreditWordType::Aw, word_x: 438, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 297.0, word_type: CreditWordType::Aw, word_x: 480, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 299.0, word_type: CreditWordType::Aw, word_x: 556, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 301.0, word_type: CreditWordType::Aw, word_x: 619, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 303.0, word_type: CreditWordType::Aw, word_x: 675, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 305.0, word_type: CreditWordType::Aw, word_x: 744, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 307.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FlyOff },
-    CreditsTiming { frame: 309.5, word_type: CreditWordType::Off, word_x: 207, brain_type: CreditBrainType::FlyOn },
-    CreditsTiming { frame: 310.5, word_type: CreditWordType::Off, word_x: 287, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 311.5, word_type: CreditWordType::Off, word_x: 365, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 313.5, word_type: CreditWordType::Off, word_x: 435, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 315.5, word_type: CreditWordType::Off, word_x: 518, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 317.5, word_type: CreditWordType::Off, word_x: 603, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 318.5, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FastOff },
-    CreditsTiming { frame: 319.5, word_type: CreditWordType::Off, word_x: 198, brain_type: CreditBrainType::FastOn },
-    CreditsTiming { frame: 320.5, word_type: CreditWordType::Off, word_x: 264, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 322.5, word_type: CreditWordType::Off, word_x: 335, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 323.5, word_type: CreditWordType::Off, word_x: 411, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 324.5, word_type: CreditWordType::Off, word_x: 474, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 326.5, word_type: CreditWordType::Off, word_x: 527, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 328.5, word_type: CreditWordType::Off, word_x: 595, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 332.5, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FlyOff },
-    CreditsTiming { frame: 337.5, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 339.5, word_type: CreditWordType::Aw, word_x: 190, brain_type: CreditBrainType::FlyOn },
-    CreditsTiming { frame: 340.5, word_type: CreditWordType::Aw, word_x: 260, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 342.5, word_type: CreditWordType::Aa, word_x: 314, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 344.5, word_type: CreditWordType::Aw, word_x: 364, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 347.5, word_type: CreditWordType::Aw, word_x: 426, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 349.5, word_type: CreditWordType::Oh, word_x: 474, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 350.5, word_type: CreditWordType::Aw, word_x: 538, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 352.5, word_type: CreditWordType::Ee, word_x: 606, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 353.5, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FastOff },
-    CreditsTiming { frame: 354.5, word_type: CreditWordType::Ee, word_x: 187, brain_type: CreditBrainType::FastOn },
-    CreditsTiming { frame: 356.5, word_type: CreditWordType::Aw, word_x: 242, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 358.5, word_type: CreditWordType::Oh, word_x: 280, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 359.5, word_type: CreditWordType::Aw, word_x: 340, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 360.5, word_type: CreditWordType::Aw, word_x: 394, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 361.5, word_type: CreditWordType::Ee, word_x: 439, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 363.5, word_type: CreditWordType::Aw, word_x: 500, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 364.5, word_type: CreditWordType::Aw, word_x: 550, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 366.5, word_type: CreditWordType::Ee, word_x: 606, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 369.5, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FlyOff },
-    CreditsTiming { frame: 371.5, word_type: CreditWordType::Off, word_x: 200, brain_type: CreditBrainType::FlyOn },
-    CreditsTiming { frame: 372.5, word_type: CreditWordType::Oh, word_x: 258, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 374.5, word_type: CreditWordType::Off, word_x: 332, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 376.5, word_type: CreditWordType::Off, word_x: 416, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 378.5, word_type: CreditWordType::Off, word_x: 494, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 380.5, word_type: CreditWordType::Off, word_x: 576, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 381.5, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FastOff },
-    CreditsTiming { frame: 382.5, word_type: CreditWordType::Off, word_x: 255, brain_type: CreditBrainType::FastOn },
-    CreditsTiming { frame: 384.5, word_type: CreditWordType::Off, word_x: 322, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 386.5, word_type: CreditWordType::Off, word_x: 400, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 388.5, word_type: CreditWordType::Off, word_x: 474, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 390.5, word_type: CreditWordType::Off, word_x: 533, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 394.5, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FlyOff },
-    CreditsTiming { frame: 522.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 523.0, word_type: CreditWordType::Aw, word_x: 214, brain_type: CreditBrainType::FastOn },
-    CreditsTiming { frame: 525.0, word_type: CreditWordType::Aw, word_x: 297, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 527.0, word_type: CreditWordType::Aw, word_x: 348, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 531.0, word_type: CreditWordType::Ee, word_x: 400, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 535.0, word_type: CreditWordType::Aw, word_x: 455, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 537.0, word_type: CreditWordType::Oh, word_x: 523, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 541.0, word_type: CreditWordType::Aw, word_x: 593, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 545.0, word_type: CreditWordType::Aw, word_x: 619, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 549.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FlyOff },
-    CreditsTiming { frame: 554.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 555.0, word_type: CreditWordType::Aw, word_x: 214, brain_type: CreditBrainType::FastOn },
-    CreditsTiming { frame: 557.0, word_type: CreditWordType::Aw, word_x: 297, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 559.0, word_type: CreditWordType::Aw, word_x: 348, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 563.0, word_type: CreditWordType::Ee, word_x: 400, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 567.0, word_type: CreditWordType::Aw, word_x: 455, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 569.0, word_type: CreditWordType::Oh, word_x: 523, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 573.0, word_type: CreditWordType::Aw, word_x: 593, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 575.0, word_type: CreditWordType::Aw, word_x: 619, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 581.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FlyOff },
-    CreditsTiming { frame: 582.0, word_type: CreditWordType::Aa, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 586.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 587.0, word_type: CreditWordType::Aw, word_x: 214, brain_type: CreditBrainType::FastOn },
-    CreditsTiming { frame: 589.0, word_type: CreditWordType::Aw, word_x: 297, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 591.0, word_type: CreditWordType::Aw, word_x: 348, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 595.0, word_type: CreditWordType::Ee, word_x: 400, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 599.0, word_type: CreditWordType::Aw, word_x: 455, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 601.0, word_type: CreditWordType::Oh, word_x: 523, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 605.0, word_type: CreditWordType::Aw, word_x: 593, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 609.0, word_type: CreditWordType::Aw, word_x: 619, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 613.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FlyOff },
-    CreditsTiming { frame: 616.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 617.0, word_type: CreditWordType::Ee, word_x: 150, brain_type: CreditBrainType::FastOn },
-    CreditsTiming { frame: 619.0, word_type: CreditWordType::Oh, word_x: 220, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 621.0, word_type: CreditWordType::Aw, word_x: 307, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 623.0, word_type: CreditWordType::Aw, word_x: 390, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 627.0, word_type: CreditWordType::Ee, word_x: 452, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 631.0, word_type: CreditWordType::Aw, word_x: 512, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 633.0, word_type: CreditWordType::Aw, word_x: 573, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 637.0, word_type: CreditWordType::Aw, word_x: 630, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 639.0, word_type: CreditWordType::Aw, word_x: 656, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 643.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FlyOff },
-    CreditsTiming { frame: 644.0, word_type: CreditWordType::Aa, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 648.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 649.0, word_type: CreditWordType::Aa, word_x: 196, brain_type: CreditBrainType::FastOn },
-    CreditsTiming { frame: 651.0, word_type: CreditWordType::Ee, word_x: 247, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 653.0, word_type: CreditWordType::Aw, word_x: 299, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 655.0, word_type: CreditWordType::Aw, word_x: 371, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 658.0, word_type: CreditWordType::Oh, word_x: 443, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 659.0, word_type: CreditWordType::Ee, word_x: 475, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 661.0, word_type: CreditWordType::Aw, word_x: 512, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 662.0, word_type: CreditWordType::Aa, word_x: 544, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 664.0, word_type: CreditWordType::Oh, word_x: 573, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 667.0, word_type: CreditWordType::Aa, word_x: 610, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 669.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FastOff },
-    CreditsTiming { frame: 670.0, word_type: CreditWordType::Off, word_x: 48, brain_type: CreditBrainType::FastOn },
-    CreditsTiming { frame: 671.0, word_type: CreditWordType::Off, word_x: 110, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 673.0, word_type: CreditWordType::Off, word_x: 185, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 674.0, word_type: CreditWordType::Off, word_x: 262, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 676.0, word_type: CreditWordType::Off, word_x: 317, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 677.0, word_type: CreditWordType::Off, word_x: 357, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 678.0, word_type: CreditWordType::Off, word_x: 417, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 679.0, word_type: CreditWordType::Off, word_x: 491, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 682.0, word_type: CreditWordType::Off, word_x: 558, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 685.0, word_type: CreditWordType::Off, word_x: 628, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 687.0, word_type: CreditWordType::Off, word_x: 720, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 689.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FlyOff },
-    CreditsTiming { frame: 690.0, word_type: CreditWordType::Off, word_x: 172, brain_type: CreditBrainType::FastOn },
-    CreditsTiming { frame: 692.0, word_type: CreditWordType::Off, word_x: 263, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 694.0, word_type: CreditWordType::Off, word_x: 346, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 696.0, word_type: CreditWordType::Off, word_x: 423, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 698.0, word_type: CreditWordType::Off, word_x: 480, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 700.0, word_type: CreditWordType::Off, word_x: 536, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 702.0, word_type: CreditWordType::Off, word_x: 583, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 705.0, word_type: CreditWordType::Off, word_x: 633, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 708.0, word_type: CreditWordType::Off, word_x: 668, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 712.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FlyOff },
-    CreditsTiming { frame: 719.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 720.0, word_type: CreditWordType::Off, word_x: 182, brain_type: CreditBrainType::FastOn },
-    CreditsTiming { frame: 722.0, word_type: CreditWordType::Off, word_x: 267, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 724.0, word_type: CreditWordType::Off, word_x: 331, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 726.0, word_type: CreditWordType::Off, word_x: 371, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 729.0, word_type: CreditWordType::Off, word_x: 434, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 731.0, word_type: CreditWordType::Off, word_x: 486, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 732.0, word_type: CreditWordType::Off, word_x: 562, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 734.0, word_type: CreditWordType::Off, word_x: 617, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 735.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FastOff },
-    CreditsTiming { frame: 736.0, word_type: CreditWordType::Aw, word_x: 148, brain_type: CreditBrainType::FastOn },
-    CreditsTiming { frame: 738.0, word_type: CreditWordType::Aw, word_x: 211, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 740.0, word_type: CreditWordType::Ee, word_x: 298, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 742.0, word_type: CreditWordType::Oh, word_x: 367, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 744.0, word_type: CreditWordType::Aw, word_x: 440, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 746.0, word_type: CreditWordType::Oh, word_x: 506, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 747.0, word_type: CreditWordType::Aw, word_x: 533, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 748.0, word_type: CreditWordType::Aw, word_x: 601, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 749.0, word_type: CreditWordType::Aw, word_x: 645, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 750.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FastOff },
-    CreditsTiming { frame: 753.0, word_type: CreditWordType::Off, word_x: 123, brain_type: CreditBrainType::FlyOn },
-    CreditsTiming { frame: 755.0, word_type: CreditWordType::Off, word_x: 195, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 757.0, word_type: CreditWordType::Off, word_x: 255, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 759.0, word_type: CreditWordType::Off, word_x: 312, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 761.0, word_type: CreditWordType::Off, word_x: 378, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 763.0, word_type: CreditWordType::Off, word_x: 443, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 765.0, word_type: CreditWordType::Off, word_x: 516, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 767.0, word_type: CreditWordType::Off, word_x: 563, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 770.0, word_type: CreditWordType::Off, word_x: 588, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 773.0, word_type: CreditWordType::Off, word_x: 657, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 777.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FlyOff },
-    CreditsTiming { frame: 907.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 908.0, word_type: CreditWordType::Aw, word_x: 214, brain_type: CreditBrainType::FastOn },
-    CreditsTiming { frame: 910.0, word_type: CreditWordType::Aw, word_x: 297, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 912.0, word_type: CreditWordType::Aw, word_x: 348, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 916.0, word_type: CreditWordType::Ee, word_x: 400, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 920.0, word_type: CreditWordType::Aw, word_x: 455, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 922.0, word_type: CreditWordType::Oh, word_x: 523, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 926.0, word_type: CreditWordType::Aw, word_x: 593, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 930.0, word_type: CreditWordType::Aw, word_x: 616, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 934.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FlyOff },
-    CreditsTiming { frame: 939.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 940.0, word_type: CreditWordType::Aw, word_x: 214, brain_type: CreditBrainType::FastOn },
-    CreditsTiming { frame: 942.0, word_type: CreditWordType::Aw, word_x: 297, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 944.0, word_type: CreditWordType::Aw, word_x: 348, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 948.0, word_type: CreditWordType::Ee, word_x: 400, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 952.0, word_type: CreditWordType::Aw, word_x: 455, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 954.0, word_type: CreditWordType::Oh, word_x: 523, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 958.0, word_type: CreditWordType::Aw, word_x: 593, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 960.0, word_type: CreditWordType::Aw, word_x: 616, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 966.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FlyOff },
-    CreditsTiming { frame: 967.0, word_type: CreditWordType::Aa, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 971.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 972.0, word_type: CreditWordType::Aw, word_x: 214, brain_type: CreditBrainType::FastOn },
-    CreditsTiming { frame: 974.0, word_type: CreditWordType::Aw, word_x: 297, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 976.0, word_type: CreditWordType::Aw, word_x: 348, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 980.0, word_type: CreditWordType::Ee, word_x: 400, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 984.0, word_type: CreditWordType::Aw, word_x: 455, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 986.0, word_type: CreditWordType::Oh, word_x: 523, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 990.0, word_type: CreditWordType::Aw, word_x: 593, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 994.0, word_type: CreditWordType::Aw, word_x: 616, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 998.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FlyOff },
-    CreditsTiming { frame: 1001.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 1002.0, word_type: CreditWordType::Ee, word_x: 150, brain_type: CreditBrainType::FastOn },
-    CreditsTiming { frame: 1004.0, word_type: CreditWordType::Oh, word_x: 220, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 1006.0, word_type: CreditWordType::Aw, word_x: 307, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 1008.0, word_type: CreditWordType::Aw, word_x: 390, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 1012.0, word_type: CreditWordType::Ee, word_x: 452, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 1016.0, word_type: CreditWordType::Aw, word_x: 512, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 1018.0, word_type: CreditWordType::Aw, word_x: 573, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 1022.0, word_type: CreditWordType::Aw, word_x: 630, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 1024.0, word_type: CreditWordType::Aw, word_x: 656, brain_type: CreditBrainType::NextWord },
-    CreditsTiming { frame: 1028.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::FlyOff },
-    CreditsTiming { frame: 1029.0, word_type: CreditWordType::Aa, word_x: 0, brain_type: CreditBrainType::Off },
-    CreditsTiming { frame: 1033.0, word_type: CreditWordType::Off, word_x: 0, brain_type: CreditBrainType::Off },
+    CreditsTiming {
+        frame: 128.5,
+        word_type: CreditWordType::Aw,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 133.0,
+        word_type: CreditWordType::Oh,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 136.5,
+        word_type: CreditWordType::Ee,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 140.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 141.0,
+        word_type: CreditWordType::Aw,
+        word_x: 214,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 143.0,
+        word_type: CreditWordType::Aw,
+        word_x: 297,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 145.0,
+        word_type: CreditWordType::Aw,
+        word_x: 348,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 149.0,
+        word_type: CreditWordType::Ee,
+        word_x: 400,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 153.0,
+        word_type: CreditWordType::Aw,
+        word_x: 455,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 155.0,
+        word_type: CreditWordType::Oh,
+        word_x: 523,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 159.0,
+        word_type: CreditWordType::Aw,
+        word_x: 593,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 163.0,
+        word_type: CreditWordType::Aw,
+        word_x: 619,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 171.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FlyOff,
+    },
+    CreditsTiming {
+        frame: 172.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 173.0,
+        word_type: CreditWordType::Aw,
+        word_x: 214,
+        brain_type: CreditBrainType::FastOn,
+    },
+    CreditsTiming {
+        frame: 175.0,
+        word_type: CreditWordType::Aw,
+        word_x: 297,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 177.0,
+        word_type: CreditWordType::Aw,
+        word_x: 348,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 181.0,
+        word_type: CreditWordType::Ee,
+        word_x: 400,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 185.0,
+        word_type: CreditWordType::Aw,
+        word_x: 455,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 187.0,
+        word_type: CreditWordType::Oh,
+        word_x: 523,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 191.0,
+        word_type: CreditWordType::Aw,
+        word_x: 593,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 193.0,
+        word_type: CreditWordType::Aw,
+        word_x: 619,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 199.0,
+        word_type: CreditWordType::Aa,
+        word_x: 0,
+        brain_type: CreditBrainType::FlyOff,
+    },
+    CreditsTiming {
+        frame: 203.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 205.0,
+        word_type: CreditWordType::Aw,
+        word_x: 214,
+        brain_type: CreditBrainType::FlyOn,
+    },
+    CreditsTiming {
+        frame: 207.0,
+        word_type: CreditWordType::Aw,
+        word_x: 297,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 209.0,
+        word_type: CreditWordType::Aw,
+        word_x: 348,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 213.0,
+        word_type: CreditWordType::Ee,
+        word_x: 400,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 217.0,
+        word_type: CreditWordType::Aw,
+        word_x: 455,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 219.0,
+        word_type: CreditWordType::Oh,
+        word_x: 523,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 223.0,
+        word_type: CreditWordType::Aw,
+        word_x: 593,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 227.0,
+        word_type: CreditWordType::Aw,
+        word_x: 619,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 231.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FlyOff,
+    },
+    CreditsTiming {
+        frame: 234.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 235.0,
+        word_type: CreditWordType::Ee,
+        word_x: 150,
+        brain_type: CreditBrainType::FastOn,
+    },
+    CreditsTiming {
+        frame: 237.0,
+        word_type: CreditWordType::Oh,
+        word_x: 220,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 239.0,
+        word_type: CreditWordType::Aw,
+        word_x: 307,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 241.0,
+        word_type: CreditWordType::Aw,
+        word_x: 390,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 245.0,
+        word_type: CreditWordType::Ee,
+        word_x: 452,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 249.0,
+        word_type: CreditWordType::Aw,
+        word_x: 512,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 251.0,
+        word_type: CreditWordType::Aw,
+        word_x: 573,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 255.0,
+        word_type: CreditWordType::Aw,
+        word_x: 630,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 257.0,
+        word_type: CreditWordType::Aw,
+        word_x: 656,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 261.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FlyOff,
+    },
+    CreditsTiming {
+        frame: 262.0,
+        word_type: CreditWordType::Aa,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 266.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 266.5,
+        word_type: CreditWordType::Aw,
+        word_x: 96,
+        brain_type: CreditBrainType::FastOn,
+    },
+    CreditsTiming {
+        frame: 268.5,
+        word_type: CreditWordType::Oh,
+        word_x: 154,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 270.5,
+        word_type: CreditWordType::Oh,
+        word_x: 244,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 272.5,
+        word_type: CreditWordType::Aw,
+        word_x: 329,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 276.5,
+        word_type: CreditWordType::Aw,
+        word_x: 419,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 279.5,
+        word_type: CreditWordType::Aw,
+        word_x: 506,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 281.5,
+        word_type: CreditWordType::Aw,
+        word_x: 597,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 284.5,
+        word_type: CreditWordType::Aw,
+        word_x: 671,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 286.5,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FlyOff,
+    },
+    CreditsTiming {
+        frame: 287.0,
+        word_type: CreditWordType::Oh,
+        word_x: 48,
+        brain_type: CreditBrainType::FastOn,
+    },
+    CreditsTiming {
+        frame: 288.0,
+        word_type: CreditWordType::Aw,
+        word_x: 125,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 290.0,
+        word_type: CreditWordType::Oh,
+        word_x: 193,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 291.0,
+        word_type: CreditWordType::Ee,
+        word_x: 254,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 294.5,
+        word_type: CreditWordType::Aw,
+        word_x: 318,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 295.0,
+        word_type: CreditWordType::Aw,
+        word_x: 375,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 296.0,
+        word_type: CreditWordType::Aw,
+        word_x: 438,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 297.0,
+        word_type: CreditWordType::Aw,
+        word_x: 480,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 299.0,
+        word_type: CreditWordType::Aw,
+        word_x: 556,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 301.0,
+        word_type: CreditWordType::Aw,
+        word_x: 619,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 303.0,
+        word_type: CreditWordType::Aw,
+        word_x: 675,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 305.0,
+        word_type: CreditWordType::Aw,
+        word_x: 744,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 307.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FlyOff,
+    },
+    CreditsTiming {
+        frame: 309.5,
+        word_type: CreditWordType::Off,
+        word_x: 207,
+        brain_type: CreditBrainType::FlyOn,
+    },
+    CreditsTiming {
+        frame: 310.5,
+        word_type: CreditWordType::Off,
+        word_x: 287,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 311.5,
+        word_type: CreditWordType::Off,
+        word_x: 365,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 313.5,
+        word_type: CreditWordType::Off,
+        word_x: 435,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 315.5,
+        word_type: CreditWordType::Off,
+        word_x: 518,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 317.5,
+        word_type: CreditWordType::Off,
+        word_x: 603,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 318.5,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FastOff,
+    },
+    CreditsTiming {
+        frame: 319.5,
+        word_type: CreditWordType::Off,
+        word_x: 198,
+        brain_type: CreditBrainType::FastOn,
+    },
+    CreditsTiming {
+        frame: 320.5,
+        word_type: CreditWordType::Off,
+        word_x: 264,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 322.5,
+        word_type: CreditWordType::Off,
+        word_x: 335,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 323.5,
+        word_type: CreditWordType::Off,
+        word_x: 411,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 324.5,
+        word_type: CreditWordType::Off,
+        word_x: 474,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 326.5,
+        word_type: CreditWordType::Off,
+        word_x: 527,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 328.5,
+        word_type: CreditWordType::Off,
+        word_x: 595,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 332.5,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FlyOff,
+    },
+    CreditsTiming {
+        frame: 337.5,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 339.5,
+        word_type: CreditWordType::Aw,
+        word_x: 190,
+        brain_type: CreditBrainType::FlyOn,
+    },
+    CreditsTiming {
+        frame: 340.5,
+        word_type: CreditWordType::Aw,
+        word_x: 260,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 342.5,
+        word_type: CreditWordType::Aa,
+        word_x: 314,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 344.5,
+        word_type: CreditWordType::Aw,
+        word_x: 364,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 347.5,
+        word_type: CreditWordType::Aw,
+        word_x: 426,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 349.5,
+        word_type: CreditWordType::Oh,
+        word_x: 474,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 350.5,
+        word_type: CreditWordType::Aw,
+        word_x: 538,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 352.5,
+        word_type: CreditWordType::Ee,
+        word_x: 606,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 353.5,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FastOff,
+    },
+    CreditsTiming {
+        frame: 354.5,
+        word_type: CreditWordType::Ee,
+        word_x: 187,
+        brain_type: CreditBrainType::FastOn,
+    },
+    CreditsTiming {
+        frame: 356.5,
+        word_type: CreditWordType::Aw,
+        word_x: 242,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 358.5,
+        word_type: CreditWordType::Oh,
+        word_x: 280,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 359.5,
+        word_type: CreditWordType::Aw,
+        word_x: 340,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 360.5,
+        word_type: CreditWordType::Aw,
+        word_x: 394,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 361.5,
+        word_type: CreditWordType::Ee,
+        word_x: 439,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 363.5,
+        word_type: CreditWordType::Aw,
+        word_x: 500,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 364.5,
+        word_type: CreditWordType::Aw,
+        word_x: 550,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 366.5,
+        word_type: CreditWordType::Ee,
+        word_x: 606,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 369.5,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FlyOff,
+    },
+    CreditsTiming {
+        frame: 371.5,
+        word_type: CreditWordType::Off,
+        word_x: 200,
+        brain_type: CreditBrainType::FlyOn,
+    },
+    CreditsTiming {
+        frame: 372.5,
+        word_type: CreditWordType::Oh,
+        word_x: 258,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 374.5,
+        word_type: CreditWordType::Off,
+        word_x: 332,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 376.5,
+        word_type: CreditWordType::Off,
+        word_x: 416,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 378.5,
+        word_type: CreditWordType::Off,
+        word_x: 494,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 380.5,
+        word_type: CreditWordType::Off,
+        word_x: 576,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 381.5,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FastOff,
+    },
+    CreditsTiming {
+        frame: 382.5,
+        word_type: CreditWordType::Off,
+        word_x: 255,
+        brain_type: CreditBrainType::FastOn,
+    },
+    CreditsTiming {
+        frame: 384.5,
+        word_type: CreditWordType::Off,
+        word_x: 322,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 386.5,
+        word_type: CreditWordType::Off,
+        word_x: 400,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 388.5,
+        word_type: CreditWordType::Off,
+        word_x: 474,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 390.5,
+        word_type: CreditWordType::Off,
+        word_x: 533,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 394.5,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FlyOff,
+    },
+    CreditsTiming {
+        frame: 522.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 523.0,
+        word_type: CreditWordType::Aw,
+        word_x: 214,
+        brain_type: CreditBrainType::FastOn,
+    },
+    CreditsTiming {
+        frame: 525.0,
+        word_type: CreditWordType::Aw,
+        word_x: 297,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 527.0,
+        word_type: CreditWordType::Aw,
+        word_x: 348,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 531.0,
+        word_type: CreditWordType::Ee,
+        word_x: 400,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 535.0,
+        word_type: CreditWordType::Aw,
+        word_x: 455,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 537.0,
+        word_type: CreditWordType::Oh,
+        word_x: 523,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 541.0,
+        word_type: CreditWordType::Aw,
+        word_x: 593,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 545.0,
+        word_type: CreditWordType::Aw,
+        word_x: 619,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 549.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FlyOff,
+    },
+    CreditsTiming {
+        frame: 554.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 555.0,
+        word_type: CreditWordType::Aw,
+        word_x: 214,
+        brain_type: CreditBrainType::FastOn,
+    },
+    CreditsTiming {
+        frame: 557.0,
+        word_type: CreditWordType::Aw,
+        word_x: 297,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 559.0,
+        word_type: CreditWordType::Aw,
+        word_x: 348,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 563.0,
+        word_type: CreditWordType::Ee,
+        word_x: 400,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 567.0,
+        word_type: CreditWordType::Aw,
+        word_x: 455,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 569.0,
+        word_type: CreditWordType::Oh,
+        word_x: 523,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 573.0,
+        word_type: CreditWordType::Aw,
+        word_x: 593,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 575.0,
+        word_type: CreditWordType::Aw,
+        word_x: 619,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 581.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FlyOff,
+    },
+    CreditsTiming {
+        frame: 582.0,
+        word_type: CreditWordType::Aa,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 586.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 587.0,
+        word_type: CreditWordType::Aw,
+        word_x: 214,
+        brain_type: CreditBrainType::FastOn,
+    },
+    CreditsTiming {
+        frame: 589.0,
+        word_type: CreditWordType::Aw,
+        word_x: 297,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 591.0,
+        word_type: CreditWordType::Aw,
+        word_x: 348,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 595.0,
+        word_type: CreditWordType::Ee,
+        word_x: 400,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 599.0,
+        word_type: CreditWordType::Aw,
+        word_x: 455,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 601.0,
+        word_type: CreditWordType::Oh,
+        word_x: 523,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 605.0,
+        word_type: CreditWordType::Aw,
+        word_x: 593,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 609.0,
+        word_type: CreditWordType::Aw,
+        word_x: 619,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 613.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FlyOff,
+    },
+    CreditsTiming {
+        frame: 616.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 617.0,
+        word_type: CreditWordType::Ee,
+        word_x: 150,
+        brain_type: CreditBrainType::FastOn,
+    },
+    CreditsTiming {
+        frame: 619.0,
+        word_type: CreditWordType::Oh,
+        word_x: 220,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 621.0,
+        word_type: CreditWordType::Aw,
+        word_x: 307,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 623.0,
+        word_type: CreditWordType::Aw,
+        word_x: 390,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 627.0,
+        word_type: CreditWordType::Ee,
+        word_x: 452,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 631.0,
+        word_type: CreditWordType::Aw,
+        word_x: 512,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 633.0,
+        word_type: CreditWordType::Aw,
+        word_x: 573,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 637.0,
+        word_type: CreditWordType::Aw,
+        word_x: 630,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 639.0,
+        word_type: CreditWordType::Aw,
+        word_x: 656,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 643.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FlyOff,
+    },
+    CreditsTiming {
+        frame: 644.0,
+        word_type: CreditWordType::Aa,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 648.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 649.0,
+        word_type: CreditWordType::Aa,
+        word_x: 196,
+        brain_type: CreditBrainType::FastOn,
+    },
+    CreditsTiming {
+        frame: 651.0,
+        word_type: CreditWordType::Ee,
+        word_x: 247,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 653.0,
+        word_type: CreditWordType::Aw,
+        word_x: 299,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 655.0,
+        word_type: CreditWordType::Aw,
+        word_x: 371,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 658.0,
+        word_type: CreditWordType::Oh,
+        word_x: 443,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 659.0,
+        word_type: CreditWordType::Ee,
+        word_x: 475,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 661.0,
+        word_type: CreditWordType::Aw,
+        word_x: 512,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 662.0,
+        word_type: CreditWordType::Aa,
+        word_x: 544,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 664.0,
+        word_type: CreditWordType::Oh,
+        word_x: 573,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 667.0,
+        word_type: CreditWordType::Aa,
+        word_x: 610,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 669.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FastOff,
+    },
+    CreditsTiming {
+        frame: 670.0,
+        word_type: CreditWordType::Off,
+        word_x: 48,
+        brain_type: CreditBrainType::FastOn,
+    },
+    CreditsTiming {
+        frame: 671.0,
+        word_type: CreditWordType::Off,
+        word_x: 110,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 673.0,
+        word_type: CreditWordType::Off,
+        word_x: 185,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 674.0,
+        word_type: CreditWordType::Off,
+        word_x: 262,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 676.0,
+        word_type: CreditWordType::Off,
+        word_x: 317,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 677.0,
+        word_type: CreditWordType::Off,
+        word_x: 357,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 678.0,
+        word_type: CreditWordType::Off,
+        word_x: 417,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 679.0,
+        word_type: CreditWordType::Off,
+        word_x: 491,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 682.0,
+        word_type: CreditWordType::Off,
+        word_x: 558,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 685.0,
+        word_type: CreditWordType::Off,
+        word_x: 628,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 687.0,
+        word_type: CreditWordType::Off,
+        word_x: 720,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 689.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FlyOff,
+    },
+    CreditsTiming {
+        frame: 690.0,
+        word_type: CreditWordType::Off,
+        word_x: 172,
+        brain_type: CreditBrainType::FastOn,
+    },
+    CreditsTiming {
+        frame: 692.0,
+        word_type: CreditWordType::Off,
+        word_x: 263,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 694.0,
+        word_type: CreditWordType::Off,
+        word_x: 346,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 696.0,
+        word_type: CreditWordType::Off,
+        word_x: 423,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 698.0,
+        word_type: CreditWordType::Off,
+        word_x: 480,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 700.0,
+        word_type: CreditWordType::Off,
+        word_x: 536,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 702.0,
+        word_type: CreditWordType::Off,
+        word_x: 583,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 705.0,
+        word_type: CreditWordType::Off,
+        word_x: 633,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 708.0,
+        word_type: CreditWordType::Off,
+        word_x: 668,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 712.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FlyOff,
+    },
+    CreditsTiming {
+        frame: 719.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 720.0,
+        word_type: CreditWordType::Off,
+        word_x: 182,
+        brain_type: CreditBrainType::FastOn,
+    },
+    CreditsTiming {
+        frame: 722.0,
+        word_type: CreditWordType::Off,
+        word_x: 267,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 724.0,
+        word_type: CreditWordType::Off,
+        word_x: 331,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 726.0,
+        word_type: CreditWordType::Off,
+        word_x: 371,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 729.0,
+        word_type: CreditWordType::Off,
+        word_x: 434,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 731.0,
+        word_type: CreditWordType::Off,
+        word_x: 486,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 732.0,
+        word_type: CreditWordType::Off,
+        word_x: 562,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 734.0,
+        word_type: CreditWordType::Off,
+        word_x: 617,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 735.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FastOff,
+    },
+    CreditsTiming {
+        frame: 736.0,
+        word_type: CreditWordType::Aw,
+        word_x: 148,
+        brain_type: CreditBrainType::FastOn,
+    },
+    CreditsTiming {
+        frame: 738.0,
+        word_type: CreditWordType::Aw,
+        word_x: 211,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 740.0,
+        word_type: CreditWordType::Ee,
+        word_x: 298,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 742.0,
+        word_type: CreditWordType::Oh,
+        word_x: 367,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 744.0,
+        word_type: CreditWordType::Aw,
+        word_x: 440,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 746.0,
+        word_type: CreditWordType::Oh,
+        word_x: 506,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 747.0,
+        word_type: CreditWordType::Aw,
+        word_x: 533,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 748.0,
+        word_type: CreditWordType::Aw,
+        word_x: 601,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 749.0,
+        word_type: CreditWordType::Aw,
+        word_x: 645,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 750.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FastOff,
+    },
+    CreditsTiming {
+        frame: 753.0,
+        word_type: CreditWordType::Off,
+        word_x: 123,
+        brain_type: CreditBrainType::FlyOn,
+    },
+    CreditsTiming {
+        frame: 755.0,
+        word_type: CreditWordType::Off,
+        word_x: 195,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 757.0,
+        word_type: CreditWordType::Off,
+        word_x: 255,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 759.0,
+        word_type: CreditWordType::Off,
+        word_x: 312,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 761.0,
+        word_type: CreditWordType::Off,
+        word_x: 378,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 763.0,
+        word_type: CreditWordType::Off,
+        word_x: 443,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 765.0,
+        word_type: CreditWordType::Off,
+        word_x: 516,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 767.0,
+        word_type: CreditWordType::Off,
+        word_x: 563,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 770.0,
+        word_type: CreditWordType::Off,
+        word_x: 588,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 773.0,
+        word_type: CreditWordType::Off,
+        word_x: 657,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 777.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FlyOff,
+    },
+    CreditsTiming {
+        frame: 907.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 908.0,
+        word_type: CreditWordType::Aw,
+        word_x: 214,
+        brain_type: CreditBrainType::FastOn,
+    },
+    CreditsTiming {
+        frame: 910.0,
+        word_type: CreditWordType::Aw,
+        word_x: 297,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 912.0,
+        word_type: CreditWordType::Aw,
+        word_x: 348,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 916.0,
+        word_type: CreditWordType::Ee,
+        word_x: 400,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 920.0,
+        word_type: CreditWordType::Aw,
+        word_x: 455,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 922.0,
+        word_type: CreditWordType::Oh,
+        word_x: 523,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 926.0,
+        word_type: CreditWordType::Aw,
+        word_x: 593,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 930.0,
+        word_type: CreditWordType::Aw,
+        word_x: 616,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 934.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FlyOff,
+    },
+    CreditsTiming {
+        frame: 939.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 940.0,
+        word_type: CreditWordType::Aw,
+        word_x: 214,
+        brain_type: CreditBrainType::FastOn,
+    },
+    CreditsTiming {
+        frame: 942.0,
+        word_type: CreditWordType::Aw,
+        word_x: 297,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 944.0,
+        word_type: CreditWordType::Aw,
+        word_x: 348,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 948.0,
+        word_type: CreditWordType::Ee,
+        word_x: 400,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 952.0,
+        word_type: CreditWordType::Aw,
+        word_x: 455,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 954.0,
+        word_type: CreditWordType::Oh,
+        word_x: 523,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 958.0,
+        word_type: CreditWordType::Aw,
+        word_x: 593,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 960.0,
+        word_type: CreditWordType::Aw,
+        word_x: 616,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 966.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FlyOff,
+    },
+    CreditsTiming {
+        frame: 967.0,
+        word_type: CreditWordType::Aa,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 971.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 972.0,
+        word_type: CreditWordType::Aw,
+        word_x: 214,
+        brain_type: CreditBrainType::FastOn,
+    },
+    CreditsTiming {
+        frame: 974.0,
+        word_type: CreditWordType::Aw,
+        word_x: 297,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 976.0,
+        word_type: CreditWordType::Aw,
+        word_x: 348,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 980.0,
+        word_type: CreditWordType::Ee,
+        word_x: 400,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 984.0,
+        word_type: CreditWordType::Aw,
+        word_x: 455,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 986.0,
+        word_type: CreditWordType::Oh,
+        word_x: 523,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 990.0,
+        word_type: CreditWordType::Aw,
+        word_x: 593,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 994.0,
+        word_type: CreditWordType::Aw,
+        word_x: 616,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 998.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FlyOff,
+    },
+    CreditsTiming {
+        frame: 1001.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 1002.0,
+        word_type: CreditWordType::Ee,
+        word_x: 150,
+        brain_type: CreditBrainType::FastOn,
+    },
+    CreditsTiming {
+        frame: 1004.0,
+        word_type: CreditWordType::Oh,
+        word_x: 220,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 1006.0,
+        word_type: CreditWordType::Aw,
+        word_x: 307,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 1008.0,
+        word_type: CreditWordType::Aw,
+        word_x: 390,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 1012.0,
+        word_type: CreditWordType::Ee,
+        word_x: 452,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 1016.0,
+        word_type: CreditWordType::Aw,
+        word_x: 512,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 1018.0,
+        word_type: CreditWordType::Aw,
+        word_x: 573,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 1022.0,
+        word_type: CreditWordType::Aw,
+        word_x: 630,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 1024.0,
+        word_type: CreditWordType::Aw,
+        word_x: 656,
+        brain_type: CreditBrainType::NextWord,
+    },
+    CreditsTiming {
+        frame: 1028.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::FlyOff,
+    },
+    CreditsTiming {
+        frame: 1029.0,
+        word_type: CreditWordType::Aa,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
+    CreditsTiming {
+        frame: 1033.0,
+        word_type: CreditWordType::Off,
+        word_x: 0,
+        brain_type: CreditBrainType::Off,
+    },
 ];
 
 ///  C++ gCreditsTimingCount
@@ -388,21 +1728,31 @@ impl CreditScreen {
     pub fn update(&mut self) {
         // 对应 C++ Update：片尾阶段推进与 reanim 同步
         if !self.credits_paused {
-            let menu_over = self.main_menu_button.map_or(false, |p| unsafe { (&*p).is_over });
-            let replay_over = self.replay_button.map_or(false, |p| unsafe { (&*p).is_over });
+            let menu_over = self
+                .main_menu_button
+                .map_or(false, |p| unsafe { (&*p).is_over });
+            let replay_over = self
+                .replay_button
+                .map_or(false, |p| unsafe { (&*p).is_over });
             if !menu_over && !replay_over {
                 // 对应 C++: SetCursor(CURSOR_POINTER)
                 if let Some(app) = self.app {
                     unsafe {
-                        (*app).base.set_cursor(crate::lawn::game_enums::CURSOR_POINTER);
+                        (*app)
+                            .base
+                            .set_cursor(crate::lawn::game_enums::CURSOR_POINTER);
                     }
                 }
             }
         }
         // C++（CreditScreen.cpp:1131）：
         //     if (mCreditsPaused || (!mApp->IsInDemoMode() && mDrawCount == 0)) return;
-        let a_in_demo = self.app.map_or(false, |app| unsafe { (*app).base.is_in_demo_mode() });
-        let a_draw_count = self.app.map_or(0, |app| unsafe { (*app).base.m_draw_count });
+        let a_in_demo = self
+            .app
+            .map_or(false, |app| unsafe { (*app).base.is_in_demo_mode() });
+        let a_draw_count = self
+            .app
+            .map_or(0, |app| unsafe { (*app).base.m_draw_count });
         if self.credits_paused || (!a_in_demo && a_draw_count == 0) {
             return;
         }
@@ -452,7 +1802,9 @@ impl CreditScreen {
         if self.credits_paused {
             return;
         }
-        let debug_enabled = self.app.map_or(false, |app| unsafe { (*app).m_debug_keys_enabled });
+        let debug_enabled = self
+            .app
+            .map_or(false, |app| unsafe { (*app).m_debug_keys_enabled });
         if !debug_enabled {
             return;
         }
@@ -474,7 +1826,9 @@ impl CreditScreen {
             'd' => self.jump_to_frame(CreditsPhase::Main3, 216.0),
             'f' => self.jump_to_frame(CreditsPhase::Main3, 240.0),
             'g' => self.jump_to_frame(CreditsPhase::Main3, 324.0),
-            'n' => { self.dont_sync = !self.dont_sync; }
+            'n' => {
+                self.dont_sync = !self.dont_sync;
+            }
             _ => {}
         }
     }
@@ -519,16 +1873,55 @@ impl CreditScreen {
 
             let (a_reanim, prefix_assignments): (*mut Reanimation, Vec<(&str, i32)>) = match index {
                 1 => {
-                    let r = (*app).add_reanimation(0.0, 0.0, 0, ReanimationType::CreditsMain as i32)?;
-                    (r, vec![("Background", 1), ("attacher__Zombie", 2), ("Words", 3), ("SpotFront", 3)])
+                    let r =
+                        (*app).add_reanimation(0.0, 0.0, 0, ReanimationType::CreditsMain as i32)?;
+                    (
+                        r,
+                        vec![
+                            ("Background", 1),
+                            ("attacher__Zombie", 2),
+                            ("Words", 3),
+                            ("SpotFront", 3),
+                        ],
+                    )
                 }
                 2 => {
-                    let r = (*app).add_reanimation(0.0, 0.0, 0, ReanimationType::CreditsMain2 as i32)?;
-                    (r, vec![("Background", 1), ("attacher__Zombie", 2), ("Words", 3), ("SpotFront", 3), ("attacher__undead", 2)])
+                    let r = (*app).add_reanimation(
+                        0.0,
+                        0.0,
+                        0,
+                        ReanimationType::CreditsMain2 as i32,
+                    )?;
+                    (
+                        r,
+                        vec![
+                            ("Background", 1),
+                            ("attacher__Zombie", 2),
+                            ("Words", 3),
+                            ("SpotFront", 3),
+                            ("attacher__undead", 2),
+                        ],
+                    )
                 }
                 3 => {
-                    let r = (*app).add_reanimation(0.0, 0.0, 0, ReanimationType::CreditsMain3 as i32)?;
-                    (r, vec![("Background", 1), ("attacher__Zombie", 2), ("attacher__DiscoLights", 2), ("Words", 3), ("attacher__cattail", 3), ("SpotFront", 3), ("attacher__undead", 2)])
+                    let r = (*app).add_reanimation(
+                        0.0,
+                        0.0,
+                        0,
+                        ReanimationType::CreditsMain3 as i32,
+                    )?;
+                    (
+                        r,
+                        vec![
+                            ("Background", 1),
+                            ("attacher__Zombie", 2),
+                            ("attacher__DiscoLights", 2),
+                            ("Words", 3),
+                            ("attacher__cattail", 3),
+                            ("SpotFront", 3),
+                            ("attacher__undead", 2),
+                        ],
+                    )
                 }
                 _ => return None, // C++ 中 PVZP_ASSERT(false)
             };
@@ -545,10 +1938,14 @@ impl CreditScreen {
     pub fn jump_to_frame(&mut self, the_phase: CreditsPhase, the_frame: f32) {
         // 对应 C++ JumpToFrame：跳转片尾指定帧并计算音乐偏移
         if let Some(btn) = self.main_menu_button {
-            unsafe { (&mut *btn).visible = false; }
+            unsafe {
+                (&mut *btn).visible = false;
+            }
         }
         if let Some(btn) = self.replay_button {
-            unsafe { (&mut *btn).visible = false; }
+            unsafe {
+                (&mut *btn).visible = false;
+            }
         }
         self.credits_phase_counter = 0;
         if let Some(app) = self.app {
@@ -560,7 +1957,11 @@ impl CreditScreen {
         }
 
         // C++ 中 PlayReanim(3) 或 PlayReanim(phase+1) 返回动画
-        let _reanim = self.play_reanim(if the_phase == CreditsPhase::End { 3 } else { (the_phase as i32) + 1 });
+        let _reanim = self.play_reanim(if the_phase == CreditsPhase::End {
+            3
+        } else {
+            (the_phase as i32) + 1
+        });
 
         // 对应 C++ CreditScreen::JumpToFrame（CreditScreen.cpp:1537）:
         // aFrameFactor = 1.0f / (aReanim->mDefinition->mTracks.tracks->mTransforms.count - 1)
@@ -578,23 +1979,50 @@ impl CreditScreen {
         let mut a_music_offset = the_frame * 12142.0;
         let mut a_jump_milliseconds = the_frame * 1000.0 / 7.0;
         if the_phase == CreditsPhase::Main1 {
-            if the_frame >= 368.0 { a_music_offset = 12142.0 * (the_frame - 368.0) + 4634474.0; }
-            else if the_frame >= 340.0 { a_music_offset = 12142.0 * (the_frame - 340.0) + 4280738.0; }
-            else if the_frame >= 304.0 { a_music_offset = 12142.0 * (the_frame - 304.0) + 3825710.0; }
-            else if the_frame >= 272.0 { a_music_offset = 12142.0 * (the_frame - 272.0) + 3421764.0; }
-            else if the_frame >= 144.0 { a_music_offset = 12142.0 * (the_frame - 144.0) + 1805688.0; }
-            else if the_frame >= 128.0 { a_music_offset = 12142.0 * (the_frame - 128.0) + 1603662.0; }
+            if the_frame >= 368.0 {
+                a_music_offset = 12142.0 * (the_frame - 368.0) + 4634474.0;
+            } else if the_frame >= 340.0 {
+                a_music_offset = 12142.0 * (the_frame - 340.0) + 4280738.0;
+            } else if the_frame >= 304.0 {
+                a_music_offset = 12142.0 * (the_frame - 304.0) + 3825710.0;
+            } else if the_frame >= 272.0 {
+                a_music_offset = 12142.0 * (the_frame - 272.0) + 3421764.0;
+            } else if the_frame >= 144.0 {
+                a_music_offset = 12142.0 * (the_frame - 144.0) + 1805688.0;
+            } else if the_frame >= 128.0 {
+                a_music_offset = 12142.0 * (the_frame - 128.0) + 1603662.0;
+            }
         } else if the_phase == CreditsPhase::Main2 {
-            if the_frame >= 320.0 { a_music_offset = 12142.0 * (the_frame - 320.0) + 9069118.0; a_jump_milliseconds += 57142.0; }
-            else if the_frame >= 248.0 { a_music_offset = 12142.0 * (the_frame - 248.0) + 8159850.0; a_jump_milliseconds += 57142.0; }
-            else if the_frame >= 188.0 { a_music_offset = 12142.0 * (the_frame - 188.0) + 7401454.0; a_jump_milliseconds += 57142.0; }
-            else if the_frame >= 124.0 { a_music_offset = 12142.0 * (the_frame - 124.0) + 6593548.0; a_jump_milliseconds += 57142.0; }
-            else { a_music_offset = 12142.0 * the_frame + 5026370.0; a_jump_milliseconds += 57142.0; }
+            if the_frame >= 320.0 {
+                a_music_offset = 12142.0 * (the_frame - 320.0) + 9069118.0;
+                a_jump_milliseconds += 57142.0;
+            } else if the_frame >= 248.0 {
+                a_music_offset = 12142.0 * (the_frame - 248.0) + 8159850.0;
+                a_jump_milliseconds += 57142.0;
+            } else if the_frame >= 188.0 {
+                a_music_offset = 12142.0 * (the_frame - 188.0) + 7401454.0;
+                a_jump_milliseconds += 57142.0;
+            } else if the_frame >= 124.0 {
+                a_music_offset = 12142.0 * (the_frame - 124.0) + 6593548.0;
+                a_jump_milliseconds += 57142.0;
+            } else {
+                a_music_offset = 12142.0 * the_frame + 5026370.0;
+                a_jump_milliseconds += 57142.0;
+            }
         } else if the_phase == CreditsPhase::Main3 {
-            if the_frame >= 240.0 { a_music_offset = 12142.0 * (the_frame - 240.0) + 12897822.0; a_jump_milliseconds += 112000.0; }
-            else if the_frame >= 216.0 { a_music_offset = 12142.0 * (the_frame - 216.0) + 12594510.0; a_jump_milliseconds += 112000.0; }
-            else if the_frame >= 124.0 { a_music_offset = 12142.0 * (the_frame - 124.0) + 11434414.0; a_jump_milliseconds += 112000.0; }
-            else { a_music_offset = 12142.0 * the_frame + 9864866.0; a_jump_milliseconds += 112000.0; }
+            if the_frame >= 240.0 {
+                a_music_offset = 12142.0 * (the_frame - 240.0) + 12897822.0;
+                a_jump_milliseconds += 112000.0;
+            } else if the_frame >= 216.0 {
+                a_music_offset = 12142.0 * (the_frame - 216.0) + 12594510.0;
+                a_jump_milliseconds += 112000.0;
+            } else if the_frame >= 124.0 {
+                a_music_offset = 12142.0 * (the_frame - 124.0) + 11434414.0;
+                a_jump_milliseconds += 112000.0;
+            } else {
+                a_music_offset = 12142.0 * the_frame + 9864866.0;
+                a_jump_milliseconds += 112000.0;
+            }
         } else if the_phase == CreditsPhase::End {
             a_music_offset = 14047138.0;
             a_jump_milliseconds += 159142.0;
@@ -669,19 +2097,33 @@ impl CreditScreen {
         const CREDIT_SCREEN_ANIM_RATE: f32 = 0.3;
         let a_content_height = draw_credits_content(g, 0, false);
         let a_total_cycle = a_content_height + crate::lawn::game_enums::BOARD_HEIGHT;
-        let a_scroll_offset = ((self.credits_phase_counter as f32 * CREDIT_SCREEN_ANIM_RATE) as i32) % a_total_cycle;
-        draw_credits_content(g, crate::lawn::game_enums::BOARD_HEIGHT - a_scroll_offset, true);
+        let a_scroll_offset =
+            ((self.credits_phase_counter as f32 * CREDIT_SCREEN_ANIM_RATE) as i32) % a_total_cycle;
+        draw_credits_content(
+            g,
+            crate::lawn::game_enums::BOARD_HEIGHT - a_scroll_offset,
+            true,
+        );
     }
     pub fn draw_overlay(&self, g: &mut Graphics) {
         // 对应 C++ DrawOverlay：END 阶段黑色淡出
         if self.credits_phase == CreditsPhase::End {
             let a_fade_alpha = crate::todlib::tod_common::tod_animate_curve(
-                50, 100, self.credits_phase_counter, 255, 0,
+                50,
+                100,
+                self.credits_phase_counter,
+                255,
+                0,
                 crate::lawn::game_enums::TodCurves::Linear,
             );
             if a_fade_alpha > 0 {
                 g.set_color(&crate::framework::color::Color::from_rgb(0, 0, 0));
-                g.fill_rect_xywh(0, 0, crate::lawn::game_enums::BOARD_WIDTH, crate::lawn::game_enums::BOARD_HEIGHT);
+                g.fill_rect_xywh(
+                    0,
+                    0,
+                    crate::lawn::game_enums::BOARD_WIDTH,
+                    crate::lawn::game_enums::BOARD_HEIGHT,
+                );
                 let _ = a_fade_alpha;
             }
         }
@@ -719,10 +2161,14 @@ impl CreditScreen {
             self.credits_phase_counter += 1;
             if self.credits_phase_counter == 50 {
                 if let Some(btn) = self.main_menu_button {
-                    unsafe { (&mut *btn).visible = true; }
+                    unsafe {
+                        (&mut *btn).visible = true;
+                    }
                 }
                 if let Some(btn) = self.replay_button {
-                    unsafe { (&mut *btn).visible = true; }
+                    unsafe {
+                        (&mut *btn).visible = true;
+                    }
                 }
             }
         }
@@ -781,17 +2227,30 @@ impl CreditScreen {
                     }
                 }
                 // C++ 中 ReanimatorEnsureDefinitionLoaded + ReanimationPreload
-                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::CreditsMain);
-                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::CreditsMain2);
-                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::CreditsMain3);
-                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::ZombieCreditsDance);
-                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::CreditsBigbrain);
-                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::CreditsFlowerPetals);
-                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::CreditsInfantry);
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(
+                    ReanimationType::CreditsMain,
+                );
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(
+                    ReanimationType::CreditsMain2,
+                );
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(
+                    ReanimationType::CreditsMain3,
+                );
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(
+                    ReanimationType::ZombieCreditsDance,
+                );
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(
+                    ReanimationType::CreditsBigbrain,
+                );
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(
+                    ReanimationType::CreditsFlowerPetals,
+                );
+                crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(
+                    ReanimationType::CreditsInfantry,
+                );
             }
         }
     }
-
 
     /// [TRANSLATION_NOTE]: C++ CreditScreen::AddedToManager
     pub fn added_to_manager(&mut self, the_widget_manager: *mut WidgetManager) {
@@ -823,13 +2282,19 @@ impl CreditScreen {
     }
 
     /// [TRANSLATION_NOTE]: C++ CreditScreen::FindSubReanim (CreditScreen.cpp:1072)
-    pub fn find_sub_reanim(&self, the_reanim: *mut crate::todlib::reanimator::Reanimation, the_reanim_type: ReanimationType) -> Option<*mut crate::todlib::reanimator::Reanimation> {
+    pub fn find_sub_reanim(
+        &self,
+        the_reanim: *mut crate::todlib::reanimator::Reanimation,
+        the_reanim_type: ReanimationType,
+    ) -> Option<*mut crate::todlib::reanimator::Reanimation> {
         if let Some(reanim_ref) = unsafe { the_reanim.as_ref() } {
             if reanim_ref.reanim_type == the_reanim_type {
                 return Some(the_reanim);
             }
             // C++: theReanim->mDefinition->mTracks.count
-            let a_track_count = reanim_ref.m_definition.map_or(0, |def| unsafe { (*def).m_tracks.len() });
+            let a_track_count = reanim_ref
+                .m_definition
+                .map_or(0, |def| unsafe { (*def).m_tracks.len() });
             for _i in 0..a_track_count {
                 // [TRANSLATION_NOTE]: C++ recurses via FindReanimAttachment(mTrackInstances[i].mAttachmentID);
                 // attachment system is a stub in Rust, recursion skipped.
@@ -852,10 +2317,9 @@ impl CreditScreen {
         let reanim = unsafe { (*app).reanimation_get(self.credits_reanim_id) };
         // C++: mDefinition->mTracks.tracks->mTransforms.count * mAnimTime - 1.0f
         let mut a_frame_count = reanim.map_or(0.0, |r| {
-            let a_transform_count = r
-                .m_definition
-                .map_or(0, |def| unsafe { (*def).m_tracks.first().map_or(0, |t| t.m_transforms.len()) })
-                as f32;
+            let a_transform_count = r.m_definition.map_or(0, |def| unsafe {
+                (*def).m_tracks.first().map_or(0, |t| t.m_transforms.len())
+            }) as f32;
             a_transform_count * r.m_anim_time - 1.0f32
         });
         if self.credits_phase == CreditsPhase::Main1 {
@@ -886,7 +2350,8 @@ impl CreditScreen {
                 if a_timing2.frame > a_frame_count {
                     *the_before_timing = a_timing1;
                     *the_after_timing = a_timing2;
-                    *the_fraction = (a_frame_count - a_timing1.frame) / (a_timing2.frame - a_timing1.frame);
+                    *the_fraction =
+                        (a_frame_count - a_timing1.frame) / (a_timing2.frame - a_timing1.frame);
                     a_found = true;
                     break;
                 }
@@ -900,21 +2365,33 @@ impl CreditScreen {
     }
 
     /// [TRANSLATION_NOTE]: C++ CreditScreen::TurnOffTongues (CreditScreen.cpp:1501)
-    pub fn turn_off_tongues(&self, the_reanim: *mut crate::todlib::reanimator::Reanimation, a_parent_track: i32) {
-        let Some(reanim_ref) = (unsafe { the_reanim.as_ref() }) else { return };
-        let a_track_count = reanim_ref.m_definition.map_or(0, |def| unsafe { (*def).m_tracks.len() });
+    pub fn turn_off_tongues(
+        &self,
+        the_reanim: *mut crate::todlib::reanimator::Reanimation,
+        a_parent_track: i32,
+    ) {
+        let Some(reanim_ref) = (unsafe { the_reanim.as_ref() }) else {
+            return;
+        };
+        let a_track_count = reanim_ref
+            .m_definition
+            .map_or(0, |def| unsafe { (*def).m_tracks.len() });
         let a_is_credits_dance = reanim_ref.reanim_type == ReanimationType::ZombieCreditsDance;
         unsafe {
             for a_track_index in 0..a_track_count {
-                let a_track_instance = &mut *((reanim_ref.m_track_instances.as_ptr() as *mut crate::todlib::definition::ReanimatorTrackInstance).add(a_track_index));
+                let a_track_instance = &mut *((reanim_ref.m_track_instances.as_ptr()
+                    as *mut crate::todlib::definition::ReanimatorTrackInstance)
+                    .add(a_track_index));
                 // C++: reanimType == REANIM_ZOMBIE_CREDITS_DANCE && aParentTrack % 4 != 1 &&
                 //      strcasecmp(trackName, "anim_tongue") == 0
                 if a_is_credits_dance && a_parent_track % 4 != 1 {
-                    let a_track_name = reanim_ref
-                        .m_definition
-                        .map_or(String::new(), |def| unsafe { (&*def).m_tracks[a_track_index].m_name.clone() });
+                    let a_track_name =
+                        reanim_ref.m_definition.map_or(String::new(), |def| unsafe {
+                            (&*def).m_tracks[a_track_index].m_name.clone()
+                        });
                     if a_track_name.eq_ignore_ascii_case("anim_tongue") {
-                        a_track_instance.m_render_group = crate::todlib::reanimator::RENDER_GROUP_HIDDEN;
+                        a_track_instance.m_render_group =
+                            crate::todlib::reanimator::RENDER_GROUP_HIDDEN;
                     }
                 }
                 // [TRANSLATION_NOTE]: C++ recurses via FindReanimAttachment(...); attachment stub, skipped.
@@ -923,38 +2400,41 @@ impl CreditScreen {
     }
 }
 
-
 /// 制作人员叠加 Widget（对应 C++ CreditsOverlay）
 pub struct CreditsOverlay {
     pub parent: Option<*mut CreditScreen>,
 }
 
 impl CreditsOverlay {
-    pub fn new() -> Self { CreditsOverlay { parent: None } }
+    pub fn new() -> Self {
+        CreditsOverlay { parent: None }
+    }
     pub fn draw(&self, g: &mut Graphics) {
         // 对应 C++ CreditsOverlay::Draw
         // [TRANSLATION_NOTE]: C++ 中绘制附加叠加效果（脑/灯光等）；Rust 侧图片资源未接入
         if let Some(p) = self.parent {
-            unsafe { (*p).draw_overlay(g); }
+            unsafe {
+                (*p).draw_overlay(g);
+            }
         }
     }
 }
 
 // --- 自由函数 ---
 pub fn draw_disco(g: &mut Graphics, center_x: f32, center_y: f32, time: f32) {
-        // 对应 C++ DrawDisco：3D 加速时的迪斯科灯光三角带
-        // [TRANSLATION_NOTE]: C++ 中按 cos/sin 计算三角顶点并 DrawTriangles；
-        // Rust 侧 Graphics 无三角带绘制接口，暂略
-        let _ = (g, center_x, center_y, time);
-    }
+    // 对应 C++ DrawDisco：3D 加速时的迪斯科灯光三角带
+    // [TRANSLATION_NOTE]: C++ 中按 cos/sin 计算三角顶点并 DrawTriangles；
+    // Rust 侧 Graphics 无三角带绘制接口，暂略
+    let _ = (g, center_x, center_y, time);
+}
 pub fn draw_reanim_to_preload(_g: &mut Graphics, the_reanim_type: ReanimationType) {
-        // 对应 C++ DrawReanimToPreload：创建指定动画并绘制（预加载用途）
-        // [TRANSLATION_NOTE]: C++ 中 CREDIT_SCREEN_ANIM_RATE = 0.3f
-        let mut a_reanim = crate::todlib::reanimator::Reanimation::new();
-        a_reanim.m_anim_rate = 0.3;
-        a_reanim.reanimation_initialize_type(0.0, 0.0, the_reanim_type);
-        a_reanim.draw(_g);
-    }
+    // 对应 C++ DrawReanimToPreload：创建指定动画并绘制（预加载用途）
+    // [TRANSLATION_NOTE]: C++ 中 CREDIT_SCREEN_ANIM_RATE = 0.3f
+    let mut a_reanim = crate::todlib::reanimator::Reanimation::new();
+    a_reanim.m_anim_rate = 0.3;
+    a_reanim.reanimation_initialize_type(0.0, 0.0, the_reanim_type);
+    a_reanim.draw(_g);
+}
 
 /// 绘制制作人员名单内容（对应 C++ DrawCreditsContent）
 pub fn draw_credits_content(g: &mut Graphics, y_pos: i32, do_draw: bool) -> i32 {
@@ -989,22 +2469,33 @@ impl CreditScreenImpl {
 
 impl WidgetImpl for CreditScreenImpl {
     fn update(&mut self, _widget: &mut Widget) {
-        unsafe { (*self.screen).update(); }
+        unsafe {
+            (*self.screen).update();
+        }
     }
     fn draw(&mut self, _widget: &Widget, g: &mut Graphics) {
-        unsafe { (*self.screen).draw(g); }
+        unsafe {
+            (*self.screen).draw(g);
+        }
     }
     fn draw_overlay(&mut self, _widget: &Widget, g: &mut Graphics) {
-        unsafe { (*self.screen).draw_overlay(g); }
+        unsafe {
+            (*self.screen).draw_overlay(g);
+        }
     }
     fn key_char(&mut self, _widget: &mut Widget, c: u8) {
-        unsafe { (*self.screen).key_char(c as char); }
+        unsafe {
+            (*self.screen).key_char(c as char);
+        }
     }
     fn key_down(&mut self, _widget: &mut Widget, key: KeyCode, _wm: &mut WidgetManager) {
-        unsafe { (*self.screen).key_down(key); }
+        unsafe {
+            (*self.screen).key_down(key);
+        }
     }
     fn mouse_up_btn(&mut self, _widget: &mut Widget, x: i32, y: i32, _btn: i32, click: i32) {
-        unsafe { (*self.screen).mouse_up(x, y, click); }
+        unsafe {
+            (*self.screen).mouse_up(x, y, click);
+        }
     }
 }
-

@@ -1,11 +1,11 @@
 // PvZ Portable Rust 翻译 — SeedPacket（种子槽）
 // 对应 C++ src/Lawn/SeedPacket.h / SeedPacket.cpp
 
-use crate::lawn::game_enums::*;
-use crate::lawn::game_object::GameObject;
-use crate::lawn::board::HitResult;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::rect::Rect;
+use crate::lawn::board::HitResult;
+use crate::lawn::game_enums::*;
+use crate::lawn::game_object::GameObject;
 use crate::todlib::tod_common::TodWeightedArray;
 
 /// 种子槽 — 玩家选择植物的 UI 元素
@@ -17,7 +17,7 @@ pub struct SeedPacket {
     pub y: i32,
     pub width: i32,
     pub height: i32,
-    pub countdown: i32,  // 冷却时间
+    pub countdown: i32, // 冷却时间
     pub refresh_time: i32,
     pub refreshing: bool,
     pub active: bool,
@@ -133,7 +133,8 @@ impl SeedPacket {
                 }
 
                 let a_cost = board_ref.get_current_plant_cost(self.seed_type, self.imitater_type);
-                if !board_ref.can_take_sun_money(a_cost) && !board_ref.has_conveyor_belt_seed_bank() {
+                if !board_ref.can_take_sun_money(a_cost) && !board_ref.has_conveyor_belt_seed_bank()
+                {
                     return false;
                 }
 
@@ -203,7 +204,12 @@ impl SeedPacket {
             let mut a_weight = 100;
             if a_seed_type == SeedType::Peashooter {
                 a_weight = crate::todlib::tod_common::tod_animate_curve(
-                    0, 5, a_peas_count, 200, 100, TodCurves::Linear,
+                    0,
+                    5,
+                    a_peas_count,
+                    200,
+                    100,
+                    TodCurves::Linear,
                 );
             } else if a_seed_type == SeedType::SlotMachineDiamond {
                 a_weight = 30;
@@ -228,8 +234,11 @@ impl SeedPacket {
             a_seeds_count += 1;
         }
 
-        let a_pick = crate::todlib::tod_common::tod_pick_from_weighted_array(&a_seed_weight_array[..a_seeds_count]);
-        self.slot_machine_next_seed = slot_seed_types[a_pick.clamp(0, slot_seed_types.len() as isize - 1) as usize];
+        let a_pick = crate::todlib::tod_common::tod_pick_from_weighted_array(
+            &a_seed_weight_array[..a_seeds_count],
+        );
+        self.slot_machine_next_seed =
+            slot_seed_types[a_pick.clamp(0, slot_seed_types.len() as isize - 1) as usize];
     }
 
     /// 老虎机启动（对应 C++ SlotMachineStart）
@@ -270,7 +279,12 @@ impl SeedPacket {
         if self.slot_machine_countdown > 0 {
             self.slot_machine_countdown -= 1;
             let a_flips_per_second = crate::todlib::tod_common::tod_animate_curve_float(
-                400, 0, self.slot_machine_countdown, 6.0, 2.0, TodCurves::Linear,
+                400,
+                0,
+                self.slot_machine_countdown,
+                6.0,
+                2.0,
+                TodCurves::Linear,
             );
             self.slot_machine_position += a_flips_per_second * 0.01;
 
@@ -296,15 +310,36 @@ impl SeedPacket {
             if self.refresh_time == 0 {
                 a_percent_dark = 1.0;
             } else {
-                a_percent_dark = (self.refresh_time - self.countdown) as f32 / self.refresh_time as f32;
+                a_percent_dark =
+                    (self.refresh_time - self.countdown) as f32 / self.refresh_time as f32;
             }
         }
 
         if self.slot_machine_countdown > 0 {
             // 老虎机滚动中：裁剪绘制当前种与下一种子（两张叠画）
             let a_offset_y = (-self.height as f32 * self.slot_machine_position).round() as i32;
-            draw_seed_packet(g, 0.0, a_offset_y as f32, self.seed_type, SeedType::None, 0.0, 128, false, false);
-            draw_seed_packet(g, 0.0, (self.height + a_offset_y) as f32, self.slot_machine_next_seed, SeedType::None, 0.0, 128, false, false);
+            draw_seed_packet(
+                g,
+                0.0,
+                a_offset_y as f32,
+                self.seed_type,
+                SeedType::None,
+                0.0,
+                128,
+                false,
+                false,
+            );
+            draw_seed_packet(
+                g,
+                0.0,
+                (self.height + a_offset_y) as f32,
+                self.slot_machine_next_seed,
+                SeedType::None,
+                0.0,
+                128,
+                false,
+                false,
+            );
         } else {
             let mut a_use_seed_type = self.seed_type;
             if self.seed_type == SeedType::Imitater && self.imitater_type != SeedType::None {
@@ -330,7 +365,8 @@ impl SeedPacket {
                             a_draw_cost = false;
                         }
                         if ((*app).game_mode == GameMode::ChallengeBeghouled && !self.active)
-                            || ((*app).game_mode == GameMode::ChallengeBeghouledTwist && !self.active)
+                            || ((*app).game_mode == GameMode::ChallengeBeghouledTwist
+                                && !self.active)
                         {
                             a_grayness = 64;
                         } else if (*app).m_easy_planting_cheat {
@@ -347,7 +383,17 @@ impl SeedPacket {
             // [TRANSLATION_NOTE]: C++ 中 mGameScene != SCENE_PLAYING 用 mCutSceneDarken、教程高亮闪烁灰化未接入
             let _ = (a_conveyor, a_slot_level, a_cost, a_grayness);
 
-            draw_seed_packet(g, self.offset_x as f32, 0.0, self.seed_type, self.imitater_type, a_percent_dark, a_grayness, a_draw_cost, true);
+            draw_seed_packet(
+                g,
+                self.offset_x as f32,
+                0.0,
+                self.seed_type,
+                self.imitater_type,
+                a_percent_dark,
+                a_grayness,
+                a_draw_cost,
+                true,
+            );
         }
     }
 
@@ -367,7 +413,9 @@ impl SeedPacket {
                 let b = &*board;
                 conveyor = b.has_conveyor_belt_seed_bank();
                 // C++: mGameMode == GAMEMODE_CHALLENGE_LAST_STAND && mChallenge->mChallengeState != STATECHALLENGE_LAST_STAND_ONSLAUGHT
-                if b.challenge.as_ref().map_or(false, |c| c.challenge_state != ChallengeState::LastStandOnslaught) {
+                if b.challenge.as_ref().map_or(false, |c| {
+                    c.challenge_state != ChallengeState::LastStandOnslaught
+                }) {
                     last_stand_before_onslaught = true;
                 }
             }
@@ -393,14 +441,21 @@ impl SeedPacket {
         } else {
             self.times_used += 1;
             self.refreshing = true;
-            self.refresh_time = crate::lawn::plant::Plant::get_refresh_time(self.seed_type, self.imitater_type);
+            self.refresh_time =
+                crate::lawn::plant::Plant::get_refresh_time(self.seed_type, self.imitater_type);
         }
     }
 
     /// 鼠标点击（对应 C++ MouseDown）
     pub fn mouse_down(&mut self, _x: i32, _y: i32, _click_count: i32) {
-        let board_ptr = match self.board { Some(b) => b, None => return };
-        let app_ptr = match self.app { Some(a) => a, None => return };
+        let board_ptr = match self.board {
+            Some(b) => b,
+            None => return,
+        };
+        let app_ptr = match self.app {
+            Some(a) => a,
+            None => return,
+        };
         unsafe {
             let b = &mut *board_ptr;
             let app = &mut *app_ptr;
@@ -413,7 +468,11 @@ impl SeedPacket {
             // 老虎机模式
             if app.is_slot_machine_level() {
                 // [TRANSLATION_NOTE]: mBoard->mAdvice->IsBeingDisplayed() 未接入，直接显示
-                b.display_advice("[ADVICE_SLOT_MACHINE_PULL]", MessageStyle::HintTallFast as i32, AdviceType::SlotMachinePull);
+                b.display_advice(
+                    "[ADVICE_SLOT_MACHINE_PULL]",
+                    MessageStyle::HintTallFast as i32,
+                    AdviceType::SlotMachinePull,
+                );
                 // [TRANSLATION_NOTE]: mChallenge->mSlotMachineRollCount = min(roll, 2) 未接入
                 return;
             }
@@ -428,7 +487,11 @@ impl SeedPacket {
                     // C++: mApp->PlaySample(Sexy::SOUND_BUZZER);
                     app.play_sample(crate::todlib::tod_foley::SOUND_BUZZER);
                     if app.is_first_time_adventure_mode() && b.level == 1 {
-                        b.display_advice("[ADVICE_SEED_REFRESH]", MessageStyle::TutorialLevel1 as i32, AdviceType::SeedRefresh);
+                        b.display_advice(
+                            "[ADVICE_SEED_REFRESH]",
+                            MessageStyle::TutorialLevel1 as i32,
+                            AdviceType::SeedRefresh,
+                        );
                     }
                     return;
                 }
@@ -439,7 +502,11 @@ impl SeedPacket {
                     app.play_sample(crate::todlib::tod_foley::SOUND_BUZZER);
                     b.m_out_of_money_counter = 70;
                     if app.is_first_time_adventure_mode() && b.level == 1 {
-                        b.display_advice("[ADVICE_CANT_AFFORD_PLANT]", MessageStyle::TutorialLevel1 as i32, AdviceType::CantAffordPlant);
+                        b.display_advice(
+                            "[ADVICE_CANT_AFFORD_PLANT]",
+                            MessageStyle::TutorialLevel1 as i32,
+                            AdviceType::CantAffordPlant,
+                        );
                     }
                     return;
                 }
@@ -448,14 +515,30 @@ impl SeedPacket {
                     // C++: mApp->PlaySample(Sexy::SOUND_BUZZER);
                     app.play_sample(crate::todlib::tod_foley::SOUND_BUZZER);
                     let (advice, style) = match a_use_seed_type {
-                        SeedType::Gatlingpea => (AdviceType::PlantNeedsRepeater, MessageStyle::HintLong),
-                        SeedType::Wintermelon => (AdviceType::PlantNeedsMelonpult, MessageStyle::HintLong),
-                        SeedType::Twinsunflower => (AdviceType::PlantNeedsSunflower, MessageStyle::HintLong),
-                        SeedType::Spikerock => (AdviceType::PlantNeedsSpikeweed, MessageStyle::HintLong),
-                        SeedType::Cobcannon => (AdviceType::PlantNeedsKernelpult, MessageStyle::HintLong),
-                        SeedType::GoldMagnet => (AdviceType::PlantNeedsMagnetshroom, MessageStyle::HintLong),
-                        SeedType::Gloomshroom => (AdviceType::PlantNeedsFumeshroom, MessageStyle::HintLong),
-                        SeedType::Cattail => (AdviceType::PlantNeedsLilypad, MessageStyle::HintLong),
+                        SeedType::Gatlingpea => {
+                            (AdviceType::PlantNeedsRepeater, MessageStyle::HintLong)
+                        }
+                        SeedType::Wintermelon => {
+                            (AdviceType::PlantNeedsMelonpult, MessageStyle::HintLong)
+                        }
+                        SeedType::Twinsunflower => {
+                            (AdviceType::PlantNeedsSunflower, MessageStyle::HintLong)
+                        }
+                        SeedType::Spikerock => {
+                            (AdviceType::PlantNeedsSpikeweed, MessageStyle::HintLong)
+                        }
+                        SeedType::Cobcannon => {
+                            (AdviceType::PlantNeedsKernelpult, MessageStyle::HintLong)
+                        }
+                        SeedType::GoldMagnet => {
+                            (AdviceType::PlantNeedsMagnetshroom, MessageStyle::HintLong)
+                        }
+                        SeedType::Gloomshroom => {
+                            (AdviceType::PlantNeedsFumeshroom, MessageStyle::HintLong)
+                        }
+                        SeedType::Cattail => {
+                            (AdviceType::PlantNeedsLilypad, MessageStyle::HintLong)
+                        }
                         _ => (AdviceType::None, MessageStyle::HintLong),
                     };
                     let advice_str = match advice {
@@ -487,7 +570,9 @@ impl SeedPacket {
             b.clear_advice(AdviceType::PlantNeedsLilypad);
 
             // 三消/水族馆模式转发给 Challenge
-            if app.game_mode == GameMode::ChallengeBeghouled || app.game_mode == GameMode::ChallengeBeghouledTwist {
+            if app.game_mode == GameMode::ChallengeBeghouled
+                || app.game_mode == GameMode::ChallengeBeghouledTwist
+            {
                 if let Some(challenge) = b.challenge.as_mut() {
                     challenge.beghouled_packet_clicked(self);
                 }
@@ -534,8 +619,10 @@ impl SeedPacket {
         if self.slot_machine_countdown > 0 || self.seed_type == SeedType::None {
             return false;
         }
-        if x >= self.x + self.offset_x && x < self.x + self.offset_x + self.width
-            && y >= self.y && y < self.y + self.height
+        if x >= self.x + self.offset_x
+            && x < self.x + self.offset_x + self.width
+            && y >= self.y
+            && y < self.y + self.height
         {
             hit_result.object = None;
             hit_result.object_type = GameObjectType::SeedPacket;
@@ -544,7 +631,6 @@ impl SeedPacket {
         false
     }
 }
-
 
 impl Default for SeedPacket {
     fn default() -> Self {
@@ -626,10 +712,20 @@ pub fn draw_seed_packet(
 
     // 对应 C++: 灰化/变暗颜色化
     if grayness != 255 {
-        g.set_color(&crate::framework::color::Color { r: grayness as u8, g: grayness as u8, b: grayness as u8, a: 255 });
+        g.set_color(&crate::framework::color::Color {
+            r: grayness as u8,
+            g: grayness as u8,
+            b: grayness as u8,
+            a: 255,
+        });
         g.set_colorize_images(true);
     } else if percent_dark > 0.0 {
-        g.set_color(&crate::framework::color::Color { r: 128, g: 128, b: 128, a: 255 });
+        g.set_color(&crate::framework::color::Color {
+            r: 128,
+            g: 128,
+            b: 128,
+            a: 255,
+        });
         g.set_colorize_images(true);
     }
 
@@ -670,13 +766,35 @@ pub fn draw_seed_packet(
         // 对应 C++: PvzpDrawImageCelScaledF(IMAGE_SEEDPACKET_LARGER, x, y, 0, 0, scaleX*0.5, scaleY*0.5)
         let a_larger = get_image("IMAGE_SEEDPACKET_LARGER");
         if !a_larger.is_null() {
-            unsafe { g.draw_image_cel_dest(&*a_larger, &crate::framework::rect::Rect::new(x as i32, y as i32, (80.0 * a_scale_x * 0.5) as i32, (86.0 * a_scale_y * 0.5) as i32), 0); }
+            unsafe {
+                g.draw_image_cel_dest(
+                    &*a_larger,
+                    &crate::framework::rect::Rect::new(
+                        x as i32,
+                        y as i32,
+                        (80.0 * a_scale_x * 0.5) as i32,
+                        (86.0 * a_scale_y * 0.5) as i32,
+                    ),
+                    0,
+                );
+            }
         }
     } else {
         // 对应 C++: PvzpDrawImageCelScaledF(IMAGE_SEEDS, x, y, aPacketBackground, 0, scaleX, scaleY)
         let a_seeds = get_image("IMAGE_SEEDS");
         if !a_seeds.is_null() {
-            unsafe { g.draw_image_cel_dest(&*a_seeds, &crate::framework::rect::Rect::new(x as i32, y as i32, (80.0 * a_scale_x) as i32, (86.0 * a_scale_y) as i32), a_packet_background); }
+            unsafe {
+                g.draw_image_cel_dest(
+                    &*a_seeds,
+                    &crate::framework::rect::Rect::new(
+                        x as i32,
+                        y as i32,
+                        (80.0 * a_scale_x) as i32,
+                        (86.0 * a_scale_y) as i32,
+                    ),
+                    a_packet_background,
+                );
+            }
         }
     }
 
@@ -686,62 +804,180 @@ pub fn draw_seed_packet(
     let mut a_offset_x = 5.0f32;
     let mut a_offset_y = 8.0f32;
     match a_seed_type {
-        SeedType::Tallnut => { a_scale = 0.3; a_offset_x = 12.0; a_offset_y = 22.0; }
-        SeedType::InstantCoffee => { a_scale = 0.55; a_offset_x = 0.0; a_offset_y = 9.0; }
-        SeedType::Cobcannon => { a_scale = 0.26; a_offset_x = 6.0; a_offset_y = 22.0; }
-        SeedType::Cactus => { a_offset_x = 9.0; a_offset_y = 13.0; }
-        SeedType::PotatoMine => { a_scale = 0.4; a_offset_x = 8.0; a_offset_y = 12.0; }
-        SeedType::Magnetshroom => { a_offset_y = 12.0; }
-        SeedType::Fumeshroom | SeedType::Pumpkinshell | SeedType::Chomper
-        | SeedType::Doomshroom | SeedType::Squash | SeedType::Hypnoshroom
-        | SeedType::Spikeweed | SeedType::Spikerock | SeedType::Plantern
-        | SeedType::Torchwood | SeedType::Tanglekelp => {
-            a_scale = 0.4; a_offset_x = 8.0; a_offset_y = 12.0;
+        SeedType::Tallnut => {
+            a_scale = 0.3;
+            a_offset_x = 12.0;
+            a_offset_y = 22.0;
+        }
+        SeedType::InstantCoffee => {
+            a_scale = 0.55;
+            a_offset_x = 0.0;
+            a_offset_y = 9.0;
+        }
+        SeedType::Cobcannon => {
+            a_scale = 0.26;
+            a_offset_x = 6.0;
+            a_offset_y = 22.0;
+        }
+        SeedType::Cactus => {
+            a_offset_x = 9.0;
+            a_offset_y = 13.0;
+        }
+        SeedType::PotatoMine => {
+            a_scale = 0.4;
+            a_offset_x = 8.0;
+            a_offset_y = 12.0;
+        }
+        SeedType::Magnetshroom => {
+            a_offset_y = 12.0;
+        }
+        SeedType::Fumeshroom
+        | SeedType::Pumpkinshell
+        | SeedType::Chomper
+        | SeedType::Doomshroom
+        | SeedType::Squash
+        | SeedType::Hypnoshroom
+        | SeedType::Spikeweed
+        | SeedType::Spikerock
+        | SeedType::Plantern
+        | SeedType::Torchwood
+        | SeedType::Tanglekelp => {
+            a_scale = 0.4;
+            a_offset_x = 8.0;
+            a_offset_y = 12.0;
         }
         SeedType::Twinsunflower | SeedType::Gloomshroom => {
-            a_scale = 0.45; a_offset_x = 7.0; a_offset_y = 14.0;
+            a_scale = 0.45;
+            a_offset_x = 7.0;
+            a_offset_y = 14.0;
         }
-        SeedType::Cattail => { a_scale = 0.45; a_offset_x = 8.0; a_offset_y = 13.0; }
-        SeedType::Umbrella => { a_scale = 0.5; a_offset_x = 5.0; a_offset_y = 10.0; }
-        SeedType::Kernelpult => { a_scale = 0.4; a_offset_x = 13.0; a_offset_y = 14.0; }
-        SeedType::Cabbagepult => { a_scale = 0.4; a_offset_x = 15.0; a_offset_y = 14.0; }
+        SeedType::Cattail => {
+            a_scale = 0.45;
+            a_offset_x = 8.0;
+            a_offset_y = 13.0;
+        }
+        SeedType::Umbrella => {
+            a_scale = 0.5;
+            a_offset_x = 5.0;
+            a_offset_y = 10.0;
+        }
+        SeedType::Kernelpult => {
+            a_scale = 0.4;
+            a_offset_x = 13.0;
+            a_offset_y = 14.0;
+        }
+        SeedType::Cabbagepult => {
+            a_scale = 0.4;
+            a_offset_x = 15.0;
+            a_offset_y = 14.0;
+        }
         SeedType::Melonpult | SeedType::Wintermelon => {
-            a_scale = 0.35; a_offset_x = 18.0; a_offset_y = 19.0;
+            a_scale = 0.35;
+            a_offset_x = 18.0;
+            a_offset_y = 19.0;
         }
-        SeedType::Gravebuster => { a_scale = 0.4; a_offset_x = 10.0; a_offset_y = 15.0; }
-        SeedType::Splitpea => { a_scale = 0.45; a_offset_x = 12.0; a_offset_y = 12.0; }
-        SeedType::Blover => { a_scale = 0.4; a_offset_x = 8.0; a_offset_y = 17.0; }
-        SeedType::Starfruit => { a_scale = 0.5; a_offset_x = 6.0; a_offset_y = 8.0; }
-        SeedType::Threepeater => { a_scale = 0.5; a_offset_x = 5.0; a_offset_y = 10.0; }
-        SeedType::Gatlingpea => { a_scale = 0.5; a_offset_x = 2.0; a_offset_y = 8.0; }
+        SeedType::Gravebuster => {
+            a_scale = 0.4;
+            a_offset_x = 10.0;
+            a_offset_y = 15.0;
+        }
+        SeedType::Splitpea => {
+            a_scale = 0.45;
+            a_offset_x = 12.0;
+            a_offset_y = 12.0;
+        }
+        SeedType::Blover => {
+            a_scale = 0.4;
+            a_offset_x = 8.0;
+            a_offset_y = 17.0;
+        }
+        SeedType::Starfruit => {
+            a_scale = 0.5;
+            a_offset_x = 6.0;
+            a_offset_y = 8.0;
+        }
+        SeedType::Threepeater => {
+            a_scale = 0.5;
+            a_offset_x = 5.0;
+            a_offset_y = 10.0;
+        }
+        SeedType::Gatlingpea => {
+            a_scale = 0.5;
+            a_offset_x = 2.0;
+            a_offset_y = 8.0;
+        }
         SeedType::ZombieNormal | SeedType::ZombieTrafficCone | SeedType::ZombiePail => {
-            a_scale = 0.35; a_offset_x = -3.0; a_offset_y = -7.0;
+            a_scale = 0.35;
+            a_offset_x = -3.0;
+            a_offset_y = -7.0;
         }
-        SeedType::ZombieDancer => { a_scale = 0.375; a_offset_x = -19.0; a_offset_y = -40.0; }
-        SeedType::ZombiePolevaulter => { a_scale = 0.35; a_offset_x = -8.0; a_offset_y = -12.0; }
-        SeedType::ZombieLadder | SeedType::ZombieDigger | SeedType::ZombieScreenDoor
+        SeedType::ZombieDancer => {
+            a_scale = 0.375;
+            a_offset_x = -19.0;
+            a_offset_y = -40.0;
+        }
+        SeedType::ZombiePolevaulter => {
+            a_scale = 0.35;
+            a_offset_x = -8.0;
+            a_offset_y = -12.0;
+        }
+        SeedType::ZombieLadder
+        | SeedType::ZombieDigger
+        | SeedType::ZombieScreenDoor
         | SeedType::ZombiePogo => {
-            a_scale = 0.35; a_offset_x = -3.0; a_offset_y = -10.0;
+            a_scale = 0.35;
+            a_offset_x = -3.0;
+            a_offset_y = -10.0;
         }
-        SeedType::ZombieBungee => { a_scale = 0.3; a_offset_x = 1.0; a_offset_y = -1.0; }
-        SeedType::ZombieFootball => { a_scale = 0.33; a_offset_x = -7.0; a_offset_y = -9.0; }
-        SeedType::ZombieBalloon => { a_scale = 0.35; a_offset_x = -3.0; a_offset_y = -5.0; }
-        SeedType::ZombieImp => { a_scale = 0.4; a_offset_x = -12.0; a_offset_y = -17.0; }
-        SeedType::Zomboni => { a_scale = 0.23; a_offset_x = 12.0; a_offset_y = 3.0; }
-        SeedType::ZombieGargantuar => { a_scale = 0.23; a_offset_x = 4.0; a_offset_y = 3.0; }
-        SeedType::BeghouledButtonShuffle | SeedType::BeghouledButtonCrater
-        | SeedType::SlotMachineSun | SeedType::SlotMachineDiamond
-        | SeedType::ZombiquariumSnorkle | SeedType::ZombiquariumTrophy => {
+        SeedType::ZombieBungee => {
+            a_scale = 0.3;
+            a_offset_x = 1.0;
+            a_offset_y = -1.0;
+        }
+        SeedType::ZombieFootball => {
+            a_scale = 0.33;
+            a_offset_x = -7.0;
+            a_offset_y = -9.0;
+        }
+        SeedType::ZombieBalloon => {
+            a_scale = 0.35;
+            a_offset_x = -3.0;
+            a_offset_y = -5.0;
+        }
+        SeedType::ZombieImp => {
+            a_scale = 0.4;
+            a_offset_x = -12.0;
+            a_offset_y = -17.0;
+        }
+        SeedType::Zomboni => {
+            a_scale = 0.23;
+            a_offset_x = 12.0;
+            a_offset_y = 3.0;
+        }
+        SeedType::ZombieGargantuar => {
+            a_scale = 0.23;
+            a_offset_x = 4.0;
+            a_offset_y = 3.0;
+        }
+        SeedType::BeghouledButtonShuffle
+        | SeedType::BeghouledButtonCrater
+        | SeedType::SlotMachineSun
+        | SeedType::SlotMachineDiamond
+        | SeedType::ZombiquariumSnorkle
+        | SeedType::ZombiquariumTrophy => {
             a_draw_seed_in_middle = false;
         }
         _ => {}
     }
 
     // 对应 C++: BigTime 特判
-    if crate::lawn::lawn_app::LawnApp::instance()
-        .map_or(false, |app| unsafe { (*app).game_mode == GameMode::ChallengeBigTime })
-    {
-        if a_seed_type == SeedType::Wallnut || a_seed_type == SeedType::Sunflower || a_seed_type == SeedType::Marigold {
+    if crate::lawn::lawn_app::LawnApp::instance().map_or(false, |app| unsafe {
+        (*app).game_mode == GameMode::ChallengeBigTime
+    }) {
+        if a_seed_type == SeedType::Wallnut
+            || a_seed_type == SeedType::Sunflower
+            || a_seed_type == SeedType::Marigold
+        {
             a_offset_x = 16.0;
             a_offset_y = 34.0;
         }
@@ -761,12 +997,28 @@ pub fn draw_seed_packet(
     if percent_dark > 0.0 {
         let a_darkness_height = (68.0 * percent_dark) as i32 + 2;
         // 对应 C++: 变暗区域 ClipRect + 灰 64 重绘背景与图标
-        g.set_color(&crate::framework::color::Color { r: 64, g: 64, b: 64, a: 255 });
+        g.set_color(&crate::framework::color::Color {
+            r: 64,
+            g: 64,
+            b: 64,
+            a: 255,
+        });
         g.set_colorize_images(true);
         g.clip_rect_xywh(x as i32, y as i32, 80, a_darkness_height);
         let a_seeds = get_image("IMAGE_SEEDS");
         if !a_seeds.is_null() {
-            unsafe { g.draw_image_cel_dest(&*a_seeds, &crate::framework::rect::Rect::new(x as i32, y as i32, (80.0 * a_scale_x) as i32, (86.0 * a_scale_y) as i32), a_packet_background); }
+            unsafe {
+                g.draw_image_cel_dest(
+                    &*a_seeds,
+                    &crate::framework::rect::Rect::new(
+                        x as i32,
+                        y as i32,
+                        (80.0 * a_scale_x) as i32,
+                        (86.0 * a_scale_y) as i32,
+                    ),
+                    a_packet_background,
+                );
+            }
         }
     }
 
@@ -780,15 +1032,21 @@ pub fn draw_seed_packet(
         a_font.ascent = 13;
         a_font.font_height = 12;
         g.set_font(&mut a_font as *mut crate::framework::graphics::font::Font);
-        g.set_color(&crate::framework::color::Color { r: 0, g: 0, b: 0, a: 255 });
+        g.set_color(&crate::framework::color::Color {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        });
         let a_text_width = a_font.string_width(&a_cost_str);
         let a_text_offset_x = 32 - a_text_width;
         let a_text_offset_y = 13 + 54;
-        g.draw_string(&a_cost_str, (x + a_text_offset_x as f32) as i32, (y + a_text_offset_y as f32) as i32);
+        g.draw_string(
+            &a_cost_str,
+            (x + a_text_offset_x as f32) as i32,
+            (y + a_text_offset_y as f32) as i32,
+        );
     }
 
     g.set_colorize_images(false);
 }
-
-
-

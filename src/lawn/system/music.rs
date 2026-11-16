@@ -2,28 +2,28 @@
 
 #![allow(dead_code)]
 
-use crate::lawn::lawn_app::LawnApp;
 use crate::framework::sound::music_interface::MusicInterface;
 use crate::lawn::game_enums::GameMode;
+use crate::lawn::lawn_app::LawnApp;
 
 /// 音乐曲目（对应 C++ MusicTune）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum MusicTune {
     None = -1,
-    DayGrasswalk = 1,          // 白天草地关卡
-    NightMoongrains,            // 黑夜草地关卡
-    PoolWateryGraves,           // 白天泳池关卡
-    FogRigormormist,            // 黑夜泳池关卡
-    RoofGrazeTheRoof,           // 屋顶关卡
-    ChooseYourSeeds,            // 选卡界面/小游戏界面
-    TitleCrazyDaveMainTheme,    // 主菜单
-    ZenGarden,                  // 禅境花园
-    PuzzleCerebrawl,            // 解谜模式
-    MinigameLoonboon,           // 小游戏
-    Conveyer,                   // 传送带关卡
-    FinalBossBrainiacManiac,    // 僵王博士关卡
-    CreditsZombiesOnYourLawn,   // MV
+    DayGrasswalk = 1,         // 白天草地关卡
+    NightMoongrains,          // 黑夜草地关卡
+    PoolWateryGraves,         // 白天泳池关卡
+    FogRigormormist,          // 黑夜泳池关卡
+    RoofGrazeTheRoof,         // 屋顶关卡
+    ChooseYourSeeds,          // 选卡界面/小游戏界面
+    TitleCrazyDaveMainTheme,  // 主菜单
+    ZenGarden,                // 禅境花园
+    PuzzleCerebrawl,          // 解谜模式
+    MinigameLoonboon,         // 小游戏
+    Conveyer,                 // 传送带关卡
+    FinalBossBrainiacManiac,  // 僵王博士关卡
+    CreditsZombiesOnYourLawn, // MV
     NumMusicTunes,
 }
 
@@ -146,11 +146,18 @@ impl Music {
         // 对应 C++ MusicInit（Music.cpp:189）：逐曲 LoadSong + mApp->mCompletedLoadingThreadTasks += MUSIC_LOADING_TASK_WEIGHT(3500)
         self.load_song(MusicFile::Drums, "sounds/mainmusic.mo3");
         if let Some(app) = self.app {
-            unsafe { (*app).m_loading_thread_tasks_completed += 3500; }
+            unsafe {
+                (*app).m_loading_thread_tasks_completed += 3500;
+            }
         }
-        self.load_song(MusicFile::CreditsZombiesOnYourLawn, "sounds/ZombiesOnYourLawn.ogg");
+        self.load_song(
+            MusicFile::CreditsZombiesOnYourLawn,
+            "sounds/ZombiesOnYourLawn.ogg",
+        );
         if let Some(app) = self.app {
-            unsafe { (*app).m_loading_thread_tasks_completed += 3500; }
+            unsafe {
+                (*app).m_loading_thread_tasks_completed += 3500;
+            }
         }
     }
 
@@ -166,7 +173,12 @@ impl Music {
                 self.stop_all_music();
             } else {
                 let a_fade_level = crate::todlib::tod_common::tod_animate_curve_float(
-                    self.fade_out_duration, 0, self.fade_out_counter, 1.0, 0.0, crate::lawn::game_enums::TodCurves::Linear,
+                    self.fade_out_duration,
+                    0,
+                    self.fade_out_counter,
+                    1.0,
+                    0.0,
+                    crate::lawn::game_enums::TodCurves::Linear,
                 );
                 if let Some(mi) = self.music_interface {
                     unsafe {
@@ -216,7 +228,9 @@ impl Music {
         match tune {
             MusicTune::DayGrasswalk => {
                 self.cur_music_file_main = MusicFile::MainMusic;
-                if offset == -1 { offset = 0; }
+                if offset == -1 {
+                    offset = 0;
+                }
                 self.play_from_offset(self.cur_music_file_main, offset, 1.0);
             }
             MusicTune::NightMoongrains => {
@@ -231,57 +245,79 @@ impl Music {
             }
             MusicTune::PoolWateryGraves => {
                 self.cur_music_file_main = MusicFile::MainMusic;
-                if offset == -1 { offset = 0x5E; }
+                if offset == -1 {
+                    offset = 0x5E;
+                }
                 self.play_from_offset(self.cur_music_file_main, offset, 1.0);
             }
             MusicTune::FogRigormormist => {
                 self.cur_music_file_main = MusicFile::MainMusic;
-                if offset == -1 { offset = 0x7D; }
+                if offset == -1 {
+                    offset = 0x7D;
+                }
                 self.play_from_offset(self.cur_music_file_main, offset, 1.0);
             }
             MusicTune::RoofGrazeTheRoof => {
                 self.cur_music_file_main = MusicFile::MainMusic;
-                if offset == -1 { offset = 0xB8; }
+                if offset == -1 {
+                    offset = 0xB8;
+                }
                 self.play_from_offset(self.cur_music_file_main, offset, 1.0);
             }
             MusicTune::ChooseYourSeeds => {
                 self.cur_music_file_main = MusicFile::MainMusic;
-                if offset == -1 { offset = 0x7A; }
+                if offset == -1 {
+                    offset = 0x7A;
+                }
                 self.play_from_offset(self.cur_music_file_main, offset, 1.0);
             }
             MusicTune::TitleCrazyDaveMainTheme => {
                 self.cur_music_file_main = MusicFile::MainMusic;
-                if offset == -1 { offset = 0x98; }
+                if offset == -1 {
+                    offset = 0x98;
+                }
                 self.play_from_offset(self.cur_music_file_main, offset, 1.0);
             }
             MusicTune::ZenGarden => {
                 self.cur_music_file_main = MusicFile::MainMusic;
-                if offset == -1 { offset = 0xDD; }
+                if offset == -1 {
+                    offset = 0xDD;
+                }
                 self.play_from_offset(self.cur_music_file_main, offset, 1.0);
             }
             MusicTune::PuzzleCerebrawl => {
                 self.cur_music_file_main = MusicFile::MainMusic;
-                if offset == -1 { offset = 0xB1; }
+                if offset == -1 {
+                    offset = 0xB1;
+                }
                 self.play_from_offset(self.cur_music_file_main, offset, 1.0);
             }
             MusicTune::MinigameLoonboon => {
                 self.cur_music_file_main = MusicFile::MainMusic;
-                if offset == -1 { offset = 0xA6; }
+                if offset == -1 {
+                    offset = 0xA6;
+                }
                 self.play_from_offset(self.cur_music_file_main, offset, 1.0);
             }
             MusicTune::Conveyer => {
                 self.cur_music_file_main = MusicFile::MainMusic;
-                if offset == -1 { offset = 0xD4; }
+                if offset == -1 {
+                    offset = 0xD4;
+                }
                 self.play_from_offset(self.cur_music_file_main, offset, 1.0);
             }
             MusicTune::FinalBossBrainiacManiac => {
                 self.cur_music_file_main = MusicFile::MainMusic;
-                if offset == -1 { offset = 0x9E; }
+                if offset == -1 {
+                    offset = 0x9E;
+                }
                 self.play_from_offset(self.cur_music_file_main, offset, 1.0);
             }
             MusicTune::CreditsZombiesOnYourLawn => {
                 self.cur_music_file_main = MusicFile::CreditsZombiesOnYourLawn;
-                if offset == -1 { offset = 0; }
+                if offset == -1 {
+                    offset = 0;
+                }
                 self.play_from_offset(self.cur_music_file_main, offset, 1.0);
             }
             _ => {}
@@ -368,13 +404,17 @@ impl Music {
         // 对应 C++ UpdateMusicBurst（Burst/Drums 状态机与音量调度）
         // [TRANSLATION_NOTE]: 依赖 board 僵尸计数与 SDL 轨道跳转（Mix_ModMusicStreamJumpToOrder），
         // Rust 侧以音乐接口音量近似；完整 MO3 轨道调度留待 SDL 音乐后端接入
-        let has_board = self.app.map_or(false, |app| unsafe { (*app).board.is_some() });
+        let has_board = self
+            .app
+            .map_or(false, |app| unsafe { (*app).board.is_some() });
         if !has_board {
             return;
         }
         let a_burst_scheme = match self.cur_music_tune {
-            MusicTune::DayGrasswalk | MusicTune::PoolWateryGraves
-            | MusicTune::FogRigormormist | MusicTune::RoofGrazeTheRoof => 1,
+            MusicTune::DayGrasswalk
+            | MusicTune::PoolWateryGraves
+            | MusicTune::FogRigormormist
+            | MusicTune::RoofGrazeTheRoof => 1,
             MusicTune::NightMoongrains => 2,
             _ => 0,
         };
@@ -436,7 +476,12 @@ impl Music {
         0
     }
 
-    pub fn setup_volume_for_tune(&mut self, tune: MusicTune, drums_volume: f32, hihats_volume: f32) {
+    pub fn setup_volume_for_tune(
+        &mut self,
+        tune: MusicTune,
+        drums_volume: f32,
+        hihats_volume: f32,
+    ) {
         // 对应 C++ SetupVolumeForTune：按曲目设置 30 轨音量（SDL ModMusic 通道）
         // [TRANSLATION_NOTE]: 依赖 Mix_ModMusicStreamSetChannelVolume 逐轨设置，
         // Rust 侧以主/鼓/镲三通道音量近似
@@ -472,7 +517,10 @@ impl Music {
 
     pub fn music_credit_screen_init(&mut self) {
         // 对应 C++ MusicCreditScreenInit
-        self.load_song(MusicFile::CreditsZombiesOnYourLawn, "sounds/ZombiesOnYourLawn.ogg");
+        self.load_song(
+            MusicFile::CreditsZombiesOnYourLawn,
+            "sounds/ZombiesOnYourLawn.ogg",
+        );
     }
 
     pub fn get_num_loading_tasks(&self) -> i32 {
@@ -488,18 +536,23 @@ impl Music {
         };
         unsafe {
             let app = &*app;
-            if app.game_mode == GameMode::ChallengeZenGarden || app.game_mode == GameMode::ChallengeTreeOfWisdom {
+            if app.game_mode == GameMode::ChallengeZenGarden
+                || app.game_mode == GameMode::ChallengeTreeOfWisdom
+            {
                 self.make_sure_music_is_playing(MusicTune::ZenGarden);
             } else if app.is_final_boss_level() {
                 self.make_sure_music_is_playing(MusicTune::FinalBossBrainiacManiac);
-            } else if app.is_wallnut_bowling_level() || app.is_whack_a_zombie_level()
-                || app.is_little_trouble_level() || app.is_bungee_blitz_level()
+            } else if app.is_wallnut_bowling_level()
+                || app.is_whack_a_zombie_level()
+                || app.is_little_trouble_level()
+                || app.is_bungee_blitz_level()
                 || app.game_mode == GameMode::ChallengeSpeed
             {
                 self.make_sure_music_is_playing(MusicTune::MinigameLoonboon);
-            } else if (app.is_adventure_mode() && (app.player_info.as_ref().map_or(0, |p| p.m_level) == 10
-                || app.player_info.as_ref().map_or(0, |p| p.m_level) == 20
-                || app.player_info.as_ref().map_or(0, |p| p.m_level) == 30))
+            } else if (app.is_adventure_mode()
+                && (app.player_info.as_ref().map_or(0, |p| p.m_level) == 10
+                    || app.player_info.as_ref().map_or(0, |p| p.m_level) == 20
+                    || app.player_info.as_ref().map_or(0, |p| p.m_level) == 30))
                 || app.game_mode == GameMode::ChallengeColumns
             {
                 self.make_sure_music_is_playing(MusicTune::Conveyer);

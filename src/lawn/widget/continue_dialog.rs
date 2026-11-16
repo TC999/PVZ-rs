@@ -95,9 +95,7 @@ impl ContinueDialog {
         // C++: LawnDialog(theApp, Dialogs::DIALOG_CONTINUE, true,
         //   theApp->GetString("CONTINUE_GAME_HEADER", "CONTINUE GAME?"),
         //   "", "[DIALOG_BUTTON_CANCEL]", Dialog::BUTTONS_FOOTER)
-        let is_adventure = unsafe {
-            app.map_or(false, |p| (*p).is_adventure_mode())
-        };
+        let is_adventure = unsafe { app.map_or(false, |p| (*p).is_adventure_mode()) };
 
         let mut d = LawnDialog::new();
         d.app = app;
@@ -159,7 +157,11 @@ impl ContinueDialog {
         {
             let weak = Rc::downgrade(&wrapper);
             let listener: Box<dyn ButtonListener> = Box::new(WeakButtonListener { host: weak });
-            let mut db = DialogButton::new(std::ptr::null_mut(), CONTINUE_DIALOG_CONTINUE, Some(listener));
+            let mut db = DialogButton::new(
+                std::ptr::null_mut(),
+                CONTINUE_DIALOG_CONTINUE,
+                Some(listener),
+            );
             db.label = CONTINUE_BUTTON_LABEL.to_string();
             db.has_alpha = true;
             db.has_transparencies = true;
@@ -171,7 +173,11 @@ impl ContinueDialog {
         {
             let weak = Rc::downgrade(&wrapper);
             let listener: Box<dyn ButtonListener> = Box::new(WeakButtonListener { host: weak });
-            let mut db = DialogButton::new(std::ptr::null_mut(), CONTINUE_DIALOG_NEW_GAME, Some(listener));
+            let mut db = DialogButton::new(
+                std::ptr::null_mut(),
+                CONTINUE_DIALOG_NEW_GAME,
+                Some(listener),
+            );
             let label = if is_adventure {
                 RESTART_LEVEL_LABEL
             } else {
@@ -239,11 +245,7 @@ impl ContinueDialog {
             if let Some(font) = &self.lines_font {
                 let avail = the_width - ci.left - ci.right - bi.left - bi.right - 4;
                 let line_spacing = font.line_spacing + self.line_spacing_offset;
-                let approx_chars_per_line = if avail > 0 {
-                    (avail / 8).max(1)
-                } else {
-                    1
-                };
+                let approx_chars_per_line = if avail > 0 { (avail / 8).max(1) } else { 1 };
                 let approx_lines = (self.dialog_lines.len() as i32 / approx_chars_per_line).max(1);
                 a_height += approx_lines * line_spacing;
             }

@@ -11,14 +11,16 @@
 #![allow(dead_code)]
 #![allow(invalid_reference_casting)]
 
+use crate::ffi::opengl::GLuint;
 use crate::framework::color::Color;
+use crate::framework::graphics::gl_interface::{
+    GLInterface, PixelFormat, TextureDataPiece, TriVertex,
+};
 use crate::framework::graphics::image::{Image, ImageKind, Span};
 use crate::framework::graphics::memory_image::MemoryImage;
-use crate::framework::graphics::gl_interface::{GLInterface, TextureDataPiece, PixelFormat, TriVertex};
-use crate::framework::rect::Rect;
 use crate::framework::point::Point;
+use crate::framework::rect::Rect;
 use crate::framework::sexy_matrix::SexyMatrix3;
-use crate::ffi::opengl::GLuint;
 
 /// OpenGL 纹理图像（对应 C++ GLImage）
 ///
@@ -196,7 +198,15 @@ impl GLImage {
     }
 
     /// 绘制线段（对应 C++ DrawLine）
-    pub fn draw_line(&mut self, start_x: f64, start_y: f64, end_x: f64, end_y: f64, color: &Color, draw_mode: i32) {
+    pub fn draw_line(
+        &mut self,
+        start_x: f64,
+        start_y: f64,
+        end_x: f64,
+        end_y: f64,
+        color: &Color,
+        draw_mode: i32,
+    ) {
         if !self.gl_interface.is_null() {
             unsafe {
                 (*self.gl_interface).draw_line(start_x, start_y, end_x, end_y, color, draw_mode);
@@ -205,27 +215,57 @@ impl GLImage {
     }
 
     /// 绘制抗锯齿线段（对应 C++ DrawLineAA）— GLImage 中与 DrawLine 相同
-    pub fn draw_line_aa(&mut self, start_x: f64, start_y: f64, end_x: f64, end_y: f64, color: &Color, draw_mode: i32) {
+    pub fn draw_line_aa(
+        &mut self,
+        start_x: f64,
+        start_y: f64,
+        end_x: f64,
+        end_y: f64,
+        color: &Color,
+        draw_mode: i32,
+    ) {
         self.draw_line(start_x, start_y, end_x, end_y, color, draw_mode);
     }
 
     /// 块传输（对应 C++ Blt）
-    pub fn blt(&mut self, src: &Image, dest_x: i32, dest_y: i32, src_rect: &Rect, color: &Color, draw_mode: i32, linear_filter: bool) {
+    pub fn blt(
+        &mut self,
+        src: &Image,
+        dest_x: i32,
+        dest_y: i32,
+        src_rect: &Rect,
+        color: &Color,
+        draw_mode: i32,
+        linear_filter: bool,
+    ) {
         // 确保自身纹理已提交
         self.commit_bits_internal();
         if !self.gl_interface.is_null() {
             unsafe {
                 (*self.gl_interface).blt(
                     &mut *(src as *const Image as *mut Image),
-                    dest_x as f32, dest_y as f32,
-                    src_rect, color, draw_mode, linear_filter,
+                    dest_x as f32,
+                    dest_y as f32,
+                    src_rect,
+                    color,
+                    draw_mode,
+                    linear_filter,
                 );
             }
         }
     }
 
     /// 浮点坐标 Blt（对应 C++ BltF）
-    pub fn blt_f(&mut self, src: &Image, dest_x: f32, dest_y: f32, src_rect: &Rect, clip_rect: &Rect, color: &Color, draw_mode: i32) {
+    pub fn blt_f(
+        &mut self,
+        src: &Image,
+        dest_x: f32,
+        dest_y: f32,
+        src_rect: &Rect,
+        clip_rect: &Rect,
+        color: &Color,
+        draw_mode: i32,
+    ) {
         if !self.gl_interface.is_null() {
             unsafe {
                 let gl = &mut *self.gl_interface;
@@ -235,13 +275,23 @@ impl GLImage {
                 {
                     gl.blt_clip_f(
                         &mut *(src as *const Image as *mut Image),
-                        dest_x, dest_y, src_rect,
-                        Some(clip_rect), color, draw_mode, true,
+                        dest_x,
+                        dest_y,
+                        src_rect,
+                        Some(clip_rect),
+                        color,
+                        draw_mode,
+                        true,
                     );
                 } else {
                     gl.blt(
                         &mut *(src as *const Image as *mut Image),
-                        dest_x, dest_y, src_rect, color, draw_mode, true,
+                        dest_x,
+                        dest_y,
+                        src_rect,
+                        color,
+                        draw_mode,
+                        true,
                     );
                 }
             }
@@ -272,8 +322,15 @@ impl GLImage {
             unsafe {
                 (*self.gl_interface).blt_rotated(
                     &mut *(src as *const Image as *mut Image),
-                    dest_x, dest_y, Some(clip_rect), color, draw_mode,
-                    rot, rot_center_x, rot_center_y, src_rect,
+                    dest_x,
+                    dest_y,
+                    Some(clip_rect),
+                    color,
+                    draw_mode,
+                    rot,
+                    rot_center_x,
+                    rot_center_y,
+                    src_rect,
                 );
             }
         }
@@ -281,13 +338,28 @@ impl GLImage {
 
     /// 拉伸 Blt（对应 C++ GLImage::StretchBlt，GLImage.cpp:171-178）
     /// [TRANSLATION_NOTE]: 同 blt_rotated —— C++ 也无软件回退，软件路径由 MemoryImage 承担。
-    pub fn stretch_blt(&mut self, src: &Image, dest_rect: &Rect, src_rect: &Rect, clip_rect: &Rect, color: &Color, draw_mode: i32, fast_stretch: bool) {
+    pub fn stretch_blt(
+        &mut self,
+        src: &Image,
+        dest_rect: &Rect,
+        src_rect: &Rect,
+        clip_rect: &Rect,
+        color: &Color,
+        draw_mode: i32,
+        fast_stretch: bool,
+    ) {
         self.commit_bits_internal();
         if !self.gl_interface.is_null() {
             unsafe {
                 (*self.gl_interface).stretch_blt(
                     &mut *(src as *const Image as *mut Image),
-                    dest_rect, src_rect, Some(clip_rect), color, draw_mode, fast_stretch, false,
+                    dest_rect,
+                    src_rect,
+                    Some(clip_rect),
+                    color,
+                    draw_mode,
+                    fast_stretch,
+                    false,
                 );
             }
         }
@@ -310,7 +382,15 @@ impl GLImage {
             unsafe {
                 (*self.gl_interface).blt_transformed(
                     &mut *(src as *const Image as *mut Image),
-                    Some(clip_rect), color, draw_mode, src_rect, matrix, blend, x, y, true,
+                    Some(clip_rect),
+                    color,
+                    draw_mode,
+                    src_rect,
+                    matrix,
+                    blend,
+                    x,
+                    y,
+                    true,
                 );
             }
         }
@@ -332,34 +412,69 @@ impl GLImage {
         if !self.gl_interface.is_null() {
             unsafe {
                 (*self.gl_interface).draw_triangles_tex(
-                    vertices, num_triangles, color, draw_mode,
-                    &mut *(texture as *const Image as *mut Image), tx, ty, blend,
+                    vertices,
+                    num_triangles,
+                    color,
+                    draw_mode,
+                    &mut *(texture as *const Image as *mut Image),
+                    tx,
+                    ty,
+                    blend,
                 );
             }
         }
     }
 
     /// 镜像 Blt（对应 C++ BltMirror）
-    pub fn blt_mirror(&mut self, src: &Image, dest_x: i32, dest_y: i32, src_rect: &Rect, color: &Color, draw_mode: i32, linear_filter: bool) {
+    pub fn blt_mirror(
+        &mut self,
+        src: &Image,
+        dest_x: i32,
+        dest_y: i32,
+        src_rect: &Rect,
+        color: &Color,
+        draw_mode: i32,
+        linear_filter: bool,
+    ) {
         self.commit_bits_internal();
         if !self.gl_interface.is_null() {
             unsafe {
                 (*self.gl_interface).blt_mirror(
                     &mut *(src as *const Image as *mut Image),
-                    dest_x as f32, dest_y as f32, src_rect, color, draw_mode, linear_filter,
+                    dest_x as f32,
+                    dest_y as f32,
+                    src_rect,
+                    color,
+                    draw_mode,
+                    linear_filter,
                 );
             }
         }
     }
 
     /// 拉伸镜像 Blt（对应 C++ StretchBltMirror）
-    pub fn stretch_blt_mirror(&mut self, src: &Image, dest_rect: &Rect, src_rect: &Rect, clip_rect: &Rect, color: &Color, draw_mode: i32, fast_stretch: bool) {
+    pub fn stretch_blt_mirror(
+        &mut self,
+        src: &Image,
+        dest_rect: &Rect,
+        src_rect: &Rect,
+        clip_rect: &Rect,
+        color: &Color,
+        draw_mode: i32,
+        fast_stretch: bool,
+    ) {
         self.commit_bits_internal();
         if !self.gl_interface.is_null() {
             unsafe {
                 (*self.gl_interface).stretch_blt(
                     &mut *(src as *const Image as *mut Image),
-                    dest_rect, src_rect, Some(clip_rect), color, draw_mode, fast_stretch, true,
+                    dest_rect,
+                    src_rect,
+                    Some(clip_rect),
+                    color,
+                    draw_mode,
+                    fast_stretch,
+                    true,
                 );
             }
         }

@@ -9,12 +9,12 @@
 
 #![allow(dead_code)]
 
-use std::collections::HashMap;
+use crate::framework::color::Color;
+use crate::framework::graphics::font::Font;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
 use crate::framework::rect::Rect;
-use crate::framework::color::Color;
-use crate::framework::graphics::font::Font;
+use std::collections::HashMap;
 
 /// 单个字形的绘制信息
 #[derive(Debug, Clone, Copy)]
@@ -79,7 +79,10 @@ enum Token {
 
 impl<'a> Tokenizer<'a> {
     fn new(s: &'a str) -> Self {
-        Tokenizer { bytes: s.as_bytes(), pos: 0 }
+        Tokenizer {
+            bytes: s.as_bytes(),
+            pos: 0,
+        }
     }
 
     fn peek(&self) -> Option<u8> {
@@ -100,10 +103,22 @@ impl<'a> Tokenizer<'a> {
         self.skip_ws();
         let c = self.peek()?;
         match c {
-            b'(' => { self.pos += 1; Some(Token::LParen) }
-            b')' => { self.pos += 1; Some(Token::RParen) }
-            b';' => { self.pos += 1; Some(Token::Semicolon) }
-            b',' => { self.pos += 1; Some(Token::Comma) }
+            b'(' => {
+                self.pos += 1;
+                Some(Token::LParen)
+            }
+            b')' => {
+                self.pos += 1;
+                Some(Token::RParen)
+            }
+            b';' => {
+                self.pos += 1;
+                Some(Token::Semicolon)
+            }
+            b',' => {
+                self.pos += 1;
+                Some(Token::Comma)
+            }
             b'\'' => {
                 self.pos += 1;
                 // 字符字面量，可能含转义
@@ -162,7 +177,9 @@ impl<'a> Tokenizer<'a> {
                         break;
                     }
                 }
-                Some(Token::Word(String::from_utf8_lossy(&self.bytes[start..self.pos]).to_string()))
+                Some(Token::Word(
+                    String::from_utf8_lossy(&self.bytes[start..self.pos]).to_string(),
+                ))
             }
             _ => {
                 // 其它字节：跳过（如未知符号）
@@ -175,14 +192,25 @@ impl<'a> Tokenizer<'a> {
     /// 解码单个 UTF-8 字符（c 为首字节）
     fn decode_utf8(&mut self, first: u8) -> char {
         let mut buf = vec![first];
-        let need = if first >= 0xF0 { 4 } else if first >= 0xE0 { 3 } else if first >= 0xC0 { 2 } else { 1 };
+        let need = if first >= 0xF0 {
+            4
+        } else if first >= 0xE0 {
+            3
+        } else if first >= 0xC0 {
+            2
+        } else {
+            1
+        };
         for _ in 1..need {
             if let Some(b) = self.peek() {
                 buf.push(b);
                 self.pos += 1;
             }
         }
-        String::from_utf8_lossy(&buf).chars().next().unwrap_or('\u{FFFD}')
+        String::from_utf8_lossy(&buf)
+            .chars()
+            .next()
+            .unwrap_or('\u{FFFD}')
     }
 }
 
@@ -279,7 +307,10 @@ impl DescParser {
         loop {
             match tz.next_token() {
                 None => break,
-                Some(Token::LParen) => { depth += 1; cur.push(Token::LParen); }
+                Some(Token::LParen) => {
+                    depth += 1;
+                    cur.push(Token::LParen);
+                }
                 Some(Token::RParen) => {
                     if depth == 0 {
                         break; // Define 块结束
@@ -325,7 +356,8 @@ impl DescParser {
                         }
                     }
                     if nums.len() == 4 {
-                        self.rects.push(Rect::new(nums[0], nums[1], nums[2], nums[3]));
+                        self.rects
+                            .push(Rect::new(nums[0], nums[1], nums[2], nums[3]));
                     }
                 }
             }
@@ -399,7 +431,15 @@ pub fn load_bitmap_font(name: &str) -> Option<*mut BitmapFont> {
         let width = desc.widths.get(i).copied().unwrap_or(0);
         let src_rect = desc.rects.get(i).copied().unwrap_or(Rect::ZERO);
         let (ox, oy) = desc.offsets.get(i).copied().unwrap_or((0, 0));
-        glyphs.insert(*ch, GlyphInfo { src_rect, offset_x: ox, offset_y: oy, advance: width });
+        glyphs.insert(
+            *ch,
+            GlyphInfo {
+                src_rect,
+                offset_x: ox,
+                offset_y: oy,
+                advance: width,
+            },
+        );
     }
 
     let font = BitmapFont {
@@ -459,7 +499,9 @@ pub fn font_global(name: &str) -> *mut Font {
         None => std::ptr::null_mut(),
     };
     if !ptr.is_null() {
-        unsafe { FONT_OBJ_CACHE.push((name.to_string(), ptr)); }
+        unsafe {
+            FONT_OBJ_CACHE.push((name.to_string(), ptr));
+        }
     }
     ptr
 }
@@ -542,7 +584,6 @@ impl BitmapFont {
         cur_x - x
     }
 }
-
 
 #[cfg(test)]
 mod tests {

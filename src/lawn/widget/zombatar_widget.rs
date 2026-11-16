@@ -3,20 +3,20 @@
 
 #![allow(dead_code)]
 
-use crate::framework::graphics::graphics::Graphics;
-use crate::framework::graphics::font::Font;
-use crate::framework::graphics::image::Image;
 use crate::framework::color::Color;
-use crate::framework::key_codes::{KEYCODE_ESCAPE, KeyCode};
+use crate::framework::graphics::font::Font;
+use crate::framework::graphics::graphics::Graphics;
+use crate::framework::graphics::image::Image;
+use crate::framework::key_codes::{KeyCode, KEYCODE_ESCAPE};
 use crate::framework::rect::Rect;
 use crate::framework::widget::dialog::{BUTTONS_YES_NO, ID_YES};
 use crate::framework::widget::widget_manager::WidgetManager;
 use crate::lawn::game_enums::*;
-use crate::lawn::zombatar::{
-    get_part_layout, zombatar_get_color, zombatar_read_signed_record_slot,
-    zombatar_read_record_slot, ZombatarPage,
-};
 use crate::lawn::widget::game_selector::GameSelectorImpl;
+use crate::lawn::zombatar::{
+    get_part_layout, zombatar_get_color, zombatar_read_record_slot,
+    zombatar_read_signed_record_slot, ZombatarPage,
+};
 use crate::todlib::tod_common::tod_animate_curve;
 
 /// 对应 C++ ZombatarWidget.h 按钮 ID 枚举
@@ -232,7 +232,10 @@ pub struct ZombatarWidget {
 }
 
 impl ZombatarWidget {
-    pub fn new(app: Option<*mut crate::lawn::lawn_app::LawnApp>, game_selector: Option<*mut GameSelectorImpl>) -> Self {
+    pub fn new(
+        app: Option<*mut crate::lawn::lawn_app::LawnApp>,
+        game_selector: Option<*mut GameSelectorImpl>,
+    ) -> Self {
         // [TRANSLATION_NOTE]: C++ 构造函数创建 9 个 NewLawnButton（IMAGE_ZOMBATAR_* 皮肤图未接入，
         // 按钮暂以字段占位），并置 mPreviewZombie=nullptr。
         ZombatarWidget {
@@ -261,7 +264,9 @@ impl ZombatarWidget {
     pub fn get_head_count(&self) -> i32 {
         self.app
             .and_then(|app| unsafe { (*app).player_info.as_ref() })
-            .map_or(0, |pi| pi.m_zombatar_data.len() as i32 / ZOMBATAR_RECORD_SIZE as i32)
+            .map_or(0, |pi| {
+                pi.m_zombatar_data.len() as i32 / ZOMBATAR_RECORD_SIZE as i32
+            })
     }
 
     /// 对应 C++ ZombatarWidget::CanSaveNewHead
@@ -288,7 +293,10 @@ impl ZombatarWidget {
 
     /// 对应 C++ ZombatarWidget::Open
     pub fn open(&mut self) {
-        if self.app.map_or(true, |app| unsafe { (*app).player_info.is_none() }) {
+        if self
+            .app
+            .map_or(true, |app| unsafe { (*app).player_info.is_none() })
+        {
             return;
         }
         self.sub_page = 0;
@@ -337,7 +345,9 @@ impl ZombatarWidget {
     /// 对应 C++ ZombatarWidget::ChangeState
     pub fn change_state(&mut self, the_state: ZombatarWidgetState) {
         self.state = the_state;
-        if the_state == ZombatarWidgetState::ToConfirm || the_state == ZombatarWidgetState::FromConfirm {
+        if the_state == ZombatarWidgetState::ToConfirm
+            || the_state == ZombatarWidgetState::FromConfirm
+        {
             self.transition_timer = ZOMBATAR_TRANSITION_TICKS;
         } else {
             self.hover_grid_cell = -1;
@@ -406,7 +416,10 @@ impl ZombatarWidget {
 
     /// 对应 C++ ZombatarWidget::ButtonDepress
     pub fn button_depress(&mut self, the_id: i32) {
-        if self.app.map_or(true, |app| unsafe { (*app).player_info.is_none() }) {
+        if self
+            .app
+            .map_or(true, |app| unsafe { (*app).player_info.is_none() })
+        {
             return;
         }
         match the_id {
@@ -552,16 +565,21 @@ impl ZombatarWidget {
     pub fn save_draft(&mut self) -> bool {
         let Some(app) = self.app else { return false };
         unsafe {
-            let Some(a_player_info) = (*app).player_info.as_mut() else { return false };
+            let Some(a_player_info) = (*app).player_info.as_mut() else {
+                return false;
+            };
             if !self.can_save_new_head() {
                 return false;
             }
             let a_offset = a_player_info.m_zombatar_data.len();
-            a_player_info.m_zombatar_data.resize(a_offset + ZOMBATAR_RECORD_SIZE, 0);
+            a_player_info
+                .m_zombatar_data
+                .resize(a_offset + ZOMBATAR_RECORD_SIZE, 0);
             let mut a_record = vec![0u8; ZOMBATAR_RECORD_SIZE];
             self.encode_record(&mut a_record);
             if a_offset + ZOMBATAR_RECORD_SIZE <= a_player_info.m_zombatar_data.len() {
-                let dst = &mut a_player_info.m_zombatar_data[a_offset..a_offset + ZOMBATAR_RECORD_SIZE];
+                let dst =
+                    &mut a_player_info.m_zombatar_data[a_offset..a_offset + ZOMBATAR_RECORD_SIZE];
                 dst.copy_from_slice(&a_record);
             }
             a_player_info.m_zombatar_head_count = self.get_head_count() as u32;
@@ -586,7 +604,9 @@ impl ZombatarWidget {
         let a_count = self.get_head_count();
         let Some(app) = self.app else { return };
         unsafe {
-            let Some(a_player_info) = (*app).player_info.as_mut() else { return };
+            let Some(a_player_info) = (*app).player_info.as_mut() else {
+                return;
+            };
             if a_count <= 0 {
                 return;
             }
@@ -650,7 +670,11 @@ impl ZombatarWidget {
         }
         self.part[ZOMBATAR_PAGE_SKIN] = 0;
         let a_skin_color = zombatar_read_signed_record_slot(the_record, ZOMBATAR_SLOT_SKIN_COLOR);
-        self.color[ZOMBATAR_PAGE_SKIN] = if a_skin_color < 0 { 0 } else { a_skin_color.min(11) };
+        self.color[ZOMBATAR_PAGE_SKIN] = if a_skin_color < 0 {
+            0
+        } else {
+            a_skin_color.min(11)
+        };
 
         for i in ZOMBATAR_PAGE_HAIR..9 {
             let a_page = page_for_index(i);
@@ -663,9 +687,17 @@ impl ZombatarWidget {
             if a_page == ZombatarPage::Backdrops {
                 self.part[i] = a_part.clamp(0, a_item_count - 1);
             } else {
-                self.part[i] = if a_part >= 0 && a_part < a_item_count { a_part } else { -1 };
+                self.part[i] = if a_part >= 0 && a_part < a_item_count {
+                    a_part
+                } else {
+                    -1
+                };
             }
-            self.color[i] = if a_color < 0 { ZOMBATAR_COLOR_NONE } else { a_color };
+            self.color[i] = if a_color < 0 {
+                ZOMBATAR_COLOR_NONE
+            } else {
+                a_color
+            };
         }
     }
 
@@ -714,11 +746,18 @@ impl ZombatarWidget {
         let a_cell_h = 67; // C++ IMAGE_ZOMBATAR_ACCESSORY_BG->mHeight
         let a_step_x = a_cell_w + ZOMBATAR_GRID_GAP;
         let a_step_y = a_cell_h + 3 + ZOMBATAR_GRID_GAP;
-        let a_origin_x = ZOMBATAR_PANEL_X + (ZOMBATAR_PANEL_WIDTH - ZOMBATAR_GRID_COLS * a_step_x) / 2 + ZOMBATAR_GRID_BIAS_X;
+        let a_origin_x = ZOMBATAR_PANEL_X
+            + (ZOMBATAR_PANEL_WIDTH - ZOMBATAR_GRID_COLS * a_step_x) / 2
+            + ZOMBATAR_GRID_BIAS_X;
         let a_origin_y = ZOMBATAR_PANEL_Y + 2 * ZOMBATAR_GRID_GAP + 120;
         let a_col = the_index % ZOMBATAR_GRID_COLS;
         let a_row = the_index / ZOMBATAR_GRID_COLS;
-        Rect::new(a_origin_x + a_col * a_step_x, a_origin_y + a_row * a_step_y, a_cell_w, a_cell_h)
+        Rect::new(
+            a_origin_x + a_col * a_step_x,
+            a_origin_y + a_row * a_step_y,
+            a_cell_w,
+            a_cell_h,
+        )
     }
 
     /// 对应 C++ ZombatarWidget::GetCategoryRect
@@ -726,7 +765,12 @@ impl ZombatarWidget {
         let a_tab_h = 39; // C++ GetCategoryImage 未接入默认
         let a_tab_w = 104;
         let a_step = (a_tab_h - 3).max(8);
-        Rect::new(ZOMBATAR_TABS_X, ZOMBATAR_TABS_Y0 + the_index * a_step, a_tab_w, a_tab_h)
+        Rect::new(
+            ZOMBATAR_TABS_X,
+            ZOMBATAR_TABS_Y0 + the_index * a_step,
+            a_tab_w,
+            a_tab_h,
+        )
     }
 
     /// 对应 C++ ZombatarWidget::GetColorRect —— [TRANSLATION_NOTE]: 图片未接入，色块默认 21x20
@@ -737,7 +781,12 @@ impl ZombatarWidget {
         let a_step_y = a_swatch_h + ZOMBATAR_COLOR_GAP;
         let a_col = the_index % ZOMBATAR_COLOR_COLS;
         let a_row = the_index / ZOMBATAR_COLOR_COLS;
-        Rect::new(ZOMBATAR_COLOR_X + a_col * a_step_x, ZOMBATAR_COLOR_Y + a_row * a_step_y, a_swatch_w, a_swatch_h)
+        Rect::new(
+            ZOMBATAR_COLOR_X + a_col * a_step_x,
+            ZOMBATAR_COLOR_Y + a_row * a_step_y,
+            a_swatch_w,
+            a_swatch_h,
+        )
     }
 
     /// 对应 C++ ZombatarWidget::GetBackgroundImage
@@ -760,33 +809,63 @@ impl ZombatarWidget {
         }
         let a_key: Option<String> = match the_page {
             ZombatarPage::Clothes => {
-                if the_index < 12 { Some(format!("IMAGE_ZOMBATAR_CLOTHES_{}", the_index + 1)) } else { None }
+                if the_index < 12 {
+                    Some(format!("IMAGE_ZOMBATAR_CLOTHES_{}", the_index + 1))
+                } else {
+                    None
+                }
             }
             ZombatarPage::Hats => {
-                if the_index < 14 { Some(format!("IMAGE_ZOMBATAR_HATS_{}", the_index + 1)) } else { None }
+                if the_index < 14 {
+                    Some(format!("IMAGE_ZOMBATAR_HATS_{}", the_index + 1))
+                } else {
+                    None
+                }
             }
             ZombatarPage::Hair => {
-                if the_index < 16 { Some(format!("IMAGE_ZOMBATAR_HAIR_{}", the_index + 1)) } else { None }
+                if the_index < 16 {
+                    Some(format!("IMAGE_ZOMBATAR_HAIR_{}", the_index + 1))
+                } else {
+                    None
+                }
             }
             ZombatarPage::Eyewear => {
-                if the_index < 16 { Some(format!("IMAGE_ZOMBATAR_EYEWEAR_{}", the_index + 1)) } else { None }
+                if the_index < 16 {
+                    Some(format!("IMAGE_ZOMBATAR_EYEWEAR_{}", the_index + 1))
+                } else {
+                    None
+                }
             }
             ZombatarPage::FacialHair => {
                 let mut a_idx = the_index;
                 if a_idx > 16 {
                     a_idx -= a_idx / 17;
                 }
-                if a_idx < 24 { Some(format!("IMAGE_ZOMBATAR_FACIALHAIR_{}", a_idx + 1)) } else { None }
+                if a_idx < 24 {
+                    Some(format!("IMAGE_ZOMBATAR_FACIALHAIR_{}", a_idx + 1))
+                } else {
+                    None
+                }
             }
             ZombatarPage::Tidbits => {
-                if the_index < 14 { Some(format!("IMAGE_ZOMBATAR_TIDBITS_{}", the_index + 1)) } else { None }
+                if the_index < 14 {
+                    Some(format!("IMAGE_ZOMBATAR_TIDBITS_{}", the_index + 1))
+                } else {
+                    None
+                }
             }
             ZombatarPage::Accessory => {
                 // C++: aAccessory[] = {1,2,3,4,5,6,8,9,...,16}（无 7）
                 if the_index < 15 {
-                    let a_res_index = if the_index >= 6 { the_index + 2 } else { the_index + 1 };
+                    let a_res_index = if the_index >= 6 {
+                        the_index + 2
+                    } else {
+                        the_index + 1
+                    };
                     Some(format!("IMAGE_ZOMBATAR_ACCESSORY_{}", a_res_index))
-                } else { None }
+                } else {
+                    None
+                }
             }
             _ => None,
         };
@@ -805,24 +884,41 @@ impl ZombatarWidget {
         const A_HATS_MASKS: [i32; 14] = [1, 0, 3, 0, 0, 6, 7, 8, 9, 0, 11, 0, 0, 0];
         const A_HAIR_MASKS: [i32; 16] = [1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 11, 12, 13, 14, 15, 0];
         const A_EYEWEAR_MASKS: [i32; 16] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 0, 0, 0, 0];
-        const A_FACIAL_MASKS: [i32; 24] =
-            [1, 0, 0, 4, 0, 0, 0, 8, 9, 10, 11, 12, 0, 14, 15, 16, 0, 18, 0, 0, 21, 22, 23, 24];
+        const A_FACIAL_MASKS: [i32; 24] = [
+            1, 0, 0, 4, 0, 0, 0, 8, 9, 10, 11, 12, 0, 14, 15, 16, 0, 18, 0, 0, 21, 22, 23, 24,
+        ];
         let a_mask_index: Option<i32> = match the_page {
             ZombatarPage::Hats => {
-                if the_index < 14 { Some(A_HATS_MASKS[the_index as usize]) } else { None }
+                if the_index < 14 {
+                    Some(A_HATS_MASKS[the_index as usize])
+                } else {
+                    None
+                }
             }
             ZombatarPage::Hair => {
-                if the_index < 16 { Some(A_HAIR_MASKS[the_index as usize]) } else { None }
+                if the_index < 16 {
+                    Some(A_HAIR_MASKS[the_index as usize])
+                } else {
+                    None
+                }
             }
             ZombatarPage::Eyewear => {
-                if the_index < 16 { Some(A_EYEWEAR_MASKS[the_index as usize]) } else { None }
+                if the_index < 16 {
+                    Some(A_EYEWEAR_MASKS[the_index as usize])
+                } else {
+                    None
+                }
             }
             ZombatarPage::FacialHair => {
                 let mut a_idx = the_index;
                 if a_idx > 16 {
                     a_idx -= a_idx / 17;
                 }
-                if a_idx < 24 { Some(A_FACIAL_MASKS[a_idx as usize]) } else { None }
+                if a_idx < 24 {
+                    Some(A_FACIAL_MASKS[a_idx as usize])
+                } else {
+                    None
+                }
             }
             _ => None,
         };
@@ -845,7 +941,12 @@ impl ZombatarWidget {
     }
 
     /// 对应 C++ ZombatarWidget::GetCategoryImage
-    pub fn get_category_image(&self, the_page: ZombatarPage, the_selected: bool, the_over: bool) -> *mut Image {
+    pub fn get_category_image(
+        &self,
+        the_page: ZombatarPage,
+        the_selected: bool,
+        the_over: bool,
+    ) -> *mut Image {
         let a_page_name = match the_page {
             ZombatarPage::Skin => "SKIN",
             ZombatarPage::Hair => "HAIR",
@@ -861,11 +962,18 @@ impl ZombatarWidget {
         let a_suffix = if the_selected {
             "_HIGHLIGHT"
         } else if the_over {
-            if the_page == ZombatarPage::Skin { "_HIGHLIGHT" } else { "_OVER" }
+            if the_page == ZombatarPage::Skin {
+                "_HIGHLIGHT"
+            } else {
+                "_OVER"
+            }
         } else {
             ""
         };
-        self.get_resource_image(&format!("IMAGE_ZOMBATAR_{}_BUTTON{}", a_page_name, a_suffix))
+        self.get_resource_image(&format!(
+            "IMAGE_ZOMBATAR_{}_BUTTON{}",
+            a_page_name, a_suffix
+        ))
     }
 
     /// 对应 C++ ZombatarWidget::CreatePreviewZombie
@@ -877,7 +985,13 @@ impl ZombatarWidget {
         // C++: mPreviewZombie->mApp = mApp; mPreviewZombie->mBoard = nullptr;
         a_preview.base.app = self.app;
         a_preview.base.board = None;
-        a_preview.zombie_initialize(0, ZombieType::Flag, false, None, crate::lawn::zombie::Zombie::ZOMBIE_WAVE_UI);
+        a_preview.zombie_initialize(
+            0,
+            ZombieType::Flag,
+            false,
+            None,
+            crate::lawn::zombie::Zombie::ZOMBIE_WAVE_UI,
+        );
         a_preview.pos_x = 0.0;
         a_preview.pos_y = 0.0;
         self.preview_zombie = Some(a_preview);
@@ -893,10 +1007,14 @@ impl ZombatarWidget {
 
     /// 从 ResourceManager 按 key 取图（对应 C++ IMAGE_* 全局资源；未接入资源表时返回 null）
     fn get_resource_image(&self, a_key: &str) -> *mut Image {
-        let Some(app) = self.app else { return std::ptr::null_mut() };
+        let Some(app) = self.app else {
+            return std::ptr::null_mut();
+        };
         unsafe {
             let app_ref = &*app;
-            let Some(rm) = app_ref.base.resource_manager else { return std::ptr::null_mut() };
+            let Some(rm) = app_ref.base.resource_manager else {
+                return std::ptr::null_mut();
+            };
             let rm_ref = &*rm;
             rm_ref.get_image(a_key).as_image_ptr()
         }
@@ -926,23 +1044,54 @@ impl ZombatarWidget {
         // C++: Widget::Update() 后预览僵尸生命周期（mX >= BOARD_WIDTH 滑出判定因无坐标字段省略）
         if let Some(a_preview) = self.preview_zombie.as_mut() {
             a_preview.update();
-        } else if self.app.map_or(false, |app| unsafe { (*app).player_info.is_some() }) {
+        } else if self
+            .app
+            .map_or(false, |app| unsafe { (*app).player_info.is_some() })
+        {
             self.create_preview_zombie();
         }
         // 对应 C++ ZombatarWidget::Update 的 transition_timer 逻辑
-        if self.state == ZombatarWidgetState::ToConfirm || self.state == ZombatarWidgetState::FromConfirm {
+        if self.state == ZombatarWidgetState::ToConfirm
+            || self.state == ZombatarWidgetState::FromConfirm
+        {
             self.transition_timer -= 1; // dec-then-use
             let a_to_confirm = self.state == ZombatarWidgetState::ToConfirm;
-            let a_from_x = if a_to_confirm { ZOMBATAR_FINISHED_X } else { ZOMBATAR_ACCEPT_X };
-            let a_from_y = if a_to_confirm { ZOMBATAR_FINISHED_Y } else { ZOMBATAR_CONFIRM_BTN_Y };
-            let a_to_x = if a_to_confirm { ZOMBATAR_ACCEPT_X } else { ZOMBATAR_FINISHED_X };
-            let a_to_y = if a_to_confirm { ZOMBATAR_CONFIRM_BTN_Y } else { ZOMBATAR_FINISHED_Y };
+            let a_from_x = if a_to_confirm {
+                ZOMBATAR_FINISHED_X
+            } else {
+                ZOMBATAR_ACCEPT_X
+            };
+            let a_from_y = if a_to_confirm {
+                ZOMBATAR_FINISHED_Y
+            } else {
+                ZOMBATAR_CONFIRM_BTN_Y
+            };
+            let a_to_x = if a_to_confirm {
+                ZOMBATAR_ACCEPT_X
+            } else {
+                ZOMBATAR_FINISHED_X
+            };
+            let a_to_y = if a_to_confirm {
+                ZOMBATAR_CONFIRM_BTN_Y
+            } else {
+                ZOMBATAR_FINISHED_Y
+            };
             // C++: mFinishedButton->Resize(AnimateCurve, AnimateCurve, 103, 26)
             let _curve_x = crate::todlib::tod_common::tod_animate_curve(
-                ZOMBATAR_TRANSITION_TICKS, 0, self.transition_timer, a_from_x, a_to_x, TodCurves::Linear,
+                ZOMBATAR_TRANSITION_TICKS,
+                0,
+                self.transition_timer,
+                a_from_x,
+                a_to_x,
+                TodCurves::Linear,
             );
             let _curve_y = crate::todlib::tod_common::tod_animate_curve(
-                ZOMBATAR_TRANSITION_TICKS, 0, self.transition_timer, a_from_y, a_to_y, TodCurves::Linear,
+                ZOMBATAR_TRANSITION_TICKS,
+                0,
+                self.transition_timer,
+                a_from_y,
+                a_to_y,
+                TodCurves::Linear,
             );
             let _ = (_curve_x, _curve_y);
             if self.transition_timer <= 0 {
@@ -977,7 +1126,12 @@ impl ZombatarWidget {
 
         // C++: 各按钮 SetVisible/SetDisabled —— 按钮未创建，状态判定保留
         let _ = (a_list, a_create, a_confirm, a_transition, a_count, _a_paged);
-        let _ = (ZOMBATAR_ACCEPT_X, ZOMBATAR_CONFIRM_BTN_Y, ZOMBATAR_FINISHED_X, ZOMBATAR_FINISHED_Y);
+        let _ = (
+            ZOMBATAR_ACCEPT_X,
+            ZOMBATAR_CONFIRM_BTN_Y,
+            ZOMBATAR_FINISHED_X,
+            ZOMBATAR_FINISHED_Y,
+        );
     }
 
     /// 对应 C++ ZombatarWidget::MouseMove（hover 追踪逻辑）
@@ -1017,7 +1171,10 @@ impl ZombatarWidget {
                 break;
             }
         }
-        if self.hover_grid_cell < 0 && self.page_allows_none() && self.get_item_hit_rect(a_item_count).contains(x, y) {
+        if self.hover_grid_cell < 0
+            && self.page_allows_none()
+            && self.get_item_hit_rect(a_item_count).contains(x, y)
+        {
             self.hover_grid_cell = a_item_count;
         }
 
@@ -1038,7 +1195,10 @@ impl ZombatarWidget {
 
     /// 对应 C++ ZombatarWidget::MouseUp
     pub fn mouse_up(&mut self, x: i32, y: i32) {
-        if self.app.map_or(true, |app| unsafe { (*app).player_info.is_none() }) {
+        if self
+            .app
+            .map_or(true, |app| unsafe { (*app).player_info.is_none() })
+        {
             return;
         }
         if self.state == ZombatarWidgetState::Create {
@@ -1081,7 +1241,8 @@ impl ZombatarWidget {
                             "[ZOMBATAR_DELETE_BUTTON]",
                             BUTTONS_YES_NO,
                         );
-                        let a_result = a_dialog.map_or(0, |d| unsafe { (&mut *d).wait_for_result(true) });
+                        let a_result =
+                            a_dialog.map_or(0, |d| unsafe { (&mut *d).wait_for_result(true) });
                         if a_result == ID_YES {
                             self.delete_current();
                         }
@@ -1095,7 +1256,14 @@ impl ZombatarWidget {
     pub fn button_press(&mut self, _the_id: i32) {}
 
     /// 对应 C++ ZombatarWidget::DrawImageColorized
-    fn draw_image_colorized(&self, g: &mut Graphics, the_image: &Image, the_x: i32, the_y: i32, the_color_index: i32) {
+    fn draw_image_colorized(
+        &self,
+        g: &mut Graphics,
+        the_image: &Image,
+        the_x: i32,
+        the_y: i32,
+        the_color_index: i32,
+    ) {
         g.set_colorize_images(true);
         g.set_color(&zombatar_get_color(the_color_index));
         g.draw_image_xy(the_image, the_x, the_y);
@@ -1104,7 +1272,15 @@ impl ZombatarWidget {
     }
 
     /// 对应 C++ ZombatarWidget::DrawPartImage
-    fn draw_part_image(&self, g: &mut Graphics, the_page: ZombatarPage, the_index: i32, the_x: i32, the_y: i32, the_color_index: i32) {
+    fn draw_part_image(
+        &self,
+        g: &mut Graphics,
+        the_page: ZombatarPage,
+        the_index: i32,
+        the_x: i32,
+        the_y: i32,
+        the_color_index: i32,
+    ) {
         let a_image = self.get_part_image(the_page, the_index);
         let a_mask = self.get_part_mask_image(the_page, the_index);
         if a_image.is_null() {
@@ -1122,7 +1298,13 @@ impl ZombatarWidget {
         if !a_mask.is_null() {
             let a_color_off_x = a_layout.map_or(0, |l| l.m_color_offset_x);
             let a_color_off_y = a_layout.map_or(0, |l| l.m_color_offset_y);
-            self.draw_image_colorized(g, unsafe { &*a_mask }, a_pos_x + a_color_off_x, a_pos_y + a_color_off_y, the_color_index);
+            self.draw_image_colorized(
+                g,
+                unsafe { &*a_mask },
+                a_pos_x + a_color_off_x,
+                a_pos_y + a_color_off_y,
+                the_color_index,
+            );
             g.draw_image_xy(unsafe { &*a_image }, a_pos_x, a_pos_y);
         } else {
             self.draw_image_colorized(g, unsafe { &*a_image }, a_pos_x, a_pos_y, the_color_index);
@@ -1136,7 +1318,11 @@ impl ZombatarWidget {
         let mut a_color = [ZOMBATAR_COLOR_NONE; 9];
         a_part[ZOMBATAR_PAGE_SKIN] = 0;
         let a_skin_color = zombatar_read_signed_record_slot(the_record, ZOMBATAR_SLOT_SKIN_COLOR);
-        a_color[ZOMBATAR_PAGE_SKIN] = if a_skin_color < 0 { 0 } else { a_skin_color.min(11) };
+        a_color[ZOMBATAR_PAGE_SKIN] = if a_skin_color < 0 {
+            0
+        } else {
+            a_skin_color.min(11)
+        };
         for i in ZOMBATAR_PAGE_HAIR..9 {
             let a_page = page_for_index(i);
             let mut a_item_count = get_total_items_for_page(a_page);
@@ -1148,16 +1334,32 @@ impl ZombatarWidget {
             if a_page == ZombatarPage::Backdrops {
                 a_part[i] = a_part_val.clamp(0, a_item_count - 1);
             } else {
-                a_part[i] = if a_part_val >= 0 && a_part_val < a_item_count { a_part_val } else { -1 };
+                a_part[i] = if a_part_val >= 0 && a_part_val < a_item_count {
+                    a_part_val
+                } else {
+                    -1
+                };
             }
-            a_color[i] = if a_color_val < 0 { ZOMBATAR_COLOR_NONE } else { a_color_val };
+            a_color[i] = if a_color_val < 0 {
+                ZOMBATAR_COLOR_NONE
+            } else {
+                a_color_val
+            };
         }
 
         // 背景
         let a_background = self.get_background_image(a_part[ZOMBATAR_PAGE_BACKDROPS]);
         if !a_background.is_null() {
-            if get_part_color_mode(ZombatarPage::Backdrops, a_part[ZOMBATAR_PAGE_BACKDROPS]) == ZOMBATAR_COLOR_MODE_2 {
-                self.draw_image_colorized(g, unsafe { &*a_background }, the_x, the_y, a_color[ZOMBATAR_PAGE_BACKDROPS]);
+            if get_part_color_mode(ZombatarPage::Backdrops, a_part[ZOMBATAR_PAGE_BACKDROPS])
+                == ZOMBATAR_COLOR_MODE_2
+            {
+                self.draw_image_colorized(
+                    g,
+                    unsafe { &*a_background },
+                    the_x,
+                    the_y,
+                    a_color[ZOMBATAR_PAGE_BACKDROPS],
+                );
             } else {
                 g.draw_image_xy(unsafe { &*a_background }, the_x, the_y);
             }
@@ -1178,7 +1380,13 @@ impl ZombatarWidget {
             }
         }
         if !a_zombie_blank_skin.is_null() {
-            self.draw_image_colorized(g, unsafe { &*a_zombie_blank_skin }, a_blank_x, a_blank_y, a_color[ZOMBATAR_PAGE_SKIN]);
+            self.draw_image_colorized(
+                g,
+                unsafe { &*a_zombie_blank_skin },
+                a_blank_x,
+                a_blank_y,
+                a_color[ZOMBATAR_PAGE_SKIN],
+            );
         }
         if !a_zombie_blank.is_null() {
             g.draw_image_xy(unsafe { &*a_zombie_blank }, a_blank_x, a_blank_y);
@@ -1208,7 +1416,13 @@ impl ZombatarWidget {
     }
 
     /// 对应 C++ ZombatarWidget::DrawColorSwatches
-    pub fn draw_color_swatches(&self, g: &mut Graphics, the_palette_base: i32, the_count: i32, the_saved_color: i32) {
+    pub fn draw_color_swatches(
+        &self,
+        g: &mut Graphics,
+        the_palette_base: i32,
+        the_count: i32,
+        the_saved_color: i32,
+    ) {
         g.set_colorize_images(true);
         for i in 0..the_count {
             let a_palette = the_palette_base + i;
@@ -1220,7 +1434,8 @@ impl ZombatarWidget {
             }
             let a_color = zombatar_get_color(a_palette);
             g.set_color(&Color::new(a_color.r, a_color.g, a_color.b, a_alpha as u8));
-            let a_is_none = a_palette == ZOMBATAR_PART_COLOR_NONE_1 || a_palette == ZOMBATAR_PART_COLOR_NONE_2;
+            let a_is_none =
+                a_palette == ZOMBATAR_PART_COLOR_NONE_1 || a_palette == ZOMBATAR_PART_COLOR_NONE_2;
             let a_image = if a_is_none {
                 self.get_resource_image("IMAGE_ZOMBATAR_COLORPICKER_NONE")
             } else {
@@ -1283,9 +1498,15 @@ impl ZombatarWidget {
                     ZOMBATAR_AVATAR_GROUND_X,
                     ZOMBATAR_AVATAR_GROUND_Y + ZOMBATAR_AVATAR_GROUND_CLIP_TOP,
                     a_ground_ref.get_width() - ZOMBATAR_AVATAR_GROUND_CLIP_RIGHT,
-                    a_ground_ref.get_height() - ZOMBATAR_AVATAR_GROUND_CLIP_TOP - ZOMBATAR_AVATAR_GROUND_CLIP_BOTTOM,
+                    a_ground_ref.get_height()
+                        - ZOMBATAR_AVATAR_GROUND_CLIP_TOP
+                        - ZOMBATAR_AVATAR_GROUND_CLIP_BOTTOM,
                 ));
-                g.draw_image_xy(a_ground_ref, ZOMBATAR_AVATAR_GROUND_X, ZOMBATAR_AVATAR_GROUND_Y);
+                g.draw_image_xy(
+                    a_ground_ref,
+                    ZOMBATAR_AVATAR_GROUND_X,
+                    ZOMBATAR_AVATAR_GROUND_Y,
+                );
                 g.clear_clip_rect();
             }
         }
@@ -1306,7 +1527,10 @@ impl ZombatarWidget {
     pub fn draw(&mut self, g: &mut Graphics) {
         // C++: if (!mApp->mPlayerInfo || mX >= BOARD_WIDTH) return;
         // [TRANSLATION_NOTE]: Rust 端无 widget 坐标字段（C++ mX >= BOARD_WIDTH 为滑出屏幕判定），省略。
-        if self.app.map_or(true, |app| unsafe { (*app).player_info.is_none() }) {
+        if self
+            .app
+            .map_or(true, |app| unsafe { (*app).player_info.is_none() })
+        {
             return;
         }
 
@@ -1390,16 +1614,32 @@ impl ZombatarWidget {
     fn zombatar_grid_align(the_page: ZombatarPage, the_index: i32) -> i32 {
         match the_page {
             ZombatarPage::Clothes => {
-                if the_index == 5 { 0 } else { ZOMBATAR_ALIGN_RIGHT | ZOMBATAR_ALIGN_BOTTOM }
+                if the_index == 5 {
+                    0
+                } else {
+                    ZOMBATAR_ALIGN_RIGHT | ZOMBATAR_ALIGN_BOTTOM
+                }
             }
             ZombatarPage::FacialHair => {
-                if the_index == 14 || the_index == 21 || the_index == 23 { ZOMBATAR_ALIGN_BOTTOM } else { 0 }
+                if the_index == 14 || the_index == 21 || the_index == 23 {
+                    ZOMBATAR_ALIGN_BOTTOM
+                } else {
+                    0
+                }
             }
             ZombatarPage::Hair => {
-                if the_index == 11 || the_index == 15 { ZOMBATAR_ALIGN_TOP } else { 0 }
+                if the_index == 11 || the_index == 15 {
+                    ZOMBATAR_ALIGN_TOP
+                } else {
+                    0
+                }
             }
             ZombatarPage::Hats => {
-                if (6..=8).contains(&the_index) { ZOMBATAR_ALIGN_TOP } else { 0 }
+                if (6..=8).contains(&the_index) {
+                    ZOMBATAR_ALIGN_TOP
+                } else {
+                    0
+                }
             }
             _ => 0,
         }
@@ -1419,9 +1659,12 @@ impl ZombatarWidget {
         }
 
         // C++: aBlankW（BACKGROUND_BLANK 宽，缺省 ZOMBATAR_LIST_BLANK_WIDTH）
-        let a_blank_w = self.get_image_width("IMAGE_ZOMBATAR_BACKGROUND_BLANK", ZOMBATAR_LIST_BLANK_WIDTH);
-        let a_portrait_x = ZOMBATAR_PANEL_X + (ZOMBATAR_PANEL_WIDTH - ZOMBATAR_LIST_CENTER_INSET) / 2
-            + ZOMBATAR_LIST_SPACING / 2 - a_blank_w / 2;
+        let a_blank_w =
+            self.get_image_width("IMAGE_ZOMBATAR_BACKGROUND_BLANK", ZOMBATAR_LIST_BLANK_WIDTH);
+        let a_portrait_x = ZOMBATAR_PANEL_X
+            + (ZOMBATAR_PANEL_WIDTH - ZOMBATAR_LIST_CENTER_INSET) / 2
+            + ZOMBATAR_LIST_SPACING / 2
+            - a_blank_w / 2;
 
         g.set_clip_rect(&Rect::new(
             ZOMBATAR_LIST_CLIP_X,
@@ -1449,7 +1692,12 @@ impl ZombatarWidget {
                 let an_offset = a_index as usize * ZOMBATAR_RECORD_SIZE;
                 if an_offset + ZOMBATAR_RECORD_SIZE <= a_data.len() {
                     let a_record = &a_data[an_offset..an_offset + ZOMBATAR_RECORD_SIZE];
-                    self.draw_avatar(g, a_portrait_x + i * (ZOMBATAR_LIST_SPACING + a_blank_w), ZOMBATAR_LIST_PORTRAIT_Y, a_record);
+                    self.draw_avatar(
+                        g,
+                        a_portrait_x + i * (ZOMBATAR_LIST_SPACING + a_blank_w),
+                        ZOMBATAR_LIST_PORTRAIT_Y,
+                        a_record,
+                    );
                 }
             }
         }
@@ -1495,7 +1743,8 @@ impl ZombatarWidget {
         for i in 0..9 {
             let a_rect = self.get_category_rect(i as i32);
             let a_page = page_for_index(i);
-            let a_category = self.get_category_image(a_page, a_page == self.page, i == self.hover_tab as usize);
+            let a_category =
+                self.get_category_image(a_page, a_page == self.page, i == self.hover_tab as usize);
             if !a_category.is_null() {
                 g.draw_image_xy(unsafe { &*a_category }, a_rect.x, a_rect.y);
             }
@@ -1552,7 +1801,12 @@ impl ZombatarWidget {
                 if !a_blank_skin.is_null() && !a_blank.is_null() {
                     unsafe {
                         let a_skin_c = zombatar_get_color(self.color[ZOMBATAR_PAGE_SKIN]);
-                        let a_skin_c = Color::new(a_skin_c.r, a_skin_c.g, a_skin_c.b, if a_dim { 0x80 } else { 0xff });
+                        let a_skin_c = Color::new(
+                            a_skin_c.r,
+                            a_skin_c.g,
+                            a_skin_c.b,
+                            if a_dim { 0x80 } else { 0xff },
+                        );
                         let a_cell_rect = Rect::new(
                             a_rect.x - ZOMBATAR_CELL_ZOMBIE_MARGIN,
                             a_rect.y - ZOMBATAR_CELL_ZOMBIE_MARGIN,
@@ -1561,7 +1815,8 @@ impl ZombatarWidget {
                         );
                         let a_src_blank = &*a_blank;
                         let a_src_blank_skin = &*a_blank_skin;
-                        let a_src_rect = Rect::new(0, 0, a_src_blank.get_width(), a_src_blank.get_height());
+                        let a_src_rect =
+                            Rect::new(0, 0, a_src_blank.get_width(), a_src_blank.get_height());
                         g.set_clip_rect(&Rect::new(
                             a_rect.x + ZOMBATAR_CELL_INSET,
                             a_rect.y + ZOMBATAR_CELL_INSET,
@@ -1591,15 +1846,23 @@ impl ZombatarWidget {
             if !a_image.is_null() {
                 unsafe {
                     let a_image_ref = &*a_image;
-                    let a_icon_rect = Self::fit_icon_rect(a_image_ref, &a_rect, Self::zombatar_grid_align(self.page, a_part_index));
+                    let a_icon_rect = Self::fit_icon_rect(
+                        a_image_ref,
+                        &a_rect,
+                        Self::zombatar_grid_align(self.page, a_part_index),
+                    );
                     let a_mask = self.get_part_mask_image(self.page, a_part_index);
                     if !a_mask.is_null() {
                         let a_mask_ref = &*a_mask;
                         let a_layout = get_part_layout(self.page, a_part_index);
                         let a_scale_x = a_icon_rect.width as f32 / a_image_ref.get_width() as f32;
                         let a_scale_y = a_icon_rect.height as f32 / a_image_ref.get_height() as f32;
-                        let a_mask_x = a_icon_rect.x + a_layout.map_or(0, |l| (l.m_color_offset_x as f32 * a_scale_x) as i32);
-                        let a_mask_y = a_icon_rect.y + a_layout.map_or(0, |l| (l.m_color_offset_y as f32 * a_scale_y) as i32);
+                        let a_mask_x = a_icon_rect.x
+                            + a_layout
+                                .map_or(0, |l| (l.m_color_offset_x as f32 * a_scale_x) as i32);
+                        let a_mask_y = a_icon_rect.y
+                            + a_layout
+                                .map_or(0, |l| (l.m_color_offset_y as f32 * a_scale_y) as i32);
                         g.draw_image_stretch(
                             a_mask_ref,
                             &Rect::new(
@@ -1656,10 +1919,19 @@ impl ZombatarWidget {
         // 色彩区（对应 C++ IMAGE_ZOMBATAR_COLORS_BG）
         let a_colors_bg = self.get_resource_image("IMAGE_ZOMBATAR_COLORS_BG");
         if !a_colors_bg.is_null() {
-            g.draw_image_xy(unsafe { &*a_colors_bg }, ZOMBATAR_COLORS_X, ZOMBATAR_COLORS_Y);
+            g.draw_image_xy(
+                unsafe { &*a_colors_bg },
+                ZOMBATAR_COLORS_X,
+                ZOMBATAR_COLORS_Y,
+            );
         }
         if self.page == ZombatarPage::Skin {
-            self.draw_color_swatches(g, 0, ZOMBATAR_SKIN_COLOR_COUNT, self.color[ZOMBATAR_PAGE_SKIN]);
+            self.draw_color_swatches(
+                g,
+                0,
+                ZOMBATAR_SKIN_COLOR_COUNT,
+                self.color[ZOMBATAR_PAGE_SKIN],
+            );
         } else {
             let a_mode = if self.part[self.page as usize] < 0 {
                 ZOMBATAR_COLOR_MODE_NONE
@@ -1677,13 +1949,23 @@ impl ZombatarWidget {
                 self.draw_string_wrapped(
                     g,
                     a_key,
-                    &Rect::new(ZOMBATAR_COLOR_HINT_X, ZOMBATAR_COLOR_HINT_Y, a_colors_w - 40, a_colors_h),
+                    &Rect::new(
+                        ZOMBATAR_COLOR_HINT_X,
+                        ZOMBATAR_COLOR_HINT_Y,
+                        a_colors_w - 40,
+                        a_colors_h,
+                    ),
                     0, // FONT_BRIANNETOD12
                     &Color::WHITE,
                     DS_ALIGN_LEFT,
                 );
             } else {
-                self.draw_color_swatches(g, zombatar_color_base_for_mode(a_mode), ZOMBATAR_PART_COLOR_COUNT, self.color[self.page as usize]);
+                self.draw_color_swatches(
+                    g,
+                    zombatar_color_base_for_mode(a_mode),
+                    ZOMBATAR_PART_COLOR_COUNT,
+                    self.color[self.page as usize],
+                );
             }
         }
 
@@ -1707,10 +1989,18 @@ impl ZombatarWidget {
             let a_prev = self.get_resource_image("IMAGE_ZOMBATAR_PREV_BUTTON");
             let a_next = self.get_resource_image("IMAGE_ZOMBATAR_NEXT_BUTTON");
             if !a_prev.is_null() {
-                g.draw_image_xy(unsafe { &*a_prev }, ZOMBATAR_PREV_PAGE_X, ZOMBATAR_PAGE_BTN_Y);
+                g.draw_image_xy(
+                    unsafe { &*a_prev },
+                    ZOMBATAR_PREV_PAGE_X,
+                    ZOMBATAR_PAGE_BTN_Y,
+                );
             }
             if !a_next.is_null() {
-                g.draw_image_xy(unsafe { &*a_next }, ZOMBATAR_NEXT_PAGE_X, ZOMBATAR_PAGE_BTN_Y);
+                g.draw_image_xy(
+                    unsafe { &*a_next },
+                    ZOMBATAR_NEXT_PAGE_X,
+                    ZOMBATAR_PAGE_BTN_Y,
+                );
             }
             g.set_colorize_images(false);
         }
@@ -1719,8 +2009,16 @@ impl ZombatarWidget {
             ZOMBATAR_TRANSITION_TICKS,
             0,
             self.transition_timer,
-            if self.state == ZombatarWidgetState::ToConfirm { 0 } else { 255 },
-            if self.state == ZombatarWidgetState::ToConfirm { 255 } else { 0 },
+            if self.state == ZombatarWidgetState::ToConfirm {
+                0
+            } else {
+                255
+            },
+            if self.state == ZombatarWidgetState::ToConfirm {
+                255
+            } else {
+                0
+            },
             TodCurves::Linear,
         );
         g.set_color(&Color::new(0, 0, 0, a_alpha as u8));
@@ -1745,7 +2043,11 @@ impl ZombatarWidget {
         g.set_font(self.font(3));
         g.set_color(&Color::new(254, 227, 0, 255));
         let a_header_w = unsafe { (*self.font(3)).string_width(a_header) };
-        g.draw_string(a_header, ZOMBATAR_CONFIRM_HEADER_X - a_header_w / 2, ZOMBATAR_CONFIRM_HEADER_Y);
+        g.draw_string(
+            a_header,
+            ZOMBATAR_CONFIRM_HEADER_X - a_header_w / 2,
+            ZOMBATAR_CONFIRM_HEADER_Y,
+        );
 
         // 正文（FONT_CONTINUUMBOLD14，wrapped 居中）
         self.draw_string_wrapped(
@@ -1767,16 +2069,32 @@ impl ZombatarWidget {
         g.set_color(&Color::WHITE);
         let a_accept = "[ZOMBATAR_FINISHED_BUTTON_TEXT]";
         let a_accept_w = unsafe { (*self.font(0)).string_width(a_accept) };
-        g.draw_string(a_accept, ZOMBATAR_CONFIRM_ACCEPT_LABEL_X - a_accept_w / 2, ZOMBATAR_CONFIRM_LABEL_Y);
+        g.draw_string(
+            a_accept,
+            ZOMBATAR_CONFIRM_ACCEPT_LABEL_X - a_accept_w / 2,
+            ZOMBATAR_CONFIRM_LABEL_Y,
+        );
         let a_back = "[ZOMBATAR_BACK_BUTTON_TEXT]";
         let a_back_w = unsafe { (*self.font(0)).string_width(a_back) };
-        g.draw_string(a_back, ZOMBATAR_CONFIRM_BACK_LABEL_X - a_back_w / 2, ZOMBATAR_CONFIRM_LABEL_Y);
+        g.draw_string(
+            a_back,
+            ZOMBATAR_CONFIRM_BACK_LABEL_X - a_back_w / 2,
+            ZOMBATAR_CONFIRM_LABEL_Y,
+        );
     }
 
     /// [TRANSLATION_NOTE]: C++ PvzpDrawStringWrapped（PvzpStringFile.cpp 通用格式系统：
     /// UTF8 解码 + "{...}" 内联格式 + 断行）Rust 端未翻译（独立底层基础设施）；
     /// 此处按语义实现空格断行 + 矩形内堆叠 + 水平对齐，供 Zombatar 提示文字使用。
-    fn draw_string_wrapped(&mut self, g: &mut Graphics, the_text: &str, the_rect: &Rect, the_font_kind: usize, the_color: &Color, the_justification: i32) {
+    fn draw_string_wrapped(
+        &mut self,
+        g: &mut Graphics,
+        the_text: &str,
+        the_rect: &Rect,
+        the_font_kind: usize,
+        the_color: &Color,
+        the_justification: i32,
+    ) {
         let a_font = self.font(the_font_kind);
         let mut a_lines: Vec<String> = Vec::new();
         let mut a_cur = String::new();
@@ -1836,7 +2154,12 @@ pub const ZOMBATAR_ALIGN_BOTTOM: i32 = 0x04;
 pub const ZOMBATAR_ALIGN_LEFT: i32 = 0x08;
 pub const ZOMBATAR_ALIGN_RIGHT: i32 = 0x10;
 /// 未选中且未悬停格子的调暗色（对应 C++ ZOMBATAR_CELL_DIM_COLOR）
-pub const ZOMBATAR_CELL_DIM_COLOR: Color = Color { r: 0x80, g: 0x80, b: 0x80, a: 0x80 };
+pub const ZOMBATAR_CELL_DIM_COLOR: Color = Color {
+    r: 0x80,
+    g: 0x80,
+    b: 0x80,
+    a: 0x80,
+};
 /// 列表模式（对应 C++ ZOMBATAR_LIST_*）
 pub const ZOMBATAR_LIST_PORTRAIT_Y: i32 = 175;
 pub const ZOMBATAR_LIST_SPACING: i32 = 40;
@@ -1878,7 +2201,12 @@ pub const ZOMBATAR_VEIL_HEIGHT: i32 = 331;
 pub const ZOMBATAR_PREV_PAGE_X: i32 = 175;
 pub const ZOMBATAR_NEXT_PAGE_X: i32 = 497;
 pub const ZOMBATAR_PAGE_BTN_Y: i32 = 372;
-pub const ZOMBATAR_PAGE_BTN_DISABLED_TINT: Color = Color { r: 108, g: 109, b: 140, a: 40 };
+pub const ZOMBATAR_PAGE_BTN_DISABLED_TINT: Color = Color {
+    r: 108,
+    g: 109,
+    b: 140,
+    a: 40,
+};
 /// 文本对齐（对应 C++ DrawStringJustification 的 DS_ALIGN_LEFT/CENTER）
 #[allow(non_upper_case_globals)]
 pub const DS_ALIGN_LEFT: i32 = 0;

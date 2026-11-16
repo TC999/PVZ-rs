@@ -119,7 +119,11 @@ pub trait DescParser {
             return false;
         }
         let first = s.as_bytes()[0];
-        (first >= b'0' && first <= b'9') || first == b'-' || first == b'+' || first == b'\'' || first == b'"'
+        (first >= b'0' && first <= b'9')
+            || first == b'-'
+            || first == b'+'
+            || first == b'\''
+            || first == b'"'
     }
 
     /// 去除引号（对应 C++ Unquote）
@@ -175,8 +179,8 @@ pub trait DescParser {
                                     if let Some(def) = self.define_map().get(&upper) {
                                         values.push(def.clone());
                                     } else {
-                                        self.error_message_mut().push_str(
-                                            &format!("Unable to Dereference \"{}\"", s));
+                                        self.error_message_mut()
+                                            .push_str(&format!("Unable to Dereference \"{}\"", s));
                                         return false;
                                     }
                                 }
@@ -194,7 +198,8 @@ pub trait DescParser {
     fn data_element_to_string(&self, elem: &DataElement) -> String {
         match elem {
             DataElement::List(list) => {
-                let parts: Vec<String> = list.iter()
+                let parts: Vec<String> = list
+                    .iter()
                     .map(|e| self.data_element_to_string(e))
                     .collect();
                 format!("({})", parts.join(", "))
@@ -232,7 +237,13 @@ pub trait DescParser {
         if !self.data_to_string(source, &mut temp) {
             return false;
         }
-        temp.trim().parse::<i32>().map(|v| { *val = v; true }).unwrap_or(false)
+        temp.trim()
+            .parse::<i32>()
+            .map(|v| {
+                *val = v;
+                true
+            })
+            .unwrap_or(false)
     }
 
     /// 从 DataElement 读取字符串向量（对应 C++ DataToStringVector）
@@ -252,8 +263,8 @@ pub trait DescParser {
                     Some(DataElement::List(list)) => list.clone(),
                     Some(DataElement::Single(_)) => return false,
                     None => {
-                        self.error_message_mut().push_str(
-                            &format!("Unable to Dereference \"{}\"", s));
+                        self.error_message_mut()
+                            .push_str(&format!("Unable to Dereference \"{}\"", s));
                         return false;
                     }
                 }
@@ -324,7 +335,12 @@ pub trait DescParser {
 
     /// 将字符串解析为列表（对应 C++ ParseToList）
     /// 注意：此方法不访问 self，只使用静态辅助函数
-    fn parse_to_list(s: &str, list: &mut Vec<DataElement>, expect_list_end: bool, string_pos: &mut Option<usize>) -> bool {
+    fn parse_to_list(
+        s: &str,
+        list: &mut Vec<DataElement>,
+        expect_list_end: bool,
+        string_pos: &mut Option<usize>,
+    ) -> bool {
         let mut in_single_quotes = false;
         let mut in_double_quotes = false;
         let mut escaped = false;
@@ -479,7 +495,10 @@ pub trait DescParser {
 
                     if !at_line_start || (a_char != b' ' && a_char != b'\t' && a_char != b'\n') {
                         if at_line_start {
-                            if (self.cmd_sep() & CMDSEP_NO_INDENT) != 0 && !is_indented && !self.current_line().is_empty() {
+                            if (self.cmd_sep() & CMDSEP_NO_INDENT) != 0
+                                && !is_indented
+                                && !self.current_line().is_empty()
+                            {
                                 buff_char = Some(a_char);
                                 break;
                             }
@@ -499,7 +518,8 @@ pub trait DescParser {
                         if a_char == b'\n' && skip_line {
                             skip_line = false;
                         } else if !skip_line {
-                            if a_char == b'\\' && (in_single_quotes || in_double_quotes) && !escaped {
+                            if a_char == b'\\' && (in_single_quotes || in_double_quotes) && !escaped
+                            {
                                 escaped = true;
                             } else {
                                 if a_char == b'\'' && !in_double_quotes && !escaped {
@@ -508,7 +528,11 @@ pub trait DescParser {
                                 if a_char == b'"' && !in_single_quotes && !escaped {
                                     in_double_quotes = !in_double_quotes;
                                 }
-                                if a_char == b';' && (self.cmd_sep() & CMDSEP_SEMICOLON) != 0 && !in_single_quotes && !in_double_quotes {
+                                if a_char == b';'
+                                    && (self.cmd_sep() & CMDSEP_SEMICOLON) != 0
+                                    && !in_single_quotes
+                                    && !in_double_quotes
+                                {
                                     break;
                                 }
                                 if escaped {

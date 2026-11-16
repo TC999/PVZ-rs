@@ -5,7 +5,7 @@
 
 use crate::framework::color::Color;
 use crate::framework::graphics::graphics::Graphics;
-use crate::framework::key_codes::{KEYCODE_ESCAPE, KeyCode};
+use crate::framework::key_codes::{KeyCode, KEYCODE_ESCAPE};
 use crate::framework::rect::Rect;
 use crate::framework::widget::widget_manager::WidgetManager;
 use crate::lawn::game_enums::*;
@@ -42,7 +42,10 @@ const TOS_CHECK_HEIGHT: i32 = 45;
 /// 僵尸自定义条款对话框（对应 C++ ZombatarTOS）
 pub struct ZombatarTOS {
     pub app: Option<*mut crate::lawn::lawn_app::LawnApp>,
-    pub x: i32, pub y: i32, pub width: i32, pub height: i32,
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
     /// 对应 C++ mBodyText / mTextHeight / mFlashArrow / mArrowAlpha / mArrowFadeDir
     pub body_text: String,
     pub text_height: i32,
@@ -60,7 +63,10 @@ impl ZombatarTOS {
     pub fn new(app: Option<*mut crate::lawn::lawn_app::LawnApp>) -> Self {
         let mut tos = ZombatarTOS {
             app,
-            x: 0, y: 0, width: TOS_DIALOG_WIDTH, height: TOS_DIALOG_HEIGHT,
+            x: 0,
+            y: 0,
+            width: TOS_DIALOG_WIDTH,
+            height: TOS_DIALOG_HEIGHT,
             body_text: String::new(),
             text_height: 0,
             flash_arrow: false,
@@ -89,17 +95,24 @@ impl ZombatarTOS {
 
     /// 对应 C++ ZombatarTOS::Resize
     pub fn resize(&mut self, x: i32, y: i32, width: i32, height: i32) {
-        self.x = x; self.y = y; self.width = width; self.height = height;
+        self.x = x;
+        self.y = y;
+        self.width = width;
+        self.height = height;
         // C++: LawnDialog::Resize + 子控件定位（依赖图片尺寸，默认 98/26）；
         // [TRANSLATION_NOTE]: 图片未接入，子控件定位暂略
     }
 
     /// 从 ResourceManager 按 key 取图（对应 C++ IMAGE_* 全局资源；未接入资源表时返回 null）
     fn get_resource_image(&self, a_key: &str) -> *mut crate::framework::graphics::image::Image {
-        let Some(app) = self.app else { return std::ptr::null_mut() };
+        let Some(app) = self.app else {
+            return std::ptr::null_mut();
+        };
         unsafe {
             let app_ref = &*app;
-            let Some(rm) = app_ref.base.resource_manager else { return std::ptr::null_mut() };
+            let Some(rm) = app_ref.base.resource_manager else {
+                return std::ptr::null_mut();
+            };
             let rm_ref = &*rm;
             rm_ref.get_image(a_key).as_image_ptr()
         }
@@ -120,7 +133,12 @@ impl ZombatarTOS {
         let a_offset = (self.slider_val * a_max_scroll as f64) as i32;
 
         // [TRANSLATION_NOTE]: C++ PvzpDrawStringWrapped（FONT_PICO129）按字符断行；Rust 端近似为按行绘制
-        g.set_clip_rect(&Rect::new(TOS_TEXT_X, TOS_TEXT_Y, TOS_TEXT_WIDTH, TOS_CLIP_HEIGHT));
+        g.set_clip_rect(&Rect::new(
+            TOS_TEXT_X,
+            TOS_TEXT_Y,
+            TOS_TEXT_WIDTH,
+            TOS_CLIP_HEIGHT,
+        ));
         let mut a_font = crate::framework::graphics::font::Font::new("Pico", 129);
         a_font.ascent = 13;
         a_font.font_height = 16;
@@ -215,7 +233,8 @@ impl ZombatarTOS {
     pub fn checkbox_checked(&mut self, the_id: i32, checked: bool) {
         if let Some(app) = self.app {
             unsafe {
-                (*app).play_sample(crate::framework::resources::ResourceId::SoundButtonclick as i32);
+                (*app)
+                    .play_sample(crate::framework::resources::ResourceId::SoundButtonclick as i32);
             }
         }
         if the_id == ZOMBATAR_TOS_CHECKBOX && checked {

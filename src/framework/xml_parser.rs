@@ -93,9 +93,7 @@ impl XMLParser {
         self.in_element = false;
 
         // 尝试从 PAK 或文件系统读取
-        let content = crate::framework::paklib::with_pak_interface(|pak| {
-            pak.load_file(file_name)
-        });
+        let content = crate::framework::paklib::with_pak_interface(|pak| pak.load_file(file_name));
 
         let data = match content {
             Some(d) => d,
@@ -200,7 +198,9 @@ impl XMLParser {
                 }
                 self.pos += 1;
             }
-            let text = String::from_utf8_lossy(&self.buf[text_start..self.pos]).trim().to_string();
+            let text = String::from_utf8_lossy(&self.buf[text_start..self.pos])
+                .trim()
+                .to_string();
             element.elem_type = XMLElement::TYPE_ELEMENT;
             element.value = text;
             return true;
@@ -278,7 +278,8 @@ impl XMLParser {
 
         // 读取直到 '?>'
         while self.pos < self.buf.len() {
-            if self.buf[self.pos] as char == '?' && self.pos + 1 < self.buf.len()
+            if self.buf[self.pos] as char == '?'
+                && self.pos + 1 < self.buf.len()
                 && self.buf[self.pos + 1] as char == '>'
             {
                 self.pos += 2; // 跳过 '?>'
@@ -318,7 +319,7 @@ impl XMLParser {
                 && self.buf[self.pos + 2] as char == '>'
             {
                 self.pos += 3; // 跳过 '-->'
-                // C++ 兼容：注释返回 false，跳过不返回元素
+                               // C++ 兼容：注释返回 false，跳过不返回元素
                 return self.next_element(element);
             }
             if self.buf[self.pos] as char == '\n' {
@@ -545,8 +546,14 @@ mod tests {
         assert!(parser.next_element(&mut elem));
         assert_eq!(elem.elem_type, XMLElement::TYPE_ELEMENT);
         assert_eq!(elem.section, "Image");
-        assert_eq!(elem.attributes.get("id").map(|s| s.as_str()), Some("test_image"));
-        assert_eq!(elem.attributes.get("path").map(|s| s.as_str()), Some("images/test.png"));
+        assert_eq!(
+            elem.attributes.get("id").map(|s| s.as_str()),
+            Some("test_image")
+        );
+        assert_eq!(
+            elem.attributes.get("path").map(|s| s.as_str()),
+            Some("images/test.png")
+        );
 
         // 第三个元素：<Sound ... /> (ELEMENT)
         let mut elem = XMLElement::new();
@@ -601,6 +608,9 @@ mod tests {
 
         let mut elem = XMLElement::new();
         assert!(parser.next_element(&mut elem));
-        assert_eq!(elem.attributes.get("name").map(|s| s.as_str()), Some("hello world"));
+        assert_eq!(
+            elem.attributes.get("name").map(|s| s.as_str()),
+            Some("hello world")
+        );
     }
 }

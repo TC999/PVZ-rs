@@ -3,14 +3,77 @@
 
 #![allow(dead_code)]
 
-use crate::framework::widget::widget::{Widget, WidgetImpl};
+use crate::framework::color::Color;
+use crate::framework::graphics::font::Font;
 use crate::framework::graphics::graphics::Graphics;
-use crate::todlib::tod_foley::FoleyType;
-use crate::framework::widget::widget_manager::WidgetManager;
+use crate::framework::graphics::image::Image;
+use crate::framework::key_codes::{KeyCode, KEYCODE_ESCAPE};
+use crate::framework::rect::Rect;
 use crate::framework::widget::button_widget::ButtonWidget;
 use crate::framework::widget::dialog_button::DialogButton;
-use crate::framework::key_codes::{KEYCODE_ESCAPE, KeyCode};
+use crate::framework::widget::widget::{Widget, WidgetImpl};
+use crate::framework::widget::widget_manager::WidgetManager;
 use crate::lawn::game_enums::*;
+use crate::todlib::tod_common::{tod_animate_curve, tod_string_translate};
+use crate::todlib::tod_foley::FoleyType;
+
+// ==================== DrawButton 的绘制辅助（对应 C++ PvzpLib 的绘制封装） ====================
+// [TRANSLATION_NOTE]: C++ 侧这些是 PvzpLib/PvzpCommon.cpp 的自由函数（PvzpDrawString:416-431
+// 等）。Rust 侧在原调用文件内以私有辅助实现，语义逐个对应。
+
+/// 按资源名取图（对应 C++ `Sexy::IMAGE_*` 全局资源常量），未找到返回空指针
+fn get_image(app: Option<*mut crate::lawn::lawn_app::LawnApp>, name: &str) -> *mut Image {
+    let Some(app) = app else {
+        return std::ptr::null_mut();
+    };
+    unsafe {
+        let Some(rm_ptr) = (*app).base.resource_manager else {
+            return std::ptr::null_mut();
+        };
+        (&*rm_ptr).get_image(name).as_image_ptr()
+    }
+}
+
+/// 按字体名取字体（对应 C++ `Sexy::FONT_*` 全局字体常量），未找到返回空指针
+fn get_font(name: &str) -> *mut Font {
+    crate::framework::graphics::bitmap_font::font_global(name)
+}
+
+/// 居中绘制字符串（对应 C++ `PvzpDrawString(..., DS_ALIGN_CENTER)`，PvzpCommon.cpp:416-431）
+/// C++ 内部先做 `PvzpStringTranslate`，再按 `x -= StringWidth / 2` 居中，最后以**当前字体**绘制。
+fn draw_pvzp_string(g: &mut Graphics, text: &str, x: i32, y: i32, color: &Color) {
+    let a_final_string = tod_string_translate(text);
+    let a_pos_x = x - g.string_width(&a_final_string) / 2; // DS_ALIGN_CENTER = 2（ConstEnums.h:337）
+    g.set_color(color);
+    g.draw_string(&a_final_string, a_pos_x, y);
+}
+
+/// 按浮点比例缩放绘制整图（对应 C++ `PvzpDrawImageScaledF`）
+fn draw_pvzp_image_scaled_f(
+    g: &mut Graphics,
+    app: Option<*mut crate::lawn::lawn_app::LawnApp>,
+    name: &str,
+    x: i32,
+    y: i32,
+    scale_x: f32,
+    scale_y: f32,
+) {
+    let img = get_image(app, name);
+    if img.is_null() {
+        return;
+    }
+    unsafe {
+        let (w, h) = ((*img).width, (*img).height);
+        let a_dest = Rect::new(
+            x,
+            y,
+            (w as f32 * scale_x).round() as i32,
+            (h as f32 * scale_y).round() as i32,
+        );
+        let a_src = Rect::new(0, 0, w, h);
+        g.draw_image_stretch(&*img, &a_dest, &a_src);
+    }
+}
 
 /// 挑战模式数量（对应 C++ #define NUM_CHALLENGE_MODES）
 pub const NUM_CHALLENGE_MODES: usize = 73; // 对应 C++ NUM_GAME_MODES - 1
@@ -18,7 +81,7 @@ pub const NUM_CHALLENGE_MODES: usize = 73; // 对应 C++ NUM_GAME_MODES - 1
 /// 挑战模式选择界面（对应 C++ ChallengeScreen）
 pub struct ChallengeScreen {
     pub back_button: Option<*mut DialogButton>,
-    pub page_button: [Option<*mut ButtonWidget>; 4],  // MAX_CHALLANGE_PAGES
+    pub page_button: [Option<*mut ButtonWidget>; 4], // MAX_CHALLANGE_PAGES
     pub challenge_buttons: Vec<Option<*mut ButtonWidget>>,
     pub app: Option<*mut crate::lawn::lawn_app::LawnApp>,
     pub tool_tip: Option<*mut crate::lawn::tool_tip_widget::ToolTipWidget>,
@@ -60,8 +123,11 @@ impl ChallengeScreen {
         self.unlock_state = UnlockingState::Shaking;
         self.unlock_state_counter = 100;
         self.unlock_challenge_index = 0;
-        for a_challenge_mode in 0..72 { // NUM_CHALLENGE_MODES
-            let Some(a_def) = get_challenge_definition(a_challenge_mode) else { continue };
+        for a_challenge_mode in 0..72 {
+            // NUM_CHALLENGE_MODES
+            let Some(a_def) = get_challenge_definition(a_challenge_mode) else {
+                continue;
+            };
             if a_def.page == page {
                 let page_ok = page != ChallengePage::Puzzle
                     || (!is_i_zombie && Self::is_scary_potter_level(a_def.challenge_mode))
@@ -111,7 +177,9 @@ impl ChallengeScreen {
 
     pub fn show_page_buttons(&self) -> bool {
         // 对应 C++ ShowPageButtons
-        let cheat_keys = self.app.map_or(false, |app| unsafe { (*app).m_tod_cheat_keys });
+        let cheat_keys = self
+            .app
+            .map_or(false, |app| unsafe { (*app).m_tod_cheat_keys });
         cheat_keys
             && self.page_index != ChallengePage::Survival
             && self.page_index != ChallengePage::Puzzle
@@ -119,15 +187,26 @@ impl ChallengeScreen {
 
     pub fn update_buttons(&mut self) {
         // 对应 C++ UpdateButtons
-        for a_challenge_mode in 0..72 { // NUM_CHALLENGE_MODES
+        for a_challenge_mode in 0..72 {
+            // NUM_CHALLENGE_MODES
             let visible = get_challenge_definition(a_challenge_mode)
                 .map_or(false, |def| def.page == self.page_index);
-            if let Some(btn) = self.challenge_buttons.get(a_challenge_mode as usize).copied().flatten() {
-                unsafe { (*btn).visible = visible; }
+            if let Some(btn) = self
+                .challenge_buttons
+                .get(a_challenge_mode as usize)
+                .copied()
+                .flatten()
+            {
+                unsafe {
+                    (*btn).visible = visible;
+                }
             }
         }
-        for a_page in 0..4 { // MAX_CHALLANGE_PAGES
-            let Some(btn) = self.page_button[a_page] else { continue };
+        for a_page in 0..4 {
+            // MAX_CHALLANGE_PAGES
+            let Some(btn) = self.page_button[a_page] else {
+                continue;
+            };
             unsafe {
                 let b = &mut *btn;
                 if a_page as i32 == ChallengePage::Limbo as i32 && self.limbo_page_unlocked {
@@ -135,12 +214,14 @@ impl ChallengeScreen {
                 }
                 if a_page as i32 == self.page_index as i32 {
                     if !b.colors.is_empty() {
-                        b.colors[crate::framework::widget::button_widget::COLOR_LABEL] = crate::framework::color::Color::from_rgb(64, 64, 64);
+                        b.colors[crate::framework::widget::button_widget::COLOR_LABEL] =
+                            crate::framework::color::Color::from_rgb(64, 64, 64);
                     }
                     b.disabled = true;
                 } else {
                     if !b.colors.is_empty() {
-                        b.colors[crate::framework::widget::button_widget::COLOR_LABEL] = crate::framework::color::Color::from_rgb(255, 240, 0);
+                        b.colors[crate::framework::widget::button_widget::COLOR_LABEL] =
+                            crate::framework::color::Color::from_rgb(255, 240, 0);
                     }
                     b.disabled = false;
                 }
@@ -151,7 +232,8 @@ impl ChallengeScreen {
     pub fn accomplishments_needed(&self, challenge_index: i32) -> i32 {
         // 对应 C++ AccomplishmentsNeeded
         let mut a_trophies_needed = self.more_trophies_needed(challenge_index);
-        let a_game_mode = get_challenge_definition(challenge_index).map_or(GameMode::Adventure, |d| d.challenge_mode);
+        let a_game_mode = get_challenge_definition(challenge_index)
+            .map_or(GameMode::Adventure, |d| d.challenge_mode);
         if let Some(app) = self.app {
             unsafe {
                 if (*app).is_survival_endless(a_game_mode)
@@ -164,17 +246,30 @@ impl ChallengeScreen {
                 }
             }
         }
-        if self.cheat_enable_challenges { 0 } else { a_trophies_needed }
+        if self.cheat_enable_challenges {
+            0
+        } else {
+            a_trophies_needed
+        }
     }
 
     pub fn draw_button(&self, g: &mut Graphics, challenge_index: i32) {
         // 对应 C++ DrawButton：绘制挑战按钮（图标/窗口框/名称/锁）
-        let Some(btn) = self.challenge_buttons.get(challenge_index as usize).copied().flatten() else { return };
+        let Some(btn) = self
+            .challenge_buttons
+            .get(challenge_index as usize)
+            .copied()
+            .flatten()
+        else {
+            return;
+        };
         unsafe {
             if !(*btn).visible {
                 return;
             }
-            let Some(a_def) = get_challenge_definition(challenge_index) else { return };
+            let Some(a_def) = get_challenge_definition(challenge_index) else {
+                return;
+            };
             let mut a_pos_x = (*btn).x;
             let mut a_pos_y = (*btn).y;
             if (*btn).is_down {
@@ -195,7 +290,10 @@ impl ChallengeScreen {
 
                 let a_record = self.app.map_or(0, |app| unsafe {
                     (*app).player_info.as_ref().map_or(0, |info| {
-                        info.m_challenge_records.get(challenge_index as usize).copied().unwrap_or(0)
+                        info.m_challenge_records
+                            .get(challenge_index as usize)
+                            .copied()
+                            .unwrap_or(0)
                     })
                 });
                 if a_record > 0 {
@@ -245,7 +343,9 @@ impl ChallengeScreen {
         if self.unlock_state == UnlockingState::Shaking {
             if self.unlock_state_counter == 0 {
                 if let Some(app) = self.app {
-                    unsafe { (*app).play_foley(FoleyType::Paper as i32); }
+                    unsafe {
+                        (*app).play_foley(FoleyType::Paper as i32);
+                    }
                 }
                 self.unlock_state = UnlockingState::Fading;
                 self.unlock_state_counter = 50;
@@ -288,7 +388,8 @@ impl ChallengeScreen {
         // 对应 C++ ChallengeScreen::ButtonPress（ChallengeScreen.cpp:647）：mApp->PlaySample(SOUND_BUTTONCLICK)
         if let Some(app) = self.app {
             unsafe {
-                (*app).play_sample(crate::framework::resources::ResourceId::SoundButtonclick as i32);
+                (*app)
+                    .play_sample(crate::framework::resources::ResourceId::SoundButtonclick as i32);
             }
         }
     }
@@ -297,15 +398,20 @@ impl ChallengeScreen {
         // 对应 C++ ButtonDepress
         let Some(app) = self.app else { return };
         unsafe {
-            if the_id == 100 { // ChallengeScreen_Back
+            if the_id == 100 {
+                // ChallengeScreen_Back
                 (*app).kill_challenge_screen();
                 (*app).do_back_to_main();
             }
 
             let a_challenge_mode = the_id - 200; // ChallengeScreen_Mode
-            if a_challenge_mode >= 0 && a_challenge_mode < 72 { // NUM_CHALLENGE_MODES
+            if a_challenge_mode >= 0 && a_challenge_mode < 72 {
+                // NUM_CHALLENGE_MODES
                 (*app).kill_challenge_screen();
-                (*app).pre_new_game(std::mem::transmute::<i32, GameMode>(a_challenge_mode + 1), true);
+                (*app).pre_new_game(
+                    std::mem::transmute::<i32, GameMode>(a_challenge_mode + 1),
+                    true,
+                );
             }
 
             let a_page_index = the_id - 300; // ChallengeScreen_Page
@@ -331,21 +437,34 @@ impl ChallengeScreen {
             // [TRANSLATION_NOTE]: C++ 中 mWidgetManager->mMouseIn/mActive 判定鼠标在窗内；
             // Rust 侧以 base.active 近似
             if !(*app).base.active {
-                self.tool_tip.map_or((), |tip| unsafe { (*tip).m_visible = false; });
+                self.tool_tip.map_or((), |tip| unsafe {
+                    (*tip).m_visible = false;
+                });
                 return;
             }
         }
         let mouse_x = 0; // [TRANSLATION_NOTE]: Rust 侧 widget_manager 未跟踪鼠标位置
         let mouse_y = 0;
         for a_challenge_mode in 0..72 {
-            let Some(a_def) = get_challenge_definition(a_challenge_mode) else { continue };
-            let Some(btn) = self.challenge_buttons.get(a_challenge_mode as usize).copied().flatten() else { continue };
+            let Some(a_def) = get_challenge_definition(a_challenge_mode) else {
+                continue;
+            };
+            let Some(btn) = self
+                .challenge_buttons
+                .get(a_challenge_mode as usize)
+                .copied()
+                .flatten()
+            else {
+                continue;
+            };
             unsafe {
                 if !(*btn).visible || !(*btn).disabled {
                     continue;
                 }
-                let in_button = mouse_x >= (*btn).x && mouse_x < (*btn).x + (*btn).width
-                    && mouse_y >= (*btn).y && mouse_y < (*btn).y + (*btn).height;
+                let in_button = mouse_x >= (*btn).x
+                    && mouse_x < (*btn).x + (*btn).width
+                    && mouse_y >= (*btn).y
+                    && mouse_y < (*btn).y + (*btn).height;
                 if !in_button || self.accomplishments_needed(a_challenge_mode) > 1 {
                     continue;
                 }
@@ -358,13 +477,17 @@ impl ChallengeScreen {
                     let mut a_label = "";
                     if self.page_index == ChallengePage::Puzzle {
                         if Self::is_scary_potter_level(a_def.challenge_mode) {
-                            a_label = if !(*app).has_finished_adventure() && a_def.challenge_mode == GameMode::ScaryPotter4 {
+                            a_label = if !(*app).has_finished_adventure()
+                                && a_def.challenge_mode == GameMode::ScaryPotter4
+                            {
                                 "[FINISH_ADVENTURE_TOOLTIP]"
                             } else {
                                 "[ONE_MORE_SCARY_POTTER_TOOLTIP]"
                             };
                         } else if Self::is_i_zombie_level(a_def.challenge_mode) {
-                            a_label = if !(*app).has_finished_adventure() && a_def.challenge_mode == GameMode::PuzzleIZombie4 {
+                            a_label = if !(*app).has_finished_adventure()
+                                && a_def.challenge_mode == GameMode::PuzzleIZombie4
+                            {
                                 "[FINISH_ADVENTURE_TOOLTIP]"
                             } else {
                                 "[ONE_MORE_IZOMBIE_TOOLTIP]"
@@ -392,7 +515,9 @@ impl ChallengeScreen {
             }
         }
         if let Some(tip) = self.tool_tip {
-            unsafe { (*tip).m_visible = false; }
+            unsafe {
+                (*tip).m_visible = false;
+            }
         }
     }
 
@@ -448,78 +573,582 @@ pub struct ChallengeDefinition {
 pub fn get_challenge_definition(challenge_mode: i32) -> Option<&'static ChallengeDefinition> {
     // 对应 C++ gChallengeDefs 静态定义表
     static G_CHALLENGE_DEFS: [ChallengeDefinition; 72] = [
-        ChallengeDefinition { challenge_mode: GameMode::SurvivalNormalStage1, challenge_icon_index: 0, page: ChallengePage::Survival, row: 0, col: 0, challenge_name: Some("[SURVIVAL_DAY_NORMAL]") },
-        ChallengeDefinition { challenge_mode: GameMode::SurvivalNormalStage2, challenge_icon_index: 1, page: ChallengePage::Survival, row: 0, col: 1, challenge_name: Some("[SURVIVAL_NIGHT_NORMAL]") },
-        ChallengeDefinition { challenge_mode: GameMode::SurvivalNormalStage3, challenge_icon_index: 2, page: ChallengePage::Survival, row: 0, col: 2, challenge_name: Some("[SURVIVAL_POOL_NORMAL]") },
-        ChallengeDefinition { challenge_mode: GameMode::SurvivalNormalStage4, challenge_icon_index: 3, page: ChallengePage::Survival, row: 0, col: 3, challenge_name: Some("[SURVIVAL_FOG_NORMAL]") },
-        ChallengeDefinition { challenge_mode: GameMode::SurvivalNormalStage5, challenge_icon_index: 4, page: ChallengePage::Survival, row: 0, col: 4, challenge_name: Some("[SURVIVAL_ROOF_NORMAL]") },
-        ChallengeDefinition { challenge_mode: GameMode::SurvivalHardStage1, challenge_icon_index: 5, page: ChallengePage::Survival, row: 1, col: 0, challenge_name: Some("[SURVIVAL_DAY_HARD]") },
-        ChallengeDefinition { challenge_mode: GameMode::SurvivalHardStage2, challenge_icon_index: 6, page: ChallengePage::Survival, row: 1, col: 1, challenge_name: Some("[SURVIVAL_NIGHT_HARD]") },
-        ChallengeDefinition { challenge_mode: GameMode::SurvivalHardStage3, challenge_icon_index: 7, page: ChallengePage::Survival, row: 1, col: 2, challenge_name: Some("[SURVIVAL_POOL_HARD]") },
-        ChallengeDefinition { challenge_mode: GameMode::SurvivalHardStage4, challenge_icon_index: 8, page: ChallengePage::Survival, row: 1, col: 3, challenge_name: Some("[SURVIVAL_FOG_HARD]") },
-        ChallengeDefinition { challenge_mode: GameMode::SurvivalHardStage5, challenge_icon_index: 9, page: ChallengePage::Survival, row: 1, col: 4, challenge_name: Some("[SURVIVAL_ROOF_HARD]") },
-        ChallengeDefinition { challenge_mode: GameMode::SurvivalEndlessStage1, challenge_icon_index: 10, page: ChallengePage::Limbo, row: 3, col: 0, challenge_name: Some("[SURVIVAL_DAY_ENDLESS]") },
-        ChallengeDefinition { challenge_mode: GameMode::SurvivalEndlessStage2, challenge_icon_index: 10, page: ChallengePage::Limbo, row: 3, col: 1, challenge_name: Some("[SURVIVAL_NIGHT_ENDLESS]") },
-        ChallengeDefinition { challenge_mode: GameMode::SurvivalEndlessStage3, challenge_icon_index: 10, page: ChallengePage::Survival, row: 2, col: 2, challenge_name: Some("[SURVIVAL_POOL_ENDLESS]") },
-        ChallengeDefinition { challenge_mode: GameMode::SurvivalEndlessStage4, challenge_icon_index: 10, page: ChallengePage::Limbo, row: 3, col: 2, challenge_name: Some("[SURVIVAL_FOG_ENDLESS]") },
-        ChallengeDefinition { challenge_mode: GameMode::SurvivalEndlessStage5, challenge_icon_index: 10, page: ChallengePage::Limbo, row: 3, col: 3, challenge_name: Some("[SURVIVAL_ROOF_ENDLESS]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeWarAndPeas, challenge_icon_index: 0, page: ChallengePage::Challenge, row: 0, col: 0, challenge_name: Some("[WAR_AND_PEAS]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeWallnutBowling, challenge_icon_index: 6, page: ChallengePage::Challenge, row: 0, col: 1, challenge_name: Some("[WALL_NUT_BOWLING]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeSlotMachine, challenge_icon_index: 2, page: ChallengePage::Challenge, row: 0, col: 2, challenge_name: Some("[SLOT_MACHINE]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeRainingSeeds, challenge_icon_index: 3, page: ChallengePage::Challenge, row: 0, col: 3, challenge_name: Some("[ITS_RAINING_SEEDS]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeBeghouled, challenge_icon_index: 1, page: ChallengePage::Challenge, row: 0, col: 4, challenge_name: Some("[BEGHOULED]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeInvisighoul, challenge_icon_index: 8, page: ChallengePage::Challenge, row: 1, col: 0, challenge_name: Some("[INVISIGHOUL]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeSeeingStars, challenge_icon_index: 5, page: ChallengePage::Challenge, row: 1, col: 1, challenge_name: Some("[SEEING_STARS]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeZombiquarium, challenge_icon_index: 7, page: ChallengePage::Challenge, row: 1, col: 2, challenge_name: Some("[ZOMBIQUARIUM]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeBeghouledTwist, challenge_icon_index: 20, page: ChallengePage::Challenge, row: 1, col: 3, challenge_name: Some("[BEGHOULED_TWIST]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeLittleTrouble, challenge_icon_index: 12, page: ChallengePage::Challenge, row: 1, col: 4, challenge_name: Some("[LITTLE_TROUBLE]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengePortalCombat, challenge_icon_index: 15, page: ChallengePage::Challenge, row: 2, col: 0, challenge_name: Some("[PORTAL_COMBAT]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeColumns, challenge_icon_index: 4, page: ChallengePage::Challenge, row: 2, col: 1, challenge_name: Some("[COLUMN_AS_YOU_SEE_EM]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeBobsledBonanza, challenge_icon_index: 17, page: ChallengePage::Challenge, row: 2, col: 2, challenge_name: Some("[BOBSLED_BONANZA]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeSpeed, challenge_icon_index: 18, page: ChallengePage::Challenge, row: 2, col: 3, challenge_name: Some("[ZOMBIES_ON_SPEED]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeWhackAZombie, challenge_icon_index: 16, page: ChallengePage::Challenge, row: 2, col: 4, challenge_name: Some("[WHACK_A_ZOMBIE]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeLastStand, challenge_icon_index: 21, page: ChallengePage::Challenge, row: 3, col: 0, challenge_name: Some("[LAST_STAND]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeWarAndPeas2, challenge_icon_index: 0, page: ChallengePage::Challenge, row: 3, col: 1, challenge_name: Some("[WAR_AND_PEAS_2]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeWallnutBowling2, challenge_icon_index: 6, page: ChallengePage::Challenge, row: 3, col: 2, challenge_name: Some("[WALL_NUT_BOWLING_EXTREME]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengePogoParty, challenge_icon_index: 14, page: ChallengePage::Challenge, row: 3, col: 3, challenge_name: Some("[POGO_PARTY]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeFinalBoss, challenge_icon_index: 19, page: ChallengePage::Challenge, row: 3, col: 4, challenge_name: Some("[FINAL_BOSS]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeArtChallengeWallnut, challenge_icon_index: 0, page: ChallengePage::Limbo, row: 0, col: 0, challenge_name: Some("[ART_CHALLENGE_WALL_NUT]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeSunnyDay, challenge_icon_index: 1, page: ChallengePage::Limbo, row: 0, col: 1, challenge_name: Some("[SUNNY_DAY]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeResodded, challenge_icon_index: 2, page: ChallengePage::Limbo, row: 0, col: 2, challenge_name: Some("[UNSODDED]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeBigTime, challenge_icon_index: 3, page: ChallengePage::Limbo, row: 0, col: 3, challenge_name: Some("[BIG_TIME]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeArtChallengeSunflower, challenge_icon_index: 4, page: ChallengePage::Limbo, row: 0, col: 4, challenge_name: Some("[ART_CHALLENGE_SUNFLOWER]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeAirRaid, challenge_icon_index: 5, page: ChallengePage::Limbo, row: 1, col: 0, challenge_name: Some("[AIR_RAID]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeIceLevel, challenge_icon_index: 6, page: ChallengePage::Limbo, row: 1, col: 1, challenge_name: Some("[ICE_LEVEL]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeZenGarden, challenge_icon_index: 7, page: ChallengePage::Limbo, row: 1, col: 2, challenge_name: Some("[ZEN_GARDEN]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeHighGravity, challenge_icon_index: 8, page: ChallengePage::Limbo, row: 1, col: 3, challenge_name: Some("[HIGH_GRAVITY]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeGraveDanger, challenge_icon_index: 11, page: ChallengePage::Limbo, row: 1, col: 4, challenge_name: Some("[GRAVE_DANGER]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeShovel, challenge_icon_index: 10, page: ChallengePage::Limbo, row: 2, col: 0, challenge_name: Some("[CAN_YOU_DIG_IT]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeStormyNight, challenge_icon_index: 13, page: ChallengePage::Limbo, row: 2, col: 1, challenge_name: Some("[DARK_STORMY_NIGHT]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeBungeeBlitz, challenge_icon_index: 9, page: ChallengePage::Limbo, row: 2, col: 2, challenge_name: Some("[BUNGEE_BLITZ]") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeSquirrel, challenge_icon_index: 10, page: ChallengePage::Limbo, row: 2, col: 3, challenge_name: Some("Squirrel") },
-        ChallengeDefinition { challenge_mode: GameMode::ChallengeTreeOfWisdom, challenge_icon_index: 10, page: ChallengePage::Limbo, row: 2, col: 4, challenge_name: Some("Tree of Wisdom") },
-        ChallengeDefinition { challenge_mode: GameMode::ScaryPotter1, challenge_icon_index: 10, page: ChallengePage::Puzzle, row: 0, col: 0, challenge_name: Some("[SCARY_POTTER_1]") },
-        ChallengeDefinition { challenge_mode: GameMode::ScaryPotter2, challenge_icon_index: 10, page: ChallengePage::Puzzle, row: 0, col: 1, challenge_name: Some("[SCARY_POTTER_2]") },
-        ChallengeDefinition { challenge_mode: GameMode::ScaryPotter3, challenge_icon_index: 10, page: ChallengePage::Puzzle, row: 0, col: 2, challenge_name: Some("[SCARY_POTTER_3]") },
-        ChallengeDefinition { challenge_mode: GameMode::ScaryPotter4, challenge_icon_index: 10, page: ChallengePage::Puzzle, row: 0, col: 3, challenge_name: Some("[SCARY_POTTER_4]") },
-        ChallengeDefinition { challenge_mode: GameMode::ScaryPotter5, challenge_icon_index: 10, page: ChallengePage::Puzzle, row: 0, col: 4, challenge_name: Some("[SCARY_POTTER_5]") },
-        ChallengeDefinition { challenge_mode: GameMode::ScaryPotter6, challenge_icon_index: 10, page: ChallengePage::Puzzle, row: 1, col: 0, challenge_name: Some("[SCARY_POTTER_6]") },
-        ChallengeDefinition { challenge_mode: GameMode::ScaryPotter7, challenge_icon_index: 10, page: ChallengePage::Puzzle, row: 1, col: 1, challenge_name: Some("[SCARY_POTTER_7]") },
-        ChallengeDefinition { challenge_mode: GameMode::ScaryPotter8, challenge_icon_index: 10, page: ChallengePage::Puzzle, row: 1, col: 2, challenge_name: Some("[SCARY_POTTER_8]") },
-        ChallengeDefinition { challenge_mode: GameMode::ScaryPotter9, challenge_icon_index: 10, page: ChallengePage::Puzzle, row: 1, col: 3, challenge_name: Some("[SCARY_POTTER_9]") },
-        ChallengeDefinition { challenge_mode: GameMode::ScaryPotterEndless, challenge_icon_index: 10, page: ChallengePage::Puzzle, row: 1, col: 4, challenge_name: Some("[SCARY_POTTER_ENDLESS]") },
-        ChallengeDefinition { challenge_mode: GameMode::PuzzleIZombie1, challenge_icon_index: 11, page: ChallengePage::Puzzle, row: 2, col: 0, challenge_name: Some("[I_ZOMBIE_1]") },
-        ChallengeDefinition { challenge_mode: GameMode::PuzzleIZombie2, challenge_icon_index: 11, page: ChallengePage::Puzzle, row: 2, col: 1, challenge_name: Some("[I_ZOMBIE_2]") },
-        ChallengeDefinition { challenge_mode: GameMode::PuzzleIZombie3, challenge_icon_index: 11, page: ChallengePage::Puzzle, row: 2, col: 2, challenge_name: Some("[I_ZOMBIE_3]") },
-        ChallengeDefinition { challenge_mode: GameMode::PuzzleIZombie4, challenge_icon_index: 11, page: ChallengePage::Puzzle, row: 2, col: 3, challenge_name: Some("[I_ZOMBIE_4]") },
-        ChallengeDefinition { challenge_mode: GameMode::PuzzleIZombie5, challenge_icon_index: 11, page: ChallengePage::Puzzle, row: 2, col: 4, challenge_name: Some("[I_ZOMBIE_5]") },
-        ChallengeDefinition { challenge_mode: GameMode::PuzzleIZombie6, challenge_icon_index: 11, page: ChallengePage::Puzzle, row: 3, col: 0, challenge_name: Some("[I_ZOMBIE_6]") },
-        ChallengeDefinition { challenge_mode: GameMode::PuzzleIZombie7, challenge_icon_index: 11, page: ChallengePage::Puzzle, row: 3, col: 1, challenge_name: Some("[I_ZOMBIE_7]") },
-        ChallengeDefinition { challenge_mode: GameMode::PuzzleIZombie8, challenge_icon_index: 11, page: ChallengePage::Puzzle, row: 3, col: 2, challenge_name: Some("[I_ZOMBIE_8]") },
-        ChallengeDefinition { challenge_mode: GameMode::PuzzleIZombie9, challenge_icon_index: 11, page: ChallengePage::Puzzle, row: 3, col: 3, challenge_name: Some("[I_ZOMBIE_9]") },
-        ChallengeDefinition { challenge_mode: GameMode::PuzzleIZombieEndless, challenge_icon_index: 11, page: ChallengePage::Puzzle, row: 3, col: 4, challenge_name: Some("[I_ZOMBIE_ENDLESS]") },
-        ChallengeDefinition { challenge_mode: GameMode::Upsell, challenge_icon_index: 10, page: ChallengePage::Limbo, row: 3, col: 4, challenge_name: Some("Upsell") },
-        ChallengeDefinition { challenge_mode: GameMode::Intro, challenge_icon_index: 10, page: ChallengePage::Limbo, row: 2, col: 3, challenge_name: Some("Intro") },
+        ChallengeDefinition {
+            challenge_mode: GameMode::SurvivalNormalStage1,
+            challenge_icon_index: 0,
+            page: ChallengePage::Survival,
+            row: 0,
+            col: 0,
+            challenge_name: Some("[SURVIVAL_DAY_NORMAL]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::SurvivalNormalStage2,
+            challenge_icon_index: 1,
+            page: ChallengePage::Survival,
+            row: 0,
+            col: 1,
+            challenge_name: Some("[SURVIVAL_NIGHT_NORMAL]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::SurvivalNormalStage3,
+            challenge_icon_index: 2,
+            page: ChallengePage::Survival,
+            row: 0,
+            col: 2,
+            challenge_name: Some("[SURVIVAL_POOL_NORMAL]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::SurvivalNormalStage4,
+            challenge_icon_index: 3,
+            page: ChallengePage::Survival,
+            row: 0,
+            col: 3,
+            challenge_name: Some("[SURVIVAL_FOG_NORMAL]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::SurvivalNormalStage5,
+            challenge_icon_index: 4,
+            page: ChallengePage::Survival,
+            row: 0,
+            col: 4,
+            challenge_name: Some("[SURVIVAL_ROOF_NORMAL]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::SurvivalHardStage1,
+            challenge_icon_index: 5,
+            page: ChallengePage::Survival,
+            row: 1,
+            col: 0,
+            challenge_name: Some("[SURVIVAL_DAY_HARD]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::SurvivalHardStage2,
+            challenge_icon_index: 6,
+            page: ChallengePage::Survival,
+            row: 1,
+            col: 1,
+            challenge_name: Some("[SURVIVAL_NIGHT_HARD]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::SurvivalHardStage3,
+            challenge_icon_index: 7,
+            page: ChallengePage::Survival,
+            row: 1,
+            col: 2,
+            challenge_name: Some("[SURVIVAL_POOL_HARD]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::SurvivalHardStage4,
+            challenge_icon_index: 8,
+            page: ChallengePage::Survival,
+            row: 1,
+            col: 3,
+            challenge_name: Some("[SURVIVAL_FOG_HARD]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::SurvivalHardStage5,
+            challenge_icon_index: 9,
+            page: ChallengePage::Survival,
+            row: 1,
+            col: 4,
+            challenge_name: Some("[SURVIVAL_ROOF_HARD]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::SurvivalEndlessStage1,
+            challenge_icon_index: 10,
+            page: ChallengePage::Limbo,
+            row: 3,
+            col: 0,
+            challenge_name: Some("[SURVIVAL_DAY_ENDLESS]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::SurvivalEndlessStage2,
+            challenge_icon_index: 10,
+            page: ChallengePage::Limbo,
+            row: 3,
+            col: 1,
+            challenge_name: Some("[SURVIVAL_NIGHT_ENDLESS]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::SurvivalEndlessStage3,
+            challenge_icon_index: 10,
+            page: ChallengePage::Survival,
+            row: 2,
+            col: 2,
+            challenge_name: Some("[SURVIVAL_POOL_ENDLESS]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::SurvivalEndlessStage4,
+            challenge_icon_index: 10,
+            page: ChallengePage::Limbo,
+            row: 3,
+            col: 2,
+            challenge_name: Some("[SURVIVAL_FOG_ENDLESS]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::SurvivalEndlessStage5,
+            challenge_icon_index: 10,
+            page: ChallengePage::Limbo,
+            row: 3,
+            col: 3,
+            challenge_name: Some("[SURVIVAL_ROOF_ENDLESS]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeWarAndPeas,
+            challenge_icon_index: 0,
+            page: ChallengePage::Challenge,
+            row: 0,
+            col: 0,
+            challenge_name: Some("[WAR_AND_PEAS]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeWallnutBowling,
+            challenge_icon_index: 6,
+            page: ChallengePage::Challenge,
+            row: 0,
+            col: 1,
+            challenge_name: Some("[WALL_NUT_BOWLING]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeSlotMachine,
+            challenge_icon_index: 2,
+            page: ChallengePage::Challenge,
+            row: 0,
+            col: 2,
+            challenge_name: Some("[SLOT_MACHINE]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeRainingSeeds,
+            challenge_icon_index: 3,
+            page: ChallengePage::Challenge,
+            row: 0,
+            col: 3,
+            challenge_name: Some("[ITS_RAINING_SEEDS]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeBeghouled,
+            challenge_icon_index: 1,
+            page: ChallengePage::Challenge,
+            row: 0,
+            col: 4,
+            challenge_name: Some("[BEGHOULED]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeInvisighoul,
+            challenge_icon_index: 8,
+            page: ChallengePage::Challenge,
+            row: 1,
+            col: 0,
+            challenge_name: Some("[INVISIGHOUL]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeSeeingStars,
+            challenge_icon_index: 5,
+            page: ChallengePage::Challenge,
+            row: 1,
+            col: 1,
+            challenge_name: Some("[SEEING_STARS]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeZombiquarium,
+            challenge_icon_index: 7,
+            page: ChallengePage::Challenge,
+            row: 1,
+            col: 2,
+            challenge_name: Some("[ZOMBIQUARIUM]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeBeghouledTwist,
+            challenge_icon_index: 20,
+            page: ChallengePage::Challenge,
+            row: 1,
+            col: 3,
+            challenge_name: Some("[BEGHOULED_TWIST]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeLittleTrouble,
+            challenge_icon_index: 12,
+            page: ChallengePage::Challenge,
+            row: 1,
+            col: 4,
+            challenge_name: Some("[LITTLE_TROUBLE]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengePortalCombat,
+            challenge_icon_index: 15,
+            page: ChallengePage::Challenge,
+            row: 2,
+            col: 0,
+            challenge_name: Some("[PORTAL_COMBAT]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeColumns,
+            challenge_icon_index: 4,
+            page: ChallengePage::Challenge,
+            row: 2,
+            col: 1,
+            challenge_name: Some("[COLUMN_AS_YOU_SEE_EM]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeBobsledBonanza,
+            challenge_icon_index: 17,
+            page: ChallengePage::Challenge,
+            row: 2,
+            col: 2,
+            challenge_name: Some("[BOBSLED_BONANZA]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeSpeed,
+            challenge_icon_index: 18,
+            page: ChallengePage::Challenge,
+            row: 2,
+            col: 3,
+            challenge_name: Some("[ZOMBIES_ON_SPEED]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeWhackAZombie,
+            challenge_icon_index: 16,
+            page: ChallengePage::Challenge,
+            row: 2,
+            col: 4,
+            challenge_name: Some("[WHACK_A_ZOMBIE]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeLastStand,
+            challenge_icon_index: 21,
+            page: ChallengePage::Challenge,
+            row: 3,
+            col: 0,
+            challenge_name: Some("[LAST_STAND]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeWarAndPeas2,
+            challenge_icon_index: 0,
+            page: ChallengePage::Challenge,
+            row: 3,
+            col: 1,
+            challenge_name: Some("[WAR_AND_PEAS_2]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeWallnutBowling2,
+            challenge_icon_index: 6,
+            page: ChallengePage::Challenge,
+            row: 3,
+            col: 2,
+            challenge_name: Some("[WALL_NUT_BOWLING_EXTREME]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengePogoParty,
+            challenge_icon_index: 14,
+            page: ChallengePage::Challenge,
+            row: 3,
+            col: 3,
+            challenge_name: Some("[POGO_PARTY]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeFinalBoss,
+            challenge_icon_index: 19,
+            page: ChallengePage::Challenge,
+            row: 3,
+            col: 4,
+            challenge_name: Some("[FINAL_BOSS]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeArtChallengeWallnut,
+            challenge_icon_index: 0,
+            page: ChallengePage::Limbo,
+            row: 0,
+            col: 0,
+            challenge_name: Some("[ART_CHALLENGE_WALL_NUT]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeSunnyDay,
+            challenge_icon_index: 1,
+            page: ChallengePage::Limbo,
+            row: 0,
+            col: 1,
+            challenge_name: Some("[SUNNY_DAY]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeResodded,
+            challenge_icon_index: 2,
+            page: ChallengePage::Limbo,
+            row: 0,
+            col: 2,
+            challenge_name: Some("[UNSODDED]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeBigTime,
+            challenge_icon_index: 3,
+            page: ChallengePage::Limbo,
+            row: 0,
+            col: 3,
+            challenge_name: Some("[BIG_TIME]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeArtChallengeSunflower,
+            challenge_icon_index: 4,
+            page: ChallengePage::Limbo,
+            row: 0,
+            col: 4,
+            challenge_name: Some("[ART_CHALLENGE_SUNFLOWER]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeAirRaid,
+            challenge_icon_index: 5,
+            page: ChallengePage::Limbo,
+            row: 1,
+            col: 0,
+            challenge_name: Some("[AIR_RAID]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeIceLevel,
+            challenge_icon_index: 6,
+            page: ChallengePage::Limbo,
+            row: 1,
+            col: 1,
+            challenge_name: Some("[ICE_LEVEL]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeZenGarden,
+            challenge_icon_index: 7,
+            page: ChallengePage::Limbo,
+            row: 1,
+            col: 2,
+            challenge_name: Some("[ZEN_GARDEN]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeHighGravity,
+            challenge_icon_index: 8,
+            page: ChallengePage::Limbo,
+            row: 1,
+            col: 3,
+            challenge_name: Some("[HIGH_GRAVITY]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeGraveDanger,
+            challenge_icon_index: 11,
+            page: ChallengePage::Limbo,
+            row: 1,
+            col: 4,
+            challenge_name: Some("[GRAVE_DANGER]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeShovel,
+            challenge_icon_index: 10,
+            page: ChallengePage::Limbo,
+            row: 2,
+            col: 0,
+            challenge_name: Some("[CAN_YOU_DIG_IT]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeStormyNight,
+            challenge_icon_index: 13,
+            page: ChallengePage::Limbo,
+            row: 2,
+            col: 1,
+            challenge_name: Some("[DARK_STORMY_NIGHT]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeBungeeBlitz,
+            challenge_icon_index: 9,
+            page: ChallengePage::Limbo,
+            row: 2,
+            col: 2,
+            challenge_name: Some("[BUNGEE_BLITZ]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeSquirrel,
+            challenge_icon_index: 10,
+            page: ChallengePage::Limbo,
+            row: 2,
+            col: 3,
+            challenge_name: Some("Squirrel"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ChallengeTreeOfWisdom,
+            challenge_icon_index: 10,
+            page: ChallengePage::Limbo,
+            row: 2,
+            col: 4,
+            challenge_name: Some("Tree of Wisdom"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ScaryPotter1,
+            challenge_icon_index: 10,
+            page: ChallengePage::Puzzle,
+            row: 0,
+            col: 0,
+            challenge_name: Some("[SCARY_POTTER_1]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ScaryPotter2,
+            challenge_icon_index: 10,
+            page: ChallengePage::Puzzle,
+            row: 0,
+            col: 1,
+            challenge_name: Some("[SCARY_POTTER_2]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ScaryPotter3,
+            challenge_icon_index: 10,
+            page: ChallengePage::Puzzle,
+            row: 0,
+            col: 2,
+            challenge_name: Some("[SCARY_POTTER_3]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ScaryPotter4,
+            challenge_icon_index: 10,
+            page: ChallengePage::Puzzle,
+            row: 0,
+            col: 3,
+            challenge_name: Some("[SCARY_POTTER_4]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ScaryPotter5,
+            challenge_icon_index: 10,
+            page: ChallengePage::Puzzle,
+            row: 0,
+            col: 4,
+            challenge_name: Some("[SCARY_POTTER_5]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ScaryPotter6,
+            challenge_icon_index: 10,
+            page: ChallengePage::Puzzle,
+            row: 1,
+            col: 0,
+            challenge_name: Some("[SCARY_POTTER_6]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ScaryPotter7,
+            challenge_icon_index: 10,
+            page: ChallengePage::Puzzle,
+            row: 1,
+            col: 1,
+            challenge_name: Some("[SCARY_POTTER_7]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ScaryPotter8,
+            challenge_icon_index: 10,
+            page: ChallengePage::Puzzle,
+            row: 1,
+            col: 2,
+            challenge_name: Some("[SCARY_POTTER_8]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ScaryPotter9,
+            challenge_icon_index: 10,
+            page: ChallengePage::Puzzle,
+            row: 1,
+            col: 3,
+            challenge_name: Some("[SCARY_POTTER_9]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::ScaryPotterEndless,
+            challenge_icon_index: 10,
+            page: ChallengePage::Puzzle,
+            row: 1,
+            col: 4,
+            challenge_name: Some("[SCARY_POTTER_ENDLESS]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::PuzzleIZombie1,
+            challenge_icon_index: 11,
+            page: ChallengePage::Puzzle,
+            row: 2,
+            col: 0,
+            challenge_name: Some("[I_ZOMBIE_1]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::PuzzleIZombie2,
+            challenge_icon_index: 11,
+            page: ChallengePage::Puzzle,
+            row: 2,
+            col: 1,
+            challenge_name: Some("[I_ZOMBIE_2]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::PuzzleIZombie3,
+            challenge_icon_index: 11,
+            page: ChallengePage::Puzzle,
+            row: 2,
+            col: 2,
+            challenge_name: Some("[I_ZOMBIE_3]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::PuzzleIZombie4,
+            challenge_icon_index: 11,
+            page: ChallengePage::Puzzle,
+            row: 2,
+            col: 3,
+            challenge_name: Some("[I_ZOMBIE_4]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::PuzzleIZombie5,
+            challenge_icon_index: 11,
+            page: ChallengePage::Puzzle,
+            row: 2,
+            col: 4,
+            challenge_name: Some("[I_ZOMBIE_5]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::PuzzleIZombie6,
+            challenge_icon_index: 11,
+            page: ChallengePage::Puzzle,
+            row: 3,
+            col: 0,
+            challenge_name: Some("[I_ZOMBIE_6]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::PuzzleIZombie7,
+            challenge_icon_index: 11,
+            page: ChallengePage::Puzzle,
+            row: 3,
+            col: 1,
+            challenge_name: Some("[I_ZOMBIE_7]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::PuzzleIZombie8,
+            challenge_icon_index: 11,
+            page: ChallengePage::Puzzle,
+            row: 3,
+            col: 2,
+            challenge_name: Some("[I_ZOMBIE_8]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::PuzzleIZombie9,
+            challenge_icon_index: 11,
+            page: ChallengePage::Puzzle,
+            row: 3,
+            col: 3,
+            challenge_name: Some("[I_ZOMBIE_9]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::PuzzleIZombieEndless,
+            challenge_icon_index: 11,
+            page: ChallengePage::Puzzle,
+            row: 3,
+            col: 4,
+            challenge_name: Some("[I_ZOMBIE_ENDLESS]"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::Upsell,
+            challenge_icon_index: 10,
+            page: ChallengePage::Limbo,
+            row: 3,
+            col: 4,
+            challenge_name: Some("Upsell"),
+        },
+        ChallengeDefinition {
+            challenge_mode: GameMode::Intro,
+            challenge_icon_index: 10,
+            page: ChallengePage::Limbo,
+            row: 2,
+            col: 3,
+            challenge_name: Some("Intro"),
+        },
     ];
     if challenge_mode < 0 || challenge_mode as usize >= G_CHALLENGE_DEFS.len() {
         return None;
@@ -540,19 +1169,26 @@ impl ChallengeScreenImpl {
 
 impl WidgetImpl for ChallengeScreenImpl {
     fn update(&mut self, _widget: &mut Widget) {
-        unsafe { (*self.screen).update(); }
+        unsafe {
+            (*self.screen).update();
+        }
     }
     fn draw(&mut self, _widget: &Widget, g: &mut Graphics) {
-        unsafe { (*self.screen).draw(g); }
+        unsafe {
+            (*self.screen).draw(g);
+        }
     }
     fn key_down(&mut self, _widget: &mut Widget, key: KeyCode, _wm: &mut WidgetManager) {
-        unsafe { (*self.screen).key_down(key); }
+        unsafe {
+            (*self.screen).key_down(key);
+        }
     }
     fn mouse_down_btn(&mut self, _widget: &mut Widget, x: i32, y: i32, _btn: i32, click: i32) {
-        unsafe { (*self.screen).mouse_down(x, y, click); }
+        unsafe {
+            (*self.screen).mouse_down(x, y, click);
+        }
     }
     fn mouse_move(&mut self, _widget: &mut Widget, _x: i32, _y: i32) {
         // C++ 中悬停状态由 Update 驱动，此处无事件处理
     }
 }
-

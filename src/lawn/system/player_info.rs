@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
 use crate::lawn::game_enums::*;
-use crate::lawn::system::data_sync::{DataSync, DataReader, DataWriter};
 use crate::lawn::system::data_sync::DataReaderException;
+use crate::lawn::system::data_sync::{DataReader, DataSync, DataWriter};
 use std::fs;
 use std::path::Path;
 
@@ -119,8 +119,14 @@ fn rd_u32(b: &[u8], off: usize) -> u32 {
 
 fn rd_i64(b: &[u8], off: usize) -> i64 {
     i64::from_le_bytes([
-        b[off], b[off + 1], b[off + 2], b[off + 3],
-        b[off + 4], b[off + 5], b[off + 6], b[off + 7],
+        b[off],
+        b[off + 1],
+        b[off + 2],
+        b[off + 3],
+        b[off + 4],
+        b[off + 5],
+        b[off + 6],
+        b[off + 7],
     ])
 }
 
@@ -319,8 +325,14 @@ impl PlayerInfo {
             m_has_seen_stinky: 0,
             stinky_pos_x: 0,
             stinky_pos_y: 0,
-            m_earned_achievements: vec![false; crate::lawn::widget::achievements_screen::MAX_ACHIEVEMENTS],
-            m_shown_achievements: vec![false; crate::lawn::widget::achievements_screen::MAX_ACHIEVEMENTS],
+            m_earned_achievements: vec![
+                false;
+                crate::lawn::widget::achievements_screen::MAX_ACHIEVEMENTS
+            ],
+            m_shown_achievements: vec![
+                false;
+                crate::lawn::widget::achievements_screen::MAX_ACHIEVEMENTS
+            ],
             m_play_time_active_player: 0,
             m_play_time_inactive_player: 0,
             m_place_holder_player_stats: 0,
@@ -351,8 +363,12 @@ impl PlayerInfo {
         self.m_level = 1;
         self.m_coins = 0;
         self.m_finished_adventure = 0;
-        for v in self.m_challenge_records.iter_mut() { *v = 0; }
-        for v in self.m_purchases.iter_mut() { *v = 0; }
+        for v in self.m_challenge_records.iter_mut() {
+            *v = 0;
+        }
+        for v in self.m_purchases.iter_mut() {
+            *v = 0;
+        }
         self.m_play_time_active_player = 0;
         self.m_play_time_inactive_player = 0;
         self.m_has_used_cheat_keys = false;
@@ -375,8 +391,12 @@ impl PlayerInfo {
         self.m_place_holder_player_stats = 0;
         self.m_potted_plant.clear();
         self.m_num_potted_plants = 0;
-        for v in self.m_earned_achievements.iter_mut() { *v = false; }
-        for v in self.m_shown_achievements.iter_mut() { *v = false; }
+        for v in self.m_earned_achievements.iter_mut() {
+            *v = false;
+        }
+        for v in self.m_shown_achievements.iter_mut() {
+            *v = false;
+        }
         self.m_zombatar_accepted = 0;
         self.m_zombatar_head_count = 0;
         self.m_zombatar_data.clear();
@@ -419,14 +439,26 @@ impl PlayerInfo {
         self.m_finished_adventure = a_finished as i32;
 
         for i in 0..100 {
-            let mut v = if i < self.m_challenge_records.len() { self.m_challenge_records[i] as u32 } else { 0 };
+            let mut v = if i < self.m_challenge_records.len() {
+                self.m_challenge_records[i] as u32
+            } else {
+                0
+            };
             the_sync.sync_u32(&mut v);
-            if i < self.m_challenge_records.len() { self.m_challenge_records[i] = v as i32; }
+            if i < self.m_challenge_records.len() {
+                self.m_challenge_records[i] = v as i32;
+            }
         }
         for i in 0..80 {
-            let mut v = if i < self.m_purchases.len() { self.m_purchases[i] as u32 } else { 0 };
+            let mut v = if i < self.m_purchases.len() {
+                self.m_purchases[i] as u32
+            } else {
+                0
+            };
             the_sync.sync_u32(&mut v);
-            if i < self.m_purchases.len() { self.m_purchases[i] = v as i32; }
+            if i < self.m_purchases.len() {
+                self.m_purchases[i] = v as i32;
+            }
         }
 
         the_sync.sync_u32(&mut self.m_play_time_active_player);
@@ -456,7 +488,11 @@ impl PlayerInfo {
         let mut a_minigames = if self.m_has_unlocked_minigames { 1 } else { 0 };
         the_sync.sync_u32(&mut a_minigames);
         self.m_has_unlocked_minigames = a_minigames != 0;
-        let mut a_puzzle = if self.m_has_unlocked_puzzle_mode { 1 } else { 0 };
+        let mut a_puzzle = if self.m_has_unlocked_puzzle_mode {
+            1
+        } else {
+            0
+        };
         the_sync.sync_u32(&mut a_puzzle);
         self.m_has_unlocked_puzzle_mode = a_puzzle != 0;
 
@@ -473,7 +509,11 @@ impl PlayerInfo {
         the_sync.sync_u32(&mut a_new_survival);
         self.m_has_new_survival = a_new_survival as i32;
 
-        let mut a_survival = if self.m_has_unlocked_survival_mode { 1 } else { 0 };
+        let mut a_survival = if self.m_has_unlocked_survival_mode {
+            1
+        } else {
+            0
+        };
         the_sync.sync_u32(&mut a_survival);
         self.m_has_unlocked_survival_mode = a_survival != 0;
 
@@ -532,7 +572,12 @@ impl PlayerInfo {
 
         // 成就：20 个 uint16（对应 C++ 存档格式）
         for i in 0..20 {
-            let mut a_val: u16 = if i < self.m_earned_achievements.len() && self.m_earned_achievements[i] { 1 } else { 0 };
+            let mut a_val: u16 =
+                if i < self.m_earned_achievements.len() && self.m_earned_achievements[i] {
+                    1
+                } else {
+                    0
+                };
             the_sync.sync_u16(&mut a_val);
             if is_reader && i < self.m_earned_achievements.len() {
                 self.m_earned_achievements[i] = a_val != 0;
@@ -575,7 +620,8 @@ impl PlayerInfo {
                                 the_sync.sync_u8(&mut a_created_before);
                                 if !the_sync.had_reader_error() {
                                     // C++: mZombatarCreatedBefore = aZombatarCreatedBefore ? 1 : 0
-                                    self.m_zombatar_created_before = if a_created_before != 0 { 1 } else { 0 };
+                                    self.m_zombatar_created_before =
+                                        if a_created_before != 0 { 1 } else { 0 };
                                 }
                             }
                         }
@@ -602,7 +648,10 @@ impl PlayerInfo {
         self.m_zombatar_head_count = (self.m_zombatar_data.len() / ZOMBATAR_RECORD_SIZE) as u32;
         if self.m_zombatar_head_count > MAX_ZOMBATAR_HEADS {
             self.m_zombatar_head_count = MAX_ZOMBATAR_HEADS;
-            self.m_zombatar_data.resize((self.m_zombatar_head_count as usize) * ZOMBATAR_RECORD_SIZE, 0);
+            self.m_zombatar_data.resize(
+                (self.m_zombatar_head_count as usize) * ZOMBATAR_RECORD_SIZE,
+                0,
+            );
         }
         let a_data_bytes = (self.m_zombatar_head_count as usize) * ZOMBATAR_RECORD_SIZE;
         let mut a_head_count = self.m_zombatar_head_count;
@@ -615,12 +664,22 @@ impl PlayerInfo {
             // C++: aMiniGameFlags[i] = mChallengeRecords[i + 0x0F] > 0 ? 1 : 0（i < 20）
             let mut a_mini_game_flags = [0u8; 0x14];
             for i in 0..20 {
-                a_mini_game_flags[i] = if i + 0x0F < self.m_challenge_records.len() && self.m_challenge_records[i + 0x0F] > 0 { 1 } else { 0 };
+                a_mini_game_flags[i] = if i + 0x0F < self.m_challenge_records.len()
+                    && self.m_challenge_records[i + 0x0F] > 0
+                {
+                    1
+                } else {
+                    0
+                };
             }
             the_sync.sync_bytes(&mut a_mini_game_flags);
         }
 
-        let mut a_created_before: u8 = if self.m_zombatar_created_before != 0 { 1 } else { 0 };
+        let mut a_created_before: u8 = if self.m_zombatar_created_before != 0 {
+            1
+        } else {
+            0
+        };
         the_sync.sync_u8(&mut a_created_before);
         self.m_zombatar_created_before = a_created_before;
     }

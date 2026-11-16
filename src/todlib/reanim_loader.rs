@@ -6,7 +6,9 @@
 // 与 Definition.cpp 的 DefMap(Reanimator) 解析逻辑。
 
 use crate::lawn::game_enums::ReanimationType;
-use crate::todlib::definition::{ReanimatorDefinition, ReanimatorTrackDefinition, ReanimatorTransform};
+use crate::todlib::definition::{
+    ReanimatorDefinition, ReanimatorTrackDefinition, ReanimatorTransform,
+};
 
 /// ReanimationType → 资源文件路径（对应 C++ gLawnReanimationArray 的 mReanimFileName）
 pub fn get_reanim_file_path(reanim_type: ReanimationType) -> Option<&'static str> {
@@ -211,6 +213,11 @@ pub fn get_reanim_font_name(idx: i32) -> Option<&'static str> {
     }
 }
 
+/// 诊断用：查图片名在全局表中的索引
+pub fn reanim_image_name_index(name: &str) -> Option<usize> {
+    unsafe { REANIM_IMAGE_NAMES.iter().position(|n| n == name) }
+}
+
 /// 按索引取图片名（-1 返回 None）
 pub fn get_reanim_image_name(idx: i32) -> Option<&'static str> {
     if idx < 0 {
@@ -288,23 +295,74 @@ fn fill_in_missing_data(transforms: &mut [ReanimatorTransform]) {
     let mut pfont = -1;
     let mut ptext = -1;
     for t in transforms.iter_mut() {
-        if t.m_trans_x == FIELD_PLACEHOLDER { t.m_trans_x = px; } else { px = t.m_trans_x; }
-        if t.m_trans_y == FIELD_PLACEHOLDER { t.m_trans_y = py; } else { py = t.m_trans_y; }
-        if t.m_skew_x == FIELD_PLACEHOLDER { t.m_skew_x = pkx; } else { pkx = t.m_skew_x; }
-        if t.m_skew_y == FIELD_PLACEHOLDER { t.m_skew_y = pky; } else { pky = t.m_skew_y; }
-        if t.m_scale_x == FIELD_PLACEHOLDER { t.m_scale_x = psx; } else { psx = t.m_scale_x; }
-        if t.m_scale_y == FIELD_PLACEHOLDER { t.m_scale_y = psy; } else { psy = t.m_scale_y; }
-        if t.m_frame == FIELD_PLACEHOLDER { t.m_frame = pf; } else { pf = t.m_frame; }
-        if t.m_alpha == FIELD_PLACEHOLDER { t.m_alpha = pa; } else { pa = t.m_alpha; }
-        if t.m_image == -1 { t.m_image = pimg; } else { pimg = t.m_image; }
+        if t.m_trans_x == FIELD_PLACEHOLDER {
+            t.m_trans_x = px;
+        } else {
+            px = t.m_trans_x;
+        }
+        if t.m_trans_y == FIELD_PLACEHOLDER {
+            t.m_trans_y = py;
+        } else {
+            py = t.m_trans_y;
+        }
+        if t.m_skew_x == FIELD_PLACEHOLDER {
+            t.m_skew_x = pkx;
+        } else {
+            pkx = t.m_skew_x;
+        }
+        if t.m_skew_y == FIELD_PLACEHOLDER {
+            t.m_skew_y = pky;
+        } else {
+            pky = t.m_skew_y;
+        }
+        if t.m_scale_x == FIELD_PLACEHOLDER {
+            t.m_scale_x = psx;
+        } else {
+            psx = t.m_scale_x;
+        }
+        if t.m_scale_y == FIELD_PLACEHOLDER {
+            t.m_scale_y = psy;
+        } else {
+            psy = t.m_scale_y;
+        }
+        if t.m_frame == FIELD_PLACEHOLDER {
+            t.m_frame = pf;
+        } else {
+            pf = t.m_frame;
+        }
+        if t.m_alpha == FIELD_PLACEHOLDER {
+            t.m_alpha = pa;
+        } else {
+            pa = t.m_alpha;
+        }
+        if t.m_image == -1 {
+            t.m_image = pimg;
+        } else {
+            pimg = t.m_image;
+        }
         // 对应 C++ ReanimationFillInMissingData 的 font/text 继承
-        if t.m_font == -1 { t.m_font = pfont; } else { pfont = t.m_font; }
-        if t.m_text == -1 { t.m_text = ptext; } else { ptext = t.m_text; }
+        if t.m_font == -1 {
+            t.m_font = pfont;
+        } else {
+            pfont = t.m_font;
+        }
+        if t.m_text == -1 {
+            t.m_text = ptext;
+        } else {
+            ptext = t.m_text;
+        }
         t.m_visible = t.m_image != -1;
     }
 }
 
 /// 解析 reanim XML 片段（对应 C++ DefinitionLoadXML + ReanimationLoadDefinition）
+/// 诊断入口：暴露 parse_reanim_xml 给 paklib 的测试（不改变状态）
+pub fn parse_reanim_xml_for_test(
+    xml: &str,
+) -> Option<crate::todlib::definition::ReanimatorDefinition> {
+    parse_reanim_xml(xml)
+}
+
 pub fn parse_reanim_xml(xml: &str) -> Option<ReanimatorDefinition> {
     let nodes = crate::todlib::xml_parser::parse_fragment(xml);
     let mut def = ReanimatorDefinition {
@@ -324,7 +382,9 @@ pub fn parse_reanim_xml(xml: &str) -> Option<ReanimatorDefinition> {
                 };
                 for child in &node.children {
                     if child.name == "t" {
-                        track.m_transforms.push(parse_transform_node(child, &mut track.m_texts));
+                        track
+                            .m_transforms
+                            .push(parse_transform_node(child, &mut track.m_texts));
                     }
                 }
                 fill_in_missing_data(&mut track.m_transforms);
@@ -365,6 +425,11 @@ pub fn reanimator_ensure_definition_loaded(reanim_type: ReanimationType) {
             return;
         }
         REANIM_DEF_CACHE[idx] = load_reanim_definition(reanim_type);
+        // 对应 C++ DefinitionLoadXML → 每图字段 DefinitionLoadImage → PvzpAddImageToMap：
+        // 定义引用的图片注册进 ResourceManager（GetImage("IMAGE_REANIM_...") 依赖此路径）
+        if REANIM_DEF_CACHE[idx].is_some() {
+            reanimator_register_images_to_resource_manager();
+        }
     }
 }
 
@@ -378,7 +443,8 @@ pub fn reanim_def_index_for_ptr(def: *mut ReanimatorDefinition) -> i32 {
     unsafe {
         for (i, slot) in REANIM_DEF_CACHE.iter().enumerate() {
             if let Some(a_def) = slot {
-                if (&**a_def as *const ReanimatorDefinition) == (def as *const ReanimatorDefinition) {
+                if (&**a_def as *const ReanimatorDefinition) == (def as *const ReanimatorDefinition)
+                {
                     return i as i32;
                 }
             }
@@ -409,7 +475,9 @@ fn load_reanim_definition(reanim_type: ReanimationType) -> Option<Box<Reanimator
 }
 
 /// 获取已加载的定义（未加载先加载；失败返回 None）
-pub fn reanimator_get_definition(reanim_type: ReanimationType) -> Option<*mut ReanimatorDefinition> {
+pub fn reanimator_get_definition(
+    reanim_type: ReanimationType,
+) -> Option<*mut ReanimatorDefinition> {
     reanimator_ensure_definition_loaded(reanim_type);
     unsafe {
         REANIM_DEF_CACHE
@@ -428,18 +496,29 @@ use crate::framework::graphics::image::Image;
 /// 图片缓存（按图片名索引）
 static mut REANIM_IMAGE_CACHE: Vec<Option<Box<Image>>> = Vec::new();
 
-/// 图片名 → 候选文件路径（对应 C++ gDefLoadResPaths 前缀/目录组合）
-/// 例：IMAGE_REANIM_ZOMBIE_INNERARM_HAND → reanim/ZOMBIE_INNERARM_HAND.png、images/...png
+/// 图片名 → 候选文件路径（对应 C++ gDefLoadResPaths 前缀/目录组合 +
+/// GetImage 的 .png/.jpg 双扩展尝试 + pak 内"尾下划线"变体文件名）
+/// 例：IMAGE_REANIM_ZOMBIE_INNERARM_HAND → reanim/ZOMBIE_INNERARM_HAND.png/.jpg、images/...png/.jpg
 fn image_path_candidates(name: &str) -> Vec<String> {
     let mut out = Vec::new();
+    // C++ GetImage 对无扩展名路径依次尝试 .jpg/.png（双格式）
     if let Some(rest) = name.strip_prefix("IMAGE_REANIM_") {
-        out.push(format!("reanim/{}.png", rest));
-        out.push(format!("images/{}.png", rest));
+        for dir in ["reanim/", "images/"] {
+            out.push(format!("{}{}.jpg", dir, rest));
+            out.push(format!("{}{}.png", dir, rest));
+            // pak 内部分文件名带尾下划线（如 SELECTORSCREEN_BG_CENTER_.PNG）
+            out.push(format!("{}{}_.jpg", dir, rest));
+            out.push(format!("{}{}_.png", dir, rest));
+        }
     } else if let Some(rest) = name.strip_prefix("IMAGE_") {
-        out.push(format!("{}.png", rest));
-        out.push(format!("particles/{}.png", rest));
-        out.push(format!("images/{}.png", rest));
+        for dir in ["", "particles/", "images/"] {
+            out.push(format!("{}{}.jpg", dir, rest));
+            out.push(format!("{}{}.png", dir, rest));
+            out.push(format!("{}{}_.jpg", dir, rest));
+            out.push(format!("{}{}_.png", dir, rest));
+        }
     } else {
+        out.push(format!("{}.jpg", name));
         out.push(format!("{}.png", name));
     }
     out
@@ -473,6 +552,71 @@ fn decode_png_bytes(bytes: &[u8]) -> Option<Box<Image>> {
     let mut img = Image::new(w, h);
     img.pixels = rgba.into_raw();
     Some(Box::new(img))
+}
+
+/// 把已解析的 reanim 图片名批量注册进 ResourceManager 的 image_map
+///
+/// 对应 C++ DefinitionLoadImage（Definition.cpp:331-364）的注册副作用：reanim 定义
+/// 加载时按 gDefLoadResPaths 找到图片后经 PvzpAddImageToMap 注册，使后续
+/// ResourceManager::GetImage("IMAGE_REANIM_...") 能命中（GameSelector 等界面
+/// 依赖此路径取 SelectorScreen 背景与部件图）。
+///
+/// 每次调用幂等：已注册的名字跳过。找不到的图跳过（对应 C++ DefinitionLoadImage
+/// 返回 false 时字段留空，不中断）。
+///
+/// # Safety
+/// 全局静态表与 ResourceManager 指针；调用点在加载线程（单线程）内。
+pub unsafe fn reanimator_register_images_to_resource_manager() {
+    use crate::framework::graphics::memory_image::MemoryImage;
+    use crate::framework::resource_manager::{BaseRes, ImageRes, ResType};
+
+    let Some(app) = crate::lawn::lawn_app::LawnApp::instance() else {
+        return;
+    };
+    let Some(rm_ptr) = (*app).base.resource_manager else {
+        return;
+    };
+    let names: Vec<String> = REANIM_IMAGE_NAMES.clone();
+    for name in &names {
+        let key = crate::framework::common::string_to_lower(name);
+        if (*rm_ptr).image_map.contains_key(&key) {
+            continue;
+        }
+        // 复用 reanim 图片加载缓存（reanimator_get_image 内部按名加载）
+        let idx = match REANIM_IMAGE_NAMES.iter().position(|n| n == name) {
+            Some(i) => i as i32,
+            None => continue,
+        };
+        let Some(img_ptr) = reanimator_get_image(idx) else {
+            continue;
+        };
+        let img = &*img_ptr;
+        // ImageRes 需要 MemoryImage；把解码像素搬进 MemoryImage（一次性拷贝）
+        let mut mi = Box::new(MemoryImage::new(img.width, img.height));
+        mi.base.pixels = img.pixels.clone();
+        mi.base.num_rows = img.num_rows;
+        mi.base.num_cols = img.num_cols;
+        mi.base.file_path = name.clone();
+        let mut res = Box::new(ImageRes {
+            base: BaseRes::new(ResType::Image),
+            image: crate::framework::graphics::shared_image::SharedImageRef::new(),
+            alpha_image: String::new(),
+            alpha_grid_image: String::new(),
+            variant: String::new(),
+            auto_find_alpha: false,
+            palletize: false,
+            rows: 1,
+            cols: 1,
+            alpha_color: 0,
+        });
+        res.base.id = name.clone();
+        res.base.path = String::new();
+        res.image.set_unshared(Box::into_raw(mi));
+        (*rm_ptr).image_map.insert(
+            key,
+            Box::into_raw(res) as *mut crate::framework::resource_manager::BaseRes,
+        );
+    }
 }
 
 /// 按图片名索引获取图片（未缓存则加载；失败返回 None）

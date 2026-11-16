@@ -2,11 +2,14 @@
 // 对应 C++ src/Lawn/Widget/GameButton.h
 
 #![allow(dead_code)]
+use crate::framework::color::Color;
+use crate::framework::graphics::font::Font;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
-use crate::framework::graphics::font::Font;
-use crate::framework::color::Color;
-use crate::framework::widget::dialog_button::{DialogButton, DIALOG_BUTTON_COLOR_BKG, DIALOG_BUTTON_COLOR_LABEL, DIALOG_BUTTON_COLOR_LABEL_HILITE};
+use crate::framework::widget::dialog_button::{
+    DialogButton, DIALOG_BUTTON_COLOR_BKG, DIALOG_BUTTON_COLOR_LABEL,
+    DIALOG_BUTTON_COLOR_LABEL_HILITE,
+};
 
 /// 设置 Graphics 当前字体（对应 C++ g->SetFont；字体可空）
 fn set_button_font(g: &mut Graphics, font: Option<&Box<Font>>) {
@@ -18,10 +21,15 @@ fn set_button_font(g: &mut Graphics, font: Option<&Box<Font>>) {
 
 /// 游戏中的自定义按钮（对应 C++ GameButton）
 pub struct GameButton {
-    pub x: i32, pub y: i32, pub width: i32, pub height: i32,
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
     pub label: String,
     pub btn_no_draw: bool,
-    pub is_over: bool, pub is_down: bool, pub disabled: bool,
+    pub is_over: bool,
+    pub is_down: bool,
+    pub disabled: bool,
     pub button_image: *mut Image,
     pub font: Option<Box<Font>>,
     pub label_justify: i32,
@@ -59,10 +67,20 @@ impl GameButton {
     pub const COLOR_LABEL: usize = 4;
     pub const COLOR_LABEL_HILITE: usize = 5;
 
-    pub fn new(_id: i32, _listener: Option<Box<dyn crate::framework::widget::button_listener::ButtonListener>>) -> Self {
+    pub fn new(
+        _id: i32,
+        _listener: Option<Box<dyn crate::framework::widget::button_listener::ButtonListener>>,
+    ) -> Self {
         GameButton {
-            x: 0, y: 0, width: 0, height: 0, label: String::new(),
-            btn_no_draw: false, is_over: false, is_down: false, disabled: false,
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+            label: String::new(),
+            btn_no_draw: false,
+            is_over: false,
+            is_down: false,
+            disabled: false,
             button_image: std::ptr::null_mut(),
             font: None,
             label_justify: GameButton::BUTTON_LABEL_CENTER,
@@ -84,7 +102,12 @@ impl GameButton {
             draw_stone_button: false,
         }
     }
-    pub fn resize(&mut self, x: i32, y: i32, w: i32, h: i32) { self.x = x; self.y = y; self.width = w; self.height = h; }
+    pub fn resize(&mut self, x: i32, y: i32, w: i32, h: i32) {
+        self.x = x;
+        self.y = y;
+        self.width = w;
+        self.height = h;
+    }
 
     /// 皮肤图是否有效（对应 C++ HaveButtonImage：图非空且区域有效）
     fn have_button_image(&self, image: *mut Image, rect: &crate::framework::rect::Rect) -> bool {
@@ -92,7 +115,14 @@ impl GameButton {
     }
 
     /// 绘制按钮图（对应 C++ DrawButtonImage；图片未接入时为 null，跳过绘制）
-    fn draw_button_image(&self, g: &mut Graphics, image: *mut Image, rect: &crate::framework::rect::Rect, offset_x: i32, offset_y: i32) {
+    fn draw_button_image(
+        &self,
+        g: &mut Graphics,
+        image: *mut Image,
+        rect: &crate::framework::rect::Rect,
+        offset_x: i32,
+        offset_y: i32,
+    ) {
         if image.is_null() {
             return;
         }
@@ -105,7 +135,9 @@ impl GameButton {
 
     /// 绘制按钮（对应 C++ GameButton::Draw，GameButton.cpp:128-209）
     pub fn draw(&mut self, g: &mut Graphics) {
-        if self.btn_no_draw { return; }
+        if self.btn_no_draw {
+            return;
+        }
 
         // C++: bool isDown = IsButtonDown() ^ mInverted; bool isHighLighted = IsMouseOver();
         let is_down = (self.is_down && self.is_over) ^ self.inverted;
@@ -124,10 +156,19 @@ impl GameButton {
             };
             draw_stone_button(
                 g,
-                self.x, self.y, self.width, self.height,
-                is_down, is_highlighted, &self.label,
-                get_image("IMAGE_BUTTON_LEFT"), get_image("IMAGE_BUTTON_MIDDLE"), get_image("IMAGE_BUTTON_RIGHT"),
-                get_image("IMAGE_BUTTON_DOWN_LEFT"), get_image("IMAGE_BUTTON_DOWN_MIDDLE"), get_image("IMAGE_BUTTON_DOWN_RIGHT"),
+                self.x,
+                self.y,
+                self.width,
+                self.height,
+                is_down,
+                is_highlighted,
+                &self.label,
+                get_image("IMAGE_BUTTON_LEFT"),
+                get_image("IMAGE_BUTTON_MIDDLE"),
+                get_image("IMAGE_BUTTON_RIGHT"),
+                get_image("IMAGE_BUTTON_DOWN_LEFT"),
+                get_image("IMAGE_BUTTON_DOWN_MIDDLE"),
+                get_image("IMAGE_BUTTON_DOWN_RIGHT"),
             );
             return;
         }
@@ -154,9 +195,13 @@ impl GameButton {
             // C++: 未按下分支：disabled → over 渐变混合 → highlighted over → normal
             if self.disabled && self.have_button_image(self.disabled_image, &self.disabled_rect) {
                 self.draw_button_image(g, self.disabled_image, &self.disabled_rect, 0, 0);
-            } else if self.over_alpha > 0.0 && self.have_button_image(self.over_image, &self.over_rect) {
+            } else if self.over_alpha > 0.0
+                && self.have_button_image(self.over_image, &self.over_rect)
+            {
                 // C++: 渐变过渡未完成时先画 normal，再叠加 over（带 alpha）
-                if self.have_button_image(self.button_image, &self.normal_rect) && self.over_alpha < 1.0 {
+                if self.have_button_image(self.button_image, &self.normal_rect)
+                    && self.over_alpha < 1.0
+                {
                     self.draw_button_image(g, self.button_image, &self.normal_rect, 0, 0);
                 }
                 g.set_colorize_images(true);
@@ -169,11 +214,13 @@ impl GameButton {
                 self.draw_button_image(g, self.button_image, &self.normal_rect, 0, 0);
             }
 
-            g.set_color(&self.colors[if is_highlighted {
-                GameButton::COLOR_LABEL_HILITE
-            } else {
-                GameButton::COLOR_LABEL
-            }]);
+            g.set_color(
+                &self.colors[if is_highlighted {
+                    GameButton::COLOR_LABEL_HILITE
+                } else {
+                    GameButton::COLOR_LABEL
+                }],
+            );
             g.draw_string(&self.label, a_font_x, a_font_y);
 
             if is_highlighted && !self.over_overlay_image.is_null() {
@@ -218,10 +265,18 @@ impl GameButton {
         }
     }
 
-    pub fn mouse_down_btn(&mut self, _x: i32, _y: i32, _b: i32, _c: i32) { self.is_down = true; }
-    pub fn mouse_up_btn(&mut self, _x: i32, _y: i32, _b: i32, _c: i32) { self.is_down = false; }
-    pub fn mouse_enter(&mut self) { self.is_over = true; }
-    pub fn mouse_leave(&mut self) { self.is_over = false; }
+    pub fn mouse_down_btn(&mut self, _x: i32, _y: i32, _b: i32, _c: i32) {
+        self.is_down = true;
+    }
+    pub fn mouse_up_btn(&mut self, _x: i32, _y: i32, _b: i32, _c: i32) {
+        self.is_down = false;
+    }
+    pub fn mouse_enter(&mut self) {
+        self.is_over = true;
+    }
+    pub fn mouse_leave(&mut self) {
+        self.is_over = false;
+    }
 
     /// 设置标签（对应 C++ SetLabel）
     pub fn set_label(&mut self, the_label: &str) {
@@ -290,10 +345,19 @@ fn draw_button_image(
 /// 按状态选左/中/右三段图片重复铺满，再居中绘制标签文字
 fn draw_stone_button(
     g: &mut Graphics,
-    x: i32, y: i32, the_width: i32, the_height: i32,
-    is_down: bool, _is_high_lighted: bool, the_label: &str,
-    a_left_img: *mut Image, a_middle_img: *mut Image, a_right_img: *mut Image,
-    a_down_left_img: *mut Image, a_down_middle_img: *mut Image, a_down_right_img: *mut Image,
+    x: i32,
+    y: i32,
+    the_width: i32,
+    the_height: i32,
+    is_down: bool,
+    _is_high_lighted: bool,
+    the_label: &str,
+    a_left_img: *mut Image,
+    a_middle_img: *mut Image,
+    a_right_img: *mut Image,
+    a_down_left_img: *mut Image,
+    a_down_middle_img: *mut Image,
+    a_down_right_img: *mut Image,
 ) {
     // [TRANSLATION_NOTE]: C++ 用 isHighLighted 选择 FONT_DWARVENTODCRAFT18BRIGHTGREENINSET，
     // Rust 无该字体资源，故参数保留但未使用
@@ -360,23 +424,35 @@ impl LawnStoneButton {
         if self.dialog_button.btn_no_draw {
             return;
         }
-        let is_down = (self.dialog_button.is_down && self.dialog_button.is_over && !self.dialog_button.disabled)
+        let is_down = (self.dialog_button.is_down
+            && self.dialog_button.is_over
+            && !self.dialog_button.disabled)
             ^ self.dialog_button.inverted;
         // 对应 C++: 使用全局 IMAGE_BUTTON_* 九宫格图（GameButton.cpp:289 起的 LawnStoneButton::Draw）
         let get_image = |a_key: &str| -> *mut Image {
-            crate::lawn::lawn_app::LawnApp::instance().map_or(std::ptr::null_mut(), |app| {
-                match app.base.resource_manager {
-                    Some(a_rm) => unsafe { (*a_rm).get_image(a_key).as_image_ptr() },
-                    None => std::ptr::null_mut(),
-                }
+            crate::lawn::lawn_app::LawnApp::instance().map_or(std::ptr::null_mut(), |app| match app
+                .base
+                .resource_manager
+            {
+                Some(a_rm) => unsafe { (*a_rm).get_image(a_key).as_image_ptr() },
+                None => std::ptr::null_mut(),
             })
         };
         draw_stone_button(
             g,
-            0, 0, self.dialog_button.width, self.dialog_button.height,
-            is_down, self.dialog_button.is_over, &self.dialog_button.label,
-            get_image("IMAGE_BUTTON_LEFT"), get_image("IMAGE_BUTTON_MIDDLE"), get_image("IMAGE_BUTTON_RIGHT"),
-            get_image("IMAGE_BUTTON_DOWN_LEFT"), get_image("IMAGE_BUTTON_DOWN_MIDDLE"), get_image("IMAGE_BUTTON_DOWN_RIGHT"),
+            0,
+            0,
+            self.dialog_button.width,
+            self.dialog_button.height,
+            is_down,
+            self.dialog_button.is_over,
+            &self.dialog_button.label,
+            get_image("IMAGE_BUTTON_LEFT"),
+            get_image("IMAGE_BUTTON_MIDDLE"),
+            get_image("IMAGE_BUTTON_RIGHT"),
+            get_image("IMAGE_BUTTON_DOWN_LEFT"),
+            get_image("IMAGE_BUTTON_DOWN_MIDDLE"),
+            get_image("IMAGE_BUTTON_DOWN_RIGHT"),
         );
     }
 
@@ -387,14 +463,22 @@ impl LawnStoneButton {
 }
 
 /// 创建新型按钮（对应 C++ MakeNewButton）
-pub fn make_new_button(_id: i32, _listener: Option<Box<dyn crate::framework::widget::button_listener::ButtonListener>>, text: &str) -> NewLawnButton {
+pub fn make_new_button(
+    _id: i32,
+    _listener: Option<Box<dyn crate::framework::widget::button_listener::ButtonListener>>,
+    text: &str,
+) -> NewLawnButton {
     let mut btn = NewLawnButton::new();
     btn.set_label(text);
     btn
 }
 
 /// 创建石头风格按钮（对应 C++ MakeButton）
-pub fn make_button(id: i32, listener: Option<Box<dyn crate::framework::widget::button_listener::ButtonListener>>, text: &str) -> LawnStoneButton {
+pub fn make_button(
+    id: i32,
+    listener: Option<Box<dyn crate::framework::widget::button_listener::ButtonListener>>,
+    text: &str,
+) -> LawnStoneButton {
     let mut btn = LawnStoneButton {
         dialog_button: DialogButton::new(std::ptr::null_mut(), id, listener),
     };
@@ -438,7 +522,9 @@ impl NewLawnButton {
         }
 
         // C++: bool isDown = (mIsDown && mIsOver && !mDisabled) ^ mInverted;
-        let is_down = (self.dialog_button.is_down && self.dialog_button.is_over && !self.dialog_button.disabled)
+        let is_down = (self.dialog_button.is_down
+            && self.dialog_button.is_over
+            && !self.dialog_button.disabled)
             ^ self.dialog_button.inverted;
 
         // C++: aFontX/Y = mTextOffsetX/Y + mTranslateX/Y
@@ -447,27 +533,48 @@ impl NewLawnButton {
         if let Some(ref font) = self.dialog_button.font {
             // C++: BUTTON_LABEL_CENTER=0, BUTTON_LABEL_RIGHT=1
             if self.dialog_button.label_justify == 0 {
-                a_font_x += (self.dialog_button.width - font.string_width(&self.dialog_button.label)) / 2;
+                a_font_x +=
+                    (self.dialog_button.width - font.string_width(&self.dialog_button.label)) / 2;
             } else if self.dialog_button.label_justify == 1 {
                 a_font_x += self.dialog_button.width - font.string_width(&self.dialog_button.label);
             }
-            a_font_y += (self.dialog_button.height - font.get_ascent() / 6 + font.get_ascent() - 1) / 2;
+            a_font_y +=
+                (self.dialog_button.height - font.get_ascent() / 6 + font.get_ascent() - 1) / 2;
         }
 
         g.set_colorize_images(true);
         if !is_down {
             g.set_color(&self.dialog_button.colors[DIALOG_BUTTON_COLOR_BKG]);
-            if self.dialog_button.disabled && have_button_image(self.dialog_button.disabled_image, &self.dialog_button.disabled_rect) {
+            if self.dialog_button.disabled
+                && have_button_image(
+                    self.dialog_button.disabled_image,
+                    &self.dialog_button.disabled_rect,
+                )
+            {
                 draw_button_image(
-                    g, self.dialog_button.button_image, self.dialog_button.disabled_image,
-                    &self.dialog_button.disabled_rect, self.button_offset_x, self.button_offset_y,
+                    g,
+                    self.dialog_button.button_image,
+                    self.dialog_button.disabled_image,
+                    &self.dialog_button.disabled_rect,
+                    self.button_offset_x,
+                    self.button_offset_y,
                 );
-            } else if self.dialog_button.over_alpha > 0.0 && have_button_image(self.dialog_button.over_image, &self.dialog_button.over_rect) {
+            } else if self.dialog_button.over_alpha > 0.0
+                && have_button_image(self.dialog_button.over_image, &self.dialog_button.over_rect)
+            {
                 // C++: 淡入过渡尚未完成时先绘制正常图片
-                if have_button_image(self.dialog_button.button_image, &self.dialog_button.normal_rect) && self.dialog_button.over_alpha < 1.0 {
+                if have_button_image(
+                    self.dialog_button.button_image,
+                    &self.dialog_button.normal_rect,
+                ) && self.dialog_button.over_alpha < 1.0
+                {
                     draw_button_image(
-                        g, self.dialog_button.button_image, self.dialog_button.button_image,
-                        &self.dialog_button.normal_rect, self.button_offset_x, self.button_offset_y,
+                        g,
+                        self.dialog_button.button_image,
+                        self.dialog_button.button_image,
+                        &self.dialog_button.normal_rect,
+                        self.button_offset_x,
+                        self.button_offset_y,
                     );
                 }
                 // C++: g->mColor.mAlpha = mOverAlpha * 255
@@ -475,27 +582,47 @@ impl NewLawnButton {
                 a_color.a = (self.dialog_button.over_alpha * 255.0) as u8;
                 g.set_color(&a_color);
                 draw_button_image(
-                    g, self.dialog_button.button_image, self.dialog_button.over_image,
-                    &self.dialog_button.over_rect, self.button_offset_x, self.button_offset_y,
+                    g,
+                    self.dialog_button.button_image,
+                    self.dialog_button.over_image,
+                    &self.dialog_button.over_rect,
+                    self.button_offset_x,
+                    self.button_offset_y,
                 );
             } else if (self.dialog_button.is_over || self.dialog_button.is_down)
                 && have_button_image(self.dialog_button.over_image, &self.dialog_button.over_rect)
             {
                 draw_button_image(
-                    g, self.dialog_button.button_image, self.dialog_button.over_image,
-                    &self.dialog_button.over_rect, self.button_offset_x, self.button_offset_y,
+                    g,
+                    self.dialog_button.button_image,
+                    self.dialog_button.over_image,
+                    &self.dialog_button.over_rect,
+                    self.button_offset_x,
+                    self.button_offset_y,
                 );
-            } else if have_button_image(self.dialog_button.button_image, &self.dialog_button.normal_rect) {
+            } else if have_button_image(
+                self.dialog_button.button_image,
+                &self.dialog_button.normal_rect,
+            ) {
                 draw_button_image(
-                    g, self.dialog_button.button_image, self.dialog_button.button_image,
-                    &self.dialog_button.normal_rect, self.button_offset_x, self.button_offset_y,
+                    g,
+                    self.dialog_button.button_image,
+                    self.dialog_button.button_image,
+                    &self.dialog_button.normal_rect,
+                    self.button_offset_x,
+                    self.button_offset_y,
                 );
             }
 
             g.set_colorize_images(false);
             // C++: 悬停用高亮字体与高亮颜色，否则用普通字体与标签颜色
             if self.dialog_button.is_over {
-                set_button_font(g, self.hilite_font.as_ref().or(self.dialog_button.font.as_ref()));
+                set_button_font(
+                    g,
+                    self.hilite_font
+                        .as_ref()
+                        .or(self.dialog_button.font.as_ref()),
+                );
                 g.set_color(&self.dialog_button.colors[DIALOG_BUTTON_COLOR_LABEL_HILITE]);
             } else {
                 set_button_font(g, self.dialog_button.font.as_ref());
@@ -506,21 +633,30 @@ impl NewLawnButton {
             g.set_color(&self.dialog_button.colors[DIALOG_BUTTON_COLOR_BKG]);
             if have_button_image(self.dialog_button.down_image, &self.dialog_button.down_rect) {
                 draw_button_image(
-                    g, self.dialog_button.button_image, self.dialog_button.down_image,
+                    g,
+                    self.dialog_button.button_image,
+                    self.dialog_button.down_image,
                     &self.dialog_button.down_rect,
                     self.button_offset_x + self.dialog_button.translate_x,
                     self.button_offset_y + self.dialog_button.translate_y,
                 );
-            } else if have_button_image(self.dialog_button.over_image, &self.dialog_button.over_rect) {
+            } else if have_button_image(
+                self.dialog_button.over_image,
+                &self.dialog_button.over_rect,
+            ) {
                 draw_button_image(
-                    g, self.dialog_button.button_image, self.dialog_button.over_image,
+                    g,
+                    self.dialog_button.button_image,
+                    self.dialog_button.over_image,
                     &self.dialog_button.over_rect,
                     self.button_offset_x + self.dialog_button.translate_x,
                     self.button_offset_y + self.dialog_button.translate_y,
                 );
             } else {
                 draw_button_image(
-                    g, self.dialog_button.button_image, self.dialog_button.button_image,
+                    g,
+                    self.dialog_button.button_image,
+                    self.dialog_button.button_image,
                     &self.dialog_button.normal_rect,
                     self.button_offset_x + self.dialog_button.translate_x,
                     self.button_offset_y + self.dialog_button.translate_y,
@@ -528,9 +664,18 @@ impl NewLawnButton {
             }
 
             g.set_colorize_images(false);
-            set_button_font(g, self.hilite_font.as_ref().or(self.dialog_button.font.as_ref()));
+            set_button_font(
+                g,
+                self.hilite_font
+                    .as_ref()
+                    .or(self.dialog_button.font.as_ref()),
+            );
             g.set_color(&self.dialog_button.colors[DIALOG_BUTTON_COLOR_LABEL_HILITE]);
-            g.draw_string(&self.dialog_button.label, a_font_x + self.text_down_offset_x, a_font_y + self.text_down_offset_y);
+            g.draw_string(
+                &self.dialog_button.label,
+                a_font_x + self.text_down_offset_x,
+                a_font_y + self.text_down_offset_y,
+            );
         }
     }
 

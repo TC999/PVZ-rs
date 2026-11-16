@@ -100,7 +100,9 @@ impl CheatDialog {
             visible: true,
         }));
         weak_host_slot = Rc::downgrade(&wrapper);
-        let listener: Box<dyn EditListener> = Box::new(WeakEditListener { host: weak_host_slot });
+        let listener: Box<dyn EditListener> = Box::new(WeakEditListener {
+            host: weak_host_slot,
+        });
 
         let mut ew = EditWidget::new(0, Some(listener));
         // C++: SetFont(FONT_BRIANNETOD12)
@@ -108,7 +110,8 @@ impl CheatDialog {
         // C++: mLevelEditWidget->mMaxChars = 12
         ew.max_chars = 12;
         // C++: mLevelEditWidget->AddWidthCheckFont(FONT_BRIANNETOD12, 220)
-        ew.width_check_list.push(WidthCheck::new(Font::new("BRIANNETOD12", 12), 220));
+        ew.width_check_list
+            .push(WidthCheck::new(Font::new("BRIANNETOD12", 12), 220));
 
         // 挂入 wrapper 的 level_edit_widget 字段
         wrapper.borrow_mut().level_edit_widget = Some(Box::into_raw(Box::new(ew)));
@@ -136,12 +139,20 @@ impl CheatDialog {
                         format!("C{}", app_ref.game_mode as i32)
                     } else if app_ref.has_finished_adventure() {
                         // C++: StrFormat("F%s", GetStageString(mPlayerInfo->GetLevel()))
-                        let level = app_ref.player_info.as_ref().map(|pi| pi.get_level()).unwrap_or(0);
+                        let level = app_ref
+                            .player_info
+                            .as_ref()
+                            .map(|pi| pi.get_level())
+                            .unwrap_or(0);
                         let stage = LawnApp::get_stage_string(level);
                         format!("F{}", stage)
                     } else {
                         // C++: mApp->GetStageString(mPlayerInfo->GetLevel())
-                        let level = app_ref.player_info.as_ref().map(|pi| pi.get_level()).unwrap_or(0);
+                        let level = app_ref
+                            .player_info
+                            .as_ref()
+                            .map(|pi| pi.get_level())
+                            .unwrap_or(0);
                         LawnApp::get_stage_string(level)
                     }
                 })
@@ -189,11 +200,7 @@ impl CheatDialog {
             if let Some(font) = &self.lines_font {
                 let avail = the_width - ci.left - ci.right - bi.left - bi.right - 4;
                 let line_spacing = font.line_spacing + self.line_spacing_offset;
-                let approx_chars_per_line = if avail > 0 {
-                    (avail / 8).max(1)
-                } else {
-                    1
-                };
+                let approx_chars_per_line = if avail > 0 { (avail / 8).max(1) } else { 1 };
                 let approx_lines = (self.dialog_lines.len() as i32 / approx_chars_per_line).max(1);
                 a_height += approx_lines * line_spacing;
             }
@@ -336,7 +343,11 @@ impl CheatDialog {
                 return Some(n);
             }
             // sscanf 也允许尾部有非数字（例如 "f3-x"）——C++ sscanf("f%d") 会读到 3
-            if let Some(n) = rest_trim.split(|c: char| !c.is_ascii_digit()).next().and_then(|s| s.parse::<i32>().ok()) {
+            if let Some(n) = rest_trim
+                .split(|c: char| !c.is_ascii_digit())
+                .next()
+                .and_then(|s| s.parse::<i32>().ok())
+            {
                 return Some(n);
             }
         }
@@ -392,11 +403,15 @@ impl CheatDialog {
     /// 5. `%d` → 关卡
     pub fn apply_cheat(&mut self) -> bool {
         let Some(app) = self.app else { return false };
-        let input = self.level_edit_widget.map_or(String::new(), |pw| unsafe { (*pw).text.clone() });
+        let input = self
+            .level_edit_widget
+            .map_or(String::new(), |pw| unsafe { (*pw).text.clone() });
         let input = input.trim();
 
         // 1. C++: sscanf(mString, "c%d", &aChallengeIndex) == 1 || sscanf(..., "C%d", ...) == 1
-        if let Some(idx) = Self::parse_prefixed_number(input, 'c').or_else(|| Self::parse_prefixed_number(input, 'C')) {
+        if let Some(idx) = Self::parse_prefixed_number(input, 'c')
+            .or_else(|| Self::parse_prefixed_number(input, 'C'))
+        {
             unsafe {
                 // C++: mApp->mGameMode = (GameMode)std::clamp(aChallengeIndex, 0, NUM_CHALLENGE_MODES);
                 let clamped = idx.clamp(0, NUM_CHALLENGE_MODES);
@@ -409,12 +424,16 @@ impl CheatDialog {
         let mut a_finished_adventure: i32 = 0;
 
         // 2. C++: sscanf(mString, "f%d-%d", &aArea, &aSubArea) == 2 || sscanf(..., "F%d-%d", ...) == 2
-        if let Some((area, sub)) = Self::parse_prefixed_area_sub(input, 'f').or_else(|| Self::parse_prefixed_area_sub(input, 'F')) {
+        if let Some((area, sub)) = Self::parse_prefixed_area_sub(input, 'f')
+            .or_else(|| Self::parse_prefixed_area_sub(input, 'F'))
+        {
             a_level = (area - 1) * LEVELS_PER_AREA + sub;
             a_finished_adventure = 1;
         }
         // 3. C++: sscanf(mString, "f%d", &aLevel) == 1 || sscanf(..., "F%d", &aLevel) == 1
-        else if let Some(level) = Self::parse_prefixed_number(input, 'f').or_else(|| Self::parse_prefixed_number(input, 'F')) {
+        else if let Some(level) = Self::parse_prefixed_number(input, 'f')
+            .or_else(|| Self::parse_prefixed_number(input, 'F'))
+        {
             a_level = level;
             a_finished_adventure = 1;
         }
@@ -459,7 +478,9 @@ impl CheatDialog {
     /// 释放内部编辑框（对应 C++ ~CheatDialog 的 delete mLevelEditWidget）
     pub fn clear_level_edit_widget(&mut self) {
         if let Some(pw) = self.level_edit_widget.take() {
-            unsafe { drop(Box::from_raw(pw)); }
+            unsafe {
+                drop(Box::from_raw(pw));
+            }
         }
     }
 }

@@ -32,7 +32,7 @@ impl ImitaterDialog {
     pub fn new(app: *mut LawnApp, width: i32, height: i32) -> Self {
         let mut dialog = ImitaterDialog {
             app: Some(app),
-            id: 0,           // 对应 DIALOG_IMITATER
+            id: 0, // 对应 DIALOG_IMITATER
             x: 0,
             y: 0,
             width,
@@ -112,7 +112,9 @@ impl ImitaterDialog {
             (*a_rm).get_image("IMAGE_IMITATERDIALOG").as_image_ptr()
         });
         if !a_back.is_null() {
-            unsafe { g.draw_image_xy(&*a_back, self.x, self.y); }
+            unsafe {
+                g.draw_image_xy(&*a_back, self.x, self.y);
+            }
         }
         g.set_linear_blend(true);
 
@@ -120,7 +122,8 @@ impl ImitaterDialog {
         //      if (mApp->HasSeedType) DrawSeedPacket(g, x, y, SEED_IMITATER, aSeedType, 0, aGrayed?115:255, true, false)
         let Some(app) = self.app else { return };
         unsafe {
-            let a_seed_chooser = (*app).seed_chooser_screen.unwrap_or(std::ptr::null_mut()) as *mut crate::lawn::widget::seed_chooser_screen::SeedChooserScreen;
+            let a_seed_chooser = (*app).seed_chooser_screen.unwrap_or(std::ptr::null_mut())
+                as *mut crate::lawn::widget::seed_chooser_screen::SeedChooserScreen;
             for a_seed_val in 0..(SeedType::Gatlingpea as i32) {
                 let a_seed_type = match num_to_seed_type(a_seed_val) {
                     Some(st) => st,
@@ -136,8 +139,15 @@ impl ImitaterDialog {
                             || (*a_seed_chooser).seed_not_recommended_to_pick(a_seed_type) != 0
                     };
                     crate::lawn::seed_packet::draw_seed_packet(
-                        g, (self.x + a_seed_x) as f32, (self.y + a_seed_y) as f32,
-                        SeedType::Imitater, a_seed_type, 0.0, if a_grayed { 115 } else { 255 }, true, false,
+                        g,
+                        (self.x + a_seed_x) as f32,
+                        (self.y + a_seed_y) as f32,
+                        SeedType::Imitater,
+                        a_seed_type,
+                        0.0,
+                        if a_grayed { 115 } else { 255 },
+                        true,
+                        false,
                     );
                 }
             }
@@ -167,7 +177,10 @@ impl ImitaterDialog {
             if let Some(ref mut tip) = self.tool_tip {
                 // C++: mToolTip->SetTitle(Plant::GetNameString(SEED_IMITATER, aSeedType));
                 // C++: mToolTip->SetLabel(Plant::GetToolTip(aSeedType));
-                tip.set_title(&crate::lawn::plant::Plant::get_name_string(SeedType::Imitater, seed_type));
+                tip.set_title(&crate::lawn::plant::Plant::get_name_string(
+                    SeedType::Imitater,
+                    seed_type,
+                ));
                 tip.set_label(&crate::lawn::plant::Plant::get_tool_tip(seed_type));
                 tip.m_x = (SEED_PACKET_WIDTH - tip.m_width) / 2 + seed_x;
                 tip.m_y = SEED_PACKET_HEIGHT + seed_y;
@@ -191,7 +204,8 @@ impl ImitaterDialog {
         if a_seed_type != SeedType::None {
             let Some(app) = self.app else { return };
             unsafe {
-                let a_seed_chooser = (*app).seed_chooser_screen.unwrap_or(std::ptr::null_mut()) as *mut crate::lawn::widget::seed_chooser_screen::SeedChooserScreen;
+                let a_seed_chooser = (*app).seed_chooser_screen.unwrap_or(std::ptr::null_mut())
+                    as *mut crate::lawn::widget::seed_chooser_screen::SeedChooserScreen;
                 if a_seed_chooser.is_null() {
                     return;
                 }
@@ -201,9 +215,9 @@ impl ImitaterDialog {
                     //      mSeedState = SEED_IN_CHOOSER; mImitaterType = aSeedType;
                     //      mX/mY = mImitaterButton 位置
                     let a_imitater_idx = SeedType::Imitater as usize;
-                    let a_button_pos = (*a_seed_chooser).imitater_button.map_or((0, 0), |b| unsafe {
-                        ((*b).x, (*b).y)
-                    });
+                    let a_button_pos = (*a_seed_chooser)
+                        .imitater_button
+                        .map_or((0, 0), |b| unsafe { ((*b).x, (*b).y) });
                     // nightly 禁止裸指针隐式 autoref：先显式解引用
                     let a_chooser_ref = &mut *a_seed_chooser;
                     let a_imitater_ptr = match a_chooser_ref.chosen_seeds.get_mut(a_imitater_idx) {

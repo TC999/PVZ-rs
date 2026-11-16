@@ -3,11 +3,11 @@
 
 #![allow(dead_code)]
 
-use crate::lawn::game_enums::*;
-use crate::framework::graphics::graphics::Graphics;
 use crate::framework::color::Color;
 use crate::framework::common::SexyVector2;
+use crate::framework::graphics::graphics::Graphics;
 use crate::framework::sexy_matrix::SexyMatrix3;
+use crate::lawn::game_enums::*;
 use crate::todlib::data_array::DataArray;
 
 pub const MAX_EFFECTS_PER_ATTACHMENT: usize = 16;
@@ -82,7 +82,10 @@ impl Attachment {
                 EffectType::Particle => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_ps) = es.particle_systems.get_mut(a_attach_effect.effect_id as usize) {
+                            if let Some(a_ps) = es
+                                .particle_systems
+                                .get_mut(a_attach_effect.effect_id as usize)
+                            {
                                 if !a_ps.dead {
                                     a_ps.update();
                                     is_empty = false;
@@ -95,7 +98,9 @@ impl Attachment {
                 EffectType::Trail => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_trail) = es.trails.get_mut(a_attach_effect.effect_id as usize) {
+                            if let Some(a_trail) =
+                                es.trails.get_mut(a_attach_effect.effect_id as usize)
+                            {
                                 if !a_trail.m_dead {
                                     a_trail.update();
                                     is_empty = false;
@@ -107,7 +112,9 @@ impl Attachment {
                 EffectType::Reanim => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_reanim) = es.reanimations.get_mut(a_attach_effect.effect_id as usize) {
+                            if let Some(a_reanim) =
+                                es.reanimations.get_mut(a_attach_effect.effect_id as usize)
+                            {
                                 if !a_reanim.m_dead {
                                     a_reanim.update();
                                     is_empty = false;
@@ -119,7 +126,9 @@ impl Attachment {
                 EffectType::Attachment => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_attach) = es.attachments.get_mut(a_attach_effect.effect_id as usize) {
+                            if let Some(a_attach) =
+                                es.attachments.get_mut(a_attach_effect.effect_id as usize)
+                            {
                                 a_attach.update();
                                 is_empty = false;
                             }
@@ -155,7 +164,10 @@ impl Attachment {
                 EffectType::Particle => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_ps) = es.particle_systems.get_mut(self.effect_array[i].effect_id as usize) {
+                            if let Some(a_ps) = es
+                                .particle_systems
+                                .get_mut(self.effect_array[i].effect_id as usize)
+                            {
                                 a_ps.system_move(a_new_pos.x, a_new_pos.y);
                             }
                         }
@@ -165,7 +177,9 @@ impl Attachment {
                 EffectType::Trail => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_trail) = es.trails.get_mut(self.effect_array[i].effect_id as usize) {
+                            if let Some(a_trail) =
+                                es.trails.get_mut(self.effect_array[i].effect_id as usize)
+                            {
                                 a_trail.add_point(a_new_pos.x, a_new_pos.y);
                             }
                         }
@@ -174,7 +188,10 @@ impl Attachment {
                 EffectType::Reanim => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_reanim) = es.reanimations.get_mut(self.effect_array[i].effect_id as usize) {
+                            if let Some(a_reanim) = es
+                                .reanimations
+                                .get_mut(self.effect_array[i].effect_id as usize)
+                            {
                                 a_reanim.set_position(a_new_pos.x, a_new_pos.y);
                             }
                         }
@@ -183,7 +200,10 @@ impl Attachment {
                 EffectType::Attachment => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_attach) = es.attachments.get_mut(self.effect_array[i].effect_id as usize) {
+                            if let Some(a_attach) = es
+                                .attachments
+                                .get_mut(self.effect_array[i].effect_id as usize)
+                            {
                                 a_attach.set_position(&a_new_pos);
                             }
                         }
@@ -203,7 +223,10 @@ impl Attachment {
                 EffectType::Particle => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_ps) = es.particle_systems.get_mut(self.effect_array[i].effect_id as usize) {
+                            if let Some(a_ps) = es
+                                .particle_systems
+                                .get_mut(self.effect_array[i].effect_id as usize)
+                            {
                                 a_ps.system_move(a_position.m[0][2], a_position.m[1][2]);
                             }
                         }
@@ -213,7 +236,10 @@ impl Attachment {
                 EffectType::Reanim => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_reanim) = es.reanimations.get_mut(self.effect_array[i].effect_id as usize) {
+                            if let Some(a_reanim) = es
+                                .reanimations
+                                .get_mut(self.effect_array[i].effect_id as usize)
+                            {
                                 a_reanim.m_overlay_matrix = a_position;
                                 // 平移分量同时同步到 m_x/m_y（既有 Rust 定位逻辑依赖）
                                 a_reanim.set_position(a_position.m[0][2], a_position.m[1][2]);
@@ -224,7 +250,10 @@ impl Attachment {
                 EffectType::Attachment => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_attach) = es.attachments.get_mut(self.effect_array[i].effect_id as usize) {
+                            if let Some(a_attach) = es
+                                .attachments
+                                .get_mut(self.effect_array[i].effect_id as usize)
+                            {
                                 a_attach.set_matrix(&a_position);
                             }
                         }
@@ -242,7 +271,10 @@ impl Attachment {
                 EffectType::Particle => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_ps) = es.particle_systems.get_mut(self.effect_array[i].effect_id as usize) {
+                            if let Some(a_ps) = es
+                                .particle_systems
+                                .get_mut(self.effect_array[i].effect_id as usize)
+                            {
                                 a_ps.override_color("", color);
                             }
                         }
@@ -251,7 +283,10 @@ impl Attachment {
                 EffectType::Reanim => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_reanim) = es.reanimations.get_mut(self.effect_array[i].effect_id as usize) {
+                            if let Some(a_reanim) = es
+                                .reanimations
+                                .get_mut(self.effect_array[i].effect_id as usize)
+                            {
                                 a_reanim.m_color_override = *color;
                             }
                         }
@@ -260,7 +295,10 @@ impl Attachment {
                 EffectType::Attachment => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_attach) = es.attachments.get_mut(self.effect_array[i].effect_id as usize) {
+                            if let Some(a_attach) = es
+                                .attachments
+                                .get_mut(self.effect_array[i].effect_id as usize)
+                            {
                                 a_attach.override_color(color);
                             }
                         }
@@ -278,7 +316,10 @@ impl Attachment {
                 EffectType::Particle => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_ps) = es.particle_systems.get_mut(self.effect_array[i].effect_id as usize) {
+                            if let Some(a_ps) = es
+                                .particle_systems
+                                .get_mut(self.effect_array[i].effect_id as usize)
+                            {
                                 a_ps.override_scale("", scale);
                             }
                         }
@@ -287,7 +328,10 @@ impl Attachment {
                 EffectType::Reanim => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_reanim) = es.reanimations.get_mut(self.effect_array[i].effect_id as usize) {
+                            if let Some(a_reanim) = es
+                                .reanimations
+                                .get_mut(self.effect_array[i].effect_id as usize)
+                            {
                                 a_reanim.m_override_scale_x = scale;
                                 a_reanim.m_override_scale_y = scale;
                             }
@@ -297,7 +341,10 @@ impl Attachment {
                 EffectType::Attachment => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_attach) = es.attachments.get_mut(self.effect_array[i].effect_id as usize) {
+                            if let Some(a_attach) = es
+                                .attachments
+                                .get_mut(self.effect_array[i].effect_id as usize)
+                            {
                                 a_attach.override_scale(scale);
                             }
                         }
@@ -314,7 +361,10 @@ impl Attachment {
             if self.effect_array[i].effect_type == EffectType::Particle {
                 if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                     if let Some(es) = app.effect_system.as_mut() {
-                        if let Some(a_ps) = es.particle_systems.get_mut(self.effect_array[i].effect_id as usize) {
+                        if let Some(a_ps) = es
+                            .particle_systems
+                            .get_mut(self.effect_array[i].effect_id as usize)
+                        {
                             a_ps.cross_fade(name);
                         }
                     }
@@ -335,7 +385,9 @@ impl Attachment {
                 EffectType::Particle => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_ref() {
-                            if let Some(a_ps) = es.particle_systems.get(a_attach_effect.effect_id as usize) {
+                            if let Some(a_ps) =
+                                es.particle_systems.get(a_attach_effect.effect_id as usize)
+                            {
                                 a_ps.draw(g);
                             }
                         }
@@ -349,7 +401,9 @@ impl Attachment {
                     // （对应 C++ Reanimator.cpp:944-948），故改为直接调用它。
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_ref() {
-                            if let Some(a_reanim) = es.reanimations.get(a_attach_effect.effect_id as usize) {
+                            if let Some(a_reanim) =
+                                es.reanimations.get(a_attach_effect.effect_id as usize)
+                            {
                                 a_reanim.draw_all_render_groups(g);
                             }
                         }
@@ -358,7 +412,9 @@ impl Attachment {
                 EffectType::Attachment => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_ref() {
-                            if let Some(a_attach) = es.attachments.get(a_attach_effect.effect_id as usize) {
+                            if let Some(a_attach) =
+                                es.attachments.get(a_attach_effect.effect_id as usize)
+                            {
                                 a_attach.draw(g, parent_hidden);
                             }
                         }
@@ -368,7 +424,8 @@ impl Attachment {
                     // C++: aTrail->Draw(g)
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_ref() {
-                            if let Some(a_trail) = es.trails.get(a_attach_effect.effect_id as usize) {
+                            if let Some(a_trail) = es.trails.get(a_attach_effect.effect_id as usize)
+                            {
                                 a_trail.draw(g);
                             }
                         }
@@ -391,7 +448,10 @@ impl Attachment {
                 EffectType::Particle => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_ps) = es.particle_systems.get_mut(self.effect_array[i].effect_id as usize) {
+                            if let Some(a_ps) = es
+                                .particle_systems
+                                .get_mut(self.effect_array[i].effect_id as usize)
+                            {
                                 a_ps.particle_system_die();
                             }
                         }
@@ -401,7 +461,9 @@ impl Attachment {
                     // 对应 C++ Attachment::AttachmentDie 的 Trail 分支：aTrail->mDead = true
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_trail) = es.trails.get_mut(self.effect_array[i].effect_id as usize) {
+                            if let Some(a_trail) =
+                                es.trails.get_mut(self.effect_array[i].effect_id as usize)
+                            {
                                 a_trail.m_dead = true;
                             }
                         }
@@ -410,7 +472,10 @@ impl Attachment {
                 EffectType::Reanim => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_reanim) = es.reanimations.get_mut(self.effect_array[i].effect_id as usize) {
+                            if let Some(a_reanim) = es
+                                .reanimations
+                                .get_mut(self.effect_array[i].effect_id as usize)
+                            {
                                 a_reanim.reanimation_die();
                             }
                         }
@@ -419,7 +484,10 @@ impl Attachment {
                 EffectType::Attachment => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_attach) = es.attachments.get_mut(self.effect_array[i].effect_id as usize) {
+                            if let Some(a_attach) = es
+                                .attachments
+                                .get_mut(self.effect_array[i].effect_id as usize)
+                            {
                                 a_attach.die();
                             }
                         }
@@ -441,7 +509,10 @@ impl Attachment {
                 EffectType::Particle => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_ps) = es.particle_systems.get_mut(self.effect_array[i].effect_id as usize) {
+                            if let Some(a_ps) = es
+                                .particle_systems
+                                .get_mut(self.effect_array[i].effect_id as usize)
+                            {
                                 a_ps.is_attachment = false;
                             }
                         }
@@ -450,7 +521,10 @@ impl Attachment {
                 EffectType::Reanim => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_reanim) = es.reanimations.get_mut(self.effect_array[i].effect_id as usize) {
+                            if let Some(a_reanim) = es
+                                .reanimations
+                                .get_mut(self.effect_array[i].effect_id as usize)
+                            {
                                 a_reanim.m_is_attachment = false;
                             }
                         }
@@ -460,7 +534,9 @@ impl Attachment {
                     // 对应 C++ Attachment::Detach 的 Trail 分支：aTrail->mIsAttachment = false
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_trail) = es.trails.get_mut(self.effect_array[i].effect_id as usize) {
+                            if let Some(a_trail) =
+                                es.trails.get_mut(self.effect_array[i].effect_id as usize)
+                            {
                                 a_trail.m_is_attachment = false;
                             }
                         }
@@ -469,7 +545,10 @@ impl Attachment {
                 EffectType::Attachment => {
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_attach) = es.attachments.get_mut(self.effect_array[i].effect_id as usize) {
+                            if let Some(a_attach) = es
+                                .attachments
+                                .get_mut(self.effect_array[i].effect_id as usize)
+                            {
                                 a_attach.detach();
                             }
                         }
@@ -532,7 +611,8 @@ impl Attachment {
                     let a_effect_id = a_attach_effect.effect_id;
                     if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                         if let Some(es) = app.effect_system.as_mut() {
-                            if let Some(a_attachment) = es.attachments.get_mut(a_effect_id as usize) {
+                            if let Some(a_attachment) = es.attachments.get_mut(a_effect_id as usize)
+                            {
                                 a_attachment.propogate_color(
                                     color,
                                     enable_additive_color,
@@ -601,11 +681,17 @@ pub fn attach_reanim(
     let es = app.effect_system.as_mut()?;
     // C++: mReanimations.DataArrayGetID(theReanimation) —— Rust Vec 按指针查索引
     let a_reanim_id = es.reanimations.iter().position(|r| {
-        std::ptr::eq(r as *const crate::todlib::reanimator::Reanimation,
-                     the_reanimation as *const crate::todlib::reanimator::Reanimation)
+        std::ptr::eq(
+            r as *const crate::todlib::reanimator::Reanimation,
+            the_reanimation as *const crate::todlib::reanimator::Reanimation,
+        )
     })? as u32;
     let a_attach_effect = create_effect_attachment(
-        the_attachment_id, EffectType::Reanim, a_reanim_id, the_offset_x, the_offset_y,
+        the_attachment_id,
+        EffectType::Reanim,
+        a_reanim_id,
+        the_offset_x,
+        the_offset_y,
     )?;
     // C++: theReanimation->mIsAttachment = true
     if let Some(a_reanim) = es.reanimations.get_mut(a_reanim_id as usize) {
@@ -624,11 +710,17 @@ pub fn attach_particle(
     let app = crate::lawn::lawn_app::LawnApp::instance()?;
     let es = app.effect_system.as_mut()?;
     let a_ps_id = es.particle_systems.iter().position(|ps| {
-        std::ptr::eq(ps as *const crate::todlib::tod_particle::TodParticleSystem,
-                     the_particle_system as *const crate::todlib::tod_particle::TodParticleSystem)
+        std::ptr::eq(
+            ps as *const crate::todlib::tod_particle::TodParticleSystem,
+            the_particle_system as *const crate::todlib::tod_particle::TodParticleSystem,
+        )
     })? as u32;
     let a_attach_effect = create_effect_attachment(
-        the_attachment_id, EffectType::Particle, a_ps_id, the_offset_x, the_offset_y,
+        the_attachment_id,
+        EffectType::Particle,
+        a_ps_id,
+        the_offset_x,
+        the_offset_y,
     )?;
     if let Some(a_ps) = es.particle_systems.get_mut(a_ps_id as usize) {
         a_ps.is_attachment = true;
@@ -653,7 +745,11 @@ pub fn attach_trail(
         )
     })? as u32;
     let a_attach_effect = create_effect_attachment(
-        the_attachment_id, EffectType::Trail, a_trail_id, the_offset_x, the_offset_y,
+        the_attachment_id,
+        EffectType::Trail,
+        a_trail_id,
+        the_offset_x,
+        the_offset_y,
     )?;
     // C++: PVZP_ASSERT(!theTrail->mIsAttachment); theTrail->mIsAttachment = true;
     if let Some(a_tr) = es.trails.get_mut(a_trail_id as usize) {
@@ -716,11 +812,7 @@ pub fn attachment_update_and_set_matrix(
 
 /// 更新附件并移动位置（对应 C++ AttachmentUpdateAndMove，Attachment.cpp:726）
 /// 附件无效时回写 NULL
-pub fn attachment_update_and_move(
-    the_attachment_id: &mut AttachmentID,
-    the_x: f32,
-    the_y: f32,
-) {
+pub fn attachment_update_and_move(the_attachment_id: &mut AttachmentID, the_x: f32, the_y: f32) {
     if *the_attachment_id == ATTACHMENTID_NULL {
         return;
     }
@@ -736,10 +828,7 @@ pub fn attachment_update_and_move(
 }
 
 /// 覆盖附件颜色（对应 C++ AttachmentOverrideColor，Attachment.cpp:744）
-pub fn attachment_override_color(
-    the_attachment_id: &mut AttachmentID,
-    the_color: &Color,
-) {
+pub fn attachment_override_color(the_attachment_id: &mut AttachmentID, the_color: &Color) {
     if *the_attachment_id == ATTACHMENTID_NULL {
         return;
     }
@@ -751,10 +840,7 @@ pub fn attachment_override_color(
 }
 
 /// 覆盖附件缩放（对应 C++ AttachmentOverrideScale，Attachment.cpp:757）
-pub fn attachment_override_scale(
-    the_attachment_id: &mut AttachmentID,
-    the_scale: f32,
-) {
+pub fn attachment_override_scale(the_attachment_id: &mut AttachmentID, the_scale: f32) {
     if *the_attachment_id == ATTACHMENTID_NULL {
         return;
     }
@@ -777,7 +863,12 @@ pub fn attachment_reanim_type_die(
     };
     let a_effect_ids: Vec<(EffectType, u32)> = unsafe {
         (0..(*a_attachment).num_effects as usize)
-            .map(|i| ((*a_attachment).effect_array[i].effect_type, (*a_attachment).effect_array[i].effect_id))
+            .map(|i| {
+                (
+                    (*a_attachment).effect_array[i].effect_type,
+                    (*a_attachment).effect_array[i].effect_id,
+                )
+            })
             .collect()
     };
     let app = match crate::lawn::lawn_app::LawnApp::instance() {
@@ -800,10 +891,7 @@ pub fn attachment_reanim_type_die(
 }
 
 /// 附件整体淡出（对应 C++ AttachmentCrossFade，Attachment.cpp:858）
-pub fn attachment_cross_fade(
-    the_attachment_id: &mut AttachmentID,
-    the_cross_fade_name: &str,
-) {
+pub fn attachment_cross_fade(the_attachment_id: &mut AttachmentID, the_cross_fade_name: &str) {
     if *the_attachment_id == ATTACHMENTID_NULL {
         return;
     }
@@ -902,7 +990,8 @@ pub fn create_effect_attachment(
         if (*a_attachment).num_effects as usize >= MAX_EFFECTS_PER_ATTACHMENT {
             return None;
         }
-        let a_attach_effect = &mut (*a_attachment).effect_array[(*a_attachment).num_effects as usize];
+        let a_attach_effect =
+            &mut (*a_attachment).effect_array[(*a_attachment).num_effects as usize];
         a_attach_effect.effect_type = the_effect_type;
         a_attach_effect.effect_id = the_data_id;
         a_attach_effect.dont_draw_if_parent_hidden = false;
@@ -932,7 +1021,9 @@ pub fn find_first_attachment(the_attachment_id: &mut AttachmentID) -> Option<*mu
 }
 
 /// 查找重动画附着（对应 C++ FindReanimAttachment，Attachment.cpp）
-pub fn find_reanim_attachment(the_attachment_id: &mut AttachmentID) -> Option<*mut std::ffi::c_void> {
+pub fn find_reanim_attachment(
+    the_attachment_id: &mut AttachmentID,
+) -> Option<*mut std::ffi::c_void> {
     let app = crate::lawn::lawn_app::LawnApp::instance()?;
     let es = app.effect_system.as_ref()?;
     let id = *the_attachment_id;
@@ -948,7 +1039,10 @@ pub fn find_reanim_attachment(the_attachment_id: &mut AttachmentID) -> Option<*m
             let a_attach_effect = &a_attachment.effect_array[i];
             if a_attach_effect.effect_type == EffectType::Reanim {
                 let a_reanim = es.reanimations.get(a_attach_effect.effect_id as usize)?;
-                return Some(a_reanim as *const crate::todlib::reanimator::Reanimation as *mut std::ffi::c_void);
+                return Some(
+                    a_reanim as *const crate::todlib::reanimator::Reanimation
+                        as *mut std::ffi::c_void,
+                );
             }
         }
     }
@@ -1011,7 +1105,8 @@ pub fn prune_dead_effects(attachment: &mut Attachment) {
             let remaining = (attachment.num_effects - i - 1) as usize;
             if remaining > 0 {
                 for j in 0..remaining {
-                    attachment.effect_array[(i as usize) + j] = attachment.effect_array[(i as usize) + j + 1].clone();
+                    attachment.effect_array[(i as usize) + j] =
+                        attachment.effect_array[(i as usize) + j + 1].clone();
                 }
             }
             attachment.num_effects -= 1;
@@ -1093,7 +1188,8 @@ pub fn attachment_detach_cross_fade_particle_type(
             let a_num_remaining = es.attachments[idx].num_effects as usize - i - 1;
             if a_num_remaining > 0 {
                 for k in 0..a_num_remaining {
-                    es.attachments[idx].effect_array[i + k] = es.attachments[idx].effect_array[i + k + 1].clone();
+                    es.attachments[idx].effect_array[i + k] =
+                        es.attachments[idx].effect_array[i + k + 1].clone();
                 }
             }
             es.attachments[idx].num_effects -= 1;

@@ -4,10 +4,10 @@
 
 #![allow(non_camel_case_types, dead_code, unused)]
 
-pub mod opengl;
 pub mod libc;
-pub mod sdl_mixer;
 pub mod libopenmpt;
+pub mod opengl;
+pub mod sdl_mixer;
 
 // 重新导出常用类型
 pub use opengl::*;

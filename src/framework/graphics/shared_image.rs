@@ -8,8 +8,8 @@
 
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
-use crate::framework::graphics::image::Image;
 use crate::framework::graphics::gl_image::GLImage;
+use crate::framework::graphics::image::Image;
 use crate::framework::graphics::memory_image::MemoryImage;
 
 /// 共享图像（对应 C++ SharedImage）
@@ -84,7 +84,9 @@ impl SharedImageRef {
 
         if !self.shared_image.is_null() {
             unsafe {
-                let prev = (*self.shared_image).ref_count.fetch_sub(1, Ordering::Relaxed);
+                let prev = (*self.shared_image)
+                    .ref_count
+                    .fetch_sub(1, Ordering::Relaxed);
                 if prev == 1 {
                     // 引用计数归零，标记清理
                     CLEANUP_SHARED_IMAGES.store(true, Ordering::Relaxed);
@@ -101,7 +103,9 @@ impl SharedImageRef {
         self.shared_image = other.shared_image;
         if !self.shared_image.is_null() {
             unsafe {
-                (*self.shared_image).ref_count.fetch_add(1, Ordering::Relaxed);
+                (*self.shared_image)
+                    .ref_count
+                    .fetch_add(1, Ordering::Relaxed);
             }
         }
         self.unshared_image = other.unshared_image;
@@ -156,7 +160,9 @@ impl Clone for SharedImageRef {
         new_ref.shared_image = self.shared_image;
         if !new_ref.shared_image.is_null() {
             unsafe {
-                (*new_ref.shared_image).ref_count.fetch_add(1, Ordering::Relaxed);
+                (*new_ref.shared_image)
+                    .ref_count
+                    .fetch_add(1, Ordering::Relaxed);
             }
         }
         new_ref.unshared_image = self.unshared_image;

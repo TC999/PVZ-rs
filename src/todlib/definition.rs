@@ -3,9 +3,9 @@
 
 #![allow(dead_code)]
 
-use crate::todlib::reanimator::{Reanimation, ReanimLoopType};
 use crate::framework::color::Color;
 use crate::framework::rect::Rect;
+use crate::todlib::reanimator::{ReanimLoopType, Reanimation};
 
 /// 动画定义（轨迹）
 #[derive(Debug, Clone)]
@@ -39,7 +39,7 @@ pub struct ReanimatorTransform {
     pub m_scale_y: f32,
     pub m_alpha: f32,
     pub m_frame: f32,
-    pub m_image: i32,       // 对应 C++ Image*（使用 ID/索引）
+    pub m_image: i32, // 对应 C++ Image*（使用 ID/索引）
     pub m_visible: bool,
     pub m_font: i32,
     pub m_text: i32,
@@ -178,7 +178,8 @@ pub struct DefField {
 pub struct DefMap {
     pub map_fields: Option<*const DefField>,
     pub def_size: i32,
-    pub constructor_func: Option<unsafe extern "C" fn(*mut std::ffi::c_void) -> *mut std::ffi::c_void>,
+    pub constructor_func:
+        Option<unsafe extern "C" fn(*mut std::ffi::c_void) -> *mut std::ffi::c_void>,
 }
 
 /// 定义数组 — 指针+数量组合（对应 C++ DefinitionArrayDef）
@@ -206,37 +207,51 @@ pub struct DefLoadResPath {
 // ── 定义系统的构造函数声明 ─────────────────────────
 
 /// 粒子定义构造函数
-pub unsafe extern "C" fn tod_particle_definition_constructor(ptr: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+pub unsafe extern "C" fn tod_particle_definition_constructor(
+    ptr: *mut std::ffi::c_void,
+) -> *mut std::ffi::c_void {
     ptr
 }
 
 /// 发射器定义构造函数
-pub unsafe extern "C" fn tod_emitter_definition_constructor(ptr: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+pub unsafe extern "C" fn tod_emitter_definition_constructor(
+    ptr: *mut std::ffi::c_void,
+) -> *mut std::ffi::c_void {
     ptr
 }
 
 /// 粒子字段构造函数
-pub unsafe extern "C" fn particle_field_constructor(ptr: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+pub unsafe extern "C" fn particle_field_constructor(
+    ptr: *mut std::ffi::c_void,
+) -> *mut std::ffi::c_void {
     ptr
 }
 
 /// 拖尾定义构造函数
-pub unsafe extern "C" fn trail_definition_constructor(ptr: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+pub unsafe extern "C" fn trail_definition_constructor(
+    ptr: *mut std::ffi::c_void,
+) -> *mut std::ffi::c_void {
     ptr
 }
 
 /// 重动画变换构造函数
-pub unsafe extern "C" fn reanimator_transform_constructor(ptr: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+pub unsafe extern "C" fn reanimator_transform_constructor(
+    ptr: *mut std::ffi::c_void,
+) -> *mut std::ffi::c_void {
     ptr
 }
 
 /// 重动画轨道构造函数
-pub unsafe extern "C" fn reanimator_track_constructor(ptr: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+pub unsafe extern "C" fn reanimator_track_constructor(
+    ptr: *mut std::ffi::c_void,
+) -> *mut std::ffi::c_void {
     ptr
 }
 
 /// 重动画定义构造函数
-pub unsafe extern "C" fn reanimator_definition_constructor(ptr: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+pub unsafe extern "C" fn reanimator_definition_constructor(
+    ptr: *mut std::ffi::c_void,
+) -> *mut std::ffi::c_void {
     ptr
 }
 
@@ -274,10 +289,6 @@ pub fn definition_fill_with_defaults(
 }
 
 /// 从符号名查找符号值
-pub fn def_symbol_value_from_string(
-    _symbol_map: Option<&[DefSymbol]>,
-    _name: &str,
-) -> Option<i32> {
+pub fn def_symbol_value_from_string(_symbol_map: Option<&[DefSymbol]>, _name: &str) -> Option<i32> {
     None
 }
-

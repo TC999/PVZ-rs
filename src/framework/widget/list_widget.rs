@@ -29,7 +29,7 @@ pub trait ListListener {
 
 impl ListWidget {
     pub fn new() -> Self {
-        ListWidget { 
+        ListWidget {
             items: Vec::new(),
             hilite_idx: -1,
             line_colors: Vec::new(),

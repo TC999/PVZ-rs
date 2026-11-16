@@ -229,7 +229,11 @@ impl FontData {
     }
 
     /// 从数据元素获取颜色值（对应 C++ GetColorFromDataElement）
-    pub fn get_color_from_data_element(&mut self, element: &DataElement, color: &mut Color) -> bool {
+    pub fn get_color_from_data_element(
+        &mut self,
+        element: &DataElement,
+        color: &mut Color,
+    ) -> bool {
         match element {
             DataElement::List(list) => {
                 let mut factor_vec = Vec::new();
@@ -304,7 +308,8 @@ impl FontData {
                     x_pos += w;
                 }
 
-                self.define_map.insert(def_name, DataElement::List(rect_list));
+                self.define_map
+                    .insert(def_name, DataElement::List(rect_list));
                 true
             }
             _ => false,
@@ -387,7 +392,8 @@ impl DescParser for FontData {
                                     if let Some(deref_val) = self.define_map.get(&upper_val) {
                                         self.define_map.insert(def_name, deref_val.clone());
                                     } else {
-                                        self.define_map.insert(def_name, DataElement::Single(val_str.clone()));
+                                        self.define_map
+                                            .insert(def_name, DataElement::Single(val_str.clone()));
                                     }
                                     return true;
                                 }
@@ -510,11 +516,14 @@ impl DescParser for FontData {
                                 // 尝试从 ResourceManager 获取图像
                                 // 由于 FontData::app 提供 SexyAppBase*，可以通过它访问 ResourceManager
                                 if !self.app.is_null() {
-                                    let app_ptr = self.app as *mut crate::framework::sexy_app_base::SexyAppBase;
+                                    let app_ptr = self.app
+                                        as *mut crate::framework::sexy_app_base::SexyAppBase;
                                     unsafe {
                                         if let Some(rm_ptr) = (*app_ptr).resource_manager {
                                             let shared_ref = (*rm_ptr).get_image(&image_name);
-                                            if !shared_ref.unshared_image.is_null() || !shared_ref.shared_image.is_null() {
+                                            if !shared_ref.unshared_image.is_null()
+                                                || !shared_ref.shared_image.is_null()
+                                            {
                                                 layer.image = shared_ref;
                                                 return true;
                                             }
@@ -569,8 +578,13 @@ impl DescParser for FontData {
                             for (i, ch_s) in chars.iter().enumerate() {
                                 let mut nums = Vec::new();
                                 if let Some(ch) = ch_s.chars().next() {
-                                    if self.data_to_int_vector(&rects[i], &mut nums) && nums.len() == 4 {
-                                        parsed.push((ch, Rect::new(nums[0], nums[1], nums[2], nums[3])));
+                                    if self.data_to_int_vector(&rects[i], &mut nums)
+                                        && nums.len() == 4
+                                    {
+                                        parsed.push((
+                                            ch,
+                                            Rect::new(nums[0], nums[1], nums[2], nums[3]),
+                                        ));
                                     }
                                 }
                             }
@@ -606,7 +620,9 @@ impl DescParser for FontData {
                             for (i, ch_s) in chars.iter().enumerate() {
                                 let mut nums = Vec::new();
                                 if let Some(ch) = ch_s.chars().next() {
-                                    if self.data_to_int_vector(&offsets[i], &mut nums) && nums.len() == 2 {
+                                    if self.data_to_int_vector(&offsets[i], &mut nums)
+                                        && nums.len() == 2
+                                    {
                                         parsed.push((ch, Point::new(nums[0], nums[1])));
                                     }
                                 }
@@ -629,7 +645,10 @@ impl DescParser for FontData {
                         if self.data_to_string(&list[2], &mut offset_str) {
                             let parts: Vec<&str> = offset_str.split(',').collect();
                             if parts.len() == 2 {
-                                if let (Ok(x), Ok(y)) = (parts[0].trim().parse::<i32>(), parts[1].trim().parse::<i32>()) {
+                                if let (Ok(x), Ok(y)) = (
+                                    parts[0].trim().parse::<i32>(),
+                                    parts[1].trim().parse::<i32>(),
+                                ) {
                                     if let Some(layer) = self.font_layer_list.get_mut(idx) {
                                         layer.offset = Point::new(x, y);
                                         return true;
@@ -1053,16 +1072,31 @@ impl ImageFont {
 
         for layer_idx in 0..fd.font_layer_list.len() {
             // 先复制需要的所有数据（避免后续可变借用时的借用检查问题）
-            let (excluded_tags, required_tags, min_ps, max_ps, point_size_val, 
-                 char_data_map, image_ref, offset_val, spacing_val) = 
-            {
+            let (
+                excluded_tags,
+                required_tags,
+                min_ps,
+                max_ps,
+                point_size_val,
+                char_data_map,
+                image_ref,
+                offset_val,
+                spacing_val,
+            ) = {
                 let layer = &fd.font_layer_list[layer_idx];
-                (layer.excluded_tags.clone(), layer.required_tags.clone(),
-                 layer.min_point_size, layer.max_point_size, layer.point_size,
-                 layer.char_data_map.clone(), 
-                 // 无法克隆 SharedImageRef（因为涉及原始指针），
-                 // 用临时 None 替代
-                 true, layer.offset, layer.spacing)
+                (
+                    layer.excluded_tags.clone(),
+                    layer.required_tags.clone(),
+                    layer.min_point_size,
+                    layer.max_point_size,
+                    layer.point_size,
+                    layer.char_data_map.clone(),
+                    // 无法克隆 SharedImageRef（因为涉及原始指针），
+                    // 用临时 None 替代
+                    true,
+                    layer.offset,
+                    layer.spacing,
+                )
             };
 
             // 检查标签排除
@@ -1114,23 +1148,29 @@ impl ImageFont {
             // C++: 缩放参数
             // 非缩放路径：aLayerPointSize=1, aPointSize=mScale(=1.0)
             // 缩放路径：aLayerPointSize=layer.mPointSize(or default), aPointSize=mPointSize*mScale
-            let (use_original, effective_layer_ps, effective_ps) = 
-                if (self.scale - 1.0).abs() < f64::EPSILON && (a_layer_point_size == 0 || self.point_size == a_layer_point_size) {
-                    // 直接使用原始图像，不缩放
-                    (true, 1.0, self.scale)
+            let (use_original, effective_layer_ps, effective_ps) = if (self.scale - 1.0).abs()
+                < f64::EPSILON
+                && (a_layer_point_size == 0 || self.point_size == a_layer_point_size)
+            {
+                // 直接使用原始图像，不缩放
+                (true, 1.0, self.scale)
+            } else {
+                // 需要缩放
+                let layer_ps = if a_layer_point_size != 0 {
+                    a_layer_point_size as f64
                 } else {
-                    // 需要缩放
-                    let layer_ps = if a_layer_point_size != 0 { a_layer_point_size as f64 } else { fd.default_point_size as f64 };
-                    let ps = self.point_size as f64 * self.scale;
-                    // 在缩放路径中，如果 layer.pointSize==0 则 a_layer_point_size 无效，用 defaultPointSize 代替
-                    let use_orig = if a_layer_point_size == 0 && fd.default_point_size != 0 {
-                        // layer.pointSize==0 且需要缩放时，不直接引用原始图像
-                        false
-                    } else {
-                        false
-                    };
-                    (use_orig, layer_ps, ps)
+                    fd.default_point_size as f64
                 };
+                let ps = self.point_size as f64 * self.scale;
+                // 在缩放路径中，如果 layer.pointSize==0 则 a_layer_point_size 无效，用 defaultPointSize 代替
+                let use_orig = if a_layer_point_size == 0 && fd.default_point_size != 0 {
+                    // layer.pointSize==0 且需要缩放时，不直接引用原始图像
+                    false
+                } else {
+                    false
+                };
+                (use_orig, layer_ps, ps)
+            };
 
             if use_original {
                 // 无需缩放，直接引用原始图像
@@ -1178,7 +1218,8 @@ impl ImageFont {
                     if !layer_image_ptr.is_null() {
                         let mut g = Graphics::new_with_image(a_memory_image_ptr as *mut Image);
                         for (ch, cd) in &char_data_map {
-                            if let Some(scaled_rect) = active_layer.scaled_char_image_rects.get(ch) {
+                            if let Some(scaled_rect) = active_layer.scaled_char_image_rects.get(ch)
+                            {
                                 let orig_rect = &cd.image_rect;
                                 g.draw_image_src(
                                     &*layer_image_ptr,
@@ -1193,10 +1234,21 @@ impl ImageFont {
             }
 
             // 从 FontData 读取图层数据用于 ascent/height 计算
-            let (layer_ascent_val, layer_height_val, layer_default_height_val,
-                  layer_ascent_padding_val, layer_line_spacing_offset_val) = {
+            let (
+                layer_ascent_val,
+                layer_height_val,
+                layer_default_height_val,
+                layer_ascent_padding_val,
+                layer_line_spacing_offset_val,
+            ) = {
                 let l = &fd.font_layer_list[layer_idx];
-                (l.ascent, l.height, l.default_height, l.ascent_padding, l.line_spacing_offset)
+                (
+                    l.ascent,
+                    l.height,
+                    l.default_height,
+                    l.ascent_padding,
+                    l.line_spacing_offset,
+                )
             };
 
             // 更新 ImageFont 的 ascent/height 等字段
@@ -1298,19 +1350,22 @@ impl ImageFont {
                     } else {
                         0
                     };
-                    ((cw as f64 * self.scale) as i32, (sp as f64 * self.scale) as i32)
+                    (
+                        (cw as f64 * self.scale) as i32,
+                        (sp as f64 * self.scale) as i32,
+                    )
                 } else {
-                    let cw = (char_data.width as f64 * a_point_size / a_layer_point_size as f64) as i32;
+                    let cw =
+                        (char_data.width as f64 * a_point_size / a_layer_point_size as f64) as i32;
                     let sp = if prev_ch != '\0' {
-                        let base_sp =
-                            layer_spacing
-                                + prev_char_data
-                                    .as_ref()
-                                    .unwrap()
-                                    .kerning_offsets
-                                    .get(&ch)
-                                    .copied()
-                                    .unwrap_or(0);
+                        let base_sp = layer_spacing
+                            + prev_char_data
+                                .as_ref()
+                                .unwrap()
+                                .kerning_offsets
+                                .get(&ch)
+                                .copied()
+                                .unwrap_or(0);
                         (base_sp as f64 * a_point_size / a_layer_point_size as f64) as i32
                     } else {
                         0
@@ -1438,11 +1493,11 @@ impl ImageFont {
                 // 获取字符数据（可变借用 base_layer）
                 let char_data = base_layer.get_char_data(ch).clone();
 
-                let (an_image_x, an_image_y, a_char_width, a_spacing) = if (a_scale - 1.0).abs() < f64::EPSILON
+                let (an_image_x, an_image_y, a_char_width, a_spacing) = if (a_scale - 1.0).abs()
+                    < f64::EPSILON
                 {
                     let ix = a_layer_x_pos + layer_offset.x + char_data.offset.x;
-                    let iy = the_y
-                        - (layer_ascent - layer_offset.y - char_data.offset.y);
+                    let iy = the_y - (layer_ascent - layer_offset.y - char_data.offset.y);
                     let cw = char_data.width;
                     let sp = if next_ch != '\0' {
                         layer_spacing
@@ -1457,8 +1512,7 @@ impl ImageFont {
                     (ix, iy, cw, sp)
                 } else {
                     let ix = a_layer_x_pos
-                        + ((layer_offset.x as f64 + char_data.offset.x as f64) * a_scale)
-                            as i32;
+                        + ((layer_offset.x as f64 + char_data.offset.x as f64) * a_scale) as i32;
                     let iy = the_y
                         - ((layer_ascent as f64
                             - layer_offset.y as f64
@@ -1703,8 +1757,6 @@ static RENDER_POOL: Mutex<Vec<RenderCommand>> = Mutex::new(Vec::new());
 /// 渲染互斥锁（对应 C++ gRenderCritSec）
 static RENDER_LOCK: Mutex<()> = Mutex::new(());
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1725,8 +1777,14 @@ mod tests {
 
         let mut fd = FontData::new();
         let ok = fd.load(&desc_text);
-        if !ok { panic!("FontData::load FAIL: error={:?} line={} current={:?}",
-            fd.error_message(), fd.current_line_num(), fd.current_line()); }
+        if !ok {
+            panic!(
+                "FontData::load FAIL: error={:?} line={} current={:?}",
+                fd.error_message(),
+                fd.current_line_num(),
+                fd.current_line()
+            );
+        }
         assert!(ok);
 
         // 验证图层创建
@@ -1745,12 +1803,10 @@ mod tests {
         assert!(a.width > 0);
         assert!(a.image_rect.width > 0);
         let space = layer.char_data_map.get(&' ').expect("缺空格字符");
-        assert!(space.image_rect.width == 0 || space.width > 0, "空格字符宽度应合理");
+        assert!(
+            space.image_rect.width == 0 || space.width > 0,
+            "空格字符宽度应合理"
+        );
         assert_eq!(space.offset.x, 0);
     }
-
-
-
-
-
 }

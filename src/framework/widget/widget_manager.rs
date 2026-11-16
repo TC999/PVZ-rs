@@ -3,10 +3,10 @@
 
 #![allow(dead_code)]
 
-use crate::framework::widget::widget::Widget;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::key_codes::KeyCode;
 use crate::framework::rect::Rect;
+use crate::framework::widget::widget::Widget;
 
 /// 模态控件信息
 #[derive(Debug, Clone, Copy)]
@@ -23,8 +23,10 @@ pub struct WidgetManager {
     pub widget_list: Vec<*mut Widget>,
 
     // 鼠标
-    pub mouse_x: i32, pub mouse_y: i32,
-    pub last_mouse_x: i32, pub last_mouse_y: i32,
+    pub mouse_x: i32,
+    pub mouse_y: i32,
+    pub last_mouse_x: i32,
+    pub last_mouse_y: i32,
     pub mouse_in: bool,
     pub mouse_flags: i32,
     pub last_down_widget: Option<*mut Widget>,
@@ -76,8 +78,10 @@ impl WidgetManager {
     pub fn new() -> Self {
         WidgetManager {
             widget_list: Vec::new(),
-            mouse_x: 0, mouse_y: 0,
-            last_mouse_x: 0, last_mouse_y: 0,
+            mouse_x: 0,
+            mouse_y: 0,
+            last_mouse_x: 0,
+            last_mouse_y: 0,
             mouse_in: false,
             mouse_flags: 0,
             last_down_widget: None,
@@ -115,7 +119,8 @@ impl WidgetManager {
     }
 
     /// 移除 Widget
-    pub fn remove_widget(&mut self, widget: *mut Widget) {        self.widget_list.retain(|w| *w != widget);
+    pub fn remove_widget(&mut self, widget: *mut Widget) {
+        self.widget_list.retain(|w| *w != widget);
         self.disable_widget(widget);
         // 对应 C++ WidgetManager::RemoveWidget（WidgetManager.cpp:98-103）：
         // 移除的 widget 若是 base modal / over / focus 则清空对应状态
@@ -148,27 +153,42 @@ impl WidgetManager {
             for &w2 in &self.widget_list {
                 unsafe {
                     if w2 != w && (*w2).wants_focus() {
-                        new_focus = Some(w2); break;
+                        new_focus = Some(w2);
+                        break;
                     }
                 }
             }
             self.set_focus(new_focus);
         }
-        if Some(w) == self.over_widget { self.over_widget = None; }
-        if Some(w) == self.last_down_widget { self.last_down_widget = None; }
+        if Some(w) == self.over_widget {
+            self.over_widget = None;
+        }
+        if Some(w) == self.last_down_widget {
+            self.last_down_widget = None;
+        }
     }
 
     /// 重新计算鼠标
     pub fn rehup_mouse(&mut self) {
-        if self.mouse_in { self.mouse_position(self.mouse_x, self.mouse_y); }
+        if self.mouse_in {
+            self.mouse_position(self.mouse_x, self.mouse_y);
+        }
     }
 
     /// 设置焦点
     pub fn set_focus(&mut self, widget: Option<*mut Widget>) {
         if self.focus_widget != widget {
-            if let Some(old) = self.focus_widget { unsafe { (*old).lost_focus(); } }
+            if let Some(old) = self.focus_widget {
+                unsafe {
+                    (*old).lost_focus();
+                }
+            }
             self.focus_widget = widget;
-            if let Some(new) = widget { unsafe { (*new).got_focus(); } }
+            if let Some(new) = widget {
+                unsafe {
+                    (*new).got_focus();
+                }
+            }
         }
     }
 
@@ -182,17 +202,28 @@ impl WidgetManager {
                     if self.is_modal_blocked(w) {
                         continue;
                     }
-                    hit = Some(w); break;
+                    hit = Some(w);
+                    break;
                 }
             }
         }
         if hit != self.over_widget {
-            if let Some(old) = self.over_widget { unsafe { (*old).mouse_leave(); } }
+            if let Some(old) = self.over_widget {
+                unsafe {
+                    (*old).mouse_leave();
+                }
+            }
             self.over_widget = hit;
-            if let Some(new) = hit { unsafe { (*new).mouse_enter(); } }
+            if let Some(new) = hit {
+                unsafe {
+                    (*new).mouse_enter();
+                }
+            }
         }
         if let Some(w) = hit {
-            unsafe { (*w).mouse_move(x - (*w).x, y - (*w).y); }
+            unsafe {
+                (*w).mouse_move(x - (*w).x, y - (*w).y);
+            }
         }
     }
 
@@ -204,12 +235,17 @@ impl WidgetManager {
     /// 刷新延迟叠加层
     pub fn flush_deferred_overlay_widgets(&mut self, max_prio: i32) {
         self.deferred_overlay_list.sort_by_key(|&(_, p)| p);
-        let remaining: Vec<_> = self.deferred_overlay_list.drain(..)
-            .filter(|&(_, p)| p > max_prio).collect();
+        let remaining: Vec<_> = self
+            .deferred_overlay_list
+            .drain(..)
+            .filter(|&(_, p)| p > max_prio)
+            .collect();
         for &(w, _) in &self.deferred_overlay_list {
             if unsafe { (*w).widget_manager.is_some() } {
                 let mut g = Graphics::new();
-                unsafe { (*w).draw_overlay(&mut g); }
+                unsafe {
+                    (*w).draw_overlay(&mut g);
+                }
             }
         }
         self.deferred_overlay_list = remaining;
@@ -219,7 +255,9 @@ impl WidgetManager {
     pub fn draw(&mut self, g: &mut Graphics) {
         for &w in &self.widget_list {
             unsafe {
-                if (*w).visible { (*w).draw(g); }
+                if (*w).visible {
+                    (*w).draw(g);
+                }
             }
         }
     }
@@ -229,7 +267,9 @@ impl WidgetManager {
         self.update_cnt += 1;
         let list: Vec<*mut Widget> = self.widget_list.clone();
         for &w in &list {
-            unsafe { (*w).update(); }
+            unsafe {
+                (*w).update();
+            }
         }
     }
 
@@ -292,7 +332,13 @@ impl WidgetManager {
     /// 鼠标释放（对应 C++ WidgetManager::MouseUp，:581）
     pub fn mouse_up(&mut self, x: i32, y: i32, click_count: i32) -> bool {
         // 对应 C++: 掩码
-        let a_mask = if click_count < 0 { 0x02 } else if click_count == 3 { 0x04 } else { 0x01 };
+        let a_mask = if click_count < 0 {
+            0x02
+        } else if click_count == 3 {
+            0x04
+        } else {
+            0x01
+        };
 
         // 对应 C++: mActualDownButtons &= ~aMask
         self.m_actual_down_buttons &= !a_mask;
@@ -330,7 +376,8 @@ impl WidgetManager {
         self.mouse_in = true;
         self.last_mouse_x = self.mouse_x;
         self.last_mouse_y = self.mouse_y;
-        self.mouse_x = x; self.mouse_y = y;
+        self.mouse_x = x;
+        self.mouse_y = y;
         self.mouse_position(x, y);
         true
     }
@@ -338,7 +385,9 @@ impl WidgetManager {
     /// 鼠标拖拽
     pub fn mouse_drag(&mut self, x: i32, y: i32) -> bool {
         if let Some(w) = self.last_down_widget {
-            unsafe { (*w).mouse_drag(x - (*w).x, y - (*w).y); }
+            unsafe {
+                (*w).mouse_drag(x - (*w).x, y - (*w).y);
+            }
             return true;
         }
         false
@@ -346,7 +395,11 @@ impl WidgetManager {
 
     /// 滚轮（对应 C++ WidgetManager::MouseWheel：发 mFocusWidget 而非 mOverWidget）
     pub fn mouse_wheel(&mut self, delta: i32) {
-        if let Some(w) = self.focus_widget { unsafe { (*w).mouse_wheel(delta); } }
+        if let Some(w) = self.focus_widget {
+            unsafe {
+                (*w).mouse_wheel(delta);
+            }
+        }
     }
 
     /// widget1 是否绘制在 widget2 之下（对应 C++ WidgetContainer::IsBelow）
@@ -355,8 +408,10 @@ impl WidgetManager {
         if widget1 == widget2 {
             return false;
         }
-        match (self.widget_list.iter().position(|&w| w == widget1),
-               self.widget_list.iter().position(|&w| w == widget2)) {
+        match (
+            self.widget_list.iter().position(|&w| w == widget1),
+            self.widget_list.iter().position(|&w| w == widget2),
+        ) {
             (Some(a), Some(b)) => a < b,
             _ => false,
         }
@@ -372,7 +427,10 @@ impl WidgetManager {
             if self.over_widget.map_or(false, |w| self.is_below(w, base)) {
                 self.over_widget = None;
             }
-            if self.last_down_widget.map_or(false, |w| self.is_below(w, base)) {
+            if self
+                .last_down_widget
+                .map_or(false, |w| self.is_below(w, base))
+            {
                 self.last_down_widget = None;
             }
             if self.focus_widget.map_or(false, |w| self.is_below(w, base)) {
@@ -420,27 +478,48 @@ impl WidgetManager {
 
     /// 按键按下
     pub fn key_down(&mut self, key: KeyCode) -> bool {
-        if (key as usize) < self.key_down.len() { self.key_down[key as usize] = true; }
-        if let Some(w) = self.focus_widget { unsafe { (*w).key_down(key, self); } }
+        if (key as usize) < self.key_down.len() {
+            self.key_down[key as usize] = true;
+        }
+        if let Some(w) = self.focus_widget {
+            unsafe {
+                (*w).key_down(key, self);
+            }
+        }
         true
     }
 
     /// 按键释放
     pub fn key_up(&mut self, key: KeyCode) -> bool {
-        if (key as usize) < self.key_down.len() { self.key_down[key as usize] = false; }
-        if let Some(w) = self.focus_widget { unsafe { (*w).key_up(key); } }
+        if (key as usize) < self.key_down.len() {
+            self.key_down[key as usize] = false;
+        }
+        if let Some(w) = self.focus_widget {
+            unsafe {
+                (*w).key_up(key);
+            }
+        }
         true
     }
 
     /// 字符输入
     pub fn key_char(&mut self, c: u8) -> bool {
-        if let Some(w) = self.focus_widget { unsafe { (*w).key_char(c); } return true; }
+        if let Some(w) = self.focus_widget {
+            unsafe {
+                (*w).key_char(c);
+            }
+            return true;
+        }
         false
     }
 
     /// 文本输入（对应 C++ WidgetManager::KeyText，WidgetManager.cpp:763-769）
     pub fn key_text(&mut self, the_text: &str) -> bool {
-        if let Some(w) = self.focus_widget { unsafe { (*w).key_text(the_text); } }
+        if let Some(w) = self.focus_widget {
+            unsafe {
+                (*w).key_text(the_text);
+            }
+        }
         true
     }
 
@@ -451,7 +530,9 @@ impl WidgetManager {
         self.mouse_in = false;
 
         if let Some(w) = self.over_widget {
-            unsafe { (*w).mouse_leave(); }
+            unsafe {
+                (*w).mouse_leave();
+            }
             self.over_widget = None;
         }
 
@@ -465,15 +546,19 @@ impl WidgetManager {
     pub fn mark_all_dirty(&mut self) {
         let a_list = self.widget_list.clone();
         for w in a_list {
-            unsafe { (*w).mark_all_dirty(); }
+            unsafe {
+                (*w).mark_all_dirty();
+            }
         }
     }
 
     /// 对应 C++ `WidgetManager::RemapMouse`（WidgetManager.cpp:215-219）
     pub fn remap_mouse(&self, x: i32, y: i32) -> (i32, i32) {
-        let a_x = (x - self.mouse_src_rect.x) * self.mouse_dest_rect.width / self.mouse_src_rect.width
+        let a_x = (x - self.mouse_src_rect.x) * self.mouse_dest_rect.width
+            / self.mouse_src_rect.width
             + self.mouse_dest_rect.x;
-        let a_y = (y - self.mouse_src_rect.y) * self.mouse_dest_rect.height / self.mouse_src_rect.height
+        let a_y = (y - self.mouse_src_rect.y) * self.mouse_dest_rect.height
+            / self.mouse_src_rect.height
             + self.mouse_dest_rect.y;
         (a_x, a_y)
     }
@@ -513,7 +598,9 @@ impl WidgetManager {
             self.m_has_focus = true;
 
             if let Some(w) = self.focus_widget {
-                unsafe { (*w).got_focus(); }
+                unsafe {
+                    (*w).got_focus();
+                }
             }
         }
     }
@@ -524,7 +611,12 @@ impl WidgetManager {
             self.m_actual_down_buttons = 0;
 
             for a_key_num in 0..0xFFi32 {
-                if self.key_down.get(a_key_num as usize).copied().unwrap_or(false) {
+                if self
+                    .key_down
+                    .get(a_key_num as usize)
+                    .copied()
+                    .unwrap_or(false)
+                {
                     self.key_up(a_key_num);
                 }
             }
@@ -532,7 +624,9 @@ impl WidgetManager {
             self.m_has_focus = false;
 
             if let Some(w) = self.focus_widget {
-                unsafe { (*w).lost_focus(); }
+                unsafe {
+                    (*w).lost_focus();
+                }
             }
         }
     }
@@ -544,5 +638,7 @@ impl WidgetManager {
 }
 
 impl Default for WidgetManager {
-    fn default() -> Self { WidgetManager::new() }
+    fn default() -> Self {
+        WidgetManager::new()
+    }
 }

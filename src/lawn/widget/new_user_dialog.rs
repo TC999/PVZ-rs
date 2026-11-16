@@ -115,7 +115,11 @@ impl NewUserDialog {
         let a_header_default = if is_rename { "RENAME USER" } else { "NEW USER" };
         let header = app.map_or_else(
             || a_header_default.to_string(),
-            |app| unsafe { (*app).base.get_string_default(a_header_key, a_header_default) },
+            |app| unsafe {
+                (*app)
+                    .base
+                    .get_string_default(a_header_key, a_header_default)
+            },
         );
         // C++: theApp->GetString("PLEASE_ENTER_NAME", "Please enter your name:")
         let lines = app.map_or_else(
@@ -159,7 +163,8 @@ impl NewUserDialog {
         // C++: mNameEditWidget->mMaxChars = 12
         ew.max_chars = 12;
         // C++: mNameEditWidget->AddWidthCheckFont(FONT_BRIANNETOD16, 220)
-        ew.width_check_list.push(WidthCheck::new(Font::new("BRIANNETOD16", 16), 220));
+        ew.width_check_list
+            .push(WidthCheck::new(Font::new("BRIANNETOD16", 16), 220));
 
         // 将 EditWidget 挂入 wrapper.host.name_edit_widget
         {
@@ -398,9 +403,9 @@ impl NewUserDialog {
     /// }
     /// ```
     pub fn get_name(&self) -> String {
-        let the_string = self.name_edit_widget.map_or(String::new(), |pw| unsafe {
-            (*pw).text.clone()
-        });
+        let the_string = self
+            .name_edit_widget
+            .map_or(String::new(), |pw| unsafe { (*pw).text.clone() });
         let mut a_string = String::new();
         let mut a_last_char = ' ';
         for a_char in the_string.chars() {

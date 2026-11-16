@@ -375,7 +375,8 @@ impl SoundInstance for SDLSoundInstance {
     /// C++: SDLSoundInstance::IsPlaying（SDLSoundInstance.cpp:258-271）
     fn is_playing(&self) -> bool {
         if Self::global_is_in_demo_mode() {
-            if self.m_mix_chunk.is_null() || !self.m_has_played || self.m_demo_end_update_count == 0 {
+            if self.m_mix_chunk.is_null() || !self.m_has_played || self.m_demo_end_update_count == 0
+            {
                 return false;
             }
             if self.m_demo_looping {

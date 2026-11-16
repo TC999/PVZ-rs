@@ -1,9 +1,9 @@
 // PvZ Portable Rust 翻译 — GridItem（格子物品：墓碑/卵石/梯子/传送门等）
 // 对应 C++ src/Lawn/GridItem.h / GridItem.cpp
 
-use crate::lawn::game_enums::*;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::rect::Rect;
+use crate::lawn::game_enums::*;
 
 /// 运动轨迹帧数（对应 C++ #define NUM_MOTION_TRAIL_FRAMES 12）
 pub const NUM_MOTION_TRAIL_FRAMES: usize = 12;
@@ -130,7 +130,9 @@ impl GridItem {
 
     /// 更新（对应 C++ GridItem::Update，GridItem.cpp:559-589）
     pub fn update(&mut self) {
-        if self.dead { return; }
+        if self.dead {
+            return;
+        }
 
         // 对应 C++: Reanimation* aGridItemReanim = mApp->ReanimationTryToGet(mGridItemReanimID);
         //          if (aGridItemReanim) aGridItemReanim->Update();
@@ -284,7 +286,9 @@ impl GridItem {
     /// 更新耙子（对应 C++ UpdateRake）
     /// 吸引→触发→伤害僵尸→消亡
     pub fn update_rake(&mut self) {
-        if self.grid_item_state == GridItemState::RakeAttracting || self.grid_item_state == GridItemState::RakeWaiting {
+        if self.grid_item_state == GridItemState::RakeAttracting
+            || self.grid_item_state == GridItemState::RakeWaiting
+        {
             if self.rake_find_zombie().is_some() {
                 // 对应 C++: aRakeReanim->mAnimRate = 20.0f;
                 if let Some(app) = self.app {
@@ -342,8 +346,12 @@ impl GridItem {
         if let Some(board) = self.board {
             let board = unsafe { &*board };
             for (idx, zombie) in board.zombies.iter().enumerate() {
-                if zombie.dead { continue; }
-                if zombie.base.row != self.grid_y { continue; }
+                if zombie.dead {
+                    continue;
+                }
+                if zombie.base.row != self.grid_y {
+                    continue;
+                }
                 let z_rect = zombie.get_zombie_rect();
                 if crate::lawn::board::get_rect_overlap(&rake_rect, &z_rect) >= 0 {
                     return Some(idx);
@@ -401,7 +409,7 @@ impl GridItem {
         let show_chocolate = self.board.map_or(false, |b| {
             let board = unsafe { &*b };
             board.cursor_object.cursor_type == CursorType::Chocolate
-                // [TRANSLATION_NOTE]: IsStinkyHighOnChocolate 依赖 ZenGarden 状态，暂以 false 近似
+            // [TRANSLATION_NOTE]: IsStinkyHighOnChocolate 依赖 ZenGarden 状态，暂以 false 近似
         });
         if show_chocolate {
             if let Some(img) = self.get_grid_image("plantspeechbubble") {
@@ -466,7 +474,12 @@ impl GridItem {
 
         // C++: PvzpAnimateCurve 系列（EASE_IN_OUT）
         let a_height_position = crate::todlib::tod_common::tod_animate_curve(
-            0, 100, self.counter, 1000, 0, TodCurves::EaseInOut,
+            0,
+            100,
+            self.counter,
+            1000,
+            0,
+            TodCurves::EaseInOut,
         );
 
         let board = match self.board {
@@ -475,10 +488,12 @@ impl GridItem {
         };
         // C++: mGridCelLook[mGridX][mGridY]，Rust 声明为 [Y][X]，故用 [grid_y][grid_x]
         let a_grid_cel_look = board.grid_cel_look[self.grid_y as usize][self.grid_x as usize];
-        let a_grid_cel_offset_x = board.grid_cel_offset[self.grid_y as usize][self.grid_x as usize][0];
-        let a_grid_cel_offset_y = board.grid_cel_offset[self.grid_y as usize][self.grid_x as usize][1];
+        let a_grid_cel_offset_x =
+            board.grid_cel_offset[self.grid_y as usize][self.grid_x as usize][0];
+        let a_grid_cel_offset_y =
+            board.grid_cel_offset[self.grid_y as usize][self.grid_x as usize][1];
 
-        let a_cel_width = 85;  // IMAGE_TOMBSTONES 单元宽
+        let a_cel_width = 85; // IMAGE_TOMBSTONES 单元宽
         let a_cel_height = 110; // IMAGE_TOMBSTONES 单元高
         let a_grave_col = a_grid_cel_look % 5;
         let a_grave_row = if self.grid_y == 0 {
@@ -491,13 +506,28 @@ impl GridItem {
 
         // C++: PvzpAnimateCurve 计算可见高度与底部裁剪
         let a_visible_height = crate::todlib::tod_common::tod_animate_curve(
-            0, 1000, a_height_position, a_cel_height, 0, TodCurves::EaseInOut,
+            0,
+            1000,
+            a_height_position,
+            a_cel_height,
+            0,
+            TodCurves::EaseInOut,
         );
         let a_extra_bottom_clip = crate::todlib::tod_common::tod_animate_curve(
-            0, 50, a_height_position, 0, 14, TodCurves::EaseInOut,
+            0,
+            50,
+            a_height_position,
+            0,
+            14,
+            TodCurves::EaseInOut,
         );
         let a_visible_height_dirt = crate::todlib::tod_common::tod_animate_curve(
-            500, 1000, a_height_position, a_cel_height, 0, TodCurves::EaseInOut,
+            500,
+            1000,
+            a_height_position,
+            a_cel_height,
+            0,
+            TodCurves::EaseInOut,
         );
         let mut a_extra_top_clip = 0;
 
@@ -505,7 +535,12 @@ impl GridItem {
         if let Some(plant) = board.get_top_plant_at_any(self.grid_x, self.grid_y) {
             if plant.state == PlantState::GravebusterEating {
                 a_extra_top_clip = crate::todlib::tod_common::tod_animate_curve_float(
-                    400, 0, plant.state_countdown, 10.0, 40.0, TodCurves::Linear,
+                    400,
+                    0,
+                    plant.state_countdown,
+                    10.0,
+                    40.0,
+                    TodCurves::Linear,
                 ) as i32;
             }
         }
@@ -524,14 +559,26 @@ impl GridItem {
             a_visible_height_dirt.max(0),
         );
         let x = board.grid_to_pixel_x(self.grid_x, self.grid_y) + a_grid_cel_offset_x - 4;
-        let y = board.grid_to_pixel_y(self.grid_x, self.grid_y) + a_cel_height + a_grid_cel_offset_y - 9;
+        let y =
+            board.grid_to_pixel_y(self.grid_x, self.grid_y) + a_cel_height + a_grid_cel_offset_y
+                - 9;
 
         // C++: DrawImage(IMAGE_TOMBSTONES, ...) + DrawImage(IMAGE_TOMBSTONE_MOUNDS, ...)
         if let Some(img) = self.get_grid_image("tombstones") {
-            g.draw_image_f_src(img, x as f32, (y - a_visible_height + a_extra_top_clip) as f32, &a_src_rect);
+            g.draw_image_f_src(
+                img,
+                x as f32,
+                (y - a_visible_height + a_extra_top_clip) as f32,
+                &a_src_rect,
+            );
         }
         if let Some(dirt) = self.get_grid_image("tombstone_mounds") {
-            g.draw_image_f_src(dirt, x as f32, (y - a_visible_height_dirt) as f32, &a_src_rect_dirt);
+            g.draw_image_f_src(
+                dirt,
+                x as f32,
+                (y - a_visible_height_dirt) as f32,
+                &a_src_rect_dirt,
+            );
         }
     }
 
@@ -558,9 +605,16 @@ impl GridItem {
                 let a_diff_x = a_frame.pos_x - self.pos_x;
                 let a_diff_y = a_frame.pos_y - self.pos_y;
                 let an_alpha = crate::todlib::tod_common::tod_animate_curve(
-                    0, 11, i, 64, 16, TodCurves::Linear,
+                    0,
+                    11,
+                    i,
+                    64,
+                    16,
+                    TodCurves::Linear,
                 ) as u8;
-                g.set_color(&crate::framework::color::Color::new(255, 255, 255, an_alpha));
+                g.set_color(&crate::framework::color::Color::new(
+                    255, 255, 255, an_alpha,
+                ));
                 g.set_colorize_images(true);
                 // C++: aStinkyReanim->mAnimTime = aFrame.mAnimTime
                 a_stinky_reanim.m_anim_time = a_frame.anim_time;
@@ -600,9 +654,16 @@ impl GridItem {
         let mut a_y_pos = (board.grid_to_pixel_y(self.grid_x, self.grid_y) + 40) as f32;
         if self.counter < 25 {
             let an_alpha = crate::todlib::tod_common::tod_animate_curve(
-                25, 0, self.counter, 255, 0, TodCurves::Linear,
+                25,
+                0,
+                self.counter,
+                255,
+                0,
+                TodCurves::Linear,
             ) as u8;
-            g.set_color(&crate::framework::color::Color::new(255, 255, 255, an_alpha));
+            g.set_color(&crate::framework::color::Color::new(
+                255, 255, 255, an_alpha,
+            ));
             g.set_colorize_images(true);
         }
 
@@ -621,8 +682,10 @@ impl GridItem {
             }
             // C++: 水面摆动
             const CRATER_ANIM_PERIOD: u32 = 200;
-            let a_pos = self.grid_y as f32 * std::f32::consts::PI + self.grid_x as f32 * std::f32::consts::PI * 0.25;
-            let a_time = (board.m_main_counter % CRATER_ANIM_PERIOD) as f32 * (std::f32::consts::PI * 2.0 / CRATER_ANIM_PERIOD as f32);
+            let a_pos = self.grid_y as f32 * std::f32::consts::PI
+                + self.grid_x as f32 * std::f32::consts::PI * 0.25;
+            let a_time = (board.m_main_counter % CRATER_ANIM_PERIOD) as f32
+                * (std::f32::consts::PI * 2.0 / CRATER_ANIM_PERIOD as f32);
             a_y_pos += (a_pos + a_time).sin() * 2.0;
         } else if board.stage_has_roof() {
             if self.grid_x < 5 {
@@ -687,7 +750,12 @@ impl GridItem {
             let _ = board.challenge;
 
             let a_alpha = crate::todlib::tod_common::tod_animate_curve(
-                0, 50, self.transparent_counter, 255, 58, TodCurves::Linear,
+                0,
+                50,
+                self.transparent_counter,
+                255,
+                58,
+                TodCurves::Linear,
             ) as u8;
             g.set_colorize_images(true);
             g.set_color(&crate::framework::color::Color::new(255, 255, 255, a_alpha));
@@ -740,7 +808,12 @@ impl GridItem {
         // C++: AddPvzpParticle(PARTICLE_GRAVE_STONE_RISE) + PlayFoley(FOLEY_DIRT_RISE)
         if let Some(app) = self.app {
             let app_ref = unsafe { &mut *app };
-            app_ref.add_tod_particle(a_x_pos as f32, a_y_pos as f32, self.render_order + 1, ParticleEffect::GraveStoneRise as i32);
+            app_ref.add_tod_particle(
+                a_x_pos as f32,
+                a_y_pos as f32,
+                self.render_order + 1,
+                ParticleEffect::GraveStoneRise as i32,
+            );
             app_ref.play_foley(crate::todlib::tod_foley::FoleyType::DirtRise as i32);
         }
     }
@@ -790,8 +863,10 @@ impl GridItem {
     pub fn open_portal(&mut self) {
         let mut a_x_pos = self.grid_x as f32 * 80.0 - 6.0;
         // C++ GridItem.cpp:422: float aYPos = mBoard->GridToPixelY(0, mGridY) - 65.0f;
-        let mut a_y_pos = self.board.map_or(0, |b| unsafe { (*b).grid_to_pixel_y(0, self.grid_y) }) as f32
-            - 65.0;
+        let mut a_y_pos =
+            self.board
+                .map_or(0, |b| unsafe { (*b).grid_to_pixel_y(0, self.grid_y) }) as f32
+                - 65.0;
 
         let mut a_reanim_type = crate::lawn::game_enums::ReanimationType::PortalCircle as i32;
         if self.grid_item_type == GridItemType::PortalSquare {
@@ -831,7 +906,8 @@ impl GridItem {
 
         if let Some(app) = self.app {
             unsafe {
-                if let Some(a_portal_reanim) = (*app).reanimation_get_mut(self.grid_item_reanim_id) {
+                if let Some(a_portal_reanim) = (*app).reanimation_get_mut(self.grid_item_reanim_id)
+                {
                     a_portal_reanim.play_reanim(
                         "anim_appear",
                         crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,
@@ -848,7 +924,8 @@ impl GridItem {
     pub fn close_portal(&mut self) {
         if let Some(app) = self.app {
             unsafe {
-                if let Some(a_portal_reanim) = (*app).reanimation_get_mut(self.grid_item_reanim_id) {
+                if let Some(a_portal_reanim) = (*app).reanimation_get_mut(self.grid_item_reanim_id)
+                {
                     a_portal_reanim.play_reanim(
                         "anim_dissapear",
                         crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,

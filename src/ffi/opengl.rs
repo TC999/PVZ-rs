@@ -8,10 +8,10 @@
 
 #![allow(non_camel_case_types, dead_code)]
 
-use std::ffi::CString;
-use std::os::raw::{c_char, c_int, c_uint, c_void, c_float};
-use std::sync::OnceLock;
 use sdl2::sys as sdl_sys;
+use std::ffi::CString;
+use std::os::raw::{c_char, c_float, c_int, c_uint, c_void};
+use std::sync::OnceLock;
 
 // ============================================================
 // 类型定义
@@ -182,6 +182,7 @@ pub const GL_SAMPLE_ALPHA_TO_COVERAGE: GLenum = 0x809E;
 pub const GL_SAMPLE_COVERAGE: GLenum = 0x80A0;
 
 // 帧缓冲
+pub const GL_FRAMEBUFFER_SRGB: GLenum = 0x8DB9;
 pub const GL_FRAMEBUFFER: GLenum = 0x8D40;
 pub const GL_FRAMEBUFFER_BINDING: GLenum = 0x8CA6;
 pub const GL_RENDERBUFFER: GLenum = 0x8D41;
@@ -330,23 +331,34 @@ pub const GL_SHORT: GLenum = 0x1402;
 pub struct GlProcs {
     pub glActiveTexture: unsafe extern "C" fn(texture: GLenum),
     pub glAttachShader: unsafe extern "C" fn(program: GLuint, shader: GLuint),
-    pub glBindAttribLocation: unsafe extern "C" fn(program: GLuint, index: GLuint, name: *const GLchar),
+    pub glBindAttribLocation:
+        unsafe extern "C" fn(program: GLuint, index: GLuint, name: *const GLchar),
     pub glBindBuffer: unsafe extern "C" fn(target: GLenum, buffer: GLuint),
     pub glBindFramebuffer: unsafe extern "C" fn(target: GLenum, framebuffer: GLuint),
     pub glBindTexture: unsafe extern "C" fn(target: GLenum, texture: GLuint),
     pub glBlendFunc: unsafe extern "C" fn(sfactor: GLenum, dfactor: GLenum),
-    pub glBlendFuncSeparate: unsafe extern "C" fn(srcRGB: GLenum, dstRGB: GLenum, srcAlpha: GLenum, dstAlpha: GLenum),
+    pub glBlendFuncSeparate:
+        unsafe extern "C" fn(srcRGB: GLenum, dstRGB: GLenum, srcAlpha: GLenum, dstAlpha: GLenum),
     pub glBlendEquation: unsafe extern "C" fn(mode: GLenum),
     pub glBlendEquationSeparate: unsafe extern "C" fn(modeRGB: GLenum, modeAlpha: GLenum),
-    pub glBlendColor: unsafe extern "C" fn(red: GLclampf, green: GLclampf, blue: GLclampf, alpha: GLclampf),
-    pub glBufferData: unsafe extern "C" fn(target: GLenum, size: GLsizeiptr, data: *const c_void, usage: GLenum),
-    pub glBufferSubData: unsafe extern "C" fn(target: GLenum, offset: GLintptr, size: GLsizeiptr, data: *const c_void),
+    pub glBlendColor:
+        unsafe extern "C" fn(red: GLclampf, green: GLclampf, blue: GLclampf, alpha: GLclampf),
+    pub glBufferData:
+        unsafe extern "C" fn(target: GLenum, size: GLsizeiptr, data: *const c_void, usage: GLenum),
+    pub glBufferSubData: unsafe extern "C" fn(
+        target: GLenum,
+        offset: GLintptr,
+        size: GLsizeiptr,
+        data: *const c_void,
+    ),
     pub glCheckFramebufferStatus: unsafe extern "C" fn(target: GLenum) -> GLenum,
     pub glClear: unsafe extern "C" fn(mask: GLbitfield),
-    pub glClearColor: unsafe extern "C" fn(red: GLclampf, green: GLclampf, blue: GLclampf, alpha: GLclampf),
+    pub glClearColor:
+        unsafe extern "C" fn(red: GLclampf, green: GLclampf, blue: GLclampf, alpha: GLclampf),
     pub glClearDepthf: unsafe extern "C" fn(d: GLclampf),
     pub glClearStencil: unsafe extern "C" fn(s: GLint),
-    pub glColorMask: unsafe extern "C" fn(red: GLboolean, green: GLboolean, blue: GLboolean, alpha: GLboolean),
+    pub glColorMask:
+        unsafe extern "C" fn(red: GLboolean, green: GLboolean, blue: GLboolean, alpha: GLboolean),
     pub glCompileShader: unsafe extern "C" fn(shader: GLuint),
     pub glCreateProgram: unsafe extern "C" fn() -> GLuint,
     pub glCreateShader: unsafe extern "C" fn(type_: GLenum) -> GLuint,
@@ -363,13 +375,25 @@ pub struct GlProcs {
     pub glDisable: unsafe extern "C" fn(cap: GLenum),
     pub glDisableVertexAttribArray: unsafe extern "C" fn(index: GLuint),
     pub glDrawArrays: unsafe extern "C" fn(mode: GLenum, first: GLint, count: GLsizei),
-    pub glDrawElements: unsafe extern "C" fn(mode: GLenum, count: GLsizei, type_: GLenum, indices: *const c_void),
+    pub glDrawElements:
+        unsafe extern "C" fn(mode: GLenum, count: GLsizei, type_: GLenum, indices: *const c_void),
     pub glEnable: unsafe extern "C" fn(cap: GLenum),
     pub glEnableVertexAttribArray: unsafe extern "C" fn(index: GLuint),
     pub glFinish: unsafe extern "C" fn(),
     pub glFlush: unsafe extern "C" fn(),
-    pub glFramebufferRenderbuffer: unsafe extern "C" fn(target: GLenum, attachment: GLenum, renderbuffertarget: GLenum, renderbuffer: GLuint),
-    pub glFramebufferTexture2D: unsafe extern "C" fn(target: GLenum, attachment: GLenum, textarget: GLenum, texture: GLuint, level: GLint),
+    pub glFramebufferRenderbuffer: unsafe extern "C" fn(
+        target: GLenum,
+        attachment: GLenum,
+        renderbuffertarget: GLenum,
+        renderbuffer: GLuint,
+    ),
+    pub glFramebufferTexture2D: unsafe extern "C" fn(
+        target: GLenum,
+        attachment: GLenum,
+        textarget: GLenum,
+        texture: GLuint,
+        level: GLint,
+    ),
     pub glFrontFace: unsafe extern "C" fn(mode: GLenum),
     pub glGenBuffers: unsafe extern "C" fn(n: GLsizei, buffers: *mut GLuint),
     pub glGenFramebuffers: unsafe extern "C" fn(n: GLsizei, framebuffers: *mut GLuint),
@@ -378,13 +402,24 @@ pub struct GlProcs {
     pub glGenerateMipmap: unsafe extern "C" fn(target: GLenum),
     pub glGetAttribLocation: unsafe extern "C" fn(program: GLuint, name: *const GLchar) -> GLint,
     pub glGetBooleanv: unsafe extern "C" fn(pname: GLenum, data: *mut GLboolean),
-    pub glGetBufferParameteriv: unsafe extern "C" fn(target: GLenum, pname: GLenum, params: *mut GLint),
+    pub glGetBufferParameteriv:
+        unsafe extern "C" fn(target: GLenum, pname: GLenum, params: *mut GLint),
     pub glGetError: unsafe extern "C" fn() -> GLenum,
     pub glGetFloatv: unsafe extern "C" fn(pname: GLenum, data: *mut GLfloat),
     pub glGetIntegerv: unsafe extern "C" fn(pname: GLenum, data: *mut GLint),
-    pub glGetProgramInfoLog: unsafe extern "C" fn(program: GLuint, bufSize: GLsizei, length: *mut GLsizei, infoLog: *mut GLchar),
+    pub glGetProgramInfoLog: unsafe extern "C" fn(
+        program: GLuint,
+        bufSize: GLsizei,
+        length: *mut GLsizei,
+        infoLog: *mut GLchar,
+    ),
     pub glGetProgramiv: unsafe extern "C" fn(program: GLuint, pname: GLenum, params: *mut GLint),
-    pub glGetShaderInfoLog: unsafe extern "C" fn(shader: GLuint, bufSize: GLsizei, length: *mut GLsizei, infoLog: *mut GLchar),
+    pub glGetShaderInfoLog: unsafe extern "C" fn(
+        shader: GLuint,
+        bufSize: GLsizei,
+        length: *mut GLsizei,
+        infoLog: *mut GLchar,
+    ),
     pub glGetShaderiv: unsafe extern "C" fn(shader: GLuint, pname: GLenum, params: *mut GLint),
     pub glGetString: unsafe extern "C" fn(name: GLenum) -> *const GLubyte,
     pub glGetStringi: unsafe extern "C" fn(name: GLenum, index: GLuint) -> *const GLubyte,
@@ -398,23 +433,64 @@ pub struct GlProcs {
     pub glLinkProgram: unsafe extern "C" fn(program: GLuint),
     pub glPixelStorei: unsafe extern "C" fn(pname: GLenum, param: GLint),
     pub glPolygonOffset: unsafe extern "C" fn(factor: GLfloat, units: GLfloat),
-    pub glReadPixels: unsafe extern "C" fn(x: GLint, y: GLint, width: GLsizei, height: GLsizei, format: GLenum, type_: GLenum, pixels: *mut c_void),
-    pub glRenderbufferStorage: unsafe extern "C" fn(target: GLenum, internalformat: GLenum, width: GLsizei, height: GLsizei),
+    pub glReadPixels: unsafe extern "C" fn(
+        x: GLint,
+        y: GLint,
+        width: GLsizei,
+        height: GLsizei,
+        format: GLenum,
+        type_: GLenum,
+        pixels: *mut c_void,
+    ),
+    pub glRenderbufferStorage: unsafe extern "C" fn(
+        target: GLenum,
+        internalformat: GLenum,
+        width: GLsizei,
+        height: GLsizei,
+    ),
     pub glSampleCoverage: unsafe extern "C" fn(value: GLclampf, invert: GLboolean),
     pub glScissor: unsafe extern "C" fn(x: GLint, y: GLint, width: GLsizei, height: GLsizei),
-    pub glShaderSource: unsafe extern "C" fn(shader: GLuint, count: GLsizei, string_: *const *const GLchar, length: *const GLint),
+    pub glShaderSource: unsafe extern "C" fn(
+        shader: GLuint,
+        count: GLsizei,
+        string_: *const *const GLchar,
+        length: *const GLint,
+    ),
     pub glStencilFunc: unsafe extern "C" fn(func: GLenum, ref_: GLint, mask: GLuint),
-    pub glStencilFuncSeparate: unsafe extern "C" fn(face: GLenum, func: GLenum, ref_: GLint, mask: GLuint),
+    pub glStencilFuncSeparate:
+        unsafe extern "C" fn(face: GLenum, func: GLenum, ref_: GLint, mask: GLuint),
     pub glStencilMask: unsafe extern "C" fn(mask: GLuint),
     pub glStencilMaskSeparate: unsafe extern "C" fn(face: GLenum, mask: GLuint),
     pub glStencilOp: unsafe extern "C" fn(fail: GLenum, zfail: GLenum, zpass: GLenum),
-    pub glStencilOpSeparate: unsafe extern "C" fn(face: GLenum, sfail: GLenum, dpfail: GLenum, dppass: GLenum),
-    pub glTexImage2D: unsafe extern "C" fn(target: GLenum, level: GLint, internalformat: GLint, width: GLsizei, height: GLsizei, border: GLint, format: GLenum, type_: GLenum, pixels: *const c_void),
+    pub glStencilOpSeparate:
+        unsafe extern "C" fn(face: GLenum, sfail: GLenum, dpfail: GLenum, dppass: GLenum),
+    pub glTexImage2D: unsafe extern "C" fn(
+        target: GLenum,
+        level: GLint,
+        internalformat: GLint,
+        width: GLsizei,
+        height: GLsizei,
+        border: GLint,
+        format: GLenum,
+        type_: GLenum,
+        pixels: *const c_void,
+    ),
     pub glTexParameterf: unsafe extern "C" fn(target: GLenum, pname: GLenum, param: GLfloat),
-    pub glTexParameterfv: unsafe extern "C" fn(target: GLenum, pname: GLenum, params: *const GLfloat),
+    pub glTexParameterfv:
+        unsafe extern "C" fn(target: GLenum, pname: GLenum, params: *const GLfloat),
     pub glTexParameteri: unsafe extern "C" fn(target: GLenum, pname: GLenum, param: GLint),
     pub glTexParameteriv: unsafe extern "C" fn(target: GLenum, pname: GLenum, params: *const GLint),
-    pub glTexSubImage2D: unsafe extern "C" fn(target: GLenum, level: GLint, xoffset: GLint, yoffset: GLint, width: GLsizei, height: GLsizei, format: GLenum, type_: GLenum, pixels: *const c_void),
+    pub glTexSubImage2D: unsafe extern "C" fn(
+        target: GLenum,
+        level: GLint,
+        xoffset: GLint,
+        yoffset: GLint,
+        width: GLsizei,
+        height: GLsizei,
+        format: GLenum,
+        type_: GLenum,
+        pixels: *const c_void,
+    ),
     pub glUniform1f: unsafe extern "C" fn(location: GLint, v0: GLfloat),
     pub glUniform1fv: unsafe extern "C" fn(location: GLint, count: GLsizei, value: *const GLfloat),
     pub glUniform1i: unsafe extern "C" fn(location: GLint, v0: GLint),
@@ -423,17 +499,36 @@ pub struct GlProcs {
     pub glUniform2fv: unsafe extern "C" fn(location: GLint, count: GLsizei, value: *const GLfloat),
     pub glUniform3f: unsafe extern "C" fn(location: GLint, v0: GLfloat, v1: GLfloat, v2: GLfloat),
     pub glUniform3fv: unsafe extern "C" fn(location: GLint, count: GLsizei, value: *const GLfloat),
-    pub glUniform4f: unsafe extern "C" fn(location: GLint, v0: GLfloat, v1: GLfloat, v2: GLfloat, v3: GLfloat),
+    pub glUniform4f:
+        unsafe extern "C" fn(location: GLint, v0: GLfloat, v1: GLfloat, v2: GLfloat, v3: GLfloat),
     pub glUniform4fv: unsafe extern "C" fn(location: GLint, count: GLsizei, value: *const GLfloat),
-    pub glUniformMatrix3fv: unsafe extern "C" fn(location: GLint, count: GLsizei, transpose: GLboolean, value: *const GLfloat),
-    pub glUniformMatrix4fv: unsafe extern "C" fn(location: GLint, count: GLsizei, transpose: GLboolean, value: *const GLfloat),
+    pub glUniformMatrix3fv: unsafe extern "C" fn(
+        location: GLint,
+        count: GLsizei,
+        transpose: GLboolean,
+        value: *const GLfloat,
+    ),
+    pub glUniformMatrix4fv: unsafe extern "C" fn(
+        location: GLint,
+        count: GLsizei,
+        transpose: GLboolean,
+        value: *const GLfloat,
+    ),
     pub glUseProgram: unsafe extern "C" fn(program: GLuint),
     pub glValidateProgram: unsafe extern "C" fn(program: GLuint),
     pub glVertexAttrib1f: unsafe extern "C" fn(index: GLuint, x: GLfloat),
     pub glVertexAttrib2f: unsafe extern "C" fn(index: GLuint, x: GLfloat, y: GLfloat),
     pub glVertexAttrib3f: unsafe extern "C" fn(index: GLuint, x: GLfloat, y: GLfloat, z: GLfloat),
-    pub glVertexAttrib4f: unsafe extern "C" fn(index: GLuint, x: GLfloat, y: GLfloat, z: GLfloat, w: GLfloat),
-    pub glVertexAttribPointer: unsafe extern "C" fn(index: GLuint, size: GLint, type_: GLenum, normalized: GLboolean, stride: GLsizei, pointer: *const c_void),
+    pub glVertexAttrib4f:
+        unsafe extern "C" fn(index: GLuint, x: GLfloat, y: GLfloat, z: GLfloat, w: GLfloat),
+    pub glVertexAttribPointer: unsafe extern "C" fn(
+        index: GLuint,
+        size: GLint,
+        type_: GLenum,
+        normalized: GLboolean,
+        stride: GLsizei,
+        pointer: *const c_void,
+    ),
     pub glViewport: unsafe extern "C" fn(x: GLint, y: GLint, width: GLsizei, height: GLsizei),
     pub glDeleteRenderbuffers: unsafe extern "C" fn(n: GLsizei, renderbuffers: *const GLuint),
     pub glBindRenderbuffer: unsafe extern "C" fn(target: GLenum, renderbuffer: GLuint),
@@ -728,7 +823,6 @@ gl_wrapper!(glVertexAttrib4f, (index: GLuint, x: GLfloat, y: GLfloat, z: GLfloat
 gl_wrapper!(glVertexAttribPointer, (index: GLuint, size: GLint, type_: GLenum, normalized: GLboolean, stride: GLsizei, pointer: *const c_void));
 gl_wrapper!(glViewport, (x: GLint, y: GLint, width: GLsizei, height: GLsizei));
 
-
 /// glad: 加载 GL ES 2.0（对应 C++ glad_gl_load_GL_ES_VERSION_2_0）
 pub fn glad_gl_load_gl_es_version_2_0(
     _load_func: Option<unsafe extern "C" fn(*const i8) -> *mut std::ffi::c_void>,
@@ -739,10 +833,7 @@ pub fn glad_gl_load_gl_es_version_2_0(
 }
 
 /// glad: 获取扩展列表（对应 C++ glad_gl_get_extensions）
-pub fn glad_gl_get_extensions(
-    _out_exts: *mut *const i8,
-    _out_exts_i: *mut *mut *mut i8,
-) -> i32 {
+pub fn glad_gl_get_extensions(_out_exts: *mut *const i8, _out_exts_i: *mut *mut *mut i8) -> i32 {
     // 返回 0（无扩展）
     0
 }

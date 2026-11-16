@@ -19,13 +19,27 @@ pub const REGEMU_QWORD_LITTLE_ENDIAN: u32 = 11;
 pub fn set_reg_file(_file_name: &str) {}
 
 /// 读取注册表值（对应 C++ RegistryRead）
-pub fn registry_read(_key: &str, _value: &str, _type_: &mut u32, _value_out: &mut [u8], _length: &mut u32) -> bool { false }
+pub fn registry_read(
+    _key: &str,
+    _value: &str,
+    _type_: &mut u32,
+    _value_out: &mut [u8],
+    _length: &mut u32,
+) -> bool {
+    false
+}
 
 /// 写入注册表值（对应 C++ RegistryWrite）
-pub fn registry_write(_key: &str, _value: &str, _type_: u32, _data: &[u8], _length: u32) -> bool { false }
+pub fn registry_write(_key: &str, _value: &str, _type_: u32, _data: &[u8], _length: u32) -> bool {
+    false
+}
 
 /// 删除注册表键（对应 C++ RegistryEraseKey）
-pub fn registry_erase_key(_key: &str) -> bool { false }
+pub fn registry_erase_key(_key: &str) -> bool {
+    false
+}
 
 /// 删除注册表值（对应 C++ RegistryEraseValue）
-pub fn registry_erase_value(_key: &str, _value: &str) -> bool { false }
+pub fn registry_erase_value(_key: &str, _value: &str) -> bool {
+    false
+}

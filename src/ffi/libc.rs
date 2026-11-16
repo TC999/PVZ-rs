@@ -1,7 +1,7 @@
 // PvZ Portable Rust 翻译 — libc 内存/字符串 FFI 绑定
 #![allow(non_camel_case_types, dead_code)]
 
-use std::os::raw::{c_void, c_int, c_uint, c_char, c_double};
+use std::os::raw::{c_char, c_double, c_int, c_uint, c_void};
 
 unsafe extern "C" {
     pub fn memcpy(dest: *mut c_void, src: *const c_void, n: usize) -> *mut c_void;
@@ -19,7 +19,12 @@ unsafe extern "C" {
     pub fn realloc(ptr: *mut c_void, size: usize) -> *mut c_void;
     pub fn atof(nptr: *const c_char) -> c_double;
     pub fn atoi(nptr: *const c_char) -> c_int;
-    pub fn qsort(base: *mut c_void, nmemb: usize, size: usize, compar: Option<unsafe extern "C" fn(*const c_void, *const c_void) -> c_int>);
+    pub fn qsort(
+        base: *mut c_void,
+        nmemb: usize,
+        size: usize,
+        compar: Option<unsafe extern "C" fn(*const c_void, *const c_void) -> c_int>,
+    );
     pub fn srand(seed: c_uint);
     pub fn rand() -> c_int;
     pub fn abs(j: c_int) -> c_int;

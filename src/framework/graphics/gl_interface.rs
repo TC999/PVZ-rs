@@ -12,12 +12,12 @@ use std::sync::OnceLock;
 
 use crate::ffi::opengl::*;
 use crate::framework::color::Color;
-use crate::framework::rect::Rect;
-use crate::framework::graphics::image::Image;
 use crate::framework::graphics::gl_image::GLImage;
+use crate::framework::graphics::image::Image;
 use crate::framework::graphics::memory_image::MemoryImage;
-use crate::framework::sexy_matrix::SexyMatrix3;
+use crate::framework::rect::Rect;
 use crate::framework::sexy_app_base::SexyAppBase;
+use crate::framework::sexy_matrix::SexyMatrix3;
 
 // ============================================================
 // 常量
@@ -82,7 +82,11 @@ pub struct TextureDataPiece {
 
 impl TextureDataPiece {
     pub const fn new() -> Self {
-        TextureDataPiece { texture: 0, width: 0, height: 0 }
+        TextureDataPiece {
+            texture: 0,
+            width: 0,
+            height: 0,
+        }
     }
 }
 
@@ -165,9 +169,8 @@ unsafe fn gfx_set_linear_filter(v: bool) {
 /// ARGB → RGBA（OpenGL 使用的小端 RGBA）
 #[inline]
 fn argb_to_rgba(argb: u32) -> u32 {
-    let abgr = (argb & 0xFF00FF00u32)
-        | ((argb >> 16) & 0x000000FFu32)
-        | ((argb << 16) & 0x00FF0000u32);
+    let abgr =
+        (argb & 0xFF00FF00u32) | ((argb >> 16) & 0x000000FFu32) | ((argb << 16) & 0x00FF0000u32);
     abgr.to_le()
 }
 
@@ -175,9 +178,7 @@ fn argb_to_rgba(argb: u32) -> u32 {
 #[inline]
 fn rgba_to_argb(rgba: u32) -> u32 {
     let abgr = u32::from_le(rgba);
-    (abgr & 0xFF00FF00u32)
-        | ((abgr >> 16) & 0x000000FFu32)
-        | ((abgr << 16) & 0x00FF0000u32)
+    (abgr & 0xFF00FF00u32) | ((abgr >> 16) & 0x000000FFu32) | ((abgr << 16) & 0x00FF0000u32)
 }
 
 /// Color → GL 颜色（RGBA）
@@ -189,7 +190,11 @@ fn color_to_gl_color(c: &Color) -> u32 {
 /// 从顶点颜色或 fallback 颜色获取 GL 颜色
 #[inline]
 fn vertex_color(tri_vertex_color: u32, fallback: u32) -> u32 {
-    if tri_vertex_color != 0 { argb_to_rgba(tri_vertex_color) } else { fallback }
+    if tri_vertex_color != 0 {
+        argb_to_rgba(tri_vertex_color)
+    } else {
+        fallback
+    }
 }
 
 // ============================================================
@@ -222,17 +227,32 @@ unsafe fn gfx_end() {
         );
 
         // 顶点属性：位置 (3 floats)
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, size_of::<GLVertex>() as GLsizei, ptr::null());
+        glVertexAttribPointer(
+            0,
+            3,
+            GL_FLOAT,
+            GL_FALSE,
+            size_of::<GLVertex>() as GLsizei,
+            ptr::null(),
+        );
         glEnableVertexAttribArray(0);
         // 颜色 (4 bytes, normalized)
         glVertexAttribPointer(
-            1, 4, GL_UNSIGNED_BYTE, GL_TRUE, size_of::<GLVertex>() as GLsizei,
+            1,
+            4,
+            GL_UNSIGNED_BYTE,
+            GL_TRUE,
+            size_of::<GLVertex>() as GLsizei,
             (size_of::<f32>() * 3) as *const std::ffi::c_void,
         );
         glEnableVertexAttribArray(1);
         // UV (2 floats)
         glVertexAttribPointer(
-            2, 2, GL_FLOAT, GL_FALSE, size_of::<GLVertex>() as GLsizei,
+            2,
+            2,
+            GL_FLOAT,
+            GL_FALSE,
+            size_of::<GLVertex>() as GLsizei,
             (size_of::<f32>() * 3 + size_of::<u32>()) as *const std::ffi::c_void,
         );
         glEnableVertexAttribArray(2);
@@ -391,14 +411,15 @@ unsafe fn shader_compile(src: &str, shader_type: GLenum) -> GLuint {
         let mut log_len: GLint = 0;
         glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &mut log_len);
         let mut log_buf: Vec<u8> = vec![0u8; log_len as usize];
-        glGetShaderInfoLog(shader, log_len, &mut log_len, log_buf.as_mut_ptr() as *mut GLchar);
+        glGetShaderInfoLog(
+            shader,
+            log_len,
+            &mut log_len,
+            log_buf.as_mut_ptr() as *mut GLchar,
+        );
         let log_str = std::str::from_utf8(&log_buf[..log_len as usize]).unwrap_or("?");
         // 使用 eprintln 避免依赖 SexyAppBase
-        eprintln!(
-            "Shader error: {}\nsource:\n{}\n",
-            log_str,
-            src,
-        );
+        eprintln!("Shader error: {}\nsource:\n{}\n", log_str, src,);
         glDeleteShader(shader);
         return 0;
     }
@@ -441,10 +462,22 @@ unsafe fn shader_load(src: &str) -> GLuint {
 /// 构建正交投影矩阵（对应 C++ MakeOrthoMatrix）
 fn make_ortho_matrix(l: f32, r: f32, b: f32, t: f32, n: f32, f_: f32) -> [f32; 16] {
     [
-        2.0 / (r - l), 0.0, 0.0, 0.0,
-        0.0, 2.0 / (t - b), 0.0, 0.0,
-        0.0, 0.0, -2.0 / (f_ - n), 0.0,
-        -(r + l) / (r - l), -(t + b) / (t - b), -(f_ + n) / (f_ - n), 1.0,
+        2.0 / (r - l),
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        2.0 / (t - b),
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -2.0 / (f_ - n),
+        0.0,
+        -(r + l) / (r - l),
+        -(t + b) / (t - b),
+        -(f_ + n) / (f_ - n),
+        1.0,
     ]
 }
 
@@ -460,7 +493,11 @@ unsafe fn set_linear_filter(linear: bool) {
 /// 绑定纹理并设置参数
 unsafe fn gfx_bind_texture(tex: GLuint, uv_bounds: &[f32; 4], clamp_uv: bool) {
     glBindTexture(GL_TEXTURE_2D, tex);
-    let f = if gfx_linear_filter() { GL_LINEAR } else { GL_NEAREST };
+    let f = if gfx_linear_filter() {
+        GL_LINEAR
+    } else {
+        GL_NEAREST
+    };
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, f as GLint);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, f as GLint);
     glUniform1i(G_UF_CLAMP_UV_ENABLED, if clamp_uv { 1 } else { 0 });
@@ -539,7 +576,14 @@ impl TextureData {
     }
 
     /// 获取最佳纹理尺寸（对应 C++ GetBestTextureDimensions）
-    fn get_best_texture_dimensions(&mut self, w: &mut i32, h: &mut i32, is_edge: bool, use_pow2: bool, flags: u32) {
+    fn get_best_texture_dimensions(
+        &mut self,
+        w: &mut i32,
+        h: &mut i32,
+        is_edge: bool,
+        use_pow2: bool,
+        flags: u32,
+    ) {
         if flags & RENDER_IMAGE_FLAG_USE64_BY64_SUBDIVISIONS != 0 {
             *w = 64;
             *h = 64;
@@ -578,17 +622,37 @@ impl TextureData {
         let mut ah = *h;
         if use_pow2 {
             if is_edge || (flags & RENDER_IMAGE_FLAG_MINIMIZE_NUM_SUBDIVISIONS != 0) {
-                aw = if aw >= max_tex_w { max_tex_w } else { closest_power_of_2_above(aw) };
-                ah = if ah >= max_tex_h { max_tex_h } else { closest_power_of_2_above(ah) };
+                aw = if aw >= max_tex_w {
+                    max_tex_w
+                } else {
+                    closest_power_of_2_above(aw)
+                };
+                ah = if ah >= max_tex_h {
+                    max_tex_h
+                } else {
+                    closest_power_of_2_above(ah)
+                };
             } else {
-                aw = if aw >= max_tex_w { max_tex_w } else { good_sizes[aw as usize] };
-                ah = if ah >= max_tex_h { max_tex_h } else { good_sizes[ah as usize] };
+                aw = if aw >= max_tex_w {
+                    max_tex_w
+                } else {
+                    good_sizes[aw as usize]
+                };
+                ah = if ah >= max_tex_h {
+                    max_tex_h
+                } else {
+                    good_sizes[ah as usize]
+                };
             }
         }
         let min_w = unsafe { G_MIN_TEXTURE_WIDTH };
         let min_h = unsafe { G_MIN_TEXTURE_HEIGHT };
-        if aw < min_w { aw = min_w; }
-        if ah < min_h { ah = min_h; }
+        if aw < min_w {
+            aw = min_w;
+        }
+        if ah < min_h {
+            ah = min_h;
+        }
         *w = aw;
         *h = ah;
     }
@@ -607,7 +671,13 @@ impl TextureData {
         let mut a_right_width = a_width % self.tex_piece_width;
         let mut a_right_height = self.tex_piece_height;
         if a_right_width > 0 {
-            self.get_best_texture_dimensions(&mut a_right_width, &mut a_right_height, true, true, self.image_flags);
+            self.get_best_texture_dimensions(
+                &mut a_right_width,
+                &mut a_right_height,
+                true,
+                true,
+                self.image_flags,
+            );
         } else {
             a_right_width = self.tex_piece_width;
         }
@@ -615,14 +685,26 @@ impl TextureData {
         let mut a_bottom_width = self.tex_piece_width;
         let mut a_bottom_height = a_height % self.tex_piece_height;
         if a_bottom_height > 0 {
-            self.get_best_texture_dimensions(&mut a_bottom_width, &mut a_bottom_height, true, true, self.image_flags);
+            self.get_best_texture_dimensions(
+                &mut a_bottom_width,
+                &mut a_bottom_height,
+                true,
+                true,
+                self.image_flags,
+            );
         } else {
             a_bottom_height = self.tex_piece_height;
         }
 
         let mut a_corner_width = a_right_width;
         let mut a_corner_height = a_bottom_height;
-        self.get_best_texture_dimensions(&mut a_corner_width, &mut a_corner_height, true, true, self.image_flags);
+        self.get_best_texture_dimensions(
+            &mut a_corner_width,
+            &mut a_corner_height,
+            true,
+            true,
+            self.image_flags,
+        );
 
         self.tex_vec_width = (a_width + self.tex_piece_width - 1) / self.tex_piece_width;
         self.tex_vec_height = (a_height + self.tex_piece_height - 1) / self.tex_piece_height;
@@ -685,16 +767,24 @@ impl TextureData {
         if w > 0 && h > 0 {
             match fmt {
                 PixelFormat::A8R8G8B8 => {
-                    Self::copy_to_texture_8888(image, offx, offy, w, h, tex_w, tex_h, pad_r, pad_b, create);
+                    Self::copy_to_texture_8888(
+                        image, offx, offy, w, h, tex_w, tex_h, pad_r, pad_b, create,
+                    );
                 }
                 PixelFormat::A4R4G4B4 => {
-                    Self::copy_to_texture_4444(image, offx, offy, w, h, tex_w, tex_h, pad_r, pad_b, create);
+                    Self::copy_to_texture_4444(
+                        image, offx, offy, w, h, tex_w, tex_h, pad_r, pad_b, create,
+                    );
                 }
                 PixelFormat::R5G6B5 => {
-                    Self::copy_to_texture_565(image, offx, offy, w, h, tex_w, tex_h, pad_r, pad_b, create);
+                    Self::copy_to_texture_565(
+                        image, offx, offy, w, h, tex_w, tex_h, pad_r, pad_b, create,
+                    );
                 }
                 PixelFormat::Palette8 => {
-                    Self::copy_to_texture_palette8(image, offx, offy, w, h, tex_w, tex_h, pad_r, pad_b, create);
+                    Self::copy_to_texture_palette8(
+                        image, offx, offy, w, h, tex_w, tex_h, pad_r, pad_b, create,
+                    );
                 }
                 PixelFormat::Unknown => {}
             }
@@ -745,13 +835,20 @@ impl TextureData {
             }
         } else {
             // 调色板模式
-            let src_row = image.color_indices.as_ptr().add((offy * img_w + offx) as usize);
+            let src_row = image
+                .color_indices
+                .as_ptr()
+                .add((offy * img_w + offx) as usize);
             for y in 0..h {
                 let s = src_row.add((y * img_w) as usize);
                 let d = dst.add((y * pitch) as usize);
                 for x in 0..w {
                     let idx = *s.add(x as usize) as usize;
-                    *d.add(x as usize) = argb_to_rgba(if idx < image.color_table.len() { image.color_table[idx] } else { 0 });
+                    *d.add(x as usize) = argb_to_rgba(if idx < image.color_table.len() {
+                        image.color_table[idx]
+                    } else {
+                        0
+                    });
                 }
                 if pad_r {
                     *d.add(w as usize) = *d.add(w as usize - 1);
@@ -771,9 +868,29 @@ impl TextureData {
         }
 
         if create {
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA as GLint, pitch, dst_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, a_dst.as_ptr() as *const std::ffi::c_void);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_RGBA as GLint,
+                pitch,
+                dst_h,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                a_dst.as_ptr() as *const std::ffi::c_void,
+            );
         } else {
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, pitch, dst_h, GL_RGBA, GL_UNSIGNED_BYTE, a_dst.as_ptr() as *const std::ffi::c_void);
+            glTexSubImage2D(
+                GL_TEXTURE_2D,
+                0,
+                0,
+                0,
+                pitch,
+                dst_h,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                a_dst.as_ptr() as *const std::ffi::c_void,
+            );
         }
     }
 
@@ -812,13 +929,20 @@ impl TextureData {
                 }
             }
         } else {
-            let src_row = image.color_indices.as_ptr().add((offy * img_w + offx) as usize);
+            let src_row = image
+                .color_indices
+                .as_ptr()
+                .add((offy * img_w + offx) as usize);
             for y in 0..h {
                 let s = src_row.add((y * img_w) as usize);
                 let d = dst.add((y * pitch) as usize);
                 for x in 0..w {
                     let idx = *s.add(x as usize) as usize;
-                    let pal_color = if idx < image.color_table.len() { image.color_table[idx] } else { 0 };
+                    let pal_color = if idx < image.color_table.len() {
+                        image.color_table[idx]
+                    } else {
+                        0
+                    };
                     *d.add(x as usize) = argb_to_4444(pal_color);
                 }
                 if pad_r {
@@ -830,14 +954,38 @@ impl TextureData {
         if pad_b {
             let last_row = dst.add((h - 1) as usize * pitch as usize);
             for y in h..dst_h {
-                ptr::copy_nonoverlapping(last_row, dst.add(y as usize * pitch as usize), pitch as usize);
+                ptr::copy_nonoverlapping(
+                    last_row,
+                    dst.add(y as usize * pitch as usize),
+                    pitch as usize,
+                );
             }
         }
 
         if create {
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA as GLint, pitch, dst_h, 0, GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4, a_dst.as_ptr() as *const std::ffi::c_void);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_RGBA as GLint,
+                pitch,
+                dst_h,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_SHORT_4_4_4_4,
+                a_dst.as_ptr() as *const std::ffi::c_void,
+            );
         } else {
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, pitch, dst_h, GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4, a_dst.as_ptr() as *const std::ffi::c_void);
+            glTexSubImage2D(
+                GL_TEXTURE_2D,
+                0,
+                0,
+                0,
+                pitch,
+                dst_h,
+                GL_RGBA,
+                GL_UNSIGNED_SHORT_4_4_4_4,
+                a_dst.as_ptr() as *const std::ffi::c_void,
+            );
         }
     }
 
@@ -876,13 +1024,20 @@ impl TextureData {
                 }
             }
         } else {
-            let src_row = image.color_indices.as_ptr().add((offy * img_w + offx) as usize);
+            let src_row = image
+                .color_indices
+                .as_ptr()
+                .add((offy * img_w + offx) as usize);
             for y in 0..h {
                 let s = src_row.add((y * img_w) as usize);
                 let d = dst.add((y * pitch) as usize);
                 for x in 0..w {
                     let idx = *s.add(x as usize) as usize;
-                    let pal_color = if idx < image.color_table.len() { image.color_table[idx] } else { 0 };
+                    let pal_color = if idx < image.color_table.len() {
+                        image.color_table[idx]
+                    } else {
+                        0
+                    };
                     *d.add(x as usize) = argb_to_565(pal_color);
                 }
                 if pad_r {
@@ -894,14 +1049,38 @@ impl TextureData {
         if pad_b {
             let last_row = dst.add((h - 1) as usize * pitch as usize);
             for y in h..dst_h {
-                ptr::copy_nonoverlapping(last_row, dst.add(y as usize * pitch as usize), pitch as usize);
+                ptr::copy_nonoverlapping(
+                    last_row,
+                    dst.add(y as usize * pitch as usize),
+                    pitch as usize,
+                );
             }
         }
 
         if create {
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB as GLint, pitch, dst_h, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, a_dst.as_ptr() as *const std::ffi::c_void);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_RGB as GLint,
+                pitch,
+                dst_h,
+                0,
+                GL_RGB,
+                GL_UNSIGNED_SHORT_5_6_5,
+                a_dst.as_ptr() as *const std::ffi::c_void,
+            );
         } else {
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, pitch, dst_h, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, a_dst.as_ptr() as *const std::ffi::c_void);
+            glTexSubImage2D(
+                GL_TEXTURE_2D,
+                0,
+                0,
+                0,
+                pitch,
+                dst_h,
+                GL_RGB,
+                GL_UNSIGNED_SHORT_5_6_5,
+                a_dst.as_ptr() as *const std::ffi::c_void,
+            );
         }
     }
 
@@ -922,14 +1101,21 @@ impl TextureData {
         let mut a_dst: Vec<u32> = vec![0u32; dst_size];
         let dst = a_dst.as_mut_ptr();
         let img_w = image.base.width;
-        let src_row = image.color_indices.as_ptr().add((offy * img_w + offx) as usize);
+        let src_row = image
+            .color_indices
+            .as_ptr()
+            .add((offy * img_w + offx) as usize);
 
         for y in 0..h {
             let s = src_row.add((y * img_w) as usize);
             let d = dst.add((y * pitch) as usize);
             for x in 0..w {
                 let idx = *s.add(x as usize) as usize;
-                *d.add(x as usize) = argb_to_rgba(if idx < image.color_table.len() { image.color_table[idx] } else { 0 });
+                *d.add(x as usize) = argb_to_rgba(if idx < image.color_table.len() {
+                    image.color_table[idx]
+                } else {
+                    0
+                });
             }
             if pad_r {
                 *d.add(w as usize) = *d.add(w as usize - 1);
@@ -939,14 +1125,38 @@ impl TextureData {
         if pad_b {
             let last_row = dst.add((h - 1) as usize * pitch as usize);
             for y in h..dst_h {
-                ptr::copy_nonoverlapping(last_row, dst.add(y as usize * pitch as usize), pitch as usize);
+                ptr::copy_nonoverlapping(
+                    last_row,
+                    dst.add(y as usize * pitch as usize),
+                    pitch as usize,
+                );
             }
         }
 
         if create {
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA as GLint, pitch, dst_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, a_dst.as_ptr() as *const std::ffi::c_void);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_RGBA as GLint,
+                pitch,
+                dst_h,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                a_dst.as_ptr() as *const std::ffi::c_void,
+            );
         } else {
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, pitch, dst_h, GL_RGBA, GL_UNSIGNED_BYTE, a_dst.as_ptr() as *const std::ffi::c_void);
+            glTexSubImage2D(
+                GL_TEXTURE_2D,
+                0,
+                0,
+                0,
+                pitch,
+                dst_h,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                a_dst.as_ptr() as *const std::ffi::c_void,
+            );
         }
     }
 
@@ -955,7 +1165,8 @@ impl TextureData {
         let a_format = {
             // 确定像素格式
             let mut fmt = PixelFormat::A8R8G8B8;
-            if !image.has_alpha && !image.has_trans
+            if !image.has_alpha
+                && !image.has_trans
                 && (unsafe { G_SUPPORTED_PIXEL_FORMATS } & (PixelFormat::R5G6B5 as i32)) != 0
                 && (image.render_flags & RENDER_IMAGE_FLAG_USE_A8R8G8B8) == 0
             {
@@ -967,7 +1178,9 @@ impl TextureData {
             {
                 fmt = PixelFormat::A4R4G4B4;
             }
-            if fmt == PixelFormat::A8R8G8B8 && (unsafe { G_SUPPORTED_PIXEL_FORMATS } & (PixelFormat::A8R8G8B8 as i32)) == 0 {
+            if fmt == PixelFormat::A8R8G8B8
+                && (unsafe { G_SUPPORTED_PIXEL_FORMATS } & (PixelFormat::A8R8G8B8 as i32)) == 0
+            {
                 fmt = PixelFormat::A4R4G4B4;
             }
             fmt
@@ -1006,7 +1219,15 @@ impl TextureData {
                         self.tex_mem_size += piece.width * piece.height * fmt_size;
                     }
                     glBindTexture(GL_TEXTURE_2D, piece.texture);
-                    Self::copy_image_to_texture(image, x, y, piece.width, piece.height, a_format, create_textures);
+                    Self::copy_image_to_texture(
+                        image,
+                        x,
+                        y,
+                        piece.width,
+                        piece.height,
+                        a_format,
+                        create_textures,
+                    );
                     x += self.tex_piece_width;
                     idx += 1;
                 }
@@ -1033,9 +1254,18 @@ impl TextureData {
     }
 
     /// 获取纹理（对应 C++ GetTexture）
-    pub fn get_texture(&self, x: i32, y: i32, w: &mut i32, h: &mut i32,
-                       u1: &mut f32, v1: &mut f32, u2: &mut f32, v2: &mut f32,
-                       uv_bounds: &mut [f32; 4]) -> GLuint {
+    pub fn get_texture(
+        &self,
+        x: i32,
+        y: i32,
+        w: &mut i32,
+        h: &mut i32,
+        u1: &mut f32,
+        v1: &mut f32,
+        u2: &mut f32,
+        v2: &mut f32,
+        uv_bounds: &mut [f32; 4],
+    ) -> GLuint {
         let tx = x / self.tex_piece_width;
         let ty = y / self.tex_piece_height;
         let p = &self.textures[(ty * self.tex_vec_width + tx) as usize];
@@ -1095,13 +1325,43 @@ impl TextureData {
                     let mut u2: f32 = 0.0;
                     let mut v2: f32 = 0.0;
                     let mut uvb: [f32; 4] = [0.0; 4];
-                    let tex = self.get_texture(src_x, src_y, &mut w, &mut h, &mut u1, &mut v1, &mut u2, &mut v2, &mut uvb);
+                    let tex = self.get_texture(
+                        src_x, src_y, &mut w, &mut h, &mut u1, &mut v1, &mut u2, &mut v2, &mut uvb,
+                    );
 
                     let vtx: [GLVertex; 4] = [
-                        GLVertex { sx: dst_x, sy: dst_y, sz: 0.0, color: a_color, tu: u1, tv: v1 },
-                        GLVertex { sx: dst_x, sy: dst_y + h as f32, sz: 0.0, color: a_color, tu: u1, tv: v2 },
-                        GLVertex { sx: dst_x + w as f32, sy: dst_y, sz: 0.0, color: a_color, tu: u2, tv: v1 },
-                        GLVertex { sx: dst_x + w as f32, sy: dst_y + h as f32, sz: 0.0, color: a_color, tu: u2, tv: v2 },
+                        GLVertex {
+                            sx: dst_x,
+                            sy: dst_y,
+                            sz: 0.0,
+                            color: a_color,
+                            tu: u1,
+                            tv: v1,
+                        },
+                        GLVertex {
+                            sx: dst_x,
+                            sy: dst_y + h as f32,
+                            sz: 0.0,
+                            color: a_color,
+                            tu: u1,
+                            tv: v2,
+                        },
+                        GLVertex {
+                            sx: dst_x + w as f32,
+                            sy: dst_y,
+                            sz: 0.0,
+                            color: a_color,
+                            tu: u2,
+                            tv: v1,
+                        },
+                        GLVertex {
+                            sx: dst_x + w as f32,
+                            sy: dst_y + h as f32,
+                            sz: 0.0,
+                            color: a_color,
+                            tu: u2,
+                            tv: v2,
+                        },
                     ];
                     gfx_bind_texture(tex, &uvb, true);
                     gfx_begin(GL_TRIANGLE_STRIP);
@@ -1163,11 +1423,18 @@ impl TextureData {
                     let mut u2: f32 = 0.0;
                     let mut v2: f32 = 0.0;
                     let mut uvb: [f32; 4] = [0.0; 4];
-                    let tex = self.get_texture(src_x, src_y, &mut w, &mut h, &mut u1, &mut v1, &mut u2, &mut v2, &mut uvb);
+                    let tex = self.get_texture(
+                        src_x, src_y, &mut w, &mut h, &mut u1, &mut v1, &mut u2, &mut v2, &mut uvb,
+                    );
 
                     let x = dst_x;
                     let y = dst_y;
-                    let pts = [(x, y), (x, y + h as f32), (x + w as f32, y), (x + w as f32, y + h as f32)];
+                    let pts = [
+                        (x, y),
+                        (x, y + h as f32),
+                        (x + w as f32, y),
+                        (x + w as f32, y + h as f32),
+                    ];
                     let mut tp = [(0.0f32, 0.0f32); 4];
                     for i in 0..4 {
                         let (px, py) = the_trans.transform(pts[i].0, pts[i].1);
@@ -1190,10 +1457,38 @@ impl TextureData {
                     }
 
                     let vtx: [GLVertex; 4] = [
-                        GLVertex { sx: tp[0].0, sy: tp[0].1, sz: 0.0, color: a_color, tu: u1, tv: v1 },
-                        GLVertex { sx: tp[1].0, sy: tp[1].1, sz: 0.0, color: a_color, tu: u1, tv: v2 },
-                        GLVertex { sx: tp[2].0, sy: tp[2].1, sz: 0.0, color: a_color, tu: u2, tv: v1 },
-                        GLVertex { sx: tp[3].0, sy: tp[3].1, sz: 0.0, color: a_color, tu: u2, tv: v2 },
+                        GLVertex {
+                            sx: tp[0].0,
+                            sy: tp[0].1,
+                            sz: 0.0,
+                            color: a_color,
+                            tu: u1,
+                            tv: v1,
+                        },
+                        GLVertex {
+                            sx: tp[1].0,
+                            sy: tp[1].1,
+                            sz: 0.0,
+                            color: a_color,
+                            tu: u1,
+                            tv: v2,
+                        },
+                        GLVertex {
+                            sx: tp[2].0,
+                            sy: tp[2].1,
+                            sz: 0.0,
+                            color: a_color,
+                            tu: u2,
+                            tv: v1,
+                        },
+                        GLVertex {
+                            sx: tp[3].0,
+                            sy: tp[3].1,
+                            sz: 0.0,
+                            color: a_color,
+                            tu: u2,
+                            tv: v2,
+                        },
                     ];
                     gfx_bind_texture(tex, &uvb, true);
 
@@ -1248,7 +1543,15 @@ impl TextureData {
                 gfx_bind_texture(piece.texture, &uvb, clamp_uv);
                 glUniform1i(G_UF_USE_TEXTURE, 1);
                 gfx_begin(GL_TRIANGLES);
-                gfx_add_vertices_tri(vertices, num_triangles, the_color, tx, ty, self.max_total_u, self.max_total_v);
+                gfx_add_vertices_tri(
+                    vertices,
+                    num_triangles,
+                    the_color,
+                    tx,
+                    ty,
+                    self.max_total_u,
+                    self.max_total_v,
+                );
                 gfx_end();
             }
             return;
@@ -1258,9 +1561,30 @@ impl TextureData {
         for tri in 0..num_triangles as usize {
             let tv = &vertices[tri];
             let vtx: [GLVertex; 3] = [
-                GLVertex { sx: tv[0].x + tx, sy: tv[0].y + ty, sz: 0.0, color: vertex_color(tv[0].color, the_color), tu: tv[0].u * self.max_total_u, tv: tv[0].v * self.max_total_v },
-                GLVertex { sx: tv[1].x + tx, sy: tv[1].y + ty, sz: 0.0, color: vertex_color(tv[1].color, the_color), tu: tv[1].u * self.max_total_u, tv: tv[1].v * self.max_total_v },
-                GLVertex { sx: tv[2].x + tx, sy: tv[2].y + ty, sz: 0.0, color: vertex_color(tv[2].color, the_color), tu: tv[2].u * self.max_total_u, tv: tv[2].v * self.max_total_v },
+                GLVertex {
+                    sx: tv[0].x + tx,
+                    sy: tv[0].y + ty,
+                    sz: 0.0,
+                    color: vertex_color(tv[0].color, the_color),
+                    tu: tv[0].u * self.max_total_u,
+                    tv: tv[0].v * self.max_total_v,
+                },
+                GLVertex {
+                    sx: tv[1].x + tx,
+                    sy: tv[1].y + ty,
+                    sz: 0.0,
+                    color: vertex_color(tv[1].color, the_color),
+                    tu: tv[1].u * self.max_total_u,
+                    tv: tv[1].v * self.max_total_v,
+                },
+                GLVertex {
+                    sx: tv[2].x + tx,
+                    sy: tv[2].y + ty,
+                    sz: 0.0,
+                    color: vertex_color(tv[2].color, the_color),
+                    tu: tv[2].u * self.max_total_u,
+                    tv: tv[2].v * self.max_total_v,
+                },
             ];
 
             let mut min_u = self.max_total_u;
@@ -1372,9 +1696,17 @@ impl VertexList {
     pub fn set_size(&mut self, n: i32) {
         // 确保容量
         if n as usize > self.mverts.len() {
-            self.mverts.resize(n as usize, GLVertex {
-                sx: 0.0, sy: 0.0, sz: 0.0, color: 0, tu: 0.0, tv: 0.0,
-            });
+            self.mverts.resize(
+                n as usize,
+                GLVertex {
+                    sx: 0.0,
+                    sy: 0.0,
+                    sz: 0.0,
+                    color: 0,
+                    tu: 0.0,
+                    tv: 0.0,
+                },
+            );
         }
         self.msize = n;
     }
@@ -1420,14 +1752,22 @@ fn interpolate(a: &GLVertex, b: &GLVertex, t: f32) -> GLVertex {
             let v = a_comp as f32 + t * (b_comp as f32 - a_comp as f32);
             (v as u32) & 0xFF
         };
-        r.color = lerp_component(0) | (lerp_component(8) << 8) | (lerp_component(16) << 16) | (lerp_component(24) << 24);
+        r.color = lerp_component(0)
+            | (lerp_component(8) << 8)
+            | (lerp_component(16) << 16)
+            | (lerp_component(24) << 24);
     }
     r
 }
 
 /// 裁剪一个点（对应 C++ PointClipper::ClipPoint）
 fn clip_point<Pred: Fn(f32, f32) -> bool>(
-    n: i32, clip_val: f32, v1: &GLVertex, v2: &GLVertex, out: &mut VertexList, pred: &Pred,
+    n: i32,
+    clip_val: f32,
+    v1: &GLVertex,
+    v2: &GLVertex,
+    out: &mut VertexList,
+    pred: &Pred,
 ) {
     let c1 = pred(get_coord(v1, n), clip_val);
     let c2 = pred(get_coord(v2, n), clip_val);
@@ -1450,7 +1790,13 @@ fn clip_point<Pred: Fn(f32, f32) -> bool>(
 }
 
 /// 裁剪多点（对应 C++ PointClipper::ClipPoints）
-fn clip_points<Pred: Fn(f32, f32) -> bool>(n: i32, clip_val: f32, inp: &VertexList, out: &mut VertexList, pred: &Pred) {
+fn clip_points<Pred: Fn(f32, f32) -> bool>(
+    n: i32,
+    clip_val: f32,
+    inp: &VertexList,
+    out: &mut VertexList,
+    pred: &Pred,
+) {
     let s = inp.size();
     if s < 2 {
         return;
@@ -1614,11 +1960,15 @@ impl GLInterface {
                     return false;
                 }
                 G_PROGRAM = prog;
-                G_UF_VIEW_PROJ_MTX = glGetUniformLocation(prog, "u_viewProj\0".as_ptr() as *const GLchar);
+                G_UF_VIEW_PROJ_MTX =
+                    glGetUniformLocation(prog, "u_viewProj\0".as_ptr() as *const GLchar);
                 G_UF_TEXTURE = glGetUniformLocation(prog, "u_texture\0".as_ptr() as *const GLchar);
-                G_UF_USE_TEXTURE = glGetUniformLocation(prog, "u_useTexture\0".as_ptr() as *const GLchar);
-                G_UF_UV_BOUNDS = glGetUniformLocation(prog, "u_uvBounds\0".as_ptr() as *const GLchar);
-                G_UF_CLAMP_UV_ENABLED = glGetUniformLocation(prog, "u_clampUvEnabled\0".as_ptr() as *const GLchar);
+                G_UF_USE_TEXTURE =
+                    glGetUniformLocation(prog, "u_useTexture\0".as_ptr() as *const GLchar);
+                G_UF_UV_BOUNDS =
+                    glGetUniformLocation(prog, "u_uvBounds\0".as_ptr() as *const GLchar);
+                G_UF_CLAMP_UV_ENABLED =
+                    glGetUniformLocation(prog, "u_clampUvEnabled\0".as_ptr() as *const GLchar);
 
                 glGenBuffers(1, &mut G_VBO as *mut GLuint);
                 glBindBuffer(GL_ARRAY_BUFFER, G_VBO);
@@ -1653,15 +2003,15 @@ impl GLInterface {
             G_MIN_TEXTURE_HEIGHT = 8;
             G_MAX_TEXTURE_WIDTH = a_max_size;
             G_MAX_TEXTURE_HEIGHT = a_max_size;
-            G_SUPPORTED_PIXEL_FORMATS =
-                (PixelFormat::A8R8G8B8 as i32)
+            G_SUPPORTED_PIXEL_FORMATS = (PixelFormat::A8R8G8B8 as i32)
                 | (PixelFormat::A4R4G4B4 as i32)
                 | (PixelFormat::R5G6B5 as i32)
                 | (PixelFormat::Palette8 as i32);
             gfx_set_linear_filter(false);
 
             glUseProgram(G_PROGRAM);
-            let ortho = make_ortho_matrix(0.0, self.width as f32, self.height as f32, 0.0, -10.0, 10.0);
+            let ortho =
+                make_ortho_matrix(0.0, self.width as f32, self.height as f32, 0.0, -10.0, 10.0);
             glUniformMatrix4fv(G_UF_VIEW_PROJ_MTX, 1, GL_FALSE, ortho.as_ptr());
             glUniform1i(G_UF_TEXTURE, 0);
             glUniform1i(G_UF_CLAMP_UV_ENABLED, 1);
@@ -1670,7 +2020,10 @@ impl GLInterface {
             glDisable(GL_DITHER);
             glDisable(GL_DEPTH_TEST);
             glDisable(GL_CULL_FACE);
-            glGetError(); // 清除可能的 GL_INVALID_ENUM
+            // C++ GLInterface.cpp:42-43/1198：GLES 2.0 头文件无此枚举，但 Windows 上
+            // 需要禁用 sRGB 帧缓冲，防止"纹理已 sRGB 直通 + 驱动再 gamma"导致画面偏亮
+            glDisable(GL_FRAMEBUFFER_SRGB);
+            glGetError(); // 清除可能的 GL_INVALID_ENUM（纯 GLES 实现会报 GL_INVALID_ENUM）
         }
 
         self.set_video_only_draw(false);
@@ -1761,7 +2114,11 @@ impl GLInterface {
         }
 
         // 获取 TextureData 的原始指针以绕过借用检查
-        let data_ptr: *mut TextureData = image.render_data.as_mut().map(|d| &mut **d as *mut TextureData).unwrap_or(std::ptr::null_mut());
+        let data_ptr: *mut TextureData = image
+            .render_data
+            .as_mut()
+            .map(|d| &mut **d as *mut TextureData)
+            .unwrap_or(std::ptr::null_mut());
         if data_ptr.is_null() {
             return false;
         }
@@ -1799,7 +2156,13 @@ impl GLInterface {
                     let mut fbo: GLuint = 0;
                     glGenFramebuffers(1, &mut fbo);
                     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-                    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, piece.texture, 0);
+                    glFramebufferTexture2D(
+                        GL_FRAMEBUFFER,
+                        GL_COLOR_ATTACHMENT0,
+                        GL_TEXTURE_2D,
+                        piece.texture,
+                        0,
+                    );
 
                     if glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE {
                         glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -1808,7 +2171,15 @@ impl GLInterface {
                     }
 
                     let mut buf: Vec<u32> = vec![0u32; (w * h) as usize];
-                    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, buf.as_mut_ptr() as *mut std::ffi::c_void);
+                    glReadPixels(
+                        0,
+                        0,
+                        w,
+                        h,
+                        GL_RGBA,
+                        GL_UNSIGNED_BYTE,
+                        buf.as_mut_ptr() as *mut std::ffi::c_void,
+                    );
 
                     glBindFramebuffer(GL_FRAMEBUFFER, 0);
                     glDeleteFramebuffers(1, &fbo);
@@ -1819,12 +2190,14 @@ impl GLInterface {
                             let src_idx = (r * w + c) as usize;
                             if src_idx < buf.len() {
                                 let rgba = buf[src_idx];
-                                let dst_base = ((offy + r) * image.base.width + (offx + c)) as usize * 4;
+                                let dst_base =
+                                    ((offy + r) * image.base.width + (offx + c)) as usize * 4;
                                 if dst_base + 3 < image.base.pixels.len() {
-                                    image.base.pixels[dst_base] = ((rgba >> 24) & 0xFF) as u8;     // R
-                                    image.base.pixels[dst_base + 1] = ((rgba >> 16) & 0xFF) as u8;  // G
-                                    image.base.pixels[dst_base + 2] = ((rgba >> 8) & 0xFF) as u8;   // B
-                                    image.base.pixels[dst_base + 3] = (rgba & 0xFF) as u8;         // A
+                                    image.base.pixels[dst_base] = ((rgba >> 24) & 0xFF) as u8; // R
+                                    image.base.pixels[dst_base + 1] = ((rgba >> 16) & 0xFF) as u8; // G
+                                    image.base.pixels[dst_base + 2] = ((rgba >> 8) & 0xFF) as u8; // B
+                                    image.base.pixels[dst_base + 3] = (rgba & 0xFF) as u8;
+                                    // A
                                 }
                             }
                         }
@@ -1864,19 +2237,34 @@ impl GLInterface {
         linear_filter: bool,
     ) {
         if !self.transform_stack.is_empty() {
-            self.blt_clip_f(image, the_x, the_y, src_rect, None, the_color, the_draw_mode, linear_filter);
+            self.blt_clip_f(
+                image,
+                the_x,
+                the_y,
+                src_rect,
+                None,
+                the_color,
+                the_draw_mode,
+                linear_filter,
+            );
             return;
         }
-        if !self.pre_draw() { return; }
+        if !self.pre_draw() {
+            return;
+        }
 
         let mem = match image.as_any_mut().downcast_mut::<MemoryImage>() {
             Some(m) => m,
             None => return,
         };
-        if !self.create_image_texture(mem) { return; }
+        if !self.create_image_texture(mem) {
+            return;
+        }
 
         self.set_draw_mode(the_draw_mode);
-        unsafe { set_linear_filter(linear_filter); }
+        unsafe {
+            set_linear_filter(linear_filter);
+        }
 
         if let Some(ref data) = mem.render_data {
             data.blt(the_x, the_y, src_rect, the_color);
@@ -1896,7 +2284,18 @@ impl GLInterface {
         linear_filter: bool,
     ) {
         let t = SexyMatrix3::translation(the_x, the_y);
-        self.blt_transformed(image, clip_rect, the_color, the_draw_mode, src_rect, &t, linear_filter, 0.0, 0.0, false);
+        self.blt_transformed(
+            image,
+            clip_rect,
+            the_color,
+            the_draw_mode,
+            src_rect,
+            &t,
+            linear_filter,
+            0.0,
+            0.0,
+            false,
+        );
     }
 
     /// BltMirror — 镜像绘制（对应 C++ BltMirror）
@@ -1915,7 +2314,18 @@ impl GLInterface {
         t = s.multiply(&t);
         let trans = SexyMatrix3::translation(the_x, the_y);
         t = trans.multiply(&t);
-        self.blt_transformed(image, None, the_color, the_draw_mode, src_rect, &t, linear_filter, 0.0, 0.0, false);
+        self.blt_transformed(
+            image,
+            None,
+            the_color,
+            the_draw_mode,
+            src_rect,
+            &t,
+            linear_filter,
+            0.0,
+            0.0,
+            false,
+        );
     }
 
     /// StretchBlt — 拉伸绘制（对应 C++ StretchBlt）
@@ -1942,7 +2352,18 @@ impl GLInterface {
             let s = SexyMatrix3::scaling(xs, ys);
             SexyMatrix3::translation(dest_rect.x as f32, dest_rect.y as f32).multiply(&s)
         };
-        self.blt_transformed(image, clip_rect, the_color, the_draw_mode, src_rect, &t, !fast_stretch, 0.0, 0.0, false);
+        self.blt_transformed(
+            image,
+            clip_rect,
+            the_color,
+            the_draw_mode,
+            src_rect,
+            &t,
+            !fast_stretch,
+            0.0,
+            0.0,
+            false,
+        );
     }
 
     /// BltRotated — 旋转绘制（对应 C++ BltRotated）
@@ -1963,7 +2384,18 @@ impl GLInterface {
         let r = SexyMatrix3::rotation(the_rot as f32);
         t = r.multiply(&t);
         t = SexyMatrix3::translation(the_x + rot_center_x, the_y + rot_center_y).multiply(&t);
-        self.blt_transformed(image, clip_rect, the_color, the_draw_mode, src_rect, &t, true, 0.0, 0.0, false);
+        self.blt_transformed(
+            image,
+            clip_rect,
+            the_color,
+            the_draw_mode,
+            src_rect,
+            &t,
+            true,
+            0.0,
+            0.0,
+            false,
+        );
     }
 
     /// BltTransformed — 变换后绘制（对应 C++ GLInterface::BltTransformed）
@@ -1980,16 +2412,22 @@ impl GLInterface {
         the_y: f32,
         center: bool,
     ) {
-        if !self.pre_draw() { return; }
+        if !self.pre_draw() {
+            return;
+        }
 
         let mem = match image.as_any_mut().downcast_mut::<MemoryImage>() {
             Some(m) => m,
             None => return,
         };
-        if !self.create_image_texture(mem) { return; }
+        if !self.create_image_texture(mem) {
+            return;
+        }
 
         self.set_draw_mode(the_draw_mode);
-        unsafe { set_linear_filter(linear_filter); }
+        unsafe {
+            set_linear_filter(linear_filter);
+        }
 
         let data_ptr: *mut TextureData = match mem.render_data {
             Some(ref mut d) => &mut **d as *mut TextureData,
@@ -2003,7 +2441,10 @@ impl GLInterface {
                 if the_x != 0.0 || the_y != 0.0 {
                     let mut t = SexyMatrix3::identity();
                     if center {
-                        t = SexyMatrix3::translation(-src_rect.width as f32 / 2.0, -src_rect.height as f32 / 2.0);
+                        t = SexyMatrix3::translation(
+                            -src_rect.width as f32 / 2.0,
+                            -src_rect.height as f32 / 2.0,
+                        );
                     }
                     t = the_transform.multiply(&t);
                     t = SexyMatrix3::translation(the_x, the_y).multiply(&t);
@@ -2014,7 +2455,15 @@ impl GLInterface {
                     data.blt_transformed(&t, src_rect, the_color, clip_rect, the_x, the_y, center);
                 }
             } else {
-                data.blt_transformed(the_transform, src_rect, the_color, clip_rect, the_x, the_y, center);
+                data.blt_transformed(
+                    the_transform,
+                    src_rect,
+                    the_color,
+                    clip_rect,
+                    the_x,
+                    the_y,
+                    center,
+                );
             }
         }
     }
@@ -2029,24 +2478,50 @@ impl GLInterface {
         the_color: &Color,
         the_draw_mode: i32,
     ) {
-        if !self.pre_draw() { return; }
+        if !self.pre_draw() {
+            return;
+        }
         self.set_draw_mode(the_draw_mode);
 
-        let (mut fx1, mut fy1, mut fx2, mut fy2) = (start_x as f32, start_y as f32, end_x as f32, end_y as f32);
+        let (mut fx1, mut fy1, mut fx2, mut fy2) =
+            (start_x as f32, start_y as f32, end_x as f32, end_y as f32);
 
         if !self.transform_stack.is_empty() {
             let stack_top = &self.transform_stack[self.transform_stack.len() - 1];
             let p1 = stack_top.transform(fx1, fy1);
             let p2 = stack_top.transform(fx2, fy2);
-            fx1 = p1.0; fy1 = p1.1;
-            fx2 = p2.0; fy2 = p2.1;
+            fx1 = p1.0;
+            fy1 = p1.1;
+            fx2 = p2.0;
+            fy2 = p2.1;
         }
 
         let c = color_to_gl_color(the_color);
         let vtx: [GLVertex; 3] = [
-            GLVertex { sx: fx1, sy: fy1, sz: 0.0, color: c, tu: 0.0, tv: 0.0 },
-            GLVertex { sx: fx2, sy: fy2, sz: 0.0, color: c, tu: 0.0, tv: 0.0 },
-            GLVertex { sx: fx2 + 0.5, sy: fy2 + 0.5, sz: 0.0, color: c, tu: 0.0, tv: 0.0 },
+            GLVertex {
+                sx: fx1,
+                sy: fy1,
+                sz: 0.0,
+                color: c,
+                tu: 0.0,
+                tv: 0.0,
+            },
+            GLVertex {
+                sx: fx2,
+                sy: fy2,
+                sz: 0.0,
+                color: c,
+                tu: 0.0,
+                tv: 0.0,
+            },
+            GLVertex {
+                sx: fx2 + 0.5,
+                sy: fy2 + 0.5,
+                sz: 0.0,
+                color: c,
+                tu: 0.0,
+                tv: 0.0,
+            },
         ];
 
         unsafe {
@@ -2059,7 +2534,9 @@ impl GLInterface {
 
     /// FillRect — 填充矩形（对应 C++ GLInterface::FillRect）
     pub fn fill_rect(&mut self, the_rect: &Rect, the_color: &Color, the_draw_mode: i32) {
-        if !self.pre_draw() { return; }
+        if !self.pre_draw() {
+            return;
+        }
         self.set_draw_mode(the_draw_mode);
 
         let x = the_rect.x as f32;
@@ -2069,10 +2546,38 @@ impl GLInterface {
         let c = color_to_gl_color(the_color);
 
         let mut vtx: [GLVertex; 4] = [
-            GLVertex { sx: x, sy: y, sz: 0.0, color: c, tu: 0.0, tv: 0.0 },
-            GLVertex { sx: x, sy: y + h, sz: 0.0, color: c, tu: 0.0, tv: 0.0 },
-            GLVertex { sx: x + w, sy: y, sz: 0.0, color: c, tu: 0.0, tv: 0.0 },
-            GLVertex { sx: x + w, sy: y + h, sz: 0.0, color: c, tu: 0.0, tv: 0.0 },
+            GLVertex {
+                sx: x,
+                sy: y,
+                sz: 0.0,
+                color: c,
+                tu: 0.0,
+                tv: 0.0,
+            },
+            GLVertex {
+                sx: x,
+                sy: y + h,
+                sz: 0.0,
+                color: c,
+                tu: 0.0,
+                tv: 0.0,
+            },
+            GLVertex {
+                sx: x + w,
+                sy: y,
+                sz: 0.0,
+                color: c,
+                tu: 0.0,
+                tv: 0.0,
+            },
+            GLVertex {
+                sx: x + w,
+                sy: y + h,
+                sz: 0.0,
+                color: c,
+                tu: 0.0,
+                tv: 0.0,
+            },
         ];
 
         if !self.transform_stack.is_empty() {
@@ -2102,14 +2607,37 @@ impl GLInterface {
         the_color: &Color,
         the_draw_mode: i32,
     ) {
-        if !self.pre_draw() { return; }
+        if !self.pre_draw() {
+            return;
+        }
         self.set_draw_mode(the_draw_mode);
 
         let c = color_to_gl_color(the_color);
         let vtx: [GLVertex; 3] = [
-            GLVertex { sx: p1.x, sy: p1.y, sz: 0.0, color: vertex_color(p1.color, c), tu: 0.0, tv: 0.0 },
-            GLVertex { sx: p2.x, sy: p2.y, sz: 0.0, color: vertex_color(p2.color, c), tu: 0.0, tv: 0.0 },
-            GLVertex { sx: p3.x, sy: p3.y, sz: 0.0, color: vertex_color(p3.color, c), tu: 0.0, tv: 0.0 },
+            GLVertex {
+                sx: p1.x,
+                sy: p1.y,
+                sz: 0.0,
+                color: vertex_color(p1.color, c),
+                tu: 0.0,
+                tv: 0.0,
+            },
+            GLVertex {
+                sx: p2.x,
+                sy: p2.y,
+                sz: 0.0,
+                color: vertex_color(p2.color, c),
+                tu: 0.0,
+                tv: 0.0,
+            },
+            GLVertex {
+                sx: p3.x,
+                sy: p3.y,
+                sz: 0.0,
+                color: vertex_color(p3.color, c),
+                tu: 0.0,
+                tv: 0.0,
+            },
         ];
 
         unsafe {
@@ -2147,16 +2675,22 @@ impl GLInterface {
         ty: f32,
         blend: bool,
     ) {
-        if !self.pre_draw() { return; }
+        if !self.pre_draw() {
+            return;
+        }
 
         let mem = match texture.as_any_mut().downcast_mut::<MemoryImage>() {
             Some(m) => m,
             None => return,
         };
-        if !self.create_image_texture(mem) { return; }
+        if !self.create_image_texture(mem) {
+            return;
+        }
 
         self.set_draw_mode(the_draw_mode);
-        unsafe { set_linear_filter(blend); }
+        unsafe {
+            set_linear_filter(blend);
+        }
 
         let c = color_to_gl_color(the_color);
         let clamp_uv = (mem.render_flags & RENDER_IMAGE_FLAG_REPEAT) == 0;
@@ -2181,14 +2715,29 @@ impl GLInterface {
         let mut done = 0i32;
         while done < num_triangles {
             let n = (100).min(num_triangles - done);
-            let mut batch = [[TriVertex { x: 0.0, y: 0.0, u: 0.0, v: 0.0, color: 0 }; 3]; 100];
+            let mut batch = [[TriVertex {
+                x: 0.0,
+                y: 0.0,
+                u: 0.0,
+                v: 0.0,
+                color: 0,
+            }; 3]; 100];
             for i in 0..n as usize {
                 let idx = done as usize + i;
                 batch[i][0] = vertices[idx];
                 batch[i][1] = vertices[idx + 1];
                 batch[i][2] = vertices[idx + 2];
             }
-            self.draw_triangles_tex(&batch[..n as usize], n, the_color, the_draw_mode, texture, tx, ty, blend);
+            self.draw_triangles_tex(
+                &batch[..n as usize],
+                n,
+                the_color,
+                the_draw_mode,
+                texture,
+                tx,
+                ty,
+                blend,
+            );
             done += n;
         }
     }
@@ -2203,8 +2752,12 @@ impl GLInterface {
         tx: i32,
         ty: i32,
     ) {
-        if vertices.len() < 3 { return; }
-        if !self.pre_draw() { return; }
+        if vertices.len() < 3 {
+            return;
+        }
+        if !self.pre_draw() {
+            return;
+        }
         self.set_draw_mode(the_draw_mode);
 
         let c = color_to_gl_color(the_color);
@@ -2255,4 +2808,3 @@ impl Drop for GLInterface {
         }
     }
 }
-

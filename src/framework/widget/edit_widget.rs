@@ -3,14 +3,17 @@
 
 #![allow(dead_code)]
 
-use std::cmp;
 use crate::framework::color::Color;
-use crate::framework::rect::Rect;
-use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::font::Font;
+use crate::framework::graphics::graphics::Graphics;
+use crate::framework::key_codes::{
+    KeyCode, KEYCODE_BACKSPACE, KEYCODE_CONTROL, KEYCODE_DELETE, KEYCODE_DOWN, KEYCODE_END,
+    KEYCODE_HOME, KEYCODE_LEFT, KEYCODE_RETURN, KEYCODE_RIGHT, KEYCODE_SHIFT, KEYCODE_UNKNOWN,
+};
+use crate::framework::rect::Rect;
 use crate::framework::widget::widget::Widget;
 use crate::framework::widget::widget_manager::WidgetManager;
-use crate::framework::key_codes::{KeyCode, KEYCODE_SHIFT, KEYCODE_CONTROL, KEYCODE_LEFT, KEYCODE_RIGHT, KEYCODE_BACKSPACE, KEYCODE_DELETE, KEYCODE_HOME, KEYCODE_END, KEYCODE_RETURN, KEYCODE_UNKNOWN, KEYCODE_DOWN};
+use std::cmp;
 
 /// 编辑框监听器 trait（对应 C++ EditListener）
 pub trait EditListener {
@@ -26,7 +29,11 @@ pub const EDIT_COLOR_HILITE_TEXT: usize = 4;
 pub const EDIT_NUM_COLORS: usize = 5;
 
 const G_EDIT_COLORS: [[u8; 3]; EDIT_NUM_COLORS] = [
-    [255,255,255], [0,0,0], [0,0,0], [0,0,0], [255,255,255],
+    [255, 255, 255],
+    [0, 0, 0],
+    [0, 0, 0],
+    [0, 0, 0],
+    [255, 255, 255],
 ];
 
 /// 宽度检查结构
@@ -120,14 +127,21 @@ impl EditWidget {
         ew.visible = true;
         ew.has_alpha = true;
         ew.wants_focus = true;
-        ew.colors = G_EDIT_COLORS.iter().map(|c| Color::from_rgb(c[0], c[1], c[2])).collect();
+        ew.colors = G_EDIT_COLORS
+            .iter()
+            .map(|c| Color::from_rgb(c[0], c[1], c[2]))
+            .collect();
         ew
     }
 
     pub fn get_display_string(&mut self) -> &str {
-        if self.password_char == 0 { return &self.text; }
+        if self.password_char == 0 {
+            return &self.text;
+        }
         if self.password_display.len() != self.text.len() {
-            self.password_display = vec![self.password_char as char; self.text.len()].into_iter().collect();
+            self.password_display = vec![self.password_char as char; self.text.len()]
+                .into_iter()
+                .collect();
         }
         &self.password_display
     }
@@ -136,13 +150,19 @@ impl EditWidget {
         self.text = the_text.to_string();
         self.cursor_pos = self.text.len() as i32;
         self.hilite_pos = 0;
-        if left_pos_to_zero { self.left_pos = 0; }
-        else { self.focus_cursor(true); }
+        if left_pos_to_zero {
+            self.left_pos = 0;
+        } else {
+            self.focus_cursor(true);
+        }
         self.mark_dirty_internal();
     }
 
     pub fn resize(&mut self, the_x: i32, the_y: i32, the_w: i32, the_h: i32) {
-        self.x = the_x; self.y = the_y; self.width = the_w; self.height = the_h;
+        self.x = the_x;
+        self.y = the_y;
+        self.width = the_w;
+        self.height = the_h;
         self.focus_cursor(false);
     }
 
@@ -163,8 +183,20 @@ impl EditWidget {
             unsafe {
                 if let Some(app_ptr) = (*wm).app {
                     let app = &*app_ptr;
-                    let _clamp_x = if self.x < 10 { 10 } else if self.x > app.width - 10 { app.width - 10 } else { self.x };
-                    let _clamp_y = if self.y < 10 { 10 } else if self.y > app.height - 10 { app.height - 10 } else { self.y };
+                    let _clamp_x = if self.x < 10 {
+                        10
+                    } else if self.x > app.width - 10 {
+                        app.width - 10
+                    } else {
+                        self.x
+                    };
+                    let _clamp_y = if self.y < 10 {
+                        10
+                    } else if self.y > app.height - 10 {
+                        app.height - 10
+                    } else {
+                        self.y
+                    };
                     // C++ 原版：SetCaretPos(clamp_x, clamp_y)
                 }
             }
@@ -195,12 +227,21 @@ impl EditWidget {
                     hilite_x = font.string_width(&display[..self.hilite_pos as usize])
                         - font.string_width(&display[..self.left_pos as usize]);
                 }
-                let c_x = if !self.showing_cursor { cursor_x + 2 } else { cursor_x };
+                let c_x = if !self.showing_cursor {
+                    cursor_x + 2
+                } else {
+                    cursor_x
+                };
                 let cx = cmp::max(0, cmp::min(c_x, self.width - 8));
                 let hx = cmp::max(0, cmp::min(hilite_x, self.width - 8));
                 let sel_start = 4 + cmp::min(cx, hx);
                 let sel_w = (hx - cx).abs();
-                clip_g.clip_rect(&Rect::new(sel_start, (self.height - font.font_height)/2, sel_w, font.font_height));
+                clip_g.clip_rect(&Rect::new(
+                    sel_start,
+                    (self.height - font.font_height) / 2,
+                    sel_w,
+                    font.font_height,
+                ));
             } else {
                 clip_g.clip_rect(&Rect::new(4, 0, self.width - 8, self.height));
             }
@@ -253,25 +294,47 @@ impl EditWidget {
     }
 
     pub fn key_down(&mut self, the_key: KeyCode, wm: &WidgetManager) {
-        let is_ctrl = wm.key_down.get(KEYCODE_CONTROL as usize).copied().unwrap_or(false);
+        let is_ctrl = wm
+            .key_down
+            .get(KEYCODE_CONTROL as usize)
+            .copied()
+            .unwrap_or(false);
         if the_key < KEYCODE_LEFT as KeyCode || the_key > KEYCODE_DOWN as KeyCode {
             self.process_key(the_key, 0, is_ctrl, wm);
         }
     }
 
     pub fn key_char(&mut self, the_char: u8, wm: &WidgetManager) {
-        let is_ctrl = wm.key_down.get(KEYCODE_CONTROL as usize).copied().unwrap_or(false);
+        let is_ctrl = wm
+            .key_down
+            .get(KEYCODE_CONTROL as usize)
+            .copied()
+            .unwrap_or(false);
         self.process_key(KEYCODE_UNKNOWN, the_char, is_ctrl, wm);
     }
 
-    fn process_key(&mut self, the_key: KeyCode, the_char: u8, control_down: bool, wm: &WidgetManager) {
-        if the_key == KEYCODE_SHIFT as KeyCode || the_key == KEYCODE_CONTROL as KeyCode { return; }
+    fn process_key(
+        &mut self,
+        the_key: KeyCode,
+        the_char: u8,
+        control_down: bool,
+        wm: &WidgetManager,
+    ) {
+        if the_key == KEYCODE_SHIFT as KeyCode || the_key == KEYCODE_CONTROL as KeyCode {
+            return;
+        }
 
-        let shift_down = wm.key_down.get(KEYCODE_SHIFT as usize).copied().unwrap_or(false);
+        let shift_down = wm
+            .key_down
+            .get(KEYCODE_SHIFT as usize)
+            .copied()
+            .unwrap_or(false);
         let mut big_change = false;
         let mut remove_hilite = !shift_down;
 
-        if shift_down && self.hilite_pos == -1 { self.hilite_pos = self.cursor_pos; }
+        if shift_down && self.hilite_pos == -1 {
+            self.hilite_pos = self.cursor_pos;
+        }
 
         let old_text = self.text.clone();
         let old_cursor = self.cursor_pos;
@@ -280,9 +343,14 @@ impl EditWidget {
         // Ctrl+C / Ctrl+X (copy/cut)
         if the_char == 3 || the_char == 24 {
             if self.hilite_pos != -1 && self.hilite_pos != self.cursor_pos {
-                let (start, end) = if self.cursor_pos < self.hilite_pos { (self.cursor_pos, self.hilite_pos) } else { (self.hilite_pos, self.cursor_pos) };
+                let (start, end) = if self.cursor_pos < self.hilite_pos {
+                    (self.cursor_pos, self.hilite_pos)
+                } else {
+                    (self.hilite_pos, self.cursor_pos)
+                };
                 // copy handled outside
-                if the_char == 24 { // cut
+                if the_char == 24 {
+                    // cut
                     let range = start as usize..end as usize;
                     self.text.replace_range(range, "");
                     self.cursor_pos = start;
@@ -297,7 +365,11 @@ impl EditWidget {
         else if the_char == 22 {
             // paste simplified
             if self.hilite_pos != -1 && self.hilite_pos != self.cursor_pos {
-                let (start, end) = if self.cursor_pos < self.hilite_pos { (self.cursor_pos, self.hilite_pos) } else { (self.hilite_pos, self.cursor_pos) };
+                let (start, end) = if self.cursor_pos < self.hilite_pos {
+                    (self.cursor_pos, self.hilite_pos)
+                } else {
+                    (self.hilite_pos, self.cursor_pos)
+                };
                 let range = start as usize..end as usize;
                 self.text.replace_range(range, "");
                 self.cursor_pos = start;
@@ -316,73 +388,124 @@ impl EditWidget {
             self.undo_cursor = swap.1;
             self.undo_hilite_pos = swap.2;
             remove_hilite = false;
-        }
-        else if the_key == KEYCODE_LEFT as KeyCode {
+        } else if the_key == KEYCODE_LEFT as KeyCode {
             if control_down {
-                while self.cursor_pos > 0 && !self.is_part_of_word(self.text.as_bytes()[(self.cursor_pos-1) as usize]) { self.cursor_pos -= 1; }
-                while self.cursor_pos > 0 && self.is_part_of_word(self.text.as_bytes()[(self.cursor_pos-1) as usize]) { self.cursor_pos -= 1; }
+                while self.cursor_pos > 0
+                    && !self.is_part_of_word(self.text.as_bytes()[(self.cursor_pos - 1) as usize])
+                {
+                    self.cursor_pos -= 1;
+                }
+                while self.cursor_pos > 0
+                    && self.is_part_of_word(self.text.as_bytes()[(self.cursor_pos - 1) as usize])
+                {
+                    self.cursor_pos -= 1;
+                }
             } else if shift_down || self.hilite_pos == -1 {
                 self.cursor_pos -= 1;
             } else {
                 self.cursor_pos = cmp::min(self.cursor_pos, self.hilite_pos);
             }
-        }
-        else if the_key == KEYCODE_RIGHT as KeyCode {
+        } else if the_key == KEYCODE_RIGHT as KeyCode {
             if control_down {
                 let len = self.text.len() as i32;
-                while self.cursor_pos < len-1 && self.is_part_of_word(self.text.as_bytes()[(self.cursor_pos+1) as usize]) { self.cursor_pos += 1; }
-                while self.cursor_pos < len-1 && !self.is_part_of_word(self.text.as_bytes()[(self.cursor_pos+1) as usize]) { self.cursor_pos += 1; }
+                while self.cursor_pos < len - 1
+                    && self.is_part_of_word(self.text.as_bytes()[(self.cursor_pos + 1) as usize])
+                {
+                    self.cursor_pos += 1;
+                }
+                while self.cursor_pos < len - 1
+                    && !self.is_part_of_word(self.text.as_bytes()[(self.cursor_pos + 1) as usize])
+                {
+                    self.cursor_pos += 1;
+                }
             }
-            if shift_down || self.hilite_pos == -1 { self.cursor_pos += 1; }
-            else { self.cursor_pos = cmp::max(self.cursor_pos, self.hilite_pos); }
-        }
-        else if the_key == KEYCODE_BACKSPACE as KeyCode {
+            if shift_down || self.hilite_pos == -1 {
+                self.cursor_pos += 1;
+            } else {
+                self.cursor_pos = cmp::max(self.cursor_pos, self.hilite_pos);
+            }
+        } else if the_key == KEYCODE_BACKSPACE as KeyCode {
             if !self.text.is_empty() {
                 if self.hilite_pos != -1 && self.hilite_pos != self.cursor_pos {
-                    let (s, e) = if self.cursor_pos < self.hilite_pos { (self.cursor_pos, self.hilite_pos) } else { (self.hilite_pos, self.cursor_pos) };
+                    let (s, e) = if self.cursor_pos < self.hilite_pos {
+                        (self.cursor_pos, self.hilite_pos)
+                    } else {
+                        (self.hilite_pos, self.cursor_pos)
+                    };
                     self.text.replace_range(s as usize..e as usize, "");
-                    self.cursor_pos = s; self.hilite_pos = -1; big_change = true;
+                    self.cursor_pos = s;
+                    self.hilite_pos = -1;
+                    big_change = true;
                 } else if self.cursor_pos > 0 {
-                    self.text.replace_range((self.cursor_pos-1) as usize..self.cursor_pos as usize, "");
-                    self.cursor_pos -= 1; self.hilite_pos = -1;
-                    if self.cursor_pos != self.last_modify_idx { big_change = true; }
+                    self.text.replace_range(
+                        (self.cursor_pos - 1) as usize..self.cursor_pos as usize,
+                        "",
+                    );
+                    self.cursor_pos -= 1;
+                    self.hilite_pos = -1;
+                    if self.cursor_pos != self.last_modify_idx {
+                        big_change = true;
+                    }
                     self.last_modify_idx = self.cursor_pos - 1;
                 }
             }
-        }
-        else if the_key == KEYCODE_DELETE as KeyCode {
+        } else if the_key == KEYCODE_DELETE as KeyCode {
             if !self.text.is_empty() {
                 if self.hilite_pos != -1 && self.hilite_pos != self.cursor_pos {
-                    let (s, e) = if self.cursor_pos < self.hilite_pos { (self.cursor_pos, self.hilite_pos) } else { (self.hilite_pos, self.cursor_pos) };
+                    let (s, e) = if self.cursor_pos < self.hilite_pos {
+                        (self.cursor_pos, self.hilite_pos)
+                    } else {
+                        (self.hilite_pos, self.cursor_pos)
+                    };
                     self.text.replace_range(s as usize..e as usize, "");
-                    self.cursor_pos = s; self.hilite_pos = -1; big_change = true;
+                    self.cursor_pos = s;
+                    self.hilite_pos = -1;
+                    big_change = true;
                 } else if (self.cursor_pos as usize) < self.text.len() {
-                    self.text.replace_range(self.cursor_pos as usize..(self.cursor_pos+1) as usize, "");
-                    if self.cursor_pos != self.last_modify_idx { big_change = true; }
+                    self.text.replace_range(
+                        self.cursor_pos as usize..(self.cursor_pos + 1) as usize,
+                        "",
+                    );
+                    if self.cursor_pos != self.last_modify_idx {
+                        big_change = true;
+                    }
                     self.last_modify_idx = self.cursor_pos;
                 }
             }
-        }
-        else if the_key == KEYCODE_HOME as KeyCode { self.cursor_pos = 0; }
-        else if the_key == KEYCODE_END as KeyCode { self.cursor_pos = self.text.len() as i32; }
-        else if the_key == KEYCODE_RETURN as KeyCode {
-            if let Some(ref mut l) = self.listener { l.edit_widget_text(self.id, &self.text); }
-        }
-        else if (the_char as u32) >= 32 && (the_char as u32) <= 127 {
+        } else if the_key == KEYCODE_HOME as KeyCode {
+            self.cursor_pos = 0;
+        } else if the_key == KEYCODE_END as KeyCode {
+            self.cursor_pos = self.text.len() as i32;
+        } else if the_key == KEYCODE_RETURN as KeyCode {
+            if let Some(ref mut l) = self.listener {
+                l.edit_widget_text(self.id, &self.text);
+            }
+        } else if (the_char as u32) >= 32 && (the_char as u32) <= 127 {
             let c = the_char as char;
             let s = c.to_string();
             if self.hilite_pos != -1 && self.hilite_pos != self.cursor_pos {
-                let (start, end) = if self.cursor_pos < self.hilite_pos { (self.cursor_pos, self.hilite_pos) } else { (self.hilite_pos, self.cursor_pos) };
+                let (start, end) = if self.cursor_pos < self.hilite_pos {
+                    (self.cursor_pos, self.hilite_pos)
+                } else {
+                    (self.hilite_pos, self.cursor_pos)
+                };
                 self.text.replace_range(start as usize..end as usize, &s);
-                self.cursor_pos = start; self.hilite_pos = -1; big_change = true;
+                self.cursor_pos = start;
+                self.hilite_pos = -1;
+                big_change = true;
             } else {
                 self.text.insert(self.cursor_pos as usize, c);
-                if self.cursor_pos != self.last_modify_idx + 1 { big_change = true; }
-                self.last_modify_idx = self.cursor_pos; self.hilite_pos = -1;
+                if self.cursor_pos != self.last_modify_idx + 1 {
+                    big_change = true;
+                }
+                self.last_modify_idx = self.cursor_pos;
+                self.hilite_pos = -1;
             }
             self.cursor_pos += 1;
             self.focus_cursor(false);
-        } else { remove_hilite = false; }
+        } else {
+            remove_hilite = false;
+        }
 
         // 约束长度
         if self.max_chars != -1 && (self.text.len() as i32) > self.max_chars {
@@ -390,12 +513,20 @@ impl EditWidget {
         }
         self.enforce_max_pixels();
 
-        if self.cursor_pos < 0 { self.cursor_pos = 0; }
-        else if (self.cursor_pos as usize) > self.text.len() { self.cursor_pos = self.text.len() as i32; }
+        if self.cursor_pos < 0 {
+            self.cursor_pos = 0;
+        } else if (self.cursor_pos as usize) > self.text.len() {
+            self.cursor_pos = self.text.len() as i32;
+        }
 
-        if old_cursor != self.cursor_pos { self.blink_acc = 0; self.showing_cursor = true; }
+        if old_cursor != self.cursor_pos {
+            self.blink_acc = 0;
+            self.showing_cursor = true;
+        }
         self.focus_cursor(true);
-        if remove_hilite || self.hilite_pos == self.cursor_pos { self.hilite_pos = -1; }
+        if remove_hilite || self.hilite_pos == self.cursor_pos {
+            self.hilite_pos = -1;
+        }
         if big_change {
             self.undo_string = old_text;
             self.undo_cursor = old_cursor;
@@ -405,30 +536,48 @@ impl EditWidget {
     }
 
     fn is_part_of_word(&self, c: u8) -> bool {
-        (c >= b'A' && c <= b'Z') || (c >= b'a' && c <= b'z') ||
-        (c >= b'0' && c <= b'9') || c == b'_'
+        (c >= b'A' && c <= b'Z')
+            || (c >= b'a' && c <= b'z')
+            || (c >= b'0' && c <= b'9')
+            || c == b'_'
     }
 
     pub fn get_char_at(&self, x: i32, _y: i32) -> i32 {
-        let display = if self.password_char == 0 { &self.text } else { &self.password_display };
-        let font = match self.font.as_ref() { Some(f) => f, None => return 0 };
+        let display = if self.password_char == 0 {
+            &self.text
+        } else {
+            &self.password_display
+        };
+        let font = match self.font.as_ref() {
+            Some(f) => f,
+            None => return 0,
+        };
         let mut pos = 0i32;
         let s = &display[self.left_pos as usize..];
         for i in 0..s.len() {
             let low = font.string_width(&s[..i]);
             let high = font.string_width(&s[..=i]);
-            if x >= (low + high) / 2 + 5 { pos = (i + 1) as i32; }
+            if x >= (low + high) / 2 + 5 {
+                pos = (i + 1) as i32;
+            }
         }
         pos + self.left_pos
     }
 
     pub fn focus_cursor(&mut self, big_jump: bool) {
         while self.cursor_pos < self.left_pos {
-            if big_jump { self.left_pos = cmp::max(0, self.left_pos - 10); }
-            else { self.left_pos = cmp::max(0, self.left_pos - 1); }
+            if big_jump {
+                self.left_pos = cmp::max(0, self.left_pos - 10);
+            } else {
+                self.left_pos = cmp::max(0, self.left_pos - 1);
+            }
             self.mark_dirty_internal();
         }
-        let display_str = if self.password_char == 0 { self.text.clone() } else { self.password_display.clone() };
+        let display_str = if self.password_char == 0 {
+            self.text.clone()
+        } else {
+            self.password_display.clone()
+        };
         // 克隆字体宽度函数所需数据，避免借用冲突
         let font_data = self.font.as_ref().map(|f| (f.name.clone(), f.size));
         if let Some((ref _fn, _fs)) = font_data {
@@ -437,10 +586,16 @@ impl EditWidget {
                 let chars_before_cursor = self.cursor_pos as usize;
                 let chars_before_left = self.left_pos as usize;
                 // 使用字符数估算宽度（每个字符约 size * 0.6）
-                let est_cw = ((chars_before_cursor - chars_before_left) as f64 * _fs as f64 * 0.6) as i32;
-                if est_cw < self.width - 8 { break; }
-                if big_jump { self.left_pos = cmp::min(self.left_pos + 10, self.text.len() as i32 - 1); }
-                else { self.left_pos = cmp::min(self.left_pos + 1, self.text.len() as i32 - 1); }
+                let est_cw =
+                    ((chars_before_cursor - chars_before_left) as f64 * _fs as f64 * 0.6) as i32;
+                if est_cw < self.width - 8 {
+                    break;
+                }
+                if big_jump {
+                    self.left_pos = cmp::min(self.left_pos + 10, self.text.len() as i32 - 1);
+                } else {
+                    self.left_pos = cmp::min(self.left_pos + 1, self.text.len() as i32 - 1);
+                }
                 self.mark_dirty_internal();
             }
         }
@@ -458,7 +613,9 @@ impl EditWidget {
     }
 
     pub fn mouse_up_btn(&mut self, x: i32, y: i32, _b: i32, _c: i32) {
-        if self.hilite_pos == self.cursor_pos { self.hilite_pos = -1; }
+        if self.hilite_pos == self.cursor_pos {
+            self.hilite_pos = -1;
+        }
         if self.had_double_click {
             self.hilite_pos = -1;
             self.cursor_pos = self.get_char_at(x, y);
@@ -469,7 +626,9 @@ impl EditWidget {
     }
 
     pub fn mouse_drag(&mut self, x: i32, _y: i32) {
-        if self.hilite_pos == -1 { self.hilite_pos = self.cursor_pos; }
+        if self.hilite_pos == -1 {
+            self.hilite_pos = self.cursor_pos;
+        }
         self.cursor_pos = self.get_char_at(x, 0);
         self.mark_dirty_internal();
         self.focus_cursor(false);
@@ -479,21 +638,33 @@ impl EditWidget {
     pub fn mouse_leave(&mut self) {}
 
     fn hilite_word(&mut self) {
-        let display = if self.password_char == 0 { &self.text } else { &self.password_display };
+        let display = if self.password_char == 0 {
+            &self.text
+        } else {
+            &self.password_display
+        };
         if (self.cursor_pos as usize) < display.len() {
             self.hilite_pos = self.cursor_pos;
-            while self.hilite_pos > 0 && self.is_part_of_word(display.as_bytes()[(self.hilite_pos-1) as usize]) {
+            while self.hilite_pos > 0
+                && self.is_part_of_word(display.as_bytes()[(self.hilite_pos - 1) as usize])
+            {
                 self.hilite_pos -= 1;
             }
-            while (self.cursor_pos as usize) < display.len() - 1 && self.is_part_of_word(display.as_bytes()[(self.cursor_pos+1) as usize]) {
+            while (self.cursor_pos as usize) < display.len() - 1
+                && self.is_part_of_word(display.as_bytes()[(self.cursor_pos + 1) as usize])
+            {
                 self.cursor_pos += 1;
             }
-            if (self.cursor_pos as usize) < display.len() { self.cursor_pos += 1; }
+            if (self.cursor_pos as usize) < display.len() {
+                self.cursor_pos += 1;
+            }
         }
     }
 
     fn enforce_max_pixels(&mut self) {
-        if self.max_pixels <= 0 && self.width_check_list.is_empty() { return; }
+        if self.max_pixels <= 0 && self.width_check_list.is_empty() {
+            return;
+        }
         if self.width_check_list.is_empty() {
             if let Some(ref font) = self.font {
                 while font.string_width(&self.text) > self.max_pixels {
@@ -504,11 +675,20 @@ impl EditWidget {
         }
         for check in &self.width_check_list {
             let mut w = check.max_width;
-            if w <= 0 { w = self.max_pixels; if w <= 0 { continue; } }
-            while check.font.string_width(&self.text) > w { self.text.pop(); }
+            if w <= 0 {
+                w = self.max_pixels;
+                if w <= 0 {
+                    continue;
+                }
+            }
+            while check.font.string_width(&self.text) > w {
+                self.text.pop();
+            }
         }
     }
 
-    fn get_color(&self, idx: usize) -> Color { self.colors.get(idx).copied().unwrap_or(Color::WHITE) }
+    fn get_color(&self, idx: usize) -> Color {
+        self.colors.get(idx).copied().unwrap_or(Color::WHITE)
+    }
     fn mark_dirty_internal(&mut self) {}
 }

@@ -6,8 +6,12 @@
 
 #![allow(dead_code)]
 
-pub fn data_array_index(the_id: u32) -> u32 { the_id & DATA_ARRAY_INDEX_MASK }
-pub fn data_array_key(the_id: u32) -> u32 { the_id & DATA_ARRAY_KEY_MASK }
+pub fn data_array_index(the_id: u32) -> u32 {
+    the_id & DATA_ARRAY_INDEX_MASK
+}
+pub fn data_array_key(the_id: u32) -> u32 {
+    the_id & DATA_ARRAY_KEY_MASK
+}
 
 const DATA_ARRAY_INDEX_MASK: u32 = 65535;
 const DATA_ARRAY_KEY_MASK: u32 = !0xFFFF;
@@ -72,7 +76,11 @@ impl<T> DataArray<T> {
     where
         T: Default,
     {
-        assert!(self.count < self.slots.len() as u32, "Data array full: {}", self.name);
+        assert!(
+            self.count < self.slots.len() as u32,
+            "Data array full: {}",
+            self.name
+        );
 
         // 从空闲链表中找到可用的索引
         let mut index = self.free_head;
@@ -168,7 +176,8 @@ impl<T> DataArray<T> {
 
     /// 获取对象（带断言）
     pub fn get(&self, id: u32) -> &T {
-        self.try_to_get(id).unwrap_or_else(|| panic!("DataArrayGet(0x{:x}) failed for {}", id, self.name))
+        self.try_to_get(id)
+            .unwrap_or_else(|| panic!("DataArrayGet(0x{:x}) failed for {}", id, self.name))
     }
 
     /// 获取可变对象
@@ -202,9 +211,15 @@ impl<T> DataArray<T> {
         std::ptr::null_mut()
     }
 
-    pub fn len(&self) -> u32 { self.count }
-    pub fn is_empty(&self) -> bool { self.count == 0 }
-    pub fn max_size(&self) -> u32 { self.slots.len() as u32 }
+    pub fn len(&self) -> u32 {
+        self.count
+    }
+    pub fn is_empty(&self) -> bool {
+        self.count == 0
+    }
+    pub fn max_size(&self) -> u32 {
+        self.slots.len() as u32
+    }
 }
 
 impl<T> Drop for DataArray<T> {

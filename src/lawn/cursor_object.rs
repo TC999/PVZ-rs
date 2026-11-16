@@ -1,10 +1,10 @@
 // PvZ Portable Rust 翻译 — CursorObject（光标对象/拖放）
 // 对应 C++ src/Lawn/CursorObject.h / CursorObject.cpp
 
+use crate::framework::graphics::graphics::Graphics;
+use crate::lawn::board::{Board, HitResult};
 use crate::lawn::game_enums::*;
 use crate::lawn::game_object::GameObject;
-use crate::lawn::board::{Board, HitResult};
-use crate::framework::graphics::graphics::Graphics;
 
 /// 光标对象 — 用于拖放植物、工具等操作
 /// 对应 C++ CursorObject : GameObject（完整字段映射）
@@ -15,25 +15,25 @@ pub struct CursorObject {
     pub imitater_type: SeedType,
 
     // 选中索引/ID
-    pub seed_bank_index: i32,       // 对应 mSeedBankIndex（种子槽索引，-1 表示无效）
-    pub coin_id: CoinID,            // 对应 mCoinID（从阳光/硬币中取出的种子）
-    pub glove_plant_id: PlantID,    // 对应 mGlovePlantID（手套抓起的植物）
+    pub seed_bank_index: i32, // 对应 mSeedBankIndex（种子槽索引，-1 表示无效）
+    pub coin_id: CoinID,      // 对应 mCoinID（从阳光/硬币中取出的种子）
+    pub glove_plant_id: PlantID, // 对应 mGlovePlantID（手套抓起的植物）
     pub duplicator_plant_id: PlantID, // 对应 mDuplicatorPlantID（复制器复制的植物）
     pub cob_cannon_plant_id: PlantID, // 对应 mCobCannonPlantID（玉米加农炮瞄准）
 
     // 锤子/动画
-    pub hammer_down_counter: i32,      // 对应 mHammerDownCounter（锤子按下计数）
+    pub hammer_down_counter: i32, // 对应 mHammerDownCounter（锤子按下计数）
     pub reanim_cursor_id: ReanimationID, // 对应 mReanimCursorID（光标上的动画实例）
 
     // 位置与可见性
     pub x: i32,
     pub y: i32,
-    pub mouse_x: i32,          // 用于内部记录的鼠标原始坐标
+    pub mouse_x: i32, // 用于内部记录的鼠标原始坐标
     pub mouse_y: i32,
     pub width: i32,
     pub height: i32,
-    pub active: bool,          // 是否处于激活状态
-    pub visible: bool,         // 对应 mVisible（从 GameObject 继承）
+    pub active: bool,  // 是否处于激活状态
+    pub visible: bool, // 对应 mVisible（从 GameObject 继承）
 }
 
 impl CursorObject {
@@ -79,7 +79,13 @@ impl CursorObject {
 
     /// 更新（对应 C++ CursorObject::Update() L48-L71）
     /// 需要 app 的 game_scene 和 mouse 状态，以及 board 的 cutscene
-    pub fn update(&mut self, mouse_x: i32, mouse_y: i32, is_playing: bool, _is_in_shovel_tutorial: bool) {
+    pub fn update(
+        &mut self,
+        mouse_x: i32,
+        mouse_y: i32,
+        is_playing: bool,
+        _is_in_shovel_tutorial: bool,
+    ) {
         if !is_playing {
             self.visible = false;
             return;
@@ -129,9 +135,14 @@ impl CursorObject {
                 unsafe { (*a_rm).get_image(a_key).as_image_ptr() }
             })
         };
-        let draw_at = |g: &mut Graphics, a_image: *mut crate::framework::graphics::image::Image, a_x: i32, a_y: i32| {
+        let draw_at = |g: &mut Graphics,
+                       a_image: *mut crate::framework::graphics::image::Image,
+                       a_x: i32,
+                       a_y: i32| {
             if !a_image.is_null() {
-                unsafe { g.draw_image_xy(&*a_image, a_x, a_y); }
+                unsafe {
+                    g.draw_image_xy(&*a_image, a_x, a_y);
+                }
             }
         };
 
@@ -164,11 +175,21 @@ impl CursorObject {
             }
             CursorType::Glove => {
                 // 对应 C++: g->DrawImage(IMAGE_ZEN_GARDENGLOVE, -17, 15)
-                draw_at(g, get_image("IMAGE_ZEN_GARDENGLOVE"), self.x - 17, self.y + 15);
+                draw_at(
+                    g,
+                    get_image("IMAGE_ZEN_GARDENGLOVE"),
+                    self.x - 17,
+                    self.y + 15,
+                );
             }
             CursorType::MoneySign => {
                 // 对应 C++: g->DrawImage(IMAGE_ZEN_MONEYSIGN, -17, -10)
-                draw_at(g, get_image("IMAGE_ZEN_MONEYSIGN"), self.x - 17, self.y - 10);
+                draw_at(
+                    g,
+                    get_image("IMAGE_ZEN_MONEYSIGN"),
+                    self.x - 17,
+                    self.y - 10,
+                );
             }
             CursorType::TreeFood => {
                 // 对应 C++: g->DrawImage(IMAGE_TREEFOOD, -15, 0)
@@ -178,13 +199,20 @@ impl CursorObject {
                 // [TRANSLATION_NOTE]: C++ 中按盆栽年龄调用 ZenGarden::DrawPottedPlant
                 //（依赖 ZenGarden/PlayerInfo 的 PottedPlant 结构，暂未接入）
                 // 对应 C++: g->DrawImage(IMAGE_ZEN_WHEELBARROW, -20, -30)
-                draw_at(g, get_image("IMAGE_ZEN_WHEELBARROW"), self.x - 20, self.y - 30);
+                draw_at(
+                    g,
+                    get_image("IMAGE_ZEN_WHEELBARROW"),
+                    self.x - 20,
+                    self.y - 30,
+                );
             }
             CursorType::PlantFromGlove | CursorType::PlantFromWheelBarrow => {
                 // [TRANSLATION_NOTE]: C++ 中按背景类型调用 ZenGarden::DrawPottedPlant
                 //（依赖 PottedPlant 结构，暂未接入）
             }
-            CursorType::PlantFromBank | CursorType::PlantFromUsableCoin | CursorType::PlantFromDuplicator => {
+            CursorType::PlantFromBank
+            | CursorType::PlantFromUsableCoin
+            | CursorType::PlantFromDuplicator => {
                 // 对应 C++: 植物种子绘制（偏移依赖 PlantDrawHeightOffset/飞行判定）
                 // [TRANSLATION_NOTE]: Plant::DrawSeedType 依赖植物图像资源族，暂未接入
             }
@@ -196,7 +224,12 @@ impl CursorObject {
                 // [TRANSLATION_NOTE]: C++ 中先经 MouseHitTest 判定无对象且 y >= 80 才绘制；
                 // Rust 简化直接绘制（依赖 Board::MouseHitTest）
                 // 对应 C++: g->DrawImageCel(IMAGE_COBCANNON_TARGET, -11, 7, 0)
-                draw_at(g, get_image("IMAGE_COBCANNON_TARGET"), self.x - 11, self.y + 7);
+                draw_at(
+                    g,
+                    get_image("IMAGE_COBCANNON_TARGET"),
+                    self.x - 11,
+                    self.y + 7,
+                );
             }
             CursorType::Normal => {}
         }
@@ -206,14 +239,21 @@ impl CursorObject {
     /// 返回当前光标的系统指针类型
     pub fn get_cursor_type_for_app(&self) -> i32 {
         match self.cursor_type {
-            CursorType::Shovel | CursorType::WateringCan |
-            CursorType::Fertilizer | CursorType::BugSpray |
-            CursorType::Phonograph | CursorType::Chocolate |
-            CursorType::Glove | CursorType::MoneySign |
-            CursorType::TreeFood | CursorType::Wheelbarrow |
-            CursorType::PlantFromGlove | CursorType::PlantFromWheelBarrow |
-            CursorType::PlantFromBank | CursorType::PlantFromUsableCoin |
-            CursorType::PlantFromDuplicator => {
+            CursorType::Shovel
+            | CursorType::WateringCan
+            | CursorType::Fertilizer
+            | CursorType::BugSpray
+            | CursorType::Phonograph
+            | CursorType::Chocolate
+            | CursorType::Glove
+            | CursorType::MoneySign
+            | CursorType::TreeFood
+            | CursorType::Wheelbarrow
+            | CursorType::PlantFromGlove
+            | CursorType::PlantFromWheelBarrow
+            | CursorType::PlantFromBank
+            | CursorType::PlantFromUsableCoin
+            | CursorType::PlantFromDuplicator => {
                 // CURSOR_HAND / CURSOR_DRAGGING
                 0
             }
@@ -296,7 +336,8 @@ impl CursorPreview {
                     && (gy as usize) <= crate::lawn::board::MAX_GRID_SIZE_Y
                 {
                     if board.is_plant_in_cursor()
-                        && board.can_plant_at(gx, gy, seed_type) == crate::lawn::game_enums::PlantingReason::Ok
+                        && board.can_plant_at(gx, gy, seed_type)
+                            == crate::lawn::game_enums::PlantingReason::Ok
                     {
                         show = true;
                     }
@@ -414,7 +455,13 @@ impl CursorPreview {
         grid_x: i32,
         grid_y: i32,
     ) -> f32 {
-        crate::lawn::plant::Plant::plant_draw_height_offset(Some(board), None, seed_type, grid_x, grid_y)
+        crate::lawn::plant::Plant::plant_draw_height_offset(
+            Some(board),
+            None,
+            seed_type,
+            grid_x,
+            grid_y,
+        )
     }
 }
 

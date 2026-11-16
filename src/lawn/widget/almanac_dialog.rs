@@ -4,8 +4,8 @@
 #![allow(dead_code)]
 
 use crate::framework::graphics::graphics::Graphics;
+use crate::framework::key_codes::{KeyCode, KEYCODE_ESCAPE};
 use crate::framework::widget::widget_manager::WidgetManager;
-use crate::framework::key_codes::{KEYCODE_ESCAPE, KeyCode};
 use crate::lawn::game_enums::*;
 use crate::lawn::widget::game_button::GameButton;
 use crate::lawn::widget::lawn_dialog::LawnDialog;
@@ -92,39 +92,72 @@ impl AlmanacDialog {
         // C++: LawnDialog::KeyDown(theKey) —— 基类按键处理，Rust 侧无对应实现
     }
     pub fn update(&mut self) {
-        if let Some(app) = self.app { unsafe {
-            let mx = 0; let my = 0;
-            if self.seed_hit_test(mx, my) != SeedType::None || self.zombie_hit_test(mx, my) != ZombieType::Invalid {}
-        } }
+        if let Some(app) = self.app {
+            unsafe {
+                let mx = 0;
+                let my = 0;
+                if self.seed_hit_test(mx, my) != SeedType::None
+                    || self.zombie_hit_test(mx, my) != ZombieType::Invalid
+                {}
+            }
+        }
     }
     /// 图鉴页索引绘制（对应 C++ DrawIndex，:267）
     fn draw_index(&self, g: &mut Graphics) {
         // 对应 C++: g->DrawImage(IMAGE_ALMANAC_INDEXBACK, 0, 0)
         draw_almanac_image(g, "IMAGE_ALMANAC_INDEXBACK", 0, 0);
         // [TRANSLATION_NOTE]: 标题 [SUBURBAN_ALMANAC_INDEX] 的 HOUSEOFTERROR28 字体以 Font 简化
-        draw_almanac_text(g, "[SUBURBAN_ALMANAC_INDEX]", crate::lawn::game_enums::BOARD_WIDTH / 2, 60, 28,
-            &crate::framework::color::Color { r: 220, g: 220, b: 220, a: 255 });
+        draw_almanac_text(
+            g,
+            "[SUBURBAN_ALMANAC_INDEX]",
+            crate::lawn::game_enums::BOARD_WIDTH / 2,
+            60,
+            28,
+            &crate::framework::color::Color {
+                r: 220,
+                g: 220,
+                b: 220,
+                a: 255,
+            },
+        );
 
         // 对应 C++: 选中的植物/僵尸预览
         // [TRANSLATION_NOTE]: C++ 的 mPlant->BeginDraw（变换栈）+ Draw；Rust 用直接 Draw 近似
         if let Some(plant_ptr) = self.plant {
-            unsafe { (*plant_ptr).draw(g); }
+            unsafe {
+                (*plant_ptr).draw(g);
+            }
         }
         if let Some(zombie_ptr) = self.zombie {
-            unsafe { (*zombie_ptr).draw(g); }
+            unsafe {
+                (*zombie_ptr).draw(g);
+            }
         }
     }
 
     /// 图鉴植物页绘制（对应 C++ DrawPlants，:286）
     fn draw_plants(&self, g: &mut Graphics) {
         draw_almanac_image(g, "IMAGE_ALMANAC_PLANTBACK", 0, 0);
-        draw_almanac_text(g, "[SUBURBAN_ALMANAC_PLANTS]", crate::lawn::game_enums::BOARD_WIDTH / 2, 48, 20,
-            &crate::framework::color::Color { r: 213, g: 159, b: 43, a: 255 });
+        draw_almanac_text(
+            g,
+            "[SUBURBAN_ALMANAC_PLANTS]",
+            crate::lawn::game_enums::BOARD_WIDTH / 2,
+            48,
+            20,
+            &crate::framework::color::Color {
+                r: 213,
+                g: 159,
+                b: 43,
+                a: 255,
+            },
+        );
 
         // 对应 C++: 遍历 0..NUM_ALMANAC_SEEDS 绘制已获得种子
         for a_seed_index in 0..crate::lawn::widget::almanac_dialog::NUM_ALMANAC_SEEDS {
             let a_seed_type = unsafe { std::mem::transmute::<i32, SeedType>(a_seed_index) };
-            let a_has_seed = self.app.map_or(false, |app| unsafe { (*app).has_seed_type(a_seed_type) });
+            let a_has_seed = self
+                .app
+                .map_or(false, |app| unsafe { (*app).has_seed_type(a_seed_type) });
             if a_has_seed {
                 let mut a_pos_x = 0;
                 let mut a_pos_y = 0;
@@ -135,7 +168,15 @@ impl AlmanacDialog {
                     draw_almanac_image(g, "IMAGE_ALMANAC_IMITATER", a_pos_x, a_pos_y);
                 } else {
                     crate::lawn::seed_packet::draw_seed_packet(
-                        g, a_pos_x as f32, a_pos_y as f32, a_seed_type, SeedType::None, 0.0, 255, true, false,
+                        g,
+                        a_pos_x as f32,
+                        a_pos_y as f32,
+                        a_seed_type,
+                        SeedType::None,
+                        0.0,
+                        255,
+                        true,
+                        false,
                     );
                     // 对应 C++ AlmanacDialog.cpp:291,307: 鼠标命中该种子时叠加 IMAGE_SEEDPACKETFLASH
                     let (a_mouse_x, a_mouse_y) = self.app.map_or((0, 0), |app| unsafe {
@@ -155,14 +196,21 @@ impl AlmanacDialog {
         let a_night_ground = crate::lawn::plant::Plant::is_nocturnal(self.selected_seed)
             || self.selected_seed == SeedType::Gravebuster
             || self.selected_seed == SeedType::Plantern;
-        if self.selected_seed == SeedType::Lilypad || self.selected_seed == SeedType::Tanglekelp
-            || self.selected_seed == SeedType::Cattail || self.selected_seed == SeedType::Seashroom
+        if self.selected_seed == SeedType::Lilypad
+            || self.selected_seed == SeedType::Tanglekelp
+            || self.selected_seed == SeedType::Cattail
+            || self.selected_seed == SeedType::Seashroom
         {
             // 对应 C++: 泳池地面（IMAGE_ALMANAC_GROUNDPOOL/NIGHTPOOL）+ 池效果（3D 加速分支标注）
             draw_almanac_image(
                 g,
-                if a_night_ground { "IMAGE_ALMANAC_GROUNDNIGHTPOOL" } else { "IMAGE_ALMANAC_GROUNDPOOL" },
-                521, 107,
+                if a_night_ground {
+                    "IMAGE_ALMANAC_GROUNDNIGHTPOOL"
+                } else {
+                    "IMAGE_ALMANAC_GROUNDPOOL"
+                },
+                521,
+                107,
             );
         } else {
             let a_ground_key = if a_night_ground {
@@ -177,14 +225,27 @@ impl AlmanacDialog {
 
         // 对应 C++: 选中植物预览
         if let Some(plant_ptr) = self.plant {
-            unsafe { (*plant_ptr).draw(g); }
+            unsafe {
+                (*plant_ptr).draw(g);
+            }
         }
 
         // 对应 C++: 植物卡片 + 名称/描述/成本/冷却
         draw_almanac_image(g, "IMAGE_ALMANAC_PLANTCARD", 459, 86);
         let a_name = crate::lawn::plant::Plant::get_name_string(self.selected_seed, SeedType::None);
-        draw_almanac_text(g, &a_name, 617, 288, 18,
-            &crate::framework::color::Color { r: 255, g: 255, b: 255, a: 255 });
+        draw_almanac_text(
+            g,
+            &a_name,
+            617,
+            288,
+            18,
+            &crate::framework::color::Color {
+                r: 255,
+                g: 255,
+                b: 255,
+                a: 255,
+            },
+        );
         // [TRANSLATION_NOTE]: 描述/成本/冷却文案（PlantDefinition 表 + [XX_DESCRIPTION] 字符串系统）
         // 依赖 PlantDef 资源表，暂以名称呈现
     }
@@ -192,8 +253,19 @@ impl AlmanacDialog {
     /// 图鉴僵尸页绘制（对应 C++ DrawZombies，:366）
     fn draw_zombies(&self, g: &mut Graphics) {
         draw_almanac_image(g, "IMAGE_ALMANAC_ZOMBIEBACK", 0, 0);
-        draw_almanac_text(g, "[SUBURBAN_ALMANAC_ZOMBIES]", crate::lawn::game_enums::BOARD_WIDTH / 2, 54, 24,
-            &crate::framework::color::Color { r: 0, g: 196, b: 0, a: 255 });
+        draw_almanac_text(
+            g,
+            "[SUBURBAN_ALMANAC_ZOMBIES]",
+            crate::lawn::game_enums::BOARD_WIDTH / 2,
+            54,
+            24,
+            &crate::framework::color::Color {
+                r: 0,
+                g: 196,
+                b: 0,
+                a: 255,
+            },
+        );
 
         // C++: aZombieMouseOn = ZombieHitTest(mWidgetManager->mLastMouseX/Y)
         let (a_mouse_x, a_mouse_y) = self.app.map_or((0, 0), |app| unsafe {
@@ -216,11 +288,15 @@ impl AlmanacDialog {
                     draw_almanac_image(g, "IMAGE_ALMANAC_ZOMBIEWINDOW", a_pos_x, a_pos_y);
                     if a_zombie_type == a_zombie_mouse_on {
                         // C++: 鼠标悬停窗口以半透明白 additive 叠加高亮
-                        g.set_draw_mode(crate::framework::graphics::graphics::DrawMode::Additive as i32);
+                        g.set_draw_mode(
+                            crate::framework::graphics::graphics::DrawMode::Additive as i32,
+                        );
                         g.set_color(&crate::framework::color::Color::new(255, 255, 255, 48));
                         g.set_colorize_images(true);
                         draw_almanac_image(g, "IMAGE_ALMANAC_ZOMBIEWINDOW", a_pos_x, a_pos_y);
-                        g.set_draw_mode(crate::framework::graphics::graphics::DrawMode::Normal as i32);
+                        g.set_draw_mode(
+                            crate::framework::graphics::graphics::DrawMode::Normal as i32,
+                        );
                         g.set_colorize_images(false);
                     }
 
@@ -274,11 +350,15 @@ impl AlmanacDialog {
 
                     draw_almanac_image(g, "IMAGE_ALMANAC_ZOMBIEWINDOW2", a_pos_x, a_pos_y);
                     if a_zombie_type == a_zombie_mouse_on {
-                        g.set_draw_mode(crate::framework::graphics::graphics::DrawMode::Additive as i32);
+                        g.set_draw_mode(
+                            crate::framework::graphics::graphics::DrawMode::Additive as i32,
+                        );
                         g.set_color(&crate::framework::color::Color::new(255, 255, 255, 48));
                         g.set_colorize_images(true);
                         draw_almanac_image(g, "IMAGE_ALMANAC_ZOMBIEWINDOW2", a_pos_x, a_pos_y);
-                        g.set_draw_mode(crate::framework::graphics::graphics::DrawMode::Normal as i32);
+                        g.set_draw_mode(
+                            crate::framework::graphics::graphics::DrawMode::Normal as i32,
+                        );
                         g.set_colorize_images(false);
                     }
                 }
@@ -290,7 +370,16 @@ impl AlmanacDialog {
             let t = (*z).zombie_type;
             t == ZombieType::Zamboni || t == ZombieType::Bobsled
         });
-        draw_almanac_image(g, if a_is_ice_ground { "IMAGE_ALMANAC_GROUNDICE" } else { "IMAGE_ALMANAC_GROUNDDAY" }, 518, 110);
+        draw_almanac_image(
+            g,
+            if a_is_ice_ground {
+                "IMAGE_ALMANAC_GROUNDICE"
+            } else {
+                "IMAGE_ALMANAC_GROUNDDAY"
+            },
+            518,
+            110,
+        );
 
         // C++: 选中僵尸大图（BeginDraw 变换栈 + clip + 平移 + 阴影 + Draw；Rust 以 push/pop 近似）
         if let Some(zombie_ptr) = self.zombie {
@@ -310,8 +399,10 @@ impl AlmanacDialog {
                         _ => {}
                     }
                     let t = a_zombie.zombie_type;
-                    if t != ZombieType::Bungee && t != ZombieType::Boss
-                        && t != ZombieType::Zamboni && t != ZombieType::Catapult
+                    if t != ZombieType::Bungee
+                        && t != ZombieType::Boss
+                        && t != ZombieType::Zamboni
+                        && t != ZombieType::Catapult
                     {
                         a_zombie.draw_shadow(g);
                     }
@@ -330,12 +421,34 @@ impl AlmanacDialog {
         } else {
             format!("[{}]", a_zombie_def.zombie_name)
         };
-        draw_almanac_text(g, &a_name, 613, 362, 18,
-            &crate::framework::color::Color { r: 190, g: 255, b: 235, a: 255 });
+        draw_almanac_text(
+            g,
+            &a_name,
+            613,
+            362,
+            18,
+            &crate::framework::color::Color {
+                r: 190,
+                g: 255,
+                b: 235,
+                a: 255,
+            },
+        );
         // [TRANSLATION_NOTE]: C++ 描述依赖字符串系统（PvzpStringTranslate/Format 与
         // 隐藏格式标记 PVZP_FORMAT_HIDE_UNTIL_MAGNETSHROOM），此处以「未遇到」文案近似
-        draw_almanac_text(g, "[NOT_ENCOUNTERED_YET]", 484, 377, 12,
-            &crate::framework::color::Color { r: 40, g: 50, b: 90, a: 255 });
+        draw_almanac_text(
+            g,
+            "[NOT_ENCOUNTERED_YET]",
+            484,
+            377,
+            12,
+            &crate::framework::color::Color {
+                r: 40,
+                g: 50,
+                b: 90,
+                a: 255,
+            },
+        );
     }
 
     /// 绘制（对应 C++ AlmanacDialog::Draw，:507）
@@ -347,45 +460,90 @@ impl AlmanacDialog {
         }
 
         // 对应 C++: mCloseButton/mIndexButton/mPlantButton/mZombieButton->Draw(g)
-        if let Some(btn) = self.close_button { unsafe { (&mut *btn).draw(g); } }
-        if let Some(btn) = self.index_button { unsafe { (&mut *btn).draw(g); } }
-        if let Some(btn) = self.plant_button { unsafe { (&mut *btn).draw(g); } }
-        if let Some(btn) = self.zombie_button { unsafe { (&mut *btn).draw(g); } }
+        if let Some(btn) = self.close_button {
+            unsafe {
+                (&mut *btn).draw(g);
+            }
+        }
+        if let Some(btn) = self.index_button {
+            unsafe {
+                (&mut *btn).draw(g);
+            }
+        }
+        if let Some(btn) = self.plant_button {
+            unsafe {
+                (&mut *btn).draw(g);
+            }
+        }
+        if let Some(btn) = self.zombie_button {
+            unsafe {
+                (&mut *btn).draw(g);
+            }
+        }
     }
     pub fn get_seed_position(&self, t: SeedType, x: &mut i32, y: &mut i32) {
-        if t == SeedType::Imitater { *x = 20; *y = 23; }
-        else { *x = (t as i32) % 8 * 52 + 26; *y = (t as i32) / 8 * 78 + 92; }
+        if t == SeedType::Imitater {
+            *x = 20;
+            *y = 23;
+        } else {
+            *x = (t as i32) % 8 * 52 + 26;
+            *y = (t as i32) / 8 * 78 + 92;
+        }
     }
     pub fn seed_hit_test(&self, x: i32, y: i32) -> SeedType {
         if self.open_page == AlmanacPage::Plants {
             for st in 0..NUM_ALMANAC_SEEDS {
                 let seed_type = unsafe { std::mem::transmute::<i32, SeedType>(st) };
-                if let Some(app) = self.app { unsafe {
-                    if (*app).has_seed_type(seed_type) {
-                        let (sx, sy) = (0, 0);
-                        let rect = crate::framework::rect::Rect::new(sx, sy, 50, 70);
-                        if rect.contains(x, y) { return seed_type; }
+                if let Some(app) = self.app {
+                    unsafe {
+                        if (*app).has_seed_type(seed_type) {
+                            let (sx, sy) = (0, 0);
+                            let rect = crate::framework::rect::Rect::new(sx, sy, 50, 70);
+                            if rect.contains(x, y) {
+                                return seed_type;
+                            }
+                        }
                     }
-                } }
+                }
             }
         }
         SeedType::None
     }
     pub fn zombie_has_silhouette(&self, t: ZombieType) -> bool {
-        if t == ZombieType::Yeti { if let Some(app) = self.app { unsafe { return !(*app).can_spawn_yetis(); } } }
+        if t == ZombieType::Yeti {
+            if let Some(app) = self.app {
+                unsafe {
+                    return !(*app).can_spawn_yetis();
+                }
+            }
+        }
         false
     }
     pub fn zombie_is_shown(&self, t: ZombieType) -> bool {
-        if let Some(app) = self.app { unsafe {
-            if (*app).is_trial_stage_locked() && (t as i32) > (ZombieType::Snorkel as i32) { return false; }
-            if t == ZombieType::Yeti { return (*app).can_spawn_yetis() || self.zombie_has_silhouette(t); }
-            if (t as i32) <= (ZombieType::Boss as i32) { return true; }
-        } }
+        if let Some(app) = self.app {
+            unsafe {
+                if (*app).is_trial_stage_locked() && (t as i32) > (ZombieType::Snorkel as i32) {
+                    return false;
+                }
+                if t == ZombieType::Yeti {
+                    return (*app).can_spawn_yetis() || self.zombie_has_silhouette(t);
+                }
+                if (t as i32) <= (ZombieType::Boss as i32) {
+                    return true;
+                }
+            }
+        }
         false
     }
     pub fn zombie_has_description(&self, t: ZombieType) -> bool {
-        if (t as i32) <= (ZombieType::Boss as i32) { return true; }
-        if let Some(app) = self.app { unsafe { (*app).has_finished_adventure() } } else { false }
+        if (t as i32) <= (ZombieType::Boss as i32) {
+            return true;
+        }
+        if let Some(app) = self.app {
+            unsafe { (*app).has_finished_adventure() }
+        } else {
+            false
+        }
     }
     pub fn get_zombie_position(&self, t: ZombieType, x: &mut i32, y: &mut i32) {
         // 对应 C++ GetZombiePosition（AlmanacDialog.cpp）：Boss 特殊位置，其余 5 列网格
@@ -407,7 +565,9 @@ impl AlmanacDialog {
                     let (mut zx, mut zy) = (0, 0);
                     self.get_zombie_position(ztype, &mut zx, &mut zy);
                     let rect = crate::framework::rect::Rect::new(zx, zy, 76, 76);
-                    if rect.contains(x, y) { return ztype; }
+                    if rect.contains(x, y) {
+                        return ztype;
+                    }
                 }
             }
         }
@@ -417,11 +577,16 @@ impl AlmanacDialog {
         // 对应 C++ MouseUp：按钮悬停时切换页面/关闭
         if self.plant_button.map_or(false, |p| unsafe { (*p).is_over }) {
             self.set_page(AlmanacPage::Plants);
-        } else if self.zombie_button.map_or(false, |p| unsafe { (*p).is_over }) {
+        } else if self
+            .zombie_button
+            .map_or(false, |p| unsafe { (*p).is_over })
+        {
             self.set_page(AlmanacPage::Zombies);
         } else if self.close_button.map_or(false, |p| unsafe { (*p).is_over }) {
             if let Some(app) = self.app {
-                unsafe { (*app).kill_almanac_dialog(); }
+                unsafe {
+                    (*app).kill_almanac_dialog();
+                }
             }
         } else if self.index_button.map_or(false, |p| unsafe { (*p).is_over }) {
             self.set_page(AlmanacPage::Index);
@@ -429,9 +594,15 @@ impl AlmanacDialog {
     }
     pub fn mouse_down(&mut self, x: i32, y: i32, _click_count: i32) {
         let seed = self.seed_hit_test(x, y);
-        if seed != SeedType::None { self.show_plant(seed); return; }
+        if seed != SeedType::None {
+            self.show_plant(seed);
+            return;
+        }
         let zombie = self.zombie_hit_test(x, y);
-        if zombie != ZombieType::Invalid { self.show_zombie(zombie); return; }
+        if zombie != ZombieType::Invalid {
+            self.show_zombie(zombie);
+            return;
+        }
     }
     pub fn get_zombie_type(index: i32) -> ZombieType {
         // 对应 C++ GetZombieType（AlmanacDialog.cpp）：索引 < NUM_ZOMBIE_TYPES 直接转换，否则 INVALID
@@ -452,11 +623,14 @@ impl AlmanacDialog {
 }
 
 impl Default for AlmanacDialog {
-    fn default() -> Self { AlmanacDialog::new() }
+    fn default() -> Self {
+        AlmanacDialog::new()
+    }
 }
 
 /// 全局僵尸击败标记数组（对应 C++ gZombieDefeated）
-pub static mut G_ZOMBIE_DEFEATED: [bool; NUM_ZOMBIE_TYPES as usize] = [false; NUM_ZOMBIE_TYPES as usize];
+pub static mut G_ZOMBIE_DEFEATED: [bool; NUM_ZOMBIE_TYPES as usize] =
+    [false; NUM_ZOMBIE_TYPES as usize];
 
 /// 初始化玩家图鉴数据（对应 C++ AlmanacInitForPlayer）
 /// 重置所有僵尸的已击败标记
@@ -470,7 +644,9 @@ fn draw_almanac_image(g: &mut Graphics, a_key: &str, x: i32, y: i32) {
         unsafe { (*a_rm).get_image(a_key).as_image_ptr() }
     });
     if !a_image.is_null() {
-        unsafe { g.draw_image_xy(&*a_image, x, y); }
+        unsafe {
+            g.draw_image_xy(&*a_image, x, y);
+        }
     }
 }
 

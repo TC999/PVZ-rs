@@ -16,10 +16,20 @@ pub struct Rect {
 }
 
 impl Rect {
-    pub const ZERO: Rect = Rect { x: 0, y: 0, width: 0, height: 0 };
+    pub const ZERO: Rect = Rect {
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+    };
 
     pub fn new(x: i32, y: i32, width: i32, height: i32) -> Self {
-        Rect { x, y, width, height }
+        Rect {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 
     pub fn from_points(tl: Point, br: Point) -> Self {
@@ -32,22 +42,34 @@ impl Rect {
     }
 
     /// 矩形的左边界
-    pub fn left(&self) -> i32 { self.x }
+    pub fn left(&self) -> i32 {
+        self.x
+    }
 
     /// 矩形的右边界
-    pub fn right(&self) -> i32 { self.x + self.width }
+    pub fn right(&self) -> i32 {
+        self.x + self.width
+    }
 
     /// 矩形的上边界
-    pub fn top(&self) -> i32 { self.y }
+    pub fn top(&self) -> i32 {
+        self.y
+    }
 
     /// 矩形的下边界
-    pub fn bottom(&self) -> i32 { self.y + self.height }
+    pub fn bottom(&self) -> i32 {
+        self.y + self.height
+    }
 
     /// 矩形左上角
-    pub fn top_left(&self) -> Point { Point::new(self.x, self.y) }
+    pub fn top_left(&self) -> Point {
+        Point::new(self.x, self.y)
+    }
 
     /// 矩形右下角
-    pub fn bottom_right(&self) -> Point { Point::new(self.x + self.width, self.y + self.height) }
+    pub fn bottom_right(&self) -> Point {
+        Point::new(self.x + self.width, self.y + self.height)
+    }
 
     /// 矩形中心点
     pub fn center(&self) -> Point {
@@ -66,10 +88,10 @@ impl Rect {
 
     /// 判断另一个矩形是否与此矩形相交
     pub fn intersects(&self, other: &Rect) -> bool {
-        self.x < other.x + other.width &&
-        self.x + self.width > other.x &&
-        self.y < other.y + other.height &&
-        self.y + self.height > other.y
+        self.x < other.x + other.width
+            && self.x + self.width > other.x
+            && self.y < other.y + other.height
+            && self.y + self.height > other.y
     }
 
     /// 计算两个矩形的交集
@@ -125,16 +147,34 @@ pub struct RectF {
 }
 
 impl RectF {
-    pub const ZERO: RectF = RectF { x: 0.0, y: 0.0, width: 0.0, height: 0.0 };
+    pub const ZERO: RectF = RectF {
+        x: 0.0,
+        y: 0.0,
+        width: 0.0,
+        height: 0.0,
+    };
 
     pub fn new(x: f64, y: f64, width: f64, height: f64) -> Self {
-        RectF { x, y, width, height }
+        RectF {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 
-    pub fn left(&self) -> f64 { self.x }
-    pub fn right(&self) -> f64 { self.x + self.width }
-    pub fn top(&self) -> f64 { self.y }
-    pub fn bottom(&self) -> f64 { self.y + self.height }
+    pub fn left(&self) -> f64 {
+        self.x
+    }
+    pub fn right(&self) -> f64 {
+        self.x + self.width
+    }
+    pub fn top(&self) -> f64 {
+        self.y
+    }
+    pub fn bottom(&self) -> f64 {
+        self.y + self.height
+    }
 }
 
 impl From<Rect> for RectF {

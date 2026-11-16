@@ -99,22 +99,14 @@ pub fn tod_hesitation_trace() {}
 
 /// 断言失败处理
 /// 对应 C++ TodAssertFailed
-pub fn tod_assert_failed(
-    condition: &str,
-    file: &str,
-    line: i32,
-    msg: &str,
-) {
+pub fn tod_assert_failed(condition: &str, file: &str, line: i32, msg: &str) {
     let formatted = if !condition.is_empty() {
         format!(
             "\n{}({})\nassertion failed: '{}'\n{}\n",
             file, line, condition, msg
         )
     } else {
-        format!(
-            "\n{}({})\nassertion failed: {}\n",
-            file, line, msg
-        )
+        format!("\n{}({})\nassertion failed: {}\n", file, line, msg)
     };
     eprint!("{}", formatted);
 

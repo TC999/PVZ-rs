@@ -4,12 +4,12 @@
 #![allow(dead_code)]
 
 use crate::framework::color::Color;
-use crate::framework::rect::Rect;
-use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::font::Font;
+use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
-use crate::framework::widget::widget::Widget;
+use crate::framework::rect::Rect;
 use crate::framework::widget::button_listener::ButtonListener;
+use crate::framework::widget::widget::Widget;
 
 /// 按钮标签对齐方式
 pub const BUTTON_LABEL_LEFT: i32 = -1;
@@ -28,18 +28,30 @@ pub const NUM_COLORS: usize = 6;
 /// 按钮控件（对应 C++ ButtonWidget，继承 Widget）
 pub struct ButtonWidget {
     // ---- Widget 基础字段 ----
-    pub x: i32, pub y: i32, pub width: i32, pub height: i32,
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
     pub parent: Option<*mut Widget>,
     pub widget_manager: Option<*mut crate::framework::widget::widget_manager::WidgetManager>,
-    pub has_alpha: bool, pub clip: bool, pub dirty: bool,
-    pub zorder: i32, pub priority: i32,
-    pub visible: bool, pub mouse_visible: bool, pub disabled: bool,
-    pub has_focus: bool, pub is_down: bool, pub is_over: bool,
+    pub has_alpha: bool,
+    pub clip: bool,
+    pub dirty: bool,
+    pub zorder: i32,
+    pub priority: i32,
+    pub visible: bool,
+    pub mouse_visible: bool,
+    pub disabled: bool,
+    pub has_focus: bool,
+    pub is_down: bool,
+    pub is_over: bool,
     pub has_transparencies: bool,
     pub colors: Vec<Color>,
     pub mouse_insets: crate::framework::widget::insets::Insets,
-    pub do_finger: bool, pub wants_focus: bool,
-    pub tab_prev: Option<*mut Widget>, pub tab_next: Option<*mut Widget>,
+    pub do_finger: bool,
+    pub wants_focus: bool,
+    pub tab_prev: Option<*mut Widget>,
+    pub tab_next: Option<*mut Widget>,
     pub loaded_resource_names: Vec<String>,
 
     // ---- ButtonWidget 特有字段 ----
@@ -88,17 +100,30 @@ const DEFAULT_BUTTON_COLORS: [[u8; 3]; NUM_COLORS] = [
 impl ButtonWidget {
     pub fn new(the_id: i32, the_listener: Option<Box<dyn ButtonListener>>) -> Self {
         let mut bw = ButtonWidget {
-            x: 0, y: 0, width: 0, height: 0,
-            parent: None, widget_manager: None,
-            has_alpha: true, clip: true, dirty: false,
-            zorder: 0, priority: 0,
-            visible: true, mouse_visible: true, disabled: false,
-            has_focus: false, is_down: false, is_over: false,
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+            parent: None,
+            widget_manager: None,
+            has_alpha: true,
+            clip: true,
+            dirty: false,
+            zorder: 0,
+            priority: 0,
+            visible: true,
+            mouse_visible: true,
+            disabled: false,
+            has_focus: false,
+            is_down: false,
+            is_over: false,
             has_transparencies: false,
             colors: Vec::new(),
             mouse_insets: crate::framework::widget::insets::Insets::new(0, 0, 0, 0),
-            do_finger: false, wants_focus: false,
-            tab_prev: None, tab_next: None,
+            do_finger: false,
+            wants_focus: false,
+            tab_prev: None,
+            tab_next: None,
             loaded_resource_names: Vec::new(),
             id: the_id,
             label: String::new(),
@@ -126,9 +151,7 @@ impl ButtonWidget {
 
     /// 设置字体
     pub fn set_font(&mut self, the_font: &Font) {
-        self.font = Some(Box::new(Font::new(
-            &the_font.name, the_font.size,
-        )));
+        self.font = Some(Box::new(Font::new(&the_font.name, the_font.size)));
     }
 
     /// 判断按钮是否按下
@@ -142,7 +165,14 @@ impl ButtonWidget {
     }
 
     /// 绘制按钮图片
-    pub fn draw_button_image(&self, g: &mut Graphics, img: *mut Image, rect: &Rect, x: i32, y: i32) {
+    pub fn draw_button_image(
+        &self,
+        g: &mut Graphics,
+        img: *mut Image,
+        rect: &Rect,
+        x: i32,
+        y: i32,
+    ) {
         if rect.width != 0 {
             unsafe {
                 g.draw_image_src(&*img, x, y, rect);
@@ -156,7 +186,9 @@ impl ButtonWidget {
 
     /// 绘制（对应 C++ Draw）
     pub fn draw(&mut self, g: &mut Graphics) {
-        if self.btn_no_draw { return; }
+        if self.btn_no_draw {
+            return;
+        }
 
         let is_down = (self.is_down && self.is_over && !self.disabled) ^ self.inverted;
 
@@ -223,17 +255,25 @@ impl ButtonWidget {
         } else {
             // 有图片模式
             if !is_down {
-                if self.disabled && Self::have_button_image(self.disabled_image, &self.disabled_rect) {
+                if self.disabled
+                    && Self::have_button_image(self.disabled_image, &self.disabled_rect)
+                {
                     self.draw_button_image(g, self.disabled_image, &self.disabled_rect, 0, 0);
-                } else if self.over_alpha > 0.0 && Self::have_button_image(self.over_image, &self.over_rect) {
-                    if Self::have_button_image(self.button_image, &self.normal_rect) && self.over_alpha < 1.0 {
+                } else if self.over_alpha > 0.0
+                    && Self::have_button_image(self.over_image, &self.over_rect)
+                {
+                    if Self::have_button_image(self.button_image, &self.normal_rect)
+                        && self.over_alpha < 1.0
+                    {
                         self.draw_button_image(g, self.button_image, &self.normal_rect, 0, 0);
                     }
                     g.set_colorize_images(true);
                     g.set_color(&Color::new(255, 255, 255, (self.over_alpha * 255.0) as u8));
                     self.draw_button_image(g, self.over_image, &self.over_rect, 0, 0);
                     g.set_colorize_images(false);
-                } else if (self.is_over || self.is_down) && Self::have_button_image(self.over_image, &self.over_rect) {
+                } else if (self.is_over || self.is_down)
+                    && Self::have_button_image(self.over_image, &self.over_rect)
+                {
                     self.draw_button_image(g, self.over_image, &self.over_rect, 0, 0);
                 } else if Self::have_button_image(self.button_image, &self.normal_rect) {
                     self.draw_button_image(g, self.button_image, &self.normal_rect, 0, 0);
@@ -341,14 +381,18 @@ impl ButtonWidget {
         if !self.is_down && !self.is_over && self.over_alpha > 0.0 {
             if self.over_alpha_speed > 0.0 {
                 self.over_alpha -= self.over_alpha_speed;
-                if self.over_alpha < 0.0 { self.over_alpha = 0.0; }
+                if self.over_alpha < 0.0 {
+                    self.over_alpha = 0.0;
+                }
             } else {
                 self.over_alpha = 0.0;
             }
             self.mark_dirty();
         } else if self.is_over && self.over_alpha_fade_in_speed > 0.0 && self.over_alpha < 1.0 {
             self.over_alpha += self.over_alpha_fade_in_speed;
-            if self.over_alpha > 1.0 { self.over_alpha = 1.0; }
+            if self.over_alpha > 1.0 {
+                self.over_alpha = 1.0;
+            }
             self.mark_dirty();
         }
     }
@@ -359,14 +403,23 @@ impl ButtonWidget {
     }
     fn set_colors_rgb(&mut self, colors: &[[u8; 3]]) {
         self.colors.clear();
-        for c in colors { self.colors.push(Color::from_rgb(c[0], c[1], c[2])); }
+        for c in colors {
+            self.colors.push(Color::from_rgb(c[0], c[1], c[2]));
+        }
     }
     fn mark_dirty(&mut self) {
-        if let Some(p) = self.parent { unsafe { (*p).mark_dirty(); } }
-        else { self.dirty = true; }
+        if let Some(p) = self.parent {
+            unsafe {
+                (*p).mark_dirty();
+            }
+        } else {
+            self.dirty = true;
+        }
     }
     fn set_disabled_widget(&mut self, d: bool) {
-        if self.disabled == d { return; }
+        if self.disabled == d {
+            return;
+        }
         self.disabled = d;
         if d { /* WidgetManager interaction deferred */ }
         self.mark_dirty();

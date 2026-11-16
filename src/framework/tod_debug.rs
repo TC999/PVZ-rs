@@ -18,9 +18,13 @@ macro_rules! dbg_assert {
     ($exp:expr) => {
         #[cfg(debug_assertions)]
         {
-            unsafe { $crate::framework::tod_debug::G_IN_ASSERT = true; }
+            unsafe {
+                $crate::framework::tod_debug::G_IN_ASSERT = true;
+            }
             assert!($exp);
-            unsafe { $crate::framework::tod_debug::G_IN_ASSERT = false; }
+            unsafe {
+                $crate::framework::tod_debug::G_IN_ASSERT = false;
+            }
         }
     };
 }

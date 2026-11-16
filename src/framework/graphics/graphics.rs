@@ -12,10 +12,10 @@
 use std::cmp;
 
 use crate::framework::color::Color;
+use crate::framework::graphics::font::Font;
+use crate::framework::graphics::image::{Image, ImageKind, Span};
 use crate::framework::point::Point;
 use crate::framework::rect::Rect;
-use crate::framework::graphics::image::{Image, ImageKind, Span};
-use crate::framework::graphics::font::Font;
 use crate::framework::sexy_matrix::{SexyMatrix3, Transform};
 
 /// 最大临时扫描线数量（对应 C++ MAX_TEMP_SPANS = 8192）
@@ -252,7 +252,6 @@ impl Graphics {
         }
     }
 
-
     // ====================================================================
     // 字体和颜色 Getter/Setter
     // ====================================================================
@@ -311,8 +310,13 @@ impl Graphics {
 
     /// 清除矩形区域（对应 C++ ClearRect）
     pub fn clear_rect_xywh(&mut self, x: i32, y: i32, width: i32, height: i32) {
-        let dest_rect = Rect::new(x + self.trans_x as i32, y + self.trans_y as i32, width, height)
-            .intersection(&self.clip_rect);
+        let dest_rect = Rect::new(
+            x + self.trans_x as i32,
+            y + self.trans_y as i32,
+            width,
+            height,
+        )
+        .intersection(&self.clip_rect);
         if dest_rect.is_zero() {
             return;
         }
@@ -332,8 +336,13 @@ impl Graphics {
         if self.color.a == 0 {
             return;
         }
-        let dest_rect = Rect::new(x + self.trans_x as i32, y + self.trans_y as i32, width, height)
-            .intersection(&self.clip_rect);
+        let dest_rect = Rect::new(
+            x + self.trans_x as i32,
+            y + self.trans_y as i32,
+            width,
+            height,
+        )
+        .intersection(&self.clip_rect);
         if dest_rect.is_zero() {
             return;
         }
@@ -353,7 +362,12 @@ impl Graphics {
         if self.color.a == 0 {
             return;
         }
-        let dest_rect = Rect::new(x + self.trans_x as i32, y + self.trans_y as i32, width, height);
+        let dest_rect = Rect::new(
+            x + self.trans_x as i32,
+            y + self.trans_y as i32,
+            width,
+            height,
+        );
         let full_dest = Rect::new(dest_rect.x, dest_rect.y, width + 1, height + 1);
         let clipped = full_dest.intersection(&self.clip_rect);
 
@@ -546,7 +560,8 @@ impl Graphics {
             let tx = x + self.trans_x as i32;
             let ty = y + self.trans_y as i32;
 
-            let dest_rect = Rect::new(tx, ty, image.width, image.height).intersection(&self.clip_rect);
+            let dest_rect =
+                Rect::new(tx, ty, image.width, image.height).intersection(&self.clip_rect);
             if dest_rect.is_zero() {
                 return;
             }
@@ -558,7 +573,15 @@ impl Graphics {
             );
 
             if src_rect.width > 0 && src_rect.height > 0 {
-                dest.blt(image, dest_rect.x, dest_rect.y, &src_rect, &draw_color, self.draw_mode, self.linear_blend);
+                dest.blt(
+                    image,
+                    dest_rect.x,
+                    dest_rect.y,
+                    &src_rect,
+                    &draw_color,
+                    self.draw_mode,
+                    self.linear_blend,
+                );
             }
         }
     }
@@ -570,7 +593,9 @@ impl Graphics {
             let draw_color = self.get_image_color();
 
             // 边界检查
-            if src_rect.x + src_rect.width > image.width || src_rect.y + src_rect.height > image.height {
+            if src_rect.x + src_rect.width > image.width
+                || src_rect.y + src_rect.height > image.height
+            {
                 return;
             }
 
@@ -580,16 +605,27 @@ impl Graphics {
             // 检查缩放
             if (self.scale_x - 1.0).abs() > 0.001 || (self.scale_y - 1.0).abs() > 0.001 {
                 let dest_rect = Rect::new(
-                    (self.scale_orig_x + (tx as f64 - self.scale_orig_x) * self.scale_x).floor() as i32,
-                    (self.scale_orig_y + (ty as f64 - self.scale_orig_y) * self.scale_y).floor() as i32,
+                    (self.scale_orig_x + (tx as f64 - self.scale_orig_x) * self.scale_x).floor()
+                        as i32,
+                    (self.scale_orig_y + (ty as f64 - self.scale_orig_y) * self.scale_y).floor()
+                        as i32,
                     (src_rect.width as f64 * self.scale_x).ceil() as i32,
                     (src_rect.height as f64 * self.scale_y).ceil() as i32,
                 );
-                dest.stretch_blt(image, &dest_rect, src_rect, &self.clip_rect, &draw_color, self.draw_mode, self.fast_stretch);
+                dest.stretch_blt(
+                    image,
+                    &dest_rect,
+                    src_rect,
+                    &self.clip_rect,
+                    &draw_color,
+                    self.draw_mode,
+                    self.fast_stretch,
+                );
                 return;
             }
 
-            let dest_rect = Rect::new(tx, ty, src_rect.width, src_rect.height).intersection(&self.clip_rect);
+            let dest_rect =
+                Rect::new(tx, ty, src_rect.width, src_rect.height).intersection(&self.clip_rect);
             if dest_rect.is_zero() {
                 return;
             }
@@ -601,7 +637,15 @@ impl Graphics {
             );
 
             if adjusted_src.width > 0 && adjusted_src.height > 0 {
-                dest.blt(image, dest_rect.x, dest_rect.y, &adjusted_src, &draw_color, self.draw_mode, self.linear_blend);
+                dest.blt(
+                    image,
+                    dest_rect.x,
+                    dest_rect.y,
+                    &adjusted_src,
+                    &draw_color,
+                    self.draw_mode,
+                    self.linear_blend,
+                );
             }
         }
     }
@@ -617,7 +661,15 @@ impl Graphics {
                 dest_rect.width,
                 dest_rect.height,
             );
-            dest.stretch_blt(image, &adjusted_dest, src_rect, &self.clip_rect, &draw_color, self.draw_mode, self.fast_stretch);
+            dest.stretch_blt(
+                image,
+                &adjusted_dest,
+                src_rect,
+                &self.clip_rect,
+                &draw_color,
+                self.draw_mode,
+                self.fast_stretch,
+            );
         }
     }
 
@@ -626,14 +678,17 @@ impl Graphics {
         unsafe {
             let dest = &mut *self.dest_image;
             let draw_color = self.get_image_color();
-            let dest_rect = Rect::new(
-                x + self.trans_x as i32,
-                y + self.trans_y as i32,
-                sw,
-                sh,
-            );
+            let dest_rect = Rect::new(x + self.trans_x as i32, y + self.trans_y as i32, sw, sh);
             let src_rect = Rect::new(0, 0, image.width, image.height);
-            dest.stretch_blt(image, &dest_rect, &src_rect, &self.clip_rect, &draw_color, self.draw_mode, self.fast_stretch);
+            dest.stretch_blt(
+                image,
+                &dest_rect,
+                &src_rect,
+                &self.clip_rect,
+                &draw_color,
+                self.draw_mode,
+                self.fast_stretch,
+            );
         }
     }
 
@@ -650,7 +705,15 @@ impl Graphics {
                 (src_rect.width as f64 * self.scale_x).ceil() as i32,
                 (src_rect.height as f64 * self.scale_y).ceil() as i32,
             );
-            dest.stretch_blt(image, &dest_rect, src_rect, &self.clip_rect, &draw_color, self.draw_mode, self.fast_stretch);
+            dest.stretch_blt(
+                image,
+                &dest_rect,
+                src_rect,
+                &self.clip_rect,
+                &draw_color,
+                self.draw_mode,
+                self.fast_stretch,
+            );
         }
     }
 
@@ -662,7 +725,15 @@ impl Graphics {
             let tx = x + self.trans_x as f32;
             let ty = y + self.trans_y as f32;
             let src_rect = image.get_rect();
-            dest.blt_f(image, tx, ty, &src_rect, &self.clip_rect, &draw_color, self.draw_mode);
+            dest.blt_f(
+                image,
+                tx,
+                ty,
+                &src_rect,
+                &self.clip_rect,
+                &draw_color,
+                self.draw_mode,
+            );
         }
     }
 
@@ -673,7 +744,15 @@ impl Graphics {
             let draw_color = self.get_image_color();
             let tx = x + self.trans_x as f32;
             let ty = y + self.trans_y as f32;
-            dest.blt_f(image, tx, ty, src_rect, &self.clip_rect, &draw_color, self.draw_mode);
+            dest.blt_f(
+                image,
+                tx,
+                ty,
+                src_rect,
+                &self.clip_rect,
+                &draw_color,
+                self.draw_mode,
+            );
         }
     }
 
@@ -688,7 +767,14 @@ impl Graphics {
     }
 
     /// DrawImageMirror(image, x, y, srcRect, mirror)（对应 C++）
-    pub fn draw_image_mirror_src(&mut self, image: &Image, x: i32, y: i32, src_rect: &Rect, mirror: bool) {
+    pub fn draw_image_mirror_src(
+        &mut self,
+        image: &Image,
+        x: i32,
+        y: i32,
+        src_rect: &Rect,
+        mirror: bool,
+    ) {
         if !mirror {
             self.draw_image_src(image, x, y, src_rect);
             return;
@@ -700,11 +786,14 @@ impl Graphics {
             let tx = x + self.trans_x as i32;
             let ty = y + self.trans_y as i32;
 
-            if src_rect.x + src_rect.width > image.width || src_rect.y + src_rect.height > image.height {
+            if src_rect.x + src_rect.width > image.width
+                || src_rect.y + src_rect.height > image.height
+            {
                 return;
             }
 
-            let dest_rect = Rect::new(tx, ty, src_rect.width, src_rect.height).intersection(&self.clip_rect);
+            let dest_rect =
+                Rect::new(tx, ty, src_rect.width, src_rect.height).intersection(&self.clip_rect);
             let total_clip = src_rect.width - dest_rect.width;
             let left_clip = dest_rect.x - tx;
             let right_clip = total_clip - left_clip;
@@ -717,13 +806,27 @@ impl Graphics {
             );
 
             if adjusted_src.width > 0 && adjusted_src.height > 0 {
-                dest.blt_mirror(image, dest_rect.x, dest_rect.y, &adjusted_src, &draw_color, self.draw_mode, self.linear_blend);
+                dest.blt_mirror(
+                    image,
+                    dest_rect.x,
+                    dest_rect.y,
+                    &adjusted_src,
+                    &draw_color,
+                    self.draw_mode,
+                    self.linear_blend,
+                );
             }
         }
     }
 
     /// DrawImageMirror(image, destRect, srcRect, mirror)（对应 C++）
-    pub fn draw_image_mirror_stretch(&mut self, image: &Image, dest_rect: &Rect, src_rect: &Rect, mirror: bool) {
+    pub fn draw_image_mirror_stretch(
+        &mut self,
+        image: &Image,
+        dest_rect: &Rect,
+        src_rect: &Rect,
+        mirror: bool,
+    ) {
         if !mirror {
             self.draw_image_stretch(image, dest_rect, src_rect);
             return;
@@ -738,7 +841,15 @@ impl Graphics {
                 dest_rect.width,
                 dest_rect.height,
             );
-            dest.stretch_blt_mirror(image, &adjusted_dest, src_rect, &self.clip_rect, &draw_color, self.draw_mode, self.fast_stretch);
+            dest.stretch_blt_mirror(
+                image,
+                &adjusted_dest,
+                src_rect,
+                &self.clip_rect,
+                &draw_color,
+                self.draw_mode,
+                self.fast_stretch,
+            );
         }
     }
 
@@ -750,7 +861,14 @@ impl Graphics {
     /// [TRANSLATION_NOTE]: C++ 这个重载用 **int 除法** 求旋转中心（`mWidth / 2` 截断），
     /// 与 F 版的 `mWidth / 2.0f`（精确半值）不同 —— 奇数尺寸时会差半个像素。
     /// 原实现统一用 f32 除法，此处按 int 除法对齐 C++（本函数在仓库内暂无调用点）。
-    pub fn draw_image_rotated(&mut self, image: &Image, x: i32, y: i32, rot: f64, src_rect: Option<&Rect>) {
+    pub fn draw_image_rotated(
+        &mut self,
+        image: &Image,
+        x: i32,
+        y: i32,
+        rot: f64,
+        src_rect: Option<&Rect>,
+    ) {
         let (cx, cy) = match src_rect {
             Some(r) => ((r.width / 2) as f32, (r.height / 2) as f32),
             None => ((image.width / 2) as f32, (image.height / 2) as f32),
@@ -760,7 +878,14 @@ impl Graphics {
     }
 
     /// DrawImageRotatedF(image, x, y, rot, srcRect)（对应 C++）
-    pub fn draw_image_rotated_f_simple(&mut self, image: &Image, x: f32, y: f32, rot: f64, src_rect: Option<&Rect>) {
+    pub fn draw_image_rotated_f_simple(
+        &mut self,
+        image: &Image,
+        x: f32,
+        y: f32,
+        rot: f64,
+        src_rect: Option<&Rect>,
+    ) {
         let (cx, cy) = match src_rect {
             Some(r) => (r.width as f32 / 2.0, r.height as f32 / 2.0),
             None => (image.width as f32 / 2.0, image.height as f32 / 2.0),
@@ -787,11 +912,33 @@ impl Graphics {
 
             match src_rect {
                 Some(r) => {
-                    dest.blt_rotated(image, tx, ty, r, &self.clip_rect, &draw_color, self.draw_mode, rot, rot_center_x, rot_center_y);
+                    dest.blt_rotated(
+                        image,
+                        tx,
+                        ty,
+                        r,
+                        &self.clip_rect,
+                        &draw_color,
+                        self.draw_mode,
+                        rot,
+                        rot_center_x,
+                        rot_center_y,
+                    );
                 }
                 None => {
                     let r = image.get_rect();
-                    dest.blt_rotated(image, tx, ty, &r, &self.clip_rect, &draw_color, self.draw_mode, rot, rot_center_x, rot_center_y);
+                    dest.blt_rotated(
+                        image,
+                        tx,
+                        ty,
+                        &r,
+                        &self.clip_rect,
+                        &draw_color,
+                        self.draw_mode,
+                        rot,
+                        rot_center_x,
+                        rot_center_y,
+                    );
                 }
             }
         }
@@ -808,14 +955,27 @@ impl Graphics {
     }
 
     /// DrawImageMatrix(image, matrix, srcRect, x, y)（对应 C++）
-    pub fn draw_image_matrix_src(&mut self, image: &Image, matrix: &SexyMatrix3, src_rect: &Rect, x: f32, y: f32) {
+    pub fn draw_image_matrix_src(
+        &mut self,
+        image: &Image,
+        matrix: &SexyMatrix3,
+        src_rect: &Rect,
+        x: f32,
+        y: f32,
+    ) {
         unsafe {
             let dest = &mut *self.dest_image;
             let draw_color = self.get_image_color();
             dest.blt_matrix(
-                image, x + self.trans_x as f32, y + self.trans_y as f32,
-                matrix, &self.clip_rect, &draw_color, self.draw_mode,
-                src_rect, self.linear_blend,
+                image,
+                x + self.trans_x as f32,
+                y + self.trans_y as f32,
+                matrix,
+                &self.clip_rect,
+                &draw_color,
+                self.draw_mode,
+                src_rect,
+                self.linear_blend,
             );
         }
     }
@@ -858,7 +1018,15 @@ impl Graphics {
             let ny = y + transform.trans_y2 - ry + 0.5;
 
             if use_float {
-                self.draw_image_rotated_f(image, nx, ny, transform.rot as f64, rx, ry, Some(src_rect));
+                self.draw_image_rotated_f(
+                    image,
+                    nx,
+                    ny,
+                    transform.rot as f64,
+                    rx,
+                    ry,
+                    Some(src_rect),
+                );
             } else {
                 // C++: DrawImageRotated(theImage, x, y, mRot, rx, ry, &theSrcRect)
                 // Graphics::DrawImageRotated（Graphics.cpp:828-831）先按 int 截断 x/y 与旋转中心，
@@ -919,8 +1087,15 @@ impl Graphics {
             let dest = &mut *self.dest_image;
             let draw_color = self.get_image_color();
             dest.blt_triangles_tex(
-                texture, &vertices, 1, &self.clip_rect, &draw_color,
-                self.draw_mode, self.trans_x as f32, self.trans_y as f32, self.linear_blend,
+                texture,
+                &vertices,
+                1,
+                &self.clip_rect,
+                &draw_color,
+                self.draw_mode,
+                self.trans_x as f32,
+                self.trans_y as f32,
+                self.linear_blend,
             );
         }
     }
@@ -936,8 +1111,15 @@ impl Graphics {
             let dest = &mut *self.dest_image;
             let draw_color = self.get_image_color();
             dest.blt_triangles_tex(
-                texture, vertices, num_triangles, &self.clip_rect, &draw_color,
-                self.draw_mode, self.trans_x as f32, self.trans_y as f32, self.linear_blend,
+                texture,
+                vertices,
+                num_triangles,
+                &self.clip_rect,
+                &draw_color,
+                self.draw_mode,
+                self.trans_x as f32,
+                self.trans_y as f32,
+                self.linear_blend,
             );
         }
     }
@@ -952,8 +1134,13 @@ impl Graphics {
             let dest = &mut *self.dest_image;
             let draw_color = self.get_image_color();
             dest.blt_triangles_flat(
-                vertices, num_triangles, &self.clip_rect, &draw_color,
-                self.draw_mode, self.trans_x as f32, self.trans_y as f32,
+                vertices,
+                num_triangles,
+                &self.clip_rect,
+                &draw_color,
+                self.draw_mode,
+                self.trans_x as f32,
+                self.trans_y as f32,
             );
         }
     }
@@ -1024,7 +1211,12 @@ impl Graphics {
             if !self.dest_image.is_null() {
                 let img = &*self.dest_image;
                 let full_rect = Rect::new(0, 0, img.width, img.height);
-                let clip = Rect::new(x + self.trans_x as i32, y + self.trans_y as i32, width, height);
+                let clip = Rect::new(
+                    x + self.trans_x as i32,
+                    y + self.trans_y as i32,
+                    width,
+                    height,
+                );
                 self.clip_rect = full_rect.intersection(&clip);
             }
         }
@@ -1037,7 +1229,12 @@ impl Graphics {
 
     /// 追加裁剪（与当前裁剪取交集，对应 C++ ClipRect(x, y, w, h)）
     pub fn clip_rect_xywh(&mut self, x: i32, y: i32, width: i32, height: i32) {
-        let clip = Rect::new(x + self.trans_x as i32, y + self.trans_y as i32, width, height);
+        let clip = Rect::new(
+            x + self.trans_x as i32,
+            y + self.trans_y as i32,
+            width,
+            height,
+        );
         self.clip_rect = self.clip_rect.intersection(&clip);
     }
 
@@ -1100,9 +1297,24 @@ impl Graphics {
 
         // 绘制 4 个角
         self.draw_image_src(component, dest.x, dest.y, &Rect::new(cx, cy, cw, ch));
-        self.draw_image_src(component, dest.x + dest.width - cw, dest.y, &Rect::new(cx + cw + cmw, cy, cw, ch));
-        self.draw_image_src(component, dest.x, dest.y + dest.height - ch, &Rect::new(cx, cy + ch + cmh, cw, ch));
-        self.draw_image_src(component, dest.x + dest.width - cw, dest.y + dest.height - ch, &Rect::new(cx + cw + cmw, cy + ch + cmh, cw, ch));
+        self.draw_image_src(
+            component,
+            dest.x + dest.width - cw,
+            dest.y,
+            &Rect::new(cx + cw + cmw, cy, cw, ch),
+        );
+        self.draw_image_src(
+            component,
+            dest.x,
+            dest.y + dest.height - ch,
+            &Rect::new(cx, cy + ch + cmh, cw, ch),
+        );
+        self.draw_image_src(
+            component,
+            dest.x + dest.width - cw,
+            dest.y + dest.height - ch,
+            &Rect::new(cx + cw + cmw, cy + ch + cmh, cw, ch),
+        );
 
         // 创建带裁剪的 Graphics 副本来绘制边框
         let mut vert_clip = self.create();
@@ -1110,8 +1322,18 @@ impl Graphics {
 
         let num_cols = (dest.width - cw * 2 + cmw - 1) / cmw;
         for col in 0..num_cols {
-            vert_clip.draw_image_src(component, dest.x + cw + col * cmw, dest.y, &Rect::new(cx + cw, cy, cmw, ch));
-            vert_clip.draw_image_src(component, dest.x + cw + col * cmw, dest.y + dest.height - ch, &Rect::new(cx + cw, cy + ch + cmh, cmw, ch));
+            vert_clip.draw_image_src(
+                component,
+                dest.x + cw + col * cmw,
+                dest.y,
+                &Rect::new(cx + cw, cy, cmw, ch),
+            );
+            vert_clip.draw_image_src(
+                component,
+                dest.x + cw + col * cmw,
+                dest.y + dest.height - ch,
+                &Rect::new(cx + cw, cy + ch + cmh, cmw, ch),
+            );
         }
 
         let mut horz_clip = self.create();
@@ -1119,17 +1341,37 @@ impl Graphics {
 
         let num_rows = (dest.height - ch * 2 + cmh - 1) / cmh;
         for row in 0..num_rows {
-            horz_clip.draw_image_src(component, dest.x, dest.y + ch + row * cmh, &Rect::new(cx, cy + ch, cw, cmh));
-            horz_clip.draw_image_src(component, dest.x + dest.width - cw, dest.y + ch + row * cmh, &Rect::new(cx + cw + cmw, cy + ch, cw, cmh));
+            horz_clip.draw_image_src(
+                component,
+                dest.x,
+                dest.y + ch + row * cmh,
+                &Rect::new(cx, cy + ch, cw, cmh),
+            );
+            horz_clip.draw_image_src(
+                component,
+                dest.x + dest.width - cw,
+                dest.y + ch + row * cmh,
+                &Rect::new(cx + cw + cmw, cy + ch, cw, cmh),
+            );
         }
 
         // 绘制中间区域
         let mut mid_clip = self.create();
-        mid_clip.clip_rect_xywh(dest.x + cw, dest.y + ch, dest.width - cw * 2, dest.height - ch * 2);
+        mid_clip.clip_rect_xywh(
+            dest.x + cw,
+            dest.y + ch,
+            dest.width - cw * 2,
+            dest.height - ch * 2,
+        );
 
         for col in 0..num_cols {
             for row in 0..num_rows {
-                mid_clip.draw_image_src(component, dest.x + cw + col * cmw, dest.y + ch + row * cmh, &Rect::new(cx + cw, cy + ch, cmw, cmh));
+                mid_clip.draw_image_src(
+                    component,
+                    dest.x + cw + col * cmw,
+                    dest.y + ch + row * cmh,
+                    &Rect::new(cx + cw, cy + ch, cmw, cmh),
+                );
             }
         }
     }
@@ -1159,17 +1401,20 @@ impl Graphics {
 
         // 处理对齐方式（通过递归测量宽度）
         if draw_string {
-            let measured = self.write_string(text, x, y, width, -1, false, offset, length, old_color);
+            let measured =
+                self.write_string(text, x, y, width, -1, false, offset, length, old_color);
             match justification {
                 0 => {
                     // 居中对齐
                     let nx = x + (width - measured) / 2;
-                    return self.write_string(text, nx, y, width, -1, true, offset, length, old_color);
+                    return self
+                        .write_string(text, nx, y, width, -1, true, offset, length, old_color);
                 }
                 1 => {
                     // 右对齐
                     let nx = x + width - measured;
-                    return self.write_string(text, nx, y, width, -1, true, offset, length, old_color);
+                    return self
+                        .write_string(text, nx, y, width, -1, true, offset, length, old_color);
                 }
                 _ => {}
             }
@@ -1275,7 +1520,15 @@ impl Graphics {
             let ascent_padding = font.ascent_padding; // 对应 C++ GetAscentPadding()
             let y_offset = ascent - ascent_padding;
             let rect = Rect::new(x, y - y_offset, wrap_width, 0);
-            self.write_word_wrapped(&rect, text, line_spacing, justification, max_width, -1, None)
+            self.write_word_wrapped(
+                &rect,
+                text,
+                line_spacing,
+                justification,
+                max_width,
+                -1,
+                None,
+            )
         }
     }
 
@@ -1310,7 +1563,11 @@ impl Graphics {
             let ascent = font.ascent;
             let ascent_padding = 0;
             let mut y_offset = ascent - ascent_padding;
-            let spacing = if line_spacing == -1 { font.line_spacing } else { line_spacing };
+            let spacing = if line_spacing == -1 {
+                font.line_spacing
+            } else {
+                line_spacing
+            };
 
             let mut cur_pos: usize = 0;
             let mut line_start_pos: usize = 0;
@@ -1371,7 +1628,9 @@ impl Graphics {
                 cur_width += font.char_width_kern(cur_char, prev_char);
 
                 // 自动换行字符检查
-                if !is_space && !is_newline && Self::is_auto_break_char(cur_char)
+                if !is_space
+                    && !is_newline
+                    && Self::is_auto_break_char(cur_char)
                     && !Self::is_closing_punctuation(cur_char)
                     && char_start > line_start_pos
                     && !Self::is_opening_punctuation(prev_char)
@@ -1578,7 +1837,16 @@ impl Graphics {
         unsafe {
             if !self.dest_image.is_null() {
                 let dest = &*self.dest_image;
-                if convex && dest.poly_fill_3d(vertices, &self.clip_rect, &self.color, self.draw_mode, self.trans_x as i32, self.trans_y as i32) {
+                if convex
+                    && dest.poly_fill_3d(
+                        vertices,
+                        &self.clip_rect,
+                        &self.color,
+                        self.draw_mode,
+                        self.trans_x as i32,
+                        self.trans_y as i32,
+                    )
+                {
                     return;
                 }
             }
@@ -1606,13 +1874,22 @@ impl Graphics {
         self.active_edge_list.clear();
         self.num_active_edges = 0;
 
-        let y0 = cmp::max(min_y, (vertices[ind[0] as usize].y as f64 - 0.5 + self.trans_y).ceil() as i32);
-        let y1 = cmp::min(max_y, (vertices[ind[(num_vertices - 1) as usize] as usize].y as f64 - 0.5 + self.trans_y).floor() as i32);
+        let y0 = cmp::max(
+            min_y,
+            (vertices[ind[0] as usize].y as f64 - 0.5 + self.trans_y).ceil() as i32,
+        );
+        let y1 = cmp::min(
+            max_y,
+            (vertices[ind[(num_vertices - 1) as usize] as usize].y as f64 - 0.5 + self.trans_y)
+                .floor() as i32,
+        );
 
         let mut k: usize = 0;
         for y in y0..=y1 {
             // 处理从前一条扫描线到当前扫描线之间的顶点
-            while k < ind.len() && vertices[ind[k] as usize].y as f64 + self.trans_y <= y as f64 + 0.5 {
+            while k < ind.len()
+                && vertices[ind[k] as usize].y as f64 + self.trans_y <= y as f64 + 0.5
+            {
                 let i = ind[k];
 
                 // 处理前一个和后一个边缘
@@ -1634,7 +1911,8 @@ impl Graphics {
             }
 
             // 按 X 排序活动边缘列表
-            self.active_edge_list.sort_by(|a, b| Self::pf_compare_active(a, b));
+            self.active_edge_list
+                .sort_by(|a, b| Self::pf_compare_active(a, b));
 
             // 绘制水平线段
             let mut j: usize = 0;
@@ -1645,7 +1923,11 @@ impl Graphics {
                 let xr = if xr > max_x { max_x } else { xr };
 
                 if xl <= xr && span_pos < MAX_TEMP_SPANS {
-                    spans.push(Span { y, x: xl, width: xr - xl + 1 });
+                    spans.push(Span {
+                        y,
+                        x: xl,
+                        width: xr - xl + 1,
+                    });
                     span_pos += 1;
                 }
 
@@ -1668,7 +1950,16 @@ impl Graphics {
         unsafe {
             if !self.dest_image.is_null() {
                 let dest = &*self.dest_image;
-                if convex && dest.poly_fill_3d(vertices, &self.clip_rect, &self.color, self.draw_mode, self.trans_x as i32, self.trans_y as i32) {
+                if convex
+                    && dest.poly_fill_3d(
+                        vertices,
+                        &self.clip_rect,
+                        &self.color,
+                        self.draw_mode,
+                        self.trans_x as i32,
+                        self.trans_y as i32,
+                    )
+                {
                     return;
                 }
             }
@@ -1708,15 +1999,24 @@ impl Graphics {
         self.active_edge_list.clear();
         self.num_active_edges = 0;
 
-        let y0 = cmp::max(min_y, (vertices[ind[0] as usize].y as f64 - 0.5 + self.trans_y).ceil() as i32);
-        let y1 = cmp::min(max_y, (vertices[ind[(num_vertices - 1) as usize] as usize].y as f64 - 0.5 + self.trans_y).floor() as i32);
+        let y0 = cmp::max(
+            min_y,
+            (vertices[ind[0] as usize].y as f64 - 0.5 + self.trans_y).ceil() as i32,
+        );
+        let y1 = cmp::min(
+            max_y,
+            (vertices[ind[(num_vertices - 1) as usize] as usize].y as f64 - 0.5 + self.trans_y)
+                .floor() as i32,
+        );
 
         let mut spans: Vec<Span> = Vec::with_capacity(MAX_TEMP_SPANS);
         let mut span_pos = 0;
 
         let mut k: usize = 0;
         for y in y0..=y1 {
-            while k < ind.len() && vertices[ind[k] as usize].y as f64 + self.trans_y <= y as f64 + 0.5 {
+            while k < ind.len()
+                && vertices[ind[k] as usize].y as f64 + self.trans_y <= y as f64 + 0.5
+            {
                 let i = ind[k];
 
                 let j = if i > 0 { i - 1 } else { num_vertices - 1 };
@@ -1735,25 +2035,32 @@ impl Graphics {
                 k += 1;
             }
 
-            self.active_edge_list.sort_by(|a, b| Self::pf_compare_active(a, b));
+            self.active_edge_list
+                .sort_by(|a, b| Self::pf_compare_active(a, b));
 
             let mut j: usize = 0;
             while j + 1 < self.active_edge_list.len() {
                 let mut xl = (self.active_edge_list[j].x - 0.5).ceil() as i32;
-                let mut l_err = ((self.active_edge_list[j].x - 0.5 - xl as f64).abs() * 255.0) as i32;
+                let mut l_err =
+                    ((self.active_edge_list[j].x - 0.5 - xl as f64).abs() * 255.0) as i32;
                 if xl < min_x {
                     xl = min_x;
                     l_err = 255;
                 }
                 let mut xr = (self.active_edge_list[j + 1].x - 0.5).floor() as i32;
-                let mut r_err = ((self.active_edge_list[j + 1].x - 0.5 - xr as f64).abs() * 255.0) as i32;
+                let mut r_err =
+                    ((self.active_edge_list[j + 1].x - 0.5 - xr as f64).abs() * 255.0) as i32;
                 if xr > max_x {
                     xr = max_x;
                     r_err = 255;
                 }
 
                 if xl <= xr && span_pos < MAX_TEMP_SPANS {
-                    spans.push(Span { y, x: xl, width: xr - xl + 1 });
+                    spans.push(Span {
+                        y,
+                        x: xl,
+                        width: xr - xl + 1,
+                    });
                     span_pos += 1;
 
                     let cover_row_offset = ((y - cover_top) * cover_width) as usize;
@@ -1761,20 +2068,26 @@ impl Graphics {
                         let idx = (xl - cover_left) as usize;
                         if cover_row_offset + idx < coverage.len() {
                             coverage[cover_row_offset + idx] = coverage[cover_row_offset + idx]
-                                .min(255 - ((255 - coverage[cover_row_offset + idx] as i32).min((l_err * r_err) >> 8) as u8));
+                                .min(
+                                    255 - ((255 - coverage[cover_row_offset + idx] as i32)
+                                        .min((l_err * r_err) >> 8)
+                                        as u8),
+                                );
                         }
                     } else {
                         // 左边缘
                         let idx_l = (xl - cover_left) as usize;
                         if cover_row_offset + idx_l < coverage.len() {
-                            coverage[cover_row_offset + idx_l] =
-                                coverage[cover_row_offset + idx_l].saturating_add(l_err as u8).min(255);
+                            coverage[cover_row_offset + idx_l] = coverage[cover_row_offset + idx_l]
+                                .saturating_add(l_err as u8)
+                                .min(255);
                         }
                         // 右边缘
                         let idx_r = (xr - cover_left) as usize;
                         if cover_row_offset + idx_r < coverage.len() {
-                            coverage[cover_row_offset + idx_r] =
-                                coverage[cover_row_offset + idx_r].saturating_add(r_err as u8).min(255);
+                            coverage[cover_row_offset + idx_r] = coverage[cover_row_offset + idx_r]
+                                .saturating_add(r_err as u8)
+                                .min(255);
                         }
                         // 中间区域完全覆盖
                         if xl + 1 <= xr - 1 {
@@ -1798,8 +2111,14 @@ impl Graphics {
             if !self.dest_image.is_null() {
                 let dest = &mut *self.dest_image;
                 dest.fill_scan_lines_with_coverage(
-                    &spans, &self.color, self.draw_mode,
-                    &coverage, cover_left, cover_top, cover_width, cover_height,
+                    &spans,
+                    &self.color,
+                    self.draw_mode,
+                    &coverage,
+                    cover_left,
+                    cover_top,
+                    cover_width,
+                    cover_height,
                 );
             }
         }
@@ -1811,15 +2130,16 @@ impl Graphics {
 
     fn is_auto_break_char(c: char) -> bool {
         match c {
-            '-' | '?' | '!' | ':' | ';' | ')' | ']' | '}' | '>'
-            | '\u{3001}' | '\u{3002}' | '\u{FF0C}' | '\u{FF0E}' | '\u{FF1F}' | '\u{FF01}' => true,
+            '-' | '?' | '!' | ':' | ';' | ')' | ']' | '}' | '>' | '\u{3001}' | '\u{3002}'
+            | '\u{FF0C}' | '\u{FF0E}' | '\u{FF1F}' | '\u{FF01}' => true,
             _ => false,
         }
     }
 
     fn is_closing_punctuation(c: char) -> bool {
         match c {
-            ')' | ']' | '}' | '>' | '\u{3001}' | '\u{3002}' | '\u{FF0C}' | '\u{FF0E}' | '\u{FF1F}' | '\u{FF01}' => true,
+            ')' | ']' | '}' | '>' | '\u{3001}' | '\u{3002}' | '\u{FF0C}' | '\u{FF0E}'
+            | '\u{FF1F}' | '\u{FF01}' => true,
             _ => false,
         }
     }

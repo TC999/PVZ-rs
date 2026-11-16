@@ -3,10 +3,10 @@
 
 #![allow(dead_code)]
 
-use crate::framework::sound::sound_manager::SoundManager;
-use crate::framework::sound::sound_instance::SoundInstance;
 use crate::framework::common::RandFloat;
 use crate::framework::common::RandRange;
+use crate::framework::sound::sound_instance::SoundInstance;
+use crate::framework::sound::sound_manager::SoundManager;
 
 /// 最大拟音类型数
 pub const MAX_FOLEY_TYPES: usize = 110;
@@ -16,11 +16,11 @@ pub const MAX_FOLEY_INSTANCES: usize = 8;
 /// 拟音标志（对应 C++ FoleyFlags）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FoleyFlags {
-    Loop,              // 循环播放
-    OneAtATime,        // 禁止叠加播放
-    MuteOnPause,       // 暂停时静默
-    UsesMusicVolume,   // 使用音乐音量
-    DontRepeat,        // 禁止变式重复
+    Loop,            // 循环播放
+    OneAtATime,      // 禁止叠加播放
+    MuteOnPause,     // 暂停时静默
+    UsesMusicVolume, // 使用音乐音量
+    DontRepeat,      // 禁止变式重复
 }
 
 /// 拟音类型枚举（对应 C++ FoleyType，105 个值）
@@ -220,11 +220,14 @@ impl TodFoley {
         }
     }
 
-
     pub fn play_foley(&self, foley_type: FoleyType) {
         // 对应 C++ PvzpFoley::PlayFoley（PvzpFoley.cpp:300）
         let a_pitch = lookup_foley(foley_type).map_or(0.0, |p| {
-            if p.pitch_range != 0.0 { RandFloat(p.pitch_range) } else { 0.0 }
+            if p.pitch_range != 0.0 {
+                RandFloat(p.pitch_range)
+            } else {
+                0.0
+            }
         });
         self.play_foley_pitch(foley_type, a_pitch);
     }
@@ -276,7 +279,8 @@ impl TodFoley {
         }
 
         // 对应 C++: ONE_AT_A_TIME——已存在实例则引用计数 +1
-        if crate::lawn::zombie::test_bit(a_foley_params.foley_flags, FoleyFlags::OneAtATime as u32) {
+        if crate::lawn::zombie::test_bit(a_foley_params.foley_flags, FoleyFlags::OneAtATime as u32)
+        {
             if let Some(a_foley_instance) = sound_system_find_instance(self, foley_type) {
                 unsafe {
                     (*a_foley_instance).ref_count += 1;
@@ -285,7 +289,10 @@ impl TodFoley {
                 return;
             }
         }
-        let a_foley_instance = match sound_system_get_free_instance_index(self as *const TodFoley as *mut TodFoley, foley_type) {
+        let a_foley_instance = match sound_system_get_free_instance_index(
+            self as *const TodFoley as *mut TodFoley,
+            foley_type,
+        ) {
             Some(inst) => inst,
             None => return, // 对应 C++: 全部实例占用
         };
@@ -293,8 +300,10 @@ impl TodFoley {
         // 对应 C++: DONT_REPEAT 时排除上次播放的变式
         let mut a_variations: i32 = 0;
         let mut a_variations_array = [0i32; 10];
-        let a_dont_repeat =
-            crate::lawn::zombie::test_bit(a_foley_params.foley_flags, FoleyFlags::DontRepeat as u32);
+        let a_dont_repeat = crate::lawn::zombie::test_bit(
+            a_foley_params.foley_flags,
+            FoleyFlags::DontRepeat as u32,
+        );
         let a_last_variation = self.foley_type_data[foley_type as usize].last_variation_played;
         for i in 0..10 {
             if !a_dont_repeat || a_last_variation != i as i32 {
@@ -311,7 +320,9 @@ impl TodFoley {
         // 对应 C++: PvzpPickFromArray 随机挑选变式
         let a_variation = a_variations_array[RandRange(a_variations) as usize];
         unsafe {
-            (&mut (*(self as *const TodFoley as *mut TodFoley)).foley_type_data)[foley_type as usize].last_variation_played = a_variation;
+            (&mut (*(self as *const TodFoley as *mut TodFoley)).foley_type_data)
+                [foley_type as usize]
+                .last_variation_played = a_variation;
         }
 
         // 对应 C++ PvzpFoley.cpp:284-297：经 mSoundManager->GetSoundInstance(id) 取实例，再 Play。
@@ -319,7 +330,10 @@ impl TodFoley {
         // 还是桩）。§6.2/§6.3 已实现 GetSoundInstance 与 SDLSoundInstance::Play/AdjustPitch，
         // 故此处切回 C++ 的实例链路，ref_count/start_time/pause-resume 状态机才真正生效。
         let a_sfx_id = match a_foley_params.sfx_id[a_variation as usize] {
-            Some(p) => unsafe { *p as i32 },
+            // [TRANSLATION_NOTE]: C++ SOUND_XXX 为 intptr_t（8 字节）；Rust SOUND_* 声明为
+            // i32（4 字节，槽位 id 足够），故 sfx_id 指针须按 i32 解引用——按 *mut usize
+            // 解引用会在非 8 对齐地址上 panic（misaligned pointer dereference）。
+            Some(p) => unsafe { *(p as *mut i32) },
             None => 0,
         };
         let a_sound_instance = match crate::lawn::lawn_app::LawnApp::instance() {
@@ -350,7 +364,10 @@ impl TodFoley {
             }
         }
         // 对应 C++: USES_MUSIC_VOLUME 时按音乐音量播放
-        if crate::lawn::zombie::test_bit(a_foley_params.foley_flags, FoleyFlags::UsesMusicVolume as u32) {
+        if crate::lawn::zombie::test_bit(
+            a_foley_params.foley_flags,
+            FoleyFlags::UsesMusicVolume as u32,
+        ) {
             let a_inst = unsafe { &*a_foley_instance };
             self.apply_music_volume(a_inst);
         }
@@ -399,7 +416,10 @@ impl TodFoley {
                 Some(p) => p,
                 None => continue,
             };
-            if crate::lawn::zombie::test_bit(a_params.foley_flags, FoleyFlags::UsesMusicVolume as u32) {
+            if crate::lawn::zombie::test_bit(
+                a_params.foley_flags,
+                FoleyFlags::UsesMusicVolume as u32,
+            ) {
                 for i in 0..MAX_FOLEY_INSTANCES {
                     let a_foley_instance = &self.foley_type_data[a_foley_type].foley_instances[i];
                     if a_foley_instance.ref_count != 0 {
@@ -456,8 +476,7 @@ pub fn lookup_foley_index(foley_type: usize) -> Option<&'static FoleyParams> {
 
 /// 当前更新帧计数（对应 C++ gSexyAppBase->mUpdateCount）
 fn current_update_count() -> i32 {
-    crate::lawn::lawn_app::LawnApp::instance()
-        .map_or(0, |app| app.base.m_update_count)
+    crate::lawn::lawn_app::LawnApp::instance().map_or(0, |app| app.base.m_update_count)
 }
 
 // --- 自由函数（对应 C++ PvzpFoley.cpp 自由函数） ---
@@ -484,14 +503,20 @@ pub fn sound_system_game_pause(sound_system: *mut TodFoley, entering_pause: bool
                         a_foley_instance.paused = true;
                         a_foley_instance.pause_offset = 0;
                         if let Some(inst) = a_foley_instance.instance {
-                            unsafe { (*inst).stop(); }
+                            unsafe {
+                                (*inst).stop();
+                            }
                         }
                     } else if a_foley_instance.paused {
                         a_foley_instance.paused = false;
                         let a_is_looping = crate::lawn::zombie::test_bit(
-                            a_params.foley_flags, FoleyFlags::Loop as u32);
+                            a_params.foley_flags,
+                            FoleyFlags::Loop as u32,
+                        );
                         if let Some(inst) = a_foley_instance.instance {
-                            unsafe { (*inst).play(a_is_looping, false); }
+                            unsafe {
+                                (*inst).play(a_is_looping, false);
+                            }
                         }
                     }
                 }
@@ -515,7 +540,9 @@ pub fn sound_system_cancel_paused_foley(sound_system: *mut TodFoley) {
             if a_foley_instance.ref_count != 0 && a_foley_instance.paused {
                 a_foley_instance.ref_count = 0;
                 if let Some(inst) = a_foley_instance.instance {
-                    unsafe { (*inst).release(); }
+                    unsafe {
+                        (*inst).release();
+                    }
                 }
                 a_foley_instance.instance = None;
             }
@@ -534,7 +561,8 @@ pub fn sound_system_release_finished_instances(sound_system: *mut TodFoley) {
     let a_param_count = foley_param_count();
     for a_foley_type in 0..a_param_count {
         for i in 0..MAX_FOLEY_INSTANCES {
-            let a_foley_instance = &mut sound_system_ref.foley_type_data[a_foley_type].foley_instances[i];
+            let a_foley_instance =
+                &mut sound_system_ref.foley_type_data[a_foley_type].foley_instances[i];
             if a_foley_instance.ref_count == 0 {
                 // 对应 C++: PVZP_ASSERT(mInstance == nullptr)
             } else if !a_foley_instance.paused {
@@ -545,7 +573,9 @@ pub fn sound_system_release_finished_instances(sound_system: *mut TodFoley) {
                 };
                 if a_finished {
                     if let Some(inst) = a_foley_instance.instance {
-                        unsafe { (*inst).release(); }
+                        unsafe {
+                            (*inst).release();
+                        }
                     }
                     a_foley_instance.instance = None;
                     a_foley_instance.ref_count = 0;
@@ -556,7 +586,10 @@ pub fn sound_system_release_finished_instances(sound_system: *mut TodFoley) {
 }
 
 /// 该拟音是否在最近 10 厘秒内播放过（对应 C++ SoundSystemHasFoleyPlayedTooRecently，:196）
-pub fn sound_system_has_foley_played_too_recently(sound_system: &TodFoley, foley_type: FoleyType) -> bool {
+pub fn sound_system_has_foley_played_too_recently(
+    sound_system: &TodFoley,
+    foley_type: FoleyType,
+) -> bool {
     let a_foley_data = &sound_system.foley_type_data[foley_type as usize];
     let a_update_count = current_update_count();
     for i in 0..MAX_FOLEY_INSTANCES {
@@ -569,19 +602,28 @@ pub fn sound_system_has_foley_played_too_recently(sound_system: &TodFoley, foley
 }
 
 /// 查找已激活实例（对应 C++ SoundSystemFindInstance，:217）
-pub fn sound_system_find_instance(sound_system: &TodFoley, foley_type: FoleyType) -> Option<*mut FoleyInstance> {
+pub fn sound_system_find_instance(
+    sound_system: &TodFoley,
+    foley_type: FoleyType,
+) -> Option<*mut FoleyInstance> {
     let a_foley_data = &sound_system.foley_type_data[foley_type as usize];
     for i in 0..MAX_FOLEY_INSTANCES {
         let a_foley_instance = &a_foley_data.foley_instances[i];
         if a_foley_instance.ref_count > 0 {
-            return Some(&sound_system.foley_type_data[foley_type as usize].foley_instances[i] as *const FoleyInstance as *mut FoleyInstance);
+            return Some(
+                &sound_system.foley_type_data[foley_type as usize].foley_instances[i]
+                    as *const FoleyInstance as *mut FoleyInstance,
+            );
         }
     }
     None
 }
 
 /// 获取空闲实例（对应 C++ SoundSystemGetFreeInstanceIndex，:232）
-pub fn sound_system_get_free_instance_index(sound_system: *mut TodFoley, foley_type: FoleyType) -> Option<*mut FoleyInstance> {
+pub fn sound_system_get_free_instance_index(
+    sound_system: *mut TodFoley,
+    foley_type: FoleyType,
+) -> Option<*mut FoleyInstance> {
     if sound_system.is_null() {
         return None;
     }
@@ -756,110 +798,1774 @@ pub static mut SOUND_ZOMBIESPLASH: i32 = -1;
 /// [TRANSLATION_NOTE]: 指针指向上方 SOUND_XXX 变量（C++ &Sexy::SOUND_XXX 地址语义），
 /// 加载声音后变量值 = SoundManager 槽位 id（C++ GetSoundThrow 赋值）
 pub static G_LAWN_FOLEY_PARAM_ARRAY: [FoleyParams; 104] = [
-    FoleyParams { foley_type: FoleyType::Sun, pitch_range: 10f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_POINTS) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Splat, pitch_range: 10f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_SPLAT) as *mut usize), Some(std::ptr::addr_of!(SOUND_SPLAT2) as *mut usize), Some(std::ptr::addr_of!(SOUND_SPLAT3) as *mut usize), None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Lawnmower, pitch_range: 10f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_LAWNMOWER) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Throw, pitch_range: 10f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_THROW) as *mut usize), Some(std::ptr::addr_of!(SOUND_THROW) as *mut usize), Some(std::ptr::addr_of!(SOUND_THROW) as *mut usize), Some(std::ptr::addr_of!(SOUND_THROW2) as *mut usize), None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::SpawnSun, pitch_range: 10f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_THROW) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Chomp, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_CHOMP) as *mut usize), Some(std::ptr::addr_of!(SOUND_CHOMP2) as *mut usize), None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::ChompSoft, pitch_range: 4f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_CHOMPSOFT) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Plant, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_PLANT) as *mut usize), Some(std::ptr::addr_of!(SOUND_PLANT2) as *mut usize), None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::UseShovel, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_PLANT2) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Drop, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_TAP2) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Beep, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_BLEEP) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Groan, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_GROAN) as *mut usize), Some(std::ptr::addr_of!(SOUND_GROAN2) as *mut usize), Some(std::ptr::addr_of!(SOUND_GROAN3) as *mut usize), Some(std::ptr::addr_of!(SOUND_GROAN4) as *mut usize), Some(std::ptr::addr_of!(SOUND_GROAN5) as *mut usize), Some(std::ptr::addr_of!(SOUND_GROAN6) as *mut usize), None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Brains, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_GROAN) as *mut usize), Some(std::ptr::addr_of!(SOUND_GROAN2) as *mut usize), Some(std::ptr::addr_of!(SOUND_GROAN3) as *mut usize), Some(std::ptr::addr_of!(SOUND_GROAN4) as *mut usize), Some(std::ptr::addr_of!(SOUND_GROAN5) as *mut usize), Some(std::ptr::addr_of!(SOUND_GROAN6) as *mut usize), Some(std::ptr::addr_of!(SOUND_SUKHBIR4) as *mut usize), Some(std::ptr::addr_of!(SOUND_SUKHBIR5) as *mut usize), Some(std::ptr::addr_of!(SOUND_SUKHBIR6) as *mut usize), None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Sukhbir, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_GROAN) as *mut usize), Some(std::ptr::addr_of!(SOUND_GROAN2) as *mut usize), Some(std::ptr::addr_of!(SOUND_GROAN3) as *mut usize), Some(std::ptr::addr_of!(SOUND_GROAN4) as *mut usize), Some(std::ptr::addr_of!(SOUND_GROAN5) as *mut usize), Some(std::ptr::addr_of!(SOUND_GROAN6) as *mut usize), Some(std::ptr::addr_of!(SOUND_SUKHBIR) as *mut usize), Some(std::ptr::addr_of!(SOUND_SUKHBIR2) as *mut usize), Some(std::ptr::addr_of!(SOUND_SUKHBIR3) as *mut usize), None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::JackInTheBox, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_JACKINTHEBOX) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 7 },
-    FoleyParams { foley_type: FoleyType::ArtChallenge, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_DIAMOND) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Zamboni, pitch_range: 5f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_ZAMBONI) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Thunder, pitch_range: 10f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_THUNDER) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Frozen, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_FROZEN) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::ZombieSplash, pitch_range: 10f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_PLANT_WATER) as *mut usize), Some(std::ptr::addr_of!(SOUND_ZOMBIE_ENTERING_WATER) as *mut usize), None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::BowlingImpact, pitch_range: -3f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_BOWLINGIMPACT) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Squish, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_CHOMP) as *mut usize), Some(std::ptr::addr_of!(SOUND_CHOMP2) as *mut usize), None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::TirePop, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_BALLOON_POP) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Explosion, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_EXPLOSION) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Slurp, pitch_range: 2f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_SLURP) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::LimbsPop, pitch_range: 10f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_LIMBS_POP) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::PogoZombie, pitch_range: 4f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_POGO_ZOMBIE) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::SnowPeaSparkles, pitch_range: 10f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_SNOW_PEA_SPARKLES) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::ZombieFalling, pitch_range: 10f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_ZOMBIE_FALLING_1) as *mut usize), Some(std::ptr::addr_of!(SOUND_ZOMBIE_FALLING_2) as *mut usize), None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Puff, pitch_range: 10f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_PUFF) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Fume, pitch_range: 10f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_FUME) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Coin, pitch_range: 10f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_COIN) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::KernelSplat, pitch_range: 10f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_KERNELPULT) as *mut usize), Some(std::ptr::addr_of!(SOUND_KERNELPULT2) as *mut usize), None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Digger, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_DIGGER_ZOMBIE) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 7 },
-    FoleyParams { foley_type: FoleyType::JackSurprise, pitch_range: 1f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_JACK_SURPRISE) as *mut usize), Some(std::ptr::addr_of!(SOUND_JACK_SURPRISE) as *mut usize), Some(std::ptr::addr_of!(SOUND_JACK_SURPRISE2) as *mut usize), None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::VaseBreaking, pitch_range: -5f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_VASE_BREAKING) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::PoolCleaner, pitch_range: 2f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_POOL_CLEANER) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Basketball, pitch_range: 10f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_BASKETBALL) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Ignite, pitch_range: 5f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_IGNITE) as *mut usize), Some(std::ptr::addr_of!(SOUND_IGNITE) as *mut usize), Some(std::ptr::addr_of!(SOUND_IGNITE) as *mut usize), Some(std::ptr::addr_of!(SOUND_IGNITE2) as *mut usize), None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::FirePea, pitch_range: 10f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_FIREPEA) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Thump, pitch_range: 2f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_GARGANTUAR_THUMP) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::SquashHmm, pitch_range: 2f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_SQUASH_HMM) as *mut usize), Some(std::ptr::addr_of!(SOUND_SQUASH_HMM) as *mut usize), Some(std::ptr::addr_of!(SOUND_SQUASH_HMM2) as *mut usize), None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Magnetshroom, pitch_range: 2f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_MAGNETSHROOM) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Butter, pitch_range: 2f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_BUTTER) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::BungeeScream, pitch_range: 2f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_BUNGEE_SCREAM) as *mut usize), Some(std::ptr::addr_of!(SOUND_BUNGEE_SCREAM2) as *mut usize), Some(std::ptr::addr_of!(SOUND_BUNGEE_SCREAM3) as *mut usize), None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::BossExplosionSmall, pitch_range: 2f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_EXPLOSION) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::ShieldHit, pitch_range: 10f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_SHIELDHIT) as *mut usize), Some(std::ptr::addr_of!(SOUND_SHIELDHIT2) as *mut usize), None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Swing, pitch_range: 2f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_SWING) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Bonk, pitch_range: 2f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_BONK) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Rain, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_RAIN) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 5 },
-    FoleyParams { foley_type: FoleyType::DolphinBeforeJumping, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_DOLPHIN_BEFORE_JUMPING) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::DolphinAppears, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_DOLPHIN_APPEARS) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::PlantWater, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_PLANT_WATER) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::ZombieEnteringWater, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_ZOMBIE_ENTERING_WATER) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::GravebusterChomp, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_GRAVEBUSTERCHOMP) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 4 },
-    FoleyParams { foley_type: FoleyType::Cherrybomb, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_CHERRYBOMB) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::JalapenoIgnite, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_JALAPENO) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::ReverseExplosion, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_REVERSE_EXPLOSION) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::PlasticHit, pitch_range: 5f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_PLASTICHIT) as *mut usize), Some(std::ptr::addr_of!(SOUND_PLASTICHIT2) as *mut usize), None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::WinMusic, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_WINMUSIC) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 8 },
-    FoleyParams { foley_type: FoleyType::BalloonInflate, pitch_range: 10f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_BALLOONINFLATE) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::BigChomp, pitch_range: -2f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_BIGCHOMP) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::MelonImpact, pitch_range: -5f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_MELONIMPACT) as *mut usize), Some(std::ptr::addr_of!(SOUND_MELONIMPACT2) as *mut usize), None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::PlantGrow, pitch_range: -2f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_PLANTGROW) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Shoop, pitch_range: -5f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_SHOOP) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Juicy, pitch_range: 2f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_JUICY) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::NewspaperRarrgh, pitch_range: -2f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_NEWSPAPER_RARRGH) as *mut usize), Some(std::ptr::addr_of!(SOUND_NEWSPAPER_RARRGH2) as *mut usize), Some(std::ptr::addr_of!(SOUND_NEWSPAPER_RARRGH2) as *mut usize), None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::NewspaperRip, pitch_range: -2f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_NEWSPAPER_RIP) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Floop, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_FLOOP) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Coffee, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_COFFEE) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::LowGroan, pitch_range: 2f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_LOWGROAN) as *mut usize), Some(std::ptr::addr_of!(SOUND_LOWGROAN2) as *mut usize), None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Prize, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_PRIZE) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Yuck, pitch_range: 1f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_YUCK) as *mut usize), Some(std::ptr::addr_of!(SOUND_YUCK) as *mut usize), Some(std::ptr::addr_of!(SOUND_YUCK2) as *mut usize), None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Umbrella, pitch_range: 2f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_THROW2) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::GrassStep, pitch_range: 2f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_GRASSSTEP) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Shovel, pitch_range: 5f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_SHOVEL) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::CobLaunch, pitch_range: 10f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_COBLAUNCH) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Watering, pitch_range: 10f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_WATERING) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Polevault, pitch_range: 5f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_POLEVAULT) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::GraveStoneRumble, pitch_range: 10f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_GRAVESTONE_RUMBLE) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::DirtRise, pitch_range: 5f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_DIRT_RISE) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Fertilizer, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_FERTILIZER) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Portal, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_PORTAL) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::WakeUp, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_WAKEUP) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::BugSpray, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_BUGSPRAY) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Scream, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_SCREAM) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Paper, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_PAPER) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::MoneyFalls, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_MONEYFALLS) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Imp, pitch_range: 5f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_IMP) as *mut usize), Some(std::ptr::addr_of!(SOUND_IMP2) as *mut usize), None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::HydraulicShort, pitch_range: 3f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_HYDRAULIC_SHORT) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Hydraulic, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_HYDRAULIC) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Gargantudeath, pitch_range: 3f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_GARGANTUDEATH) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Ceramic, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_CERAMIC) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::BossBoulderAttack, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_BOSSBOULDERATTACK) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Chime, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_CHIME) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::CrazyDaveShort, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_CRAZYDAVESHORT1) as *mut usize), Some(std::ptr::addr_of!(SOUND_CRAZYDAVESHORT2) as *mut usize), Some(std::ptr::addr_of!(SOUND_CRAZYDAVESHORT3) as *mut usize), None, None, None, None, None, None, None], foley_flags: 16 },
-    FoleyParams { foley_type: FoleyType::CrazyDaveLong, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_CRAZYDAVELONG1) as *mut usize), Some(std::ptr::addr_of!(SOUND_CRAZYDAVELONG2) as *mut usize), Some(std::ptr::addr_of!(SOUND_CRAZYDAVELONG3) as *mut usize), None, None, None, None, None, None, None], foley_flags: 16 },
-    FoleyParams { foley_type: FoleyType::CrazyDaveExtraLong, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_CRAZYDAVEEXTRALONG1) as *mut usize), Some(std::ptr::addr_of!(SOUND_CRAZYDAVEEXTRALONG2) as *mut usize), Some(std::ptr::addr_of!(SOUND_CRAZYDAVEEXTRALONG3) as *mut usize), None, None, None, None, None, None, None], foley_flags: 16 },
-    FoleyParams { foley_type: FoleyType::CrazyDaveCrazy, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_CRAZYDAVECRAZY) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Phonograph, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_PHONOGRAPH) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::Dancer, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_DANCER) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 6 },
-    FoleyParams { foley_type: FoleyType::FinalFanfare, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_FINALFANFARE) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::CrazyDaveScream, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_CRAZYDAVESCREAM) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
-    FoleyParams { foley_type: FoleyType::CrazyDaveScream2, pitch_range: 0f32, sfx_id: [Some(std::ptr::addr_of!(SOUND_CRAZYDAVESCREAM2) as *mut usize), None, None, None, None, None, None, None, None, None], foley_flags: 0 },
+    FoleyParams {
+        foley_type: FoleyType::Sun,
+        pitch_range: 10f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_POINTS) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Splat,
+        pitch_range: 10f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_SPLAT) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_SPLAT2) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_SPLAT3) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Lawnmower,
+        pitch_range: 10f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_LAWNMOWER) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Throw,
+        pitch_range: 10f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_THROW) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_THROW) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_THROW) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_THROW2) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::SpawnSun,
+        pitch_range: 10f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_THROW) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Chomp,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_CHOMP) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_CHOMP2) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::ChompSoft,
+        pitch_range: 4f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_CHOMPSOFT) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Plant,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_PLANT) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_PLANT2) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::UseShovel,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_PLANT2) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Drop,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_TAP2) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Beep,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_BLEEP) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Groan,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_GROAN) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_GROAN2) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_GROAN3) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_GROAN4) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_GROAN5) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_GROAN6) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Brains,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_GROAN) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_GROAN2) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_GROAN3) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_GROAN4) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_GROAN5) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_GROAN6) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_SUKHBIR4) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_SUKHBIR5) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_SUKHBIR6) as *mut usize),
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Sukhbir,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_GROAN) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_GROAN2) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_GROAN3) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_GROAN4) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_GROAN5) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_GROAN6) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_SUKHBIR) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_SUKHBIR2) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_SUKHBIR3) as *mut usize),
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::JackInTheBox,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_JACKINTHEBOX) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 7,
+    },
+    FoleyParams {
+        foley_type: FoleyType::ArtChallenge,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_DIAMOND) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Zamboni,
+        pitch_range: 5f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_ZAMBONI) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Thunder,
+        pitch_range: 10f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_THUNDER) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Frozen,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_FROZEN) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::ZombieSplash,
+        pitch_range: 10f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_PLANT_WATER) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_ZOMBIE_ENTERING_WATER) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::BowlingImpact,
+        pitch_range: -3f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_BOWLINGIMPACT) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Squish,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_CHOMP) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_CHOMP2) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::TirePop,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_BALLOON_POP) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Explosion,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_EXPLOSION) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Slurp,
+        pitch_range: 2f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_SLURP) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::LimbsPop,
+        pitch_range: 10f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_LIMBS_POP) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::PogoZombie,
+        pitch_range: 4f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_POGO_ZOMBIE) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::SnowPeaSparkles,
+        pitch_range: 10f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_SNOW_PEA_SPARKLES) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::ZombieFalling,
+        pitch_range: 10f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_ZOMBIE_FALLING_1) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_ZOMBIE_FALLING_2) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Puff,
+        pitch_range: 10f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_PUFF) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Fume,
+        pitch_range: 10f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_FUME) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Coin,
+        pitch_range: 10f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_COIN) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::KernelSplat,
+        pitch_range: 10f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_KERNELPULT) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_KERNELPULT2) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Digger,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_DIGGER_ZOMBIE) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 7,
+    },
+    FoleyParams {
+        foley_type: FoleyType::JackSurprise,
+        pitch_range: 1f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_JACK_SURPRISE) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_JACK_SURPRISE) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_JACK_SURPRISE2) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::VaseBreaking,
+        pitch_range: -5f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_VASE_BREAKING) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::PoolCleaner,
+        pitch_range: 2f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_POOL_CLEANER) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Basketball,
+        pitch_range: 10f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_BASKETBALL) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Ignite,
+        pitch_range: 5f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_IGNITE) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_IGNITE) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_IGNITE) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_IGNITE2) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::FirePea,
+        pitch_range: 10f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_FIREPEA) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Thump,
+        pitch_range: 2f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_GARGANTUAR_THUMP) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::SquashHmm,
+        pitch_range: 2f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_SQUASH_HMM) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_SQUASH_HMM) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_SQUASH_HMM2) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Magnetshroom,
+        pitch_range: 2f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_MAGNETSHROOM) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Butter,
+        pitch_range: 2f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_BUTTER) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::BungeeScream,
+        pitch_range: 2f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_BUNGEE_SCREAM) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_BUNGEE_SCREAM2) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_BUNGEE_SCREAM3) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::BossExplosionSmall,
+        pitch_range: 2f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_EXPLOSION) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::ShieldHit,
+        pitch_range: 10f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_SHIELDHIT) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_SHIELDHIT2) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Swing,
+        pitch_range: 2f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_SWING) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Bonk,
+        pitch_range: 2f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_BONK) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Rain,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_RAIN) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 5,
+    },
+    FoleyParams {
+        foley_type: FoleyType::DolphinBeforeJumping,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_DOLPHIN_BEFORE_JUMPING) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::DolphinAppears,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_DOLPHIN_APPEARS) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::PlantWater,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_PLANT_WATER) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::ZombieEnteringWater,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_ZOMBIE_ENTERING_WATER) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::GravebusterChomp,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_GRAVEBUSTERCHOMP) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 4,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Cherrybomb,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_CHERRYBOMB) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::JalapenoIgnite,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_JALAPENO) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::ReverseExplosion,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_REVERSE_EXPLOSION) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::PlasticHit,
+        pitch_range: 5f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_PLASTICHIT) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_PLASTICHIT2) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::WinMusic,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_WINMUSIC) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 8,
+    },
+    FoleyParams {
+        foley_type: FoleyType::BalloonInflate,
+        pitch_range: 10f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_BALLOONINFLATE) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::BigChomp,
+        pitch_range: -2f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_BIGCHOMP) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::MelonImpact,
+        pitch_range: -5f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_MELONIMPACT) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_MELONIMPACT2) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::PlantGrow,
+        pitch_range: -2f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_PLANTGROW) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Shoop,
+        pitch_range: -5f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_SHOOP) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Juicy,
+        pitch_range: 2f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_JUICY) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::NewspaperRarrgh,
+        pitch_range: -2f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_NEWSPAPER_RARRGH) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_NEWSPAPER_RARRGH2) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_NEWSPAPER_RARRGH2) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::NewspaperRip,
+        pitch_range: -2f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_NEWSPAPER_RIP) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Floop,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_FLOOP) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Coffee,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_COFFEE) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::LowGroan,
+        pitch_range: 2f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_LOWGROAN) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_LOWGROAN2) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Prize,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_PRIZE) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Yuck,
+        pitch_range: 1f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_YUCK) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_YUCK) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_YUCK2) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Umbrella,
+        pitch_range: 2f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_THROW2) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::GrassStep,
+        pitch_range: 2f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_GRASSSTEP) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Shovel,
+        pitch_range: 5f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_SHOVEL) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::CobLaunch,
+        pitch_range: 10f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_COBLAUNCH) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Watering,
+        pitch_range: 10f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_WATERING) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Polevault,
+        pitch_range: 5f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_POLEVAULT) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::GraveStoneRumble,
+        pitch_range: 10f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_GRAVESTONE_RUMBLE) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::DirtRise,
+        pitch_range: 5f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_DIRT_RISE) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Fertilizer,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_FERTILIZER) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Portal,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_PORTAL) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::WakeUp,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_WAKEUP) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::BugSpray,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_BUGSPRAY) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Scream,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_SCREAM) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Paper,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_PAPER) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::MoneyFalls,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_MONEYFALLS) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Imp,
+        pitch_range: 5f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_IMP) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_IMP2) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::HydraulicShort,
+        pitch_range: 3f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_HYDRAULIC_SHORT) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Hydraulic,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_HYDRAULIC) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Gargantudeath,
+        pitch_range: 3f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_GARGANTUDEATH) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Ceramic,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_CERAMIC) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::BossBoulderAttack,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_BOSSBOULDERATTACK) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Chime,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_CHIME) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::CrazyDaveShort,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_CRAZYDAVESHORT1) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_CRAZYDAVESHORT2) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_CRAZYDAVESHORT3) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 16,
+    },
+    FoleyParams {
+        foley_type: FoleyType::CrazyDaveLong,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_CRAZYDAVELONG1) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_CRAZYDAVELONG2) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_CRAZYDAVELONG3) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 16,
+    },
+    FoleyParams {
+        foley_type: FoleyType::CrazyDaveExtraLong,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_CRAZYDAVEEXTRALONG1) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_CRAZYDAVEEXTRALONG2) as *mut usize),
+            Some(std::ptr::addr_of!(SOUND_CRAZYDAVEEXTRALONG3) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 16,
+    },
+    FoleyParams {
+        foley_type: FoleyType::CrazyDaveCrazy,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_CRAZYDAVECRAZY) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Phonograph,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_PHONOGRAPH) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::Dancer,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_DANCER) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 6,
+    },
+    FoleyParams {
+        foley_type: FoleyType::FinalFanfare,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_FINALFANFARE) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::CrazyDaveScream,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_CRAZYDAVESCREAM) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
+    FoleyParams {
+        foley_type: FoleyType::CrazyDaveScream2,
+        pitch_range: 0f32,
+        sfx_id: [
+            Some(std::ptr::addr_of!(SOUND_CRAZYDAVESCREAM2) as *mut usize),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ],
+        foley_flags: 0,
+    },
 ];
 
 /// 按资源名把 SoundManager 槽位 id 写入对应 SOUND 变量（对应 C++ GetSoundThrow 赋值）

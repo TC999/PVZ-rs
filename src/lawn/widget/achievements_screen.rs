@@ -44,26 +44,86 @@ pub struct AchievementItem {
 
 /// 成就列表（对应 C++ gAchievementList）
 pub const G_ACHIEVEMENT_LIST: [AchievementItem; MAX_ACHIEVEMENTS] = [
-    AchievementItem { name: "Home Lawn Security", description: "Complete Adventure Mode." },
-    AchievementItem { name: "Nobel Peas Prize", description: "Get the golden sunflower trophy." },
-    AchievementItem { name: "Better Off Dead", description: "Get to a streak of 10 in I, Zombie Endless" },
-    AchievementItem { name: "China Shop", description: "Get to a streak of 15 in Vasebreaker Endless" },
-    AchievementItem { name: "SPUDOW!", description: "Blow up a zombie using a Potato Mine." },
-    AchievementItem { name: "Explodonator", description: "Take out 10 full-sized zombies with a single Cherry Bomb." },
-    AchievementItem { name: "Morticulturalist", description: "Collect all 49 plants." },
-    AchievementItem { name: "Don't Pea in the Pool", description: "Complete a daytime pool level without using pea shooters." },
-    AchievementItem { name: "Roll Some Heads", description: "Bowl over 5 zombies with a single Wall-Nut." },
-    AchievementItem { name: "Grounded", description: "Defeat a normal roof level without using any catapult plants." },
-    AchievementItem { name: "Zombologist", description: "Discover the Yeti zombie." },
-    AchievementItem { name: "Penny Pincher", description: "Pick up 30 coins in a row without letting any disappear." },
-    AchievementItem { name: "Sunny Days", description: "Get 8000 sun during a single level." },
-    AchievementItem { name: "Popcorn Party", description: "Defeat 2 Gargantuars with Corn Cob missiles." },
-    AchievementItem { name: "Good Morning", description: "Complete a daytime level by planting only Mushrooms." },
-    AchievementItem { name: "No Fungus Among Us", description: "Complete a nighttime level without any Mushrooms." },
-    AchievementItem { name: "Beyond the Grave", description: "Beat all 20 mini games." },
-    AchievementItem { name: "Immortal", description: "Survive 20 waves of pure zombie ferocity." },
-    AchievementItem { name: "Towering Wisdom", description: "Grow the Tree of Wisdom to 100 feet." },
-    AchievementItem { name: "Mustache Mode", description: "Enable Mustache Mode" },
+    AchievementItem {
+        name: "Home Lawn Security",
+        description: "Complete Adventure Mode.",
+    },
+    AchievementItem {
+        name: "Nobel Peas Prize",
+        description: "Get the golden sunflower trophy.",
+    },
+    AchievementItem {
+        name: "Better Off Dead",
+        description: "Get to a streak of 10 in I, Zombie Endless",
+    },
+    AchievementItem {
+        name: "China Shop",
+        description: "Get to a streak of 15 in Vasebreaker Endless",
+    },
+    AchievementItem {
+        name: "SPUDOW!",
+        description: "Blow up a zombie using a Potato Mine.",
+    },
+    AchievementItem {
+        name: "Explodonator",
+        description: "Take out 10 full-sized zombies with a single Cherry Bomb.",
+    },
+    AchievementItem {
+        name: "Morticulturalist",
+        description: "Collect all 49 plants.",
+    },
+    AchievementItem {
+        name: "Don't Pea in the Pool",
+        description: "Complete a daytime pool level without using pea shooters.",
+    },
+    AchievementItem {
+        name: "Roll Some Heads",
+        description: "Bowl over 5 zombies with a single Wall-Nut.",
+    },
+    AchievementItem {
+        name: "Grounded",
+        description: "Defeat a normal roof level without using any catapult plants.",
+    },
+    AchievementItem {
+        name: "Zombologist",
+        description: "Discover the Yeti zombie.",
+    },
+    AchievementItem {
+        name: "Penny Pincher",
+        description: "Pick up 30 coins in a row without letting any disappear.",
+    },
+    AchievementItem {
+        name: "Sunny Days",
+        description: "Get 8000 sun during a single level.",
+    },
+    AchievementItem {
+        name: "Popcorn Party",
+        description: "Defeat 2 Gargantuars with Corn Cob missiles.",
+    },
+    AchievementItem {
+        name: "Good Morning",
+        description: "Complete a daytime level by planting only Mushrooms.",
+    },
+    AchievementItem {
+        name: "No Fungus Among Us",
+        description: "Complete a nighttime level without any Mushrooms.",
+    },
+    AchievementItem {
+        name: "Beyond the Grave",
+        description: "Beat all 20 mini games.",
+    },
+    AchievementItem {
+        name: "Immortal",
+        description: "Survive 20 waves of pure zombie ferocity.",
+    },
+    AchievementItem {
+        name: "Towering Wisdom",
+        description: "Grow the Tree of Wisdom to 100 feet.",
+    },
+    AchievementItem {
+        name: "Mustache Mode",
+        description: "Enable Mustache Mode",
+    },
 ];
 
 /// 成就界面 Widget（对应 C++ AchievementsWidget）
@@ -92,7 +152,9 @@ impl AchievementsWidget {
 
     pub fn update(&mut self) {
         // MarkDirty();
-        if self.scroll_value <= 0 { return; }
+        if self.scroll_value <= 0 {
+            return;
+        }
         self.scroll_value = self.scroll_value.min(self.default_scroll_value);
         self.scroll_value -= self.scroll_decay;
         let new_y = self.scroll_value * self.scroll_direction;
@@ -106,10 +168,14 @@ impl AchievementsWidget {
     }
 
     pub fn key_down(&mut self, key: KeyCode) {
-        if key == 0x26 /* KEY_UP */ {
+        if key == 0x26
+        /* KEY_UP */
+        {
             self.scroll_value = self.default_scroll_value;
             self.scroll_direction = 1;
-        } else if key == 0x28 /* KEY_DOWN */ {
+        } else if key == 0x28
+        /* KEY_DOWN */
+        {
             self.scroll_value = self.default_scroll_value;
             self.scroll_direction = -1;
         }
@@ -129,7 +195,13 @@ impl AchievementsWidget {
 
     pub fn mouse_wheel(&mut self, delta: i32) {
         self.scroll_value = self.default_scroll_value;
-        self.scroll_direction = if delta > 0 { 1 } else if delta < 0 { -1 } else { self.scroll_direction };
+        self.scroll_direction = if delta > 0 {
+            1
+        } else if delta < 0 {
+            -1
+        } else {
+            self.scroll_direction
+        };
     }
 }
 
@@ -144,7 +216,11 @@ pub struct ReportAchievement;
 
 impl ReportAchievement {
     /// 授予成就（对应 C++ ReportAchievement::GiveAchievement，AchievementsScreen.cpp:225）
-    pub fn give_achievement(app: Option<*mut crate::lawn::lawn_app::LawnApp>, achievement: i32, force_give: bool) {
+    pub fn give_achievement(
+        app: Option<*mut crate::lawn::lawn_app::LawnApp>,
+        achievement: i32,
+        force_give: bool,
+    ) {
         let app_ptr = match app {
             Some(a) => a,
             None => return,
@@ -164,7 +240,10 @@ impl ReportAchievement {
 
             // C++: if (mPlayerInfo->mEarnedAchievements[theAchievement]) return;
             if app_ref.player_info.as_ref().map_or(false, |pi| {
-                pi.m_earned_achievements.get(a_index).copied().unwrap_or(false)
+                pi.m_earned_achievements
+                    .get(a_index)
+                    .copied()
+                    .unwrap_or(false)
             }) {
                 return;
             }
@@ -200,29 +279,41 @@ impl ReportAchievement {
     }
 
     pub fn achievement_init_for_player(app: Option<*mut crate::lawn::lawn_app::LawnApp>) {
-        if let Some(app_ptr) = app { unsafe {
-            let app_ref = &mut *app_ptr;
-            if app_ref.player_info.is_none() { return; }
-            if app_ref.has_finished_adventure() {
-                Self::give_achievement(Some(app_ptr), AchievementId::HomeSecurity as i32, true);
-            }
-            if app_ref.earned_gold_trophy() {
-                Self::give_achievement(Some(app_ptr), AchievementId::NovelPeasPrize as i32, true);
-            }
-            if app_ref.can_spawn_yetis() {
-                Self::give_achievement(Some(app_ptr), AchievementId::Zombologist as i32, true);
-            }
-            // 检查是否收集了所有植物
-            let mut all_collected = true;
-            for seed_type in 0..=48 {
-                if !app_ref.has_seed_type(unsafe { std::mem::transmute(seed_type) }) {
-                    all_collected = false;
-                    break;
+        if let Some(app_ptr) = app {
+            unsafe {
+                let app_ref = &mut *app_ptr;
+                if app_ref.player_info.is_none() {
+                    return;
+                }
+                if app_ref.has_finished_adventure() {
+                    Self::give_achievement(Some(app_ptr), AchievementId::HomeSecurity as i32, true);
+                }
+                if app_ref.earned_gold_trophy() {
+                    Self::give_achievement(
+                        Some(app_ptr),
+                        AchievementId::NovelPeasPrize as i32,
+                        true,
+                    );
+                }
+                if app_ref.can_spawn_yetis() {
+                    Self::give_achievement(Some(app_ptr), AchievementId::Zombologist as i32, true);
+                }
+                // 检查是否收集了所有植物
+                let mut all_collected = true;
+                for seed_type in 0..=48 {
+                    if !app_ref.has_seed_type(unsafe { std::mem::transmute(seed_type) }) {
+                        all_collected = false;
+                        break;
+                    }
+                }
+                if all_collected {
+                    Self::give_achievement(
+                        Some(app_ptr),
+                        AchievementId::Morticulturalist as i32,
+                        true,
+                    );
                 }
             }
-            if all_collected {
-                Self::give_achievement(Some(app_ptr), AchievementId::Morticulturalist as i32, true);
-            }
-        } }
+        }
     }
 }

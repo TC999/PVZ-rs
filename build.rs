@@ -42,7 +42,10 @@ fn copy_game_assets() {
         let props_dst = target_dir.join("properties");
         let _ = fs::remove_dir_all(&props_dst);
         if copy_dir_recursively(&props_src, &props_dst) {
-            println!("cargo:warning=已复制 properties/ -> {}", props_dst.display());
+            println!(
+                "cargo:warning=已复制 properties/ -> {}",
+                props_dst.display()
+            );
         }
     } else {
         println!("cargo:warning=properties/ 未找到，跳过复制 (运行时需要此目录)");
@@ -101,7 +104,10 @@ fn setup_sdl2_mixer_windows() {
     } else if target.starts_with("i686") {
         "x86"
     } else {
-        println!("cargo:warning=不支持的架构: {}，跳过 SDL2_mixer 链接", target);
+        println!(
+            "cargo:warning=不支持的架构: {}，跳过 SDL2_mixer 链接",
+            target
+        );
         return;
     };
 
@@ -117,7 +123,11 @@ fn setup_sdl2_mixer_windows() {
 
     if dest.join("SDL2_mixer.lib").exists() {
         println!("cargo:rustc-link-search={}", dest.display());
-        println!("cargo:warning=SDL2_mixer .lib: {}\\SDL2_mixer.lib ({})", dest.display(), arch_dir);
+        println!(
+            "cargo:warning=SDL2_mixer .lib: {}\\SDL2_mixer.lib ({})",
+            dest.display(),
+            arch_dir
+        );
 
         // 复制 DLL 到正确的输出目录
         let dll_src = dest.join("SDL2_mixer.dll");
@@ -139,7 +149,12 @@ fn setup_sdl2_mixer_windows() {
 }
 
 #[cfg(target_os = "windows")]
-fn download_and_extract(version: &str, arch_dir: &std::path::Path, done_file: &std::path::Path, arch_label: &str) {
+fn download_and_extract(
+    version: &str,
+    arch_dir: &std::path::Path,
+    done_file: &std::path::Path,
+    arch_label: &str,
+) {
     use std::process::Command;
 
     // 将 properties/ 目录以及 main.pak 复制到程序目录下
@@ -161,33 +176,55 @@ fn download_and_extract(version: &str, arch_dir: &std::path::Path, done_file: &s
     if zip_path.exists() {
         println!("cargo:warning=使用已有开发包: {}", zip_path.display());
     } else {
-        println!("cargo:warning=正在下载 SDL2_mixer 开发包 ({})...", arch_label);
-    let dl_ok = Command::new("powershell")
-        .args(["-NoProfile", "-Command", &format!(
-            "Invoke-WebRequest -Uri '{}' -OutFile '{}' -ErrorAction Stop",
-            url, zip_path.to_string_lossy()
-        )])
-        .status().map(|s| s.success()).unwrap_or(false);
+        println!(
+            "cargo:warning=正在下载 SDL2_mixer 开发包 ({})...",
+            arch_label
+        );
+        let dl_ok = Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                &format!(
+                    "Invoke-WebRequest -Uri '{}' -OutFile '{}' -ErrorAction Stop",
+                    url,
+                    zip_path.to_string_lossy()
+                ),
+            ])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
 
-    if !dl_ok {
-        println!("cargo:warning=下载失败 (1/2)，尝试 curl...");
-        let curl_ok = Command::new("curl")
-            .args(["-L", "-o", &zip_path.to_string_lossy(), &url])
-            .status().map(|s| s.success()).unwrap_or(false);
-        if !curl_ok {
-            println!("cargo:warning=下载失败，请手动下载到: {}", zip_path.display());
-            return;
+        if !dl_ok {
+            println!("cargo:warning=下载失败 (1/2)，尝试 curl...");
+            let curl_ok = Command::new("curl")
+                .args(["-L", "-o", &zip_path.to_string_lossy(), &url])
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if !curl_ok {
+                println!(
+                    "cargo:warning=下载失败，请手动下载到: {}",
+                    zip_path.display()
+                );
+                return;
+            }
         }
-    }
     }
 
     // 解压
     let unzip_ok = Command::new("powershell")
-        .args(["-NoProfile", "-Command", &format!(
-            "Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
-            zip_path.to_string_lossy(), extract_dir.to_string_lossy()
-        )])
-        .status().map(|s| s.success()).unwrap_or(false);
+        .args([
+            "-NoProfile",
+            "-Command",
+            &format!(
+                "Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
+                zip_path.to_string_lossy(),
+                extract_dir.to_string_lossy()
+            ),
+        ])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
 
     if !unzip_ok {
         println!("cargo:warning=解压失败");
@@ -209,7 +246,8 @@ fn download_and_extract(version: &str, arch_dir: &std::path::Path, done_file: &s
                         if let Ok(lib_entries) = std::fs::read_dir(&lib_dir) {
                             for le in lib_entries {
                                 if let Ok(le) = le {
-                                    let _ = std::fs::copy(&le.path(), &arch_dir.join(le.file_name()));
+                                    let _ =
+                                        std::fs::copy(&le.path(), &arch_dir.join(le.file_name()));
                                 }
                             }
                         }
@@ -239,17 +277,24 @@ fn download_and_extract(version: &str, arch_dir: &std::path::Path, done_file: &s
                                         if let Ok(dentries) = std::fs::read_dir(parent) {
                                             for de in dentries {
                                                 if let Ok(de) = de {
-                                                    let _ = std::fs::copy(&de.path(), &arch_dir.join(de.file_name()));
+                                                    let _ = std::fs::copy(
+                                                        &de.path(),
+                                                        &arch_dir.join(de.file_name()),
+                                                    );
                                                 }
                                             }
                                         }
                                         copied = true;
                                     }
                                 }
-                                if copied { break; }
+                                if copied {
+                                    break;
+                                }
                             }
                         }
-                        if copied { break; }
+                        if copied {
+                            break;
+                        }
                     }
                 }
             }

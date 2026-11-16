@@ -9,14 +9,14 @@
 use std::cmp;
 
 use crate::framework::color::Color;
-use crate::framework::rect::Rect;
-use crate::framework::point::Point;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
-use crate::framework::widget::widget_container::WidgetContainer;
+use crate::framework::key_codes::{KeyCode, KEYCODE_SHIFT, KEYCODE_TAB};
+use crate::framework::point::Point;
+use crate::framework::rect::Rect;
 use crate::framework::widget::insets::Insets;
+use crate::framework::widget::widget_container::WidgetContainer;
 use crate::framework::widget::widget_manager::WidgetManager;
-use crate::framework::key_codes::{KeyCode, KEYCODE_TAB, KEYCODE_SHIFT};
 
 /// 布局标志
 pub const LAY_SAME_WIDTH: i32 = 0x0001;
@@ -126,7 +126,10 @@ pub static mut WRITE_COLORED_STRING: bool = true;
 impl Widget {
     pub fn new() -> Self {
         Widget {
-            x: 0, y: 0, width: 0, height: 0,
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
             parent: None,
             widget_manager: None,
             has_alpha: false,
@@ -160,17 +163,31 @@ impl Widget {
         Rect::new(self.x, self.y, self.width, self.height)
     }
 
-    pub fn left(&self) -> i32 { self.x }
-    pub fn top(&self) -> i32 { self.y }
-    pub fn right(&self) -> i32 { self.x + self.width }
-    pub fn bottom(&self) -> i32 { self.y + self.height }
-    pub fn width(&self) -> i32 { self.width }
-    pub fn height(&self) -> i32 { self.height }
+    pub fn left(&self) -> i32 {
+        self.x
+    }
+    pub fn top(&self) -> i32 {
+        self.y
+    }
+    pub fn right(&self) -> i32 {
+        self.x + self.width
+    }
+    pub fn bottom(&self) -> i32 {
+        self.y + self.height
+    }
+    pub fn width(&self) -> i32 {
+        self.width
+    }
+    pub fn height(&self) -> i32 {
+        self.height
+    }
 
     /// 判断点是否在控件内
     pub fn contains(&self, the_x: i32, the_y: i32) -> bool {
-        the_x >= self.x && the_x < self.x + self.width
-            && the_y >= self.y && the_y < self.y + self.height
+        the_x >= self.x
+            && the_x < self.x + self.width
+            && the_y >= self.y
+            && the_y < self.y + self.height
     }
 
     /// 获取内嵌矩形
@@ -193,21 +210,32 @@ impl Widget {
     // ============================================================
 
     pub fn set_visible(&mut self, is_visible: bool) {
-        if self.visible == is_visible { return; }
+        if self.visible == is_visible {
+            return;
+        }
         self.visible = is_visible;
-        if self.visible { self.mark_dirty(); }
-        else { self.mark_dirty_full(); }
+        if self.visible {
+            self.mark_dirty();
+        } else {
+            self.mark_dirty_full();
+        }
         if let Some(wm) = self.widget_manager {
-            unsafe { (*wm).rehup_mouse(); }
+            unsafe {
+                (*wm).rehup_mouse();
+            }
         }
     }
 
     pub fn set_disabled(&mut self, is_disabled: bool) {
-        if self.disabled == is_disabled { return; }
+        if self.disabled == is_disabled {
+            return;
+        }
         self.disabled = is_disabled;
         if is_disabled {
             if let Some(wm) = self.widget_manager {
-                unsafe { (*wm).disable_widget(self as *mut Widget); }
+                unsafe {
+                    (*wm).disable_widget(self as *mut Widget);
+                }
             }
         }
         self.mark_dirty();
@@ -267,10 +295,15 @@ impl Widget {
             return;
         }
         self.mark_dirty_full();
-        self.x = the_x; self.y = the_y; self.width = the_w; self.height = the_h;
+        self.x = the_x;
+        self.y = the_y;
+        self.width = the_w;
+        self.height = the_h;
         self.mark_dirty();
         if let Some(wm) = self.widget_manager {
-            unsafe { (*wm).rehup_mouse(); }
+            unsafe {
+                (*wm).rehup_mouse();
+            }
         }
     }
 
@@ -346,7 +379,9 @@ impl Widget {
             self.impl_ = impl_;
         }
     }
-    pub fn wants_focus(&self) -> bool { self.wants_focus }
+    pub fn wants_focus(&self) -> bool {
+        self.wants_focus
+    }
     pub fn show_finger(&mut self, _on: bool) {}
 
     // ============================================================
@@ -506,7 +541,9 @@ impl Widget {
 
     pub fn mark_dirty(&mut self) {
         if let Some(p) = self.parent {
-            unsafe { (*p).mark_dirty(); }
+            unsafe {
+                (*p).mark_dirty();
+            }
         } else {
             self.dirty = true;
         }
@@ -514,7 +551,9 @@ impl Widget {
 
     pub fn mark_dirty_full(&mut self) {
         if let Some(p) = self.parent {
-            unsafe { (*p).mark_dirty_full(); }
+            unsafe {
+                (*p).mark_dirty_full();
+            }
         } else {
             self.dirty = true;
         }
@@ -533,9 +572,13 @@ impl Widget {
     pub fn removed_from_manager(&mut self, _wm: Option<*mut WidgetManager>) {}
 
     pub fn widget_removed_helper(&mut self) {
-        if self.widget_manager.is_none() { return; }
+        if self.widget_manager.is_none() {
+            return;
+        }
         if let Some(wm) = self.widget_manager {
-            unsafe { (*wm).disable_widget(self as *mut Widget); }
+            unsafe {
+                (*wm).disable_widget(self as *mut Widget);
+            }
         }
         self.removed_from_manager(self.widget_manager);
         self.mark_dirty_full();
@@ -548,7 +591,9 @@ impl Widget {
 
     pub fn defer_overlay(&mut self, priority: i32) {
         if let Some(wm) = self.widget_manager {
-            unsafe { (*wm).defer_overlay(self as *mut Widget, priority); }
+            unsafe {
+                (*wm).defer_overlay(self as *mut Widget, priority);
+            }
         }
     }
 
@@ -561,13 +606,22 @@ impl Widget {
     }
 
     pub fn write_centered_line_shadow(
-        &self, g: &mut Graphics, offset: i32, line: &str,
-        color1: &Color, color2: &Color, shadow_offset: &Point,
+        &self,
+        g: &mut Graphics,
+        offset: i32,
+        line: &str,
+        color1: &Color,
+        color2: &Color,
+        shadow_offset: &Point,
     ) -> Rect {
         let font = unsafe { g.font.as_ref().unwrap() };
         let w = font.string_width(line);
         g.set_color(color2);
-        g.draw_string(line, (self.width - w) / 2 + shadow_offset.x, offset + shadow_offset.y);
+        g.draw_string(
+            line,
+            (self.width - w) / 2 + shadow_offset.x,
+            offset + shadow_offset.y,
+        );
         g.set_color(color1);
         g.draw_string(line, (self.width - w) / 2, offset);
         Rect::new(
@@ -579,27 +633,50 @@ impl Widget {
     }
 
     pub fn get_num_digits(n: i32) -> i32 {
-        let mut d = 10; let mut nd = 1;
-        while n >= d { nd += 1; d *= 10; }
+        let mut d = 10;
+        let mut nd = 1;
+        while n >= d {
+            nd += 1;
+            d *= 10;
+        }
         nd
     }
 
     pub fn write_number_from_strip(
-        &self, g: &mut Graphics, number: i32,
-        the_x: i32, the_y: i32, strip: &Image, spacing: i32,
+        &self,
+        g: &mut Graphics,
+        number: i32,
+        the_x: i32,
+        the_y: i32,
+        strip: &Image,
+        spacing: i32,
     ) {
         let mut divisor = 10;
         let mut num_digits = 1;
-        while number >= divisor { num_digits += 1; divisor *= 10; }
-        if number == 0 { divisor = 10; }
+        while number >= divisor {
+            num_digits += 1;
+            divisor *= 10;
+        }
+        if number == 0 {
+            divisor = 10;
+        }
 
         let digit_len = strip.get_width() / 10;
         for di in 0..num_digits {
             divisor /= 10;
             let digit = (number / divisor) % 10;
             let mut cg = g.create();
-            cg.clip_rect_xywh(the_x + di * (digit_len + spacing), the_y, digit_len, strip.get_height());
-            cg.draw_image_xy(strip, the_x + di * (digit_len + spacing) - digit * digit_len, the_y);
+            cg.clip_rect_xywh(
+                the_x + di * (digit_len + spacing),
+                the_y,
+                digit_len,
+                strip.get_height(),
+            );
+            cg.draw_image_xy(
+                strip,
+                the_x + di * (digit_len + spacing) - digit * digit_len,
+                the_y,
+            );
         }
     }
 
@@ -608,18 +685,38 @@ impl Widget {
     // ============================================================
 
     pub fn layout(
-        &mut self, flags: i32, rel: Option<&Widget>,
-        left_pad: i32, top_pad: i32, w_pad: i32, h_pad: i32,
+        &mut self,
+        flags: i32,
+        rel: Option<&Widget>,
+        left_pad: i32,
+        top_pad: i32,
+        w_pad: i32,
+        h_pad: i32,
     ) {
-        let rel = match rel { Some(r) => r, None => return };
+        let rel = match rel {
+            Some(r) => r,
+            None => return,
+        };
 
-        let rl = if self.parent.is_some() && self.parent == rel.parent { 0 } else { rel.x };
-        let rt = if self.parent.is_some() && self.parent == rel.parent { 0 } else { rel.y };
-        let rw = rel.width; let rh = rel.height;
-        let rr = rl + rw; let rb = rt + rh;
+        let rl = if self.parent.is_some() && self.parent == rel.parent {
+            0
+        } else {
+            rel.x
+        };
+        let rt = if self.parent.is_some() && self.parent == rel.parent {
+            0
+        } else {
+            rel.y
+        };
+        let rw = rel.width;
+        let rh = rel.height;
+        let rr = rl + rw;
+        let rb = rt + rh;
 
-        let mut l = self.x; let mut t = self.y;
-        let mut wd = self.width; let mut ht = self.height;
+        let mut l = self.x;
+        let mut t = self.y;
+        let mut wd = self.width;
+        let mut ht = self.height;
         let mut ft = 1;
 
         while ft < LAY_MAX {
@@ -655,5 +752,7 @@ impl Widget {
 }
 
 impl Default for Widget {
-    fn default() -> Self { Widget::new() }
+    fn default() -> Self {
+        Widget::new()
+    }
 }

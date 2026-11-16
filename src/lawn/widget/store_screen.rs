@@ -4,7 +4,7 @@
 #![allow(dead_code)]
 
 use crate::framework::graphics::graphics::Graphics;
-use crate::framework::key_codes::{KEYCODE_ESCAPE, KEYCODE_RETURN, KEYCODE_SPACE, KeyCode};
+use crate::framework::key_codes::{KeyCode, KEYCODE_ESCAPE, KEYCODE_RETURN, KEYCODE_SPACE};
 use crate::framework::widget::dialog::{BUTTONS_FOOTER, BUTTONS_YES_NO, ID_OK};
 use crate::framework::widget::dialog_button::DialogButton;
 use crate::framework::widget::widget::{Widget, WidgetImpl};
@@ -167,7 +167,8 @@ impl StoreScreen {
             drawn_once: false,
             go_to_tree_now: false,
             purchased_full_version: false,
-            trial_locked_when_store_opened: app.map_or(false, |a| unsafe { (*a).is_trial_stage_locked() }),
+            trial_locked_when_store_opened: app
+                .map_or(false, |a| unsafe { (*a).is_trial_stage_locked() }),
             added_at_update_count: app.map_or(0, |a| unsafe { (*a).base.m_update_count }),
             result: -1, // 对应 C++ Dialog 构造 mResult = ID_NONE
             x: 0,
@@ -180,10 +181,13 @@ impl StoreScreen {
 
     /// 对应 C++ StoreScreen::GetStoreItemType
     pub fn get_store_item_type(&self, spot_index: i32) -> StoreItem {
-        if (self.page as i32) < (StorePages::NumPages as i32) && spot_index < MAX_PAGE_SPOTS as i32 {
+        if (self.page as i32) < (StorePages::NumPages as i32) && spot_index < MAX_PAGE_SPOTS as i32
+        {
             if self.page == StorePages::SlotUpgrades
                 && spot_index == 6
-                && self.app.map_or(false, |app| unsafe { (*app).is_trial_stage_locked() })
+                && self
+                    .app
+                    .map_or(false, |app| unsafe { (*app).is_trial_stage_locked() })
             {
                 return StoreItem::Pvz;
             }
@@ -194,17 +198,27 @@ impl StoreScreen {
 
     /// 从 ResourceManager 按 key 取图（对应 C++ IMAGE_* 全局资源；未接入资源表时返回 null）
     fn get_resource_image(&self, a_key: &str) -> *mut crate::framework::graphics::image::Image {
-        let Some(app) = self.app else { return std::ptr::null_mut() };
+        let Some(app) = self.app else {
+            return std::ptr::null_mut();
+        };
         unsafe {
             let app_ref = &*app;
-            let Some(rm) = app_ref.base.resource_manager else { return std::ptr::null_mut() };
+            let Some(rm) = app_ref.base.resource_manager else {
+                return std::ptr::null_mut();
+            };
             let rm_ref = &*rm;
             rm_ref.get_image(a_key).as_image_ptr()
         }
     }
 
     /// 对应 C++ StoreScreen::DrawItemIcon（StoreScreen.cpp 309-416）
-    pub fn draw_item_icon(&self, g: &mut Graphics, the_item_position: i32, the_item_type: StoreItem, the_is_for_highlight: bool) {
+    pub fn draw_item_icon(
+        &self,
+        g: &mut Graphics,
+        the_item_position: i32,
+        the_item_type: StoreItem,
+        the_is_for_highlight: bool,
+    ) {
         if the_is_for_highlight {
             // C++: DRAWMODE_ADDITIVE + Color(255,255,255,96) 调亮
             g.set_draw_mode(1); // Graphics::DRAWMODE_ADDITIVE
@@ -227,7 +241,11 @@ impl StoreScreen {
                 // C++: [STORE_UPGRADE_SLOTS] = mPurchases[PACKET_UPGRADE] + 7，HOUSEOFTERROR16 居中
                 let a_slot_text = self.app.map_or(String::new(), |app| unsafe {
                     (*app).player_info.as_ref().map_or(String::new(), |pi| {
-                        let a_purchases = pi.m_purchases.get(StoreItem::PacketUpgrade as usize).copied().unwrap_or(0);
+                        let a_purchases = pi
+                            .m_purchases
+                            .get(StoreItem::PacketUpgrade as usize)
+                            .copied()
+                            .unwrap_or(0);
                         format!("{}", a_purchases + 7)
                     })
                 });
@@ -235,73 +253,107 @@ impl StoreScreen {
             }
             StoreItem::PoolCleaner => {
                 let a_img = self.get_resource_image("IMAGE_ICON_POOLCLEANER");
-                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x + 1, a_pos_y + 7); }
+                if !a_img.is_null() {
+                    g.draw_image_xy(unsafe { &*a_img }, a_pos_x + 1, a_pos_y + 7);
+                }
             }
             StoreItem::Rake => {
                 let a_img = self.get_resource_image("IMAGE_ICON_RAKE");
-                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 5, a_pos_y + 10); }
+                if !a_img.is_null() {
+                    g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 5, a_pos_y + 10);
+                }
             }
             StoreItem::RoofCleaner => {
                 let a_img = self.get_resource_image("IMAGE_ICON_ROOFCLEANER");
-                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x, a_pos_y + 28); }
+                if !a_img.is_null() {
+                    g.draw_image_xy(unsafe { &*a_img }, a_pos_x, a_pos_y + 28);
+                }
             }
             StoreItem::PlantImitater => {
                 let a_img = self.get_resource_image("IMAGE_IMITATERSEED");
-                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x, a_pos_y); }
+                if !a_img.is_null() {
+                    g.draw_image_xy(unsafe { &*a_img }, a_pos_x, a_pos_y);
+                }
             }
             StoreItem::MushroomGarden => {
                 let a_img = self.get_resource_image("IMAGE_STORE_MUSHROOMGARDENICON");
-                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 8, a_pos_y + 2); }
+                if !a_img.is_null() {
+                    g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 8, a_pos_y + 2);
+                }
             }
             StoreItem::AquariumGarden => {
                 let a_img = self.get_resource_image("IMAGE_STORE_AQUARIUMGARDENICON");
-                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 8, a_pos_y + 2); }
+                if !a_img.is_null() {
+                    g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 8, a_pos_y + 2);
+                }
             }
             StoreItem::TreeOfWisdom => {
                 let a_img = self.get_resource_image("IMAGE_STORE_TREEOFWISDOMICON");
-                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 8, a_pos_y + 2); }
+                if !a_img.is_null() {
+                    g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 8, a_pos_y + 2);
+                }
             }
             StoreItem::Firstaid => {
                 let a_img = self.get_resource_image("IMAGE_STORE_FIRSTAIDWALLNUTICON");
-                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 1, a_pos_y + 13); }
+                if !a_img.is_null() {
+                    g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 1, a_pos_y + 13);
+                }
             }
             StoreItem::Pvz => {
                 let a_img = self.get_resource_image("IMAGE_STORE_PVZICON");
-                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x, a_pos_y - 9); }
+                if !a_img.is_null() {
+                    g.draw_image_xy(unsafe { &*a_img }, a_pos_x, a_pos_y - 9);
+                }
             }
             StoreItem::TreeFood => {
                 let a_img = self.get_resource_image("IMAGE_TREEFOOD");
-                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 8, a_pos_y - 2); }
+                if !a_img.is_null() {
+                    g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 8, a_pos_y - 2);
+                }
             }
             StoreItem::StinkyTheSnail => {
                 let a_img = self.get_resource_image("IMAGE_REANIM_STINKY_TURN3");
-                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 24, a_pos_y + 14); }
+                if !a_img.is_null() {
+                    g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 24, a_pos_y + 14);
+                }
             }
             StoreItem::GoldWateringcan => {
                 let a_img = self.get_resource_image("IMAGE_WATERINGCANGOLD");
-                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 14, a_pos_y - 4); }
+                if !a_img.is_null() {
+                    g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 14, a_pos_y - 4);
+                }
             }
             StoreItem::Fertilizer => {
                 let a_img = self.get_resource_image("IMAGE_FERTILIZER");
-                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 11, a_pos_y - 2); }
+                if !a_img.is_null() {
+                    g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 11, a_pos_y - 2);
+                }
                 self.draw_item_label_right(g, "x5", a_pos_x + 56, a_pos_y + 62, 16);
             }
             StoreItem::Phonograph => {
                 let a_img = self.get_resource_image("IMAGE_PHONOGRAPH");
-                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 12, a_pos_y + 3); }
+                if !a_img.is_null() {
+                    g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 12, a_pos_y + 3);
+                }
             }
             StoreItem::BugSpray => {
                 let a_img = self.get_resource_image("IMAGE_BUG_SPRAY");
-                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 12, a_pos_y + 3); }
+                if !a_img.is_null() {
+                    g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 12, a_pos_y + 3);
+                }
                 self.draw_item_label_right(g, "x5", a_pos_x + 56, a_pos_y + 62, 16);
             }
             StoreItem::GardeningGlove => {
                 let a_img = self.get_resource_image("IMAGE_ZEN_GARDENGLOVE");
-                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 12, a_pos_y + 3); }
+                if !a_img.is_null() {
+                    g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 12, a_pos_y + 3);
+                }
             }
             StoreItem::WheelBarrow => {
                 let a_img = self.get_resource_image("IMAGE_ZEN_WHEELBARROW");
-                if !a_img.is_null() { g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 12, a_pos_y + 3); }
+                if !a_img.is_null() {
+                    g.draw_image_xy(unsafe { &*a_img }, a_pos_x - 12, a_pos_y + 3);
+                }
             }
             _ => {
                 if Self::is_potted_plant(the_item_type) {
@@ -309,14 +361,33 @@ impl StoreScreen {
                     if let Some(app) = self.app {
                         unsafe {
                             if let Some(zg) = (*app).zen_garden.as_mut() {
-                                (**zg).draw_potted_plant_icon(g, a_pos_x as f32, a_pos_y as f32, &self.potted_plant_specs);
+                                (**zg).draw_potted_plant_icon(
+                                    g,
+                                    a_pos_x as f32,
+                                    a_pos_y as f32,
+                                    &self.potted_plant_specs,
+                                );
                             }
                         }
                     }
                 } else {
                     // C++: DrawSeedPacket(g, aPosX, aPosY, (SeedType)(theItemType + 40), SEED_NONE, 0, 255, false, false)
-                    let a_seed_type = unsafe { std::mem::transmute::<i32, crate::lawn::game_enums::SeedType>((the_item_type as i32) + 40) };
-                    crate::lawn::seed_packet::draw_seed_packet(g, a_pos_x as f32, a_pos_y as f32, a_seed_type, crate::lawn::game_enums::SeedType::None, 0.0, 255, false, false);
+                    let a_seed_type = unsafe {
+                        std::mem::transmute::<i32, crate::lawn::game_enums::SeedType>(
+                            (the_item_type as i32) + 40,
+                        )
+                    };
+                    crate::lawn::seed_packet::draw_seed_packet(
+                        g,
+                        a_pos_x as f32,
+                        a_pos_y as f32,
+                        a_seed_type,
+                        crate::lawn::game_enums::SeedType::None,
+                        0.0,
+                        255,
+                        false,
+                        false,
+                    );
                 }
             }
         }
@@ -326,7 +397,14 @@ impl StoreScreen {
     }
 
     /// 用 HOUSEOFTERROR 字号在 (x,y) 水平居中绘制商品标签文字（TRANSLATION_NOTE: PvzpDrawStringWrapped 简化）
-    fn draw_item_label_centered(&self, g: &mut Graphics, a_text: &str, a_center_x: i32, a_y: i32, a_size: i32) {
+    fn draw_item_label_centered(
+        &self,
+        g: &mut Graphics,
+        a_text: &str,
+        a_center_x: i32,
+        a_y: i32,
+        a_size: i32,
+    ) {
         let mut a_font = crate::framework::graphics::font::Font::new("Houseofterror", a_size);
         a_font.ascent = 13;
         a_font.font_height = a_size;
@@ -337,7 +415,14 @@ impl StoreScreen {
     }
 
     /// 右对齐商品标签文字（对应 C++ DS_ALIGN_RIGHT）
-    fn draw_item_label_right(&self, g: &mut Graphics, a_text: &str, a_right_x: i32, a_y: i32, a_size: i32) {
+    fn draw_item_label_right(
+        &self,
+        g: &mut Graphics,
+        a_text: &str,
+        a_right_x: i32,
+        a_y: i32,
+        a_size: i32,
+    ) {
         let mut a_font = crate::framework::graphics::font::Font::new("Houseofterror", a_size);
         a_font.ascent = 13;
         a_font.font_height = a_size;
@@ -346,7 +431,7 @@ impl StoreScreen {
         let a_w = a_font.string_width(a_text);
         g.draw_string(a_text, a_right_x - a_w, a_y);
     }
-/// 对应 C++ StoreScreen::DrawItem（StoreScreen.cpp 418-460）
+    /// 对应 C++ StoreScreen::DrawItem（StoreScreen.cpp 418-460）
     pub fn draw_item(&self, g: &mut Graphics, the_item_position: i32, the_item_type: StoreItem) {
         if self.is_item_unavailable(the_item_type) {
             return;
@@ -362,7 +447,9 @@ impl StoreScreen {
             if !a_price_img.is_null() {
                 g.draw_image_xy(unsafe { &*a_price_img }, a_pos_x - 3, a_pos_y + 70);
             }
-            let a_cost_string = crate::lawn::lawn_app::LawnApp::get_money_string(Self::get_item_cost(the_item_type));
+            let a_cost_string = crate::lawn::lawn_app::LawnApp::get_money_string(
+                Self::get_item_cost(the_item_type),
+            );
             let mut a_font = crate::framework::graphics::font::Font::new("Briannetod", 12);
             a_font.ascent = 13;
             a_font.font_height = 12;
@@ -397,12 +484,21 @@ impl StoreScreen {
 
         // C++: aStoreSignPosY = PvzpAnimateCurve(50, 110, mStoreTime, -150, 0, CURVE_EASE_IN_OUT)
         let a_store_sign_pos_y = crate::todlib::tod_common::tod_animate_curve(
-            50, 110, self.store_time, -150, 0, TodCurves::EaseInOut,
+            50,
+            110,
+            self.store_time,
+            -150,
+            0,
+            TodCurves::EaseInOut,
         );
 
         // 背景（昼夜）
         let a_is_night = self.app.map_or(false, |app| unsafe { (*app).is_night() });
-        let a_bg_key = if a_is_night { "IMAGE_STORE_BACKGROUNDNIGHT" } else { "IMAGE_STORE_BACKGROUND" };
+        let a_bg_key = if a_is_night {
+            "IMAGE_STORE_BACKGROUNDNIGHT"
+        } else {
+            "IMAGE_STORE_BACKGROUND"
+        };
         let a_bg = self.get_resource_image(a_bg_key);
         if !a_bg.is_null() {
             g.draw_image_xy(unsafe { &*a_bg }, 0, 0);
@@ -421,22 +517,38 @@ impl StoreScreen {
             if a_is_night {
                 let a_car_night = self.get_resource_image("IMAGE_STORE_CAR_NIGHT");
                 if !a_car_night.is_null() {
-                    g.draw_image_xy(unsafe { &*a_car_night }, self.shake_x + 688, self.shake_y + 193);
+                    g.draw_image_xy(
+                        unsafe { &*a_car_night },
+                        self.shake_x + 688,
+                        self.shake_y + 193,
+                    );
                 }
             }
         } else {
             let a_car_closed = self.get_resource_image("IMAGE_STORE_CARCLOSED");
             if !a_car_closed.is_null() {
-                g.draw_image_xy(unsafe { &*a_car_closed }, self.shake_x + 196, self.shake_y + 138);
+                g.draw_image_xy(
+                    unsafe { &*a_car_closed },
+                    self.shake_x + 196,
+                    self.shake_y + 138,
+                );
             }
             if a_is_night {
                 let a_car_night = self.get_resource_image("IMAGE_STORE_CAR_NIGHT");
                 if !a_car_night.is_null() {
-                    g.draw_image_xy(unsafe { &*a_car_night }, self.shake_x + 688, self.shake_y + 193);
+                    g.draw_image_xy(
+                        unsafe { &*a_car_night },
+                        self.shake_x + 688,
+                        self.shake_y + 193,
+                    );
                 }
                 let a_car_closed_night = self.get_resource_image("IMAGE_STORE_CARCLOSED_NIGHT");
                 if !a_car_closed_night.is_null() {
-                    g.draw_image_xy(unsafe { &*a_car_closed_night }, self.shake_x + 337, self.shake_y + 187);
+                    g.draw_image_xy(
+                        unsafe { &*a_car_closed_night },
+                        self.shake_x + 337,
+                        self.shake_y + 187,
+                    );
                 }
             }
         }
@@ -450,7 +562,9 @@ impl StoreScreen {
         // C++: Graphics gCrazyDave(*g) 平移后 mApp->DrawCrazyDave(&gCrazyDave)
         // [TRANSLATION_NOTE]: Graphics 复制 + mTransX/Y 偏移未模拟，直接调用等价绘制
         if let Some(app) = self.app {
-            unsafe { (*app).draw_crazy_dave(g); }
+            unsafe {
+                (*app).draw_crazy_dave(g);
+            }
         }
 
         // 商品循环
@@ -466,7 +580,11 @@ impl StoreScreen {
         // coinbank + 金币数（C++: IMAGE_COINBANK + FONT_CONTINUUMBOLD14 右对齐）
         let a_coinbank = self.get_resource_image("IMAGE_COINBANK");
         if !a_coinbank.is_null() {
-            g.draw_image_xy(unsafe { &*a_coinbank }, STORESCREEN_COINBANK_X, STORESCREEN_COINBANK_Y);
+            g.draw_image_xy(
+                unsafe { &*a_coinbank },
+                STORESCREEN_COINBANK_X,
+                STORESCREEN_COINBANK_Y,
+            );
         }
         let a_coin_label = self.app.map_or(String::new(), |app| unsafe {
             (*app).player_info.as_ref().map_or(String::new(), |pi| {
@@ -479,7 +597,11 @@ impl StoreScreen {
         g.set_font(&mut a_coin_font as *mut crate::framework::graphics::font::Font);
         g.set_color(&crate::framework::color::Color::new(180, 255, 90, 255));
         let a_coin_w = a_coin_font.string_width(&a_coin_label);
-        g.draw_string(&a_coin_label, STORESCREEN_COINBANK_X + 116 - a_coin_w, STORESCREEN_COINBANK_Y + 24);
+        g.draw_string(
+            &a_coin_label,
+            STORESCREEN_COINBANK_X + 116 - a_coin_w,
+            STORESCREEN_COINBANK_Y + 24,
+        );
 
         // 分页文本（C++: !mPrevButton->mDisabled 时 [STORE_PAGE]）
         let a_prev_disabled = self.prev_button.map_or(true, |b| unsafe {
@@ -503,7 +625,11 @@ impl StoreScreen {
             g.set_font(&mut a_page_font as *mut crate::framework::graphics::font::Font);
             g.set_color(&crate::framework::color::Color::new(80, 80, 80, 255));
             let a_page_w = a_page_font.string_width(&a_page_string);
-            g.draw_string(&a_page_string, STORESCREEN_PAGESTRING_X - a_page_w / 2, STORESCREEN_PAGESTRING_Y);
+            g.draw_string(
+                &a_page_string,
+                STORESCREEN_PAGESTRING_X - a_page_w / 2,
+                STORESCREEN_PAGESTRING_Y,
+            );
         }
     }
     pub fn draw_overlay(&self, g: &mut Graphics) {
@@ -522,7 +648,9 @@ impl StoreScreen {
                     return false;
                 }
                 if item == StoreItem::PacketUpgrade
-                    && (*app).player_info.as_ref().unwrap().m_purchases[StoreItem::PacketUpgrade as usize] >= 2
+                    && (*app).player_info.as_ref().unwrap().m_purchases
+                        [StoreItem::PacketUpgrade as usize]
+                        >= 2
                 {
                     return true;
                 }
@@ -548,13 +676,21 @@ impl StoreScreen {
         if let Some(app) = self.app {
             unsafe {
                 if item == StoreItem::WheelBarrow {
-                    return (*app).player_info.as_ref().unwrap().m_purchases[StoreItem::MushroomGarden as usize] == 0
-                        && (*app).player_info.as_ref().unwrap().m_purchases[StoreItem::AquariumGarden as usize] == 0;
+                    return (*app).player_info.as_ref().unwrap().m_purchases
+                        [StoreItem::MushroomGarden as usize]
+                        == 0
+                        && (*app).player_info.as_ref().unwrap().m_purchases
+                            [StoreItem::AquariumGarden as usize]
+                            == 0;
                 } else if Self::is_potted_plant(item) {
                     return !(*app).has_finished_adventure();
                 } else if item == StoreItem::TreeFood {
-                    return (*app).player_info.as_ref().unwrap().m_purchases[StoreItem::TreeOfWisdom as usize] == 0
-                        || (*app).player_info.as_ref().unwrap().m_purchases[StoreItem::TreeFood as usize] < PURCHASE_COUNT_OFFSET;
+                    return (*app).player_info.as_ref().unwrap().m_purchases
+                        [StoreItem::TreeOfWisdom as usize]
+                        == 0
+                        || (*app).player_info.as_ref().unwrap().m_purchases
+                            [StoreItem::TreeFood as usize]
+                            < PURCHASE_COUNT_OFFSET;
                 }
             }
         }
@@ -573,12 +709,16 @@ impl StoreScreen {
                 } else if item == StoreItem::Fertilizer || item == StoreItem::BugSpray {
                     return a_player.m_purchases[item as usize] > PURCHASE_COUNT_OFFSET + 15;
                 } else if item == StoreItem::TreeFood {
-                    return a_player.m_purchases[StoreItem::TreeFood as usize] >= PURCHASE_COUNT_OFFSET + 10;
+                    return a_player.m_purchases[StoreItem::TreeFood as usize]
+                        >= PURCHASE_COUNT_OFFSET + 10;
                 } else if item == StoreItem::BonusLawnMower {
                     return a_player.m_purchases[StoreItem::BonusLawnMower as usize] >= 2;
                 } else if Self::is_potted_plant(item) {
-                    let a_zen_full = (*app).zen_garden.map_or(false, |zg| unsafe { (*zg).is_zen_garden_full(true) });
-                    return a_zen_full || a_player.m_purchases[item as usize] == get_current_days_since_2000();
+                    let a_zen_full = (*app)
+                        .zen_garden
+                        .map_or(false, |zg| unsafe { (*zg).is_zen_garden_full(true) });
+                    return a_zen_full
+                        || a_player.m_purchases[item as usize] == get_current_days_since_2000();
                 } else {
                     return a_player.m_purchases[item as usize] != 0;
                 }
@@ -642,7 +782,9 @@ impl StoreScreen {
         if the_id != STORESCREEN_PREV && the_id != STORESCREEN_NEXT {
             if let Some(app) = self.app {
                 unsafe {
-                    (*app).play_sample(crate::framework::resources::ResourceId::SoundButtonclick as i32);
+                    (*app).play_sample(
+                        crate::framework::resources::ResourceId::SoundButtonclick as i32,
+                    );
                 }
             }
         }
@@ -650,7 +792,10 @@ impl StoreScreen {
 
     /// 对应 C++ StoreScreen::CanInteractWithButtons
     pub fn can_interact_with_buttons(&self) -> bool {
-        self.store_time >= 120 && !self.bubble_click_to_continue && self.hatch_timer <= 0 && !self.wait_for_dialog
+        self.store_time >= 120
+            && !self.bubble_click_to_continue
+            && self.hatch_timer <= 0
+            && !self.wait_for_dialog
     }
 
     /// 对应 C++ StoreScreen::IsPageShown
@@ -695,7 +840,9 @@ impl StoreScreen {
             StoreItem::PlantSpikerock => 750,
             StoreItem::PlantCobcannon => 2000,
             StoreItem::PlantImitater => 3000,
-            StoreItem::PottedMarigold1 | StoreItem::PottedMarigold2 | StoreItem::PottedMarigold3 => 250,
+            StoreItem::PottedMarigold1
+            | StoreItem::PottedMarigold2
+            | StoreItem::PottedMarigold3 => 250,
             StoreItem::GoldWateringcan => 1000,
             StoreItem::Fertilizer => 75,
             StoreItem::BugSpray => 100,
@@ -782,7 +929,12 @@ impl StoreScreen {
 
 impl StoreScreen {
     /// 对应 C++ StoreScreen::SetBubbleText
-    pub fn set_bubble_text(&mut self, the_crazy_dave_message: i32, the_time: i32, the_click_to_continue: bool) {
+    pub fn set_bubble_text(
+        &mut self,
+        the_crazy_dave_message: i32,
+        the_time: i32,
+        the_click_to_continue: bool,
+    ) {
         if let Some(app) = self.app {
             unsafe {
                 (*app).crazy_dave_talk_index(the_crazy_dave_message);
@@ -795,7 +947,11 @@ impl StoreScreen {
     /// 对应 C++ StoreScreen::UpdateMouse
     pub fn update_mouse(&mut self) {
         self.mouse_over_item = StoreItem::Invalid;
-        if self.store_time < 120 || self.bubble_click_to_continue || self.hatch_timer > 0 || self.wait_for_dialog {
+        if self.store_time < 120
+            || self.bubble_click_to_continue
+            || self.hatch_timer > 0
+            || self.wait_for_dialog
+        {
             return;
         }
         let (a_mouse_x, a_mouse_y) = if let Some(app) = self.app {
@@ -820,7 +976,9 @@ impl StoreScreen {
                 let mut a_item_y = 0;
                 Self::get_store_position(a_item_pos as i32, &mut a_item_x, &mut a_item_y);
                 // C++: Rect(aItemX, aItemY, 50, 87).Contains(aMouseX, aMouseY)
-                if (a_item_x..a_item_x + 50).contains(&a_mouse_x) && (a_item_y..a_item_y + 87).contains(&a_mouse_y) {
+                if (a_item_x..a_item_x + 50).contains(&a_mouse_x)
+                    && (a_item_y..a_item_y + 87).contains(&a_mouse_y)
+                {
                     self.mouse_over_item = a_item_type;
                     let mut a_message_index = -1;
                     match a_item_type {
@@ -834,9 +992,9 @@ impl StoreScreen {
                         StoreItem::PlantCobcannon => a_message_index = 2007,
                         StoreItem::PlantImitater => a_message_index = 2008,
                         StoreItem::BonusLawnMower => a_message_index = 2009,
-                        StoreItem::PottedMarigold1 | StoreItem::PottedMarigold2 | StoreItem::PottedMarigold3 => {
-                            a_message_index = 2010
-                        }
+                        StoreItem::PottedMarigold1
+                        | StoreItem::PottedMarigold2
+                        | StoreItem::PottedMarigold3 => a_message_index = 2010,
                         StoreItem::GoldWateringcan => a_message_index = 2019,
                         StoreItem::Fertilizer => a_message_index = 2020,
                         StoreItem::BugSpray => a_message_index = 2022,
@@ -848,7 +1006,8 @@ impl StoreScreen {
                         StoreItem::PacketUpgrade => {
                             // C++: std::clamp(购买数 + 2011, 2011, 2014)
                             let a_purchase = self.app.map_or(0, |app| unsafe {
-                                (*app).player_info.as_ref().unwrap().m_purchases[StoreItem::PacketUpgrade as usize]
+                                (*app).player_info.as_ref().unwrap().m_purchases
+                                    [StoreItem::PacketUpgrade as usize]
                             });
                             a_message_index = (a_purchase + 2011).clamp(2011, 2014);
                         }
@@ -863,7 +1022,9 @@ impl StoreScreen {
                         StoreItem::Pvz => a_message_index = 2034,
                         _ => {}
                     }
-                    if self.app.map_or(false, |app| unsafe { (*app).m_crazy_dave_message_index != a_message_index }) {
+                    if self.app.map_or(false, |app| unsafe {
+                        (*app).m_crazy_dave_message_index != a_message_index
+                    }) {
                         self.set_bubble_text(a_message_index, 100, false);
                     } else {
                         self.bubble_count_down = 100;
@@ -881,24 +1042,36 @@ impl StoreScreen {
         }
 
         // C++: mApp->SetCursor(mBackButton->mIsOver || mPrevButton->mIsOver || mNextButton->mIsOver || aShowFinger ? CURSOR_HAND : CURSOR_POINTER)
-        let a_back_over = self.back_button.map_or(false, |b| unsafe { (*b).widget.is_over });
-        let a_prev_over = self.prev_button.map_or(false, |b| unsafe { (*b).widget.is_over });
-        let a_next_over = self.next_button.map_or(false, |b| unsafe { (*b).widget.is_over });
+        let a_back_over = self
+            .back_button
+            .map_or(false, |b| unsafe { (*b).widget.is_over });
+        let a_prev_over = self
+            .prev_button
+            .map_or(false, |b| unsafe { (*b).widget.is_over });
+        let a_next_over = self
+            .next_button
+            .map_or(false, |b| unsafe { (*b).widget.is_over });
         if let Some(app) = self.app {
             unsafe {
-                (*app).base.set_cursor(if a_back_over || a_prev_over || a_next_over || a_show_finger {
-                    CURSOR_HAND
-                } else {
-                    CURSOR_POINTER
-                });
+                (*app).base.set_cursor(
+                    if a_back_over || a_prev_over || a_next_over || a_show_finger {
+                        CURSOR_HAND
+                    } else {
+                        CURSOR_POINTER
+                    },
+                );
             }
         }
     }
 
     /// 对应 C++ StoreScreen::StorePreload
     pub fn store_preload(&mut self) {
-        crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::CrazyDave);
-        crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::ZengardenFertilizer);
+        crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(
+            ReanimationType::CrazyDave,
+        );
+        crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(
+            ReanimationType::ZengardenFertilizer,
+        );
         if let Some(app) = self.app {
             unsafe {
                 (*app).crazy_dave_enter();
@@ -944,7 +1117,9 @@ impl StoreScreen {
             return;
         }
 
-        let a_crazy_dave_state = self.app.map_or(CrazyDaveState::Off, |app| unsafe { (*app).m_crazy_dave_state });
+        let a_crazy_dave_state = self.app.map_or(CrazyDaveState::Off, |app| unsafe {
+            (*app).m_crazy_dave_state
+        });
         if a_crazy_dave_state == CrazyDaveState::Off {
             // demo sessions preload by update tick instead of the frame-scheduled mDrawnOnce
             // （对应 C++ StoreScreen.cpp:666 的 `mApp->IsInDemoMode()`）
@@ -966,7 +1141,9 @@ impl StoreScreen {
         }
 
         self.store_time += 1;
-        if a_crazy_dave_state != CrazyDaveState::Off && a_crazy_dave_state != CrazyDaveState::Entering {
+        if a_crazy_dave_state != CrazyDaveState::Off
+            && a_crazy_dave_state != CrazyDaveState::Entering
+        {
             if self.hatch_timer > 0 {
                 self.hatch_timer -= 1;
                 // 还原上一帧加的抖动位移
@@ -1052,14 +1229,17 @@ impl StoreScreen {
                     self.ambient_speech_count_down -= 1;
                     if self.ambient_speech_count_down <= 0 {
                         // C++: PvzpWeightedArray aPickArray[4]（消息 2015..2018）
-                        let mut a_pick_array: [TodWeightedArray; 4] = [TodWeightedArray { item: 0, weight: 0 }; 4];
+                        let mut a_pick_array: [TodWeightedArray; 4] =
+                            [TodWeightedArray { item: 0, weight: 0 }; 4];
                         for i in 0i32..4 {
                             let a_message = 2015 + i;
                             a_pick_array[i as usize].item = a_message as usize;
                             if self.previous_ambient_speech_index == a_message {
                                 a_pick_array[i as usize].weight = 0;
                             } else if i == 3 {
-                                let a_finished = self.app.map_or(false, |app| unsafe { (*app).has_finished_adventure() });
+                                let a_finished = self.app.map_or(false, |app| unsafe {
+                                    (*app).has_finished_adventure()
+                                });
                                 a_pick_array[i as usize].weight = if a_finished { 20 } else { 0 };
                             } else {
                                 a_pick_array[i as usize].weight = 100;
@@ -1079,7 +1259,9 @@ impl StoreScreen {
         // store opened in trial mode and now unlocked: the player just purchased the full version
         if self.can_interact_with_buttons()
             && self.trial_locked_when_store_opened
-            && self.app.map_or(false, |app| unsafe { !(*app).is_trial_stage_locked() })
+            && self
+                .app
+                .map_or(false, |app| unsafe { !(*app).is_trial_stage_locked() })
         {
             self.purchased_full_version = true;
             self.result = ID_OK;
@@ -1137,7 +1319,9 @@ impl StoreScreen {
             self.hatch_timer = 50;
             if let Some(app) = self.app {
                 unsafe {
-                    (*app).play_sample(crate::framework::resources::ResourceId::SoundHatchbackClose as i32);
+                    (*app).play_sample(
+                        crate::framework::resources::ResourceId::SoundHatchbackClose as i32,
+                    );
                 }
             }
             self.bubble_count_down = 0;
@@ -1150,12 +1334,14 @@ impl StoreScreen {
             // do-while 翻页到第一个可见页
             loop {
                 if the_id == STORESCREEN_PREV {
-                    self.page = unsafe { std::mem::transmute::<i32, StorePages>(self.page as i32 - 1) };
+                    self.page =
+                        unsafe { std::mem::transmute::<i32, StorePages>(self.page as i32 - 1) };
                     if (self.page as i32) < (StorePages::SlotUpgrades as i32) {
                         self.page = StorePages::Zen2;
                     }
                 } else {
-                    self.page = unsafe { std::mem::transmute::<i32, StorePages>(self.page as i32 + 1) };
+                    self.page =
+                        unsafe { std::mem::transmute::<i32, StorePages>(self.page as i32 + 1) };
                     if (self.page as i32) >= (StorePages::NumPages as i32) {
                         self.page = StorePages::SlotUpgrades;
                     }
@@ -1174,7 +1360,8 @@ impl StoreScreen {
             return;
         }
 
-        if self.bubble_click_to_continue && (the_key == KEYCODE_SPACE || the_key == KEYCODE_RETURN) {
+        if self.bubble_click_to_continue && (the_key == KEYCODE_SPACE || the_key == KEYCODE_RETURN)
+        {
             self.advance_crazy_dave_dialog();
             return;
         }
@@ -1237,7 +1424,8 @@ impl StoreScreen {
             // Rust do_dialog 返回 *mut Dialog 而非 LawnDialog，按钮标签用对话框默认值，暂跳过。
 
             self.wait_for_dialog = true;
-            let a_confirm_result = a_confirm_dialog.map_or(0, |d| unsafe { (&mut *d).wait_for_result(true) });
+            let a_confirm_result =
+                a_confirm_dialog.map_or(0, |d| unsafe { (&mut *d).wait_for_result(true) });
             self.wait_for_dialog = false;
 
             if a_confirm_result == ID_OK {
@@ -1286,7 +1474,9 @@ impl StoreScreen {
                                 for i in 0..bank_len {
                                     // [TRANSLATION_NOTE]: C++ mSeedPackets[i].mX = ...；nightly 要求
                                     // 裸指针写操作显式解引用
-                                    unsafe { (&mut *board).seed_bank[i].x = a_packet_xs[i]; }
+                                    unsafe {
+                                        (&mut *board).seed_bank[i].x = a_packet_xs[i];
+                                    }
                                 }
                             }
                         } else if the_store_item == StoreItem::BonusLawnMower {
@@ -1299,21 +1489,29 @@ impl StoreScreen {
                                 a_time = 1;
                             }
                             a_player.m_purchases[StoreItem::StinkyTheSnail as usize] = a_time;
-                        } else if the_store_item == StoreItem::Fertilizer || the_store_item == StoreItem::BugSpray {
-                            if a_player.m_purchases[the_store_item as usize] < PURCHASE_COUNT_OFFSET {
-                                a_player.m_purchases[the_store_item as usize] = PURCHASE_COUNT_OFFSET;
+                        } else if the_store_item == StoreItem::Fertilizer
+                            || the_store_item == StoreItem::BugSpray
+                        {
+                            if a_player.m_purchases[the_store_item as usize] < PURCHASE_COUNT_OFFSET
+                            {
+                                a_player.m_purchases[the_store_item as usize] =
+                                    PURCHASE_COUNT_OFFSET;
                             }
                             a_player.m_purchases[the_store_item as usize] += 5;
                         } else if the_store_item == StoreItem::TreeFood {
-                            if a_player.m_purchases[StoreItem::TreeFood as usize] < PURCHASE_COUNT_OFFSET {
-                                a_player.m_purchases[StoreItem::TreeFood as usize] = PURCHASE_COUNT_OFFSET;
+                            if a_player.m_purchases[StoreItem::TreeFood as usize]
+                                < PURCHASE_COUNT_OFFSET
+                            {
+                                a_player.m_purchases[StoreItem::TreeFood as usize] =
+                                    PURCHASE_COUNT_OFFSET;
                             }
                             a_player.m_purchases[StoreItem::TreeFood as usize] += 1;
                         } else if the_store_item == StoreItem::TreeOfWisdom {
                             a_player.m_purchases[StoreItem::TreeOfWisdom as usize] = 1;
                             // C++: mChallengeRecords[GAMEMODE_TREE_OF_WISDOM - GAMEMODE_SURVIVAL_NORMAL_STAGE_1] = 1
-                            let a_record_index =
-                                (GameMode::ChallengeTreeOfWisdom as i32 - GameMode::SurvivalNormalStage1 as i32) as usize;
+                            let a_record_index = (GameMode::ChallengeTreeOfWisdom as i32
+                                - GameMode::SurvivalNormalStage1 as i32)
+                                as usize;
                             if a_record_index < a_player.m_challenge_records.len() {
                                 a_player.m_challenge_records[a_record_index] = 1;
                             }
@@ -1328,7 +1526,8 @@ impl StoreScreen {
                             );
                             // [TRANSLATION_NOTE]: C++ 中 mLawnYesButton/mLawnNoButton SetLabel 跳过（同上）
                             self.wait_for_dialog = true;
-                            let a_result = a_visit_dialog.map_or(0, |d| unsafe { (&mut *d).wait_for_result(true) });
+                            let a_result = a_visit_dialog
+                                .map_or(0, |d| unsafe { (&mut *d).wait_for_result(true) });
                             self.wait_for_dialog = false;
 
                             if a_result == ID_OK {
@@ -1339,14 +1538,15 @@ impl StoreScreen {
                             if let Some(zg) = app_ref.zen_garden {
                                 (*zg).add_potted_plant(&mut self.potted_plant_specs);
                             }
-                            self.potted_plant_specs.initialize_potted_plant(SeedType::Marigold);
-                            self.potted_plant_specs.draw_variation = std::mem::transmute::<i32, DrawVariation>(
-                                rand_range_int(
+                            self.potted_plant_specs
+                                .initialize_potted_plant(SeedType::Marigold);
+                            self.potted_plant_specs.draw_variation =
+                                std::mem::transmute::<i32, DrawVariation>(rand_range_int(
                                     DrawVariation::MarigoldWhite as i32,
                                     DrawVariation::MarigoldLightGreen as i32,
-                                ),
-                            );
-                            a_player.m_purchases[the_store_item as usize] = get_current_days_since_2000();
+                                ));
+                            a_player.m_purchases[the_store_item as usize] =
+                                get_current_days_since_2000();
                         } else {
                             // C++: PVZP_ASSERT(theStoreItem >= STORE_ITEM_PLANT_GATLINGPEA && theStoreItem < (StoreItem)MAX_PURCHASES)
                             a_player.m_purchases[the_store_item as usize] = 1;
@@ -1363,11 +1563,16 @@ impl StoreScreen {
                         // Only give the achievement if the player bought a plant and has all plants purchased
                         // [TRANSLATION_NOTE]: C++ 用枚举比较 theStoreItem >= STORE_ITEM_PLANT_GATLINGPEA；
                         // Rust StoreItem 无 PartialOrd，改用底层整数值比较（repr(i32) 值序一致）。
-                        let mut a_give_achievement = the_store_item as i32 >= StoreItem::PlantGatlingpea as i32
+                        let mut a_give_achievement = the_store_item as i32
+                            >= StoreItem::PlantGatlingpea as i32
                             && the_store_item as i32 <= StoreItem::PlantImitater as i32;
                         if a_give_achievement {
-                            for a_seed_type in (SeedType::Gatlingpea as i32)..=(SeedType::Imitater as i32) {
-                                if !app_ref.has_seed_type(unsafe { std::mem::transmute::<i32, SeedType>(a_seed_type) }) {
+                            for a_seed_type in
+                                (SeedType::Gatlingpea as i32)..=(SeedType::Imitater as i32)
+                            {
+                                if !app_ref.has_seed_type(unsafe {
+                                    std::mem::transmute::<i32, SeedType>(a_seed_type)
+                                }) {
                                     a_give_achievement = false;
                                 }
                             }
@@ -1396,16 +1601,22 @@ impl StoreScreen {
         }
 
         // "Hey neighbor! I've got some new things to sell!"
-        if self.app.map_or(false, |app| unsafe { (*app).m_crazy_dave_message_index == 3100 }) {
+        if self.app.map_or(false, |app| unsafe {
+            (*app).m_crazy_dave_message_index == 3100
+        }) {
             self.hatch_timer = 150;
             self.hatch_open = true;
             if let Some(app) = self.app {
                 unsafe {
-                    (*app).play_sample(crate::framework::resources::ResourceId::SoundHatchbackOpen as i32);
+                    (*app).play_sample(
+                        crate::framework::resources::ResourceId::SoundHatchbackOpen as i32,
+                    );
                 }
             }
         }
-        let a_advanced = self.app.map_or(true, |app| unsafe { (*app).advance_crazy_dave_text() });
+        let a_advanced = self
+            .app
+            .map_or(true, |app| unsafe { (*app).advance_crazy_dave_text() });
         if !a_advanced {
             if let Some(app) = self.app {
                 unsafe {
@@ -1418,25 +1629,36 @@ impl StoreScreen {
                 self.enable_buttons(true);
             }
         } else {
-            let a_message_index = self.app.map_or(0, |app| unsafe { (*app).m_crazy_dave_message_index });
+            let a_message_index = self
+                .app
+                .map_or(0, |app| unsafe { (*app).m_crazy_dave_message_index });
             self.set_bubble_text(a_message_index, 0, true);
         }
 
-        let a_message = self.app.map_or(0, |app| unsafe { (*app).m_crazy_dave_message_index });
+        let a_message = self
+            .app
+            .map_or(0, |app| unsafe { (*app).m_crazy_dave_message_index });
         if a_message == 303 || a_message == 606 || a_message == 2601 {
             self.hatch_timer = 150;
             self.hatch_open = true;
             if let Some(app) = self.app {
                 unsafe {
-                    (*app).play_sample(crate::framework::resources::ResourceId::SoundHatchbackOpen as i32);
+                    (*app).play_sample(
+                        crate::framework::resources::ResourceId::SoundHatchbackOpen as i32,
+                    );
                 }
             }
         } else if a_message == 603 {
             if let Some(app) = self.app {
                 unsafe {
-                    (*app).player_info.as_mut().unwrap().m_needs_magic_taco_reward = false;
+                    (*app)
+                        .player_info
+                        .as_mut()
+                        .unwrap()
+                        .m_needs_magic_taco_reward = false;
                     (*app).write_current_user_config();
-                    (*app).play_sample(crate::framework::resources::ResourceId::SoundDiamond as i32);
+                    (*app)
+                        .play_sample(crate::framework::resources::ResourceId::SoundDiamond as i32);
                 }
             }
             self.coins.push(Coin::new());

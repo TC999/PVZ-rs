@@ -1,17 +1,17 @@
 // PvZ Portable Rust 翻译 — Plant（植物类）
 // 对应 C++ src/Lawn/Plant.h / Plant.cpp
 
-use crate::lawn::game_object::GameObject;
-use crate::lawn::game_enums::*;
-use crate::lawn::board::Board;
-use crate::lawn::zombie::Zombie;
-use crate::todlib::reanimator::{Reanimation, ReanimationType, ReanimLoopType};
-use crate::todlib::tod_particle::ParticleSystem;
+use crate::framework::color::Color;
+use crate::framework::common::{Rand, RandFloat, RandRange};
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
 use crate::framework::rect::Rect;
-use crate::framework::color::Color;
-use crate::framework::common::{Rand, RandRange, RandFloat};
+use crate::lawn::board::Board;
+use crate::lawn::game_enums::*;
+use crate::lawn::game_object::GameObject;
+use crate::lawn::zombie::Zombie;
+use crate::todlib::reanimator::{ReanimLoopType, Reanimation, ReanimationType};
+use crate::todlib::tod_particle::ParticleSystem;
 
 pub const MAX_MAGNET_ITEMS: usize = 5;
 
@@ -139,7 +139,13 @@ impl Plant {
             beghouled_flash_countdown: 0,
             shake_offset_x: 0.0,
             shake_offset_y: 0.0,
-            magnet_items: [MagnetItem::new(), MagnetItem::new(), MagnetItem::new(), MagnetItem::new(), MagnetItem::new()],
+            magnet_items: [
+                MagnetItem::new(),
+                MagnetItem::new(),
+                MagnetItem::new(),
+                MagnetItem::new(),
+                MagnetItem::new(),
+            ],
             target_zombie_id: ZOMBIEID_NULL,
             wake_up_counter: 0,
             on_bungee_state: PlantOnBungeeState::NotOnBungee,
@@ -155,13 +161,22 @@ impl Plant {
     }
 
     /// 初始化植物（对应 C++ Plant::PlantInitialize）
-    pub fn plant_initialize(&mut self, grid_x: i32, grid_y: i32, seed_type: SeedType, imitater_type: SeedType) {
+    pub fn plant_initialize(
+        &mut self,
+        grid_x: i32,
+        grid_y: i32,
+        seed_type: SeedType,
+        imitater_type: SeedType,
+    ) {
         self.plant_col = grid_x;
         self.base.row = grid_y;
 
         // 从 Board 获取像素坐标
         let (pixel_x, pixel_y) = if let Some(board) = self.base.get_board() {
-            (board.grid_to_pixel_x(grid_x, grid_y), board.grid_to_pixel_y(grid_x, grid_y))
+            (
+                board.grid_to_pixel_x(grid_x, grid_y),
+                board.grid_to_pixel_y(grid_x, grid_y),
+            )
         } else {
             (0, 0)
         };
@@ -217,10 +232,21 @@ impl Plant {
 
         // 加载重动画
         if a_plant_def.reanimation_type != ReanimationType::None {
-            let a_offset_y = Self::plant_draw_height_offset(self.base.get_board(), Some(self), seed_type, grid_x, grid_y);
+            let a_offset_y = Self::plant_draw_height_offset(
+                self.base.get_board(),
+                Some(self),
+                seed_type,
+                grid_x,
+                grid_y,
+            );
             let render_order = self.base.render_order;
             if let Some(app) = self.base.get_app_mut() {
-                if let Some(body_reanim) = app.add_reanimation(0.0, a_offset_y, render_order + 1, a_plant_def.reanimation_type as i32) {
+                if let Some(body_reanim) = app.add_reanimation(
+                    0.0,
+                    a_offset_y,
+                    render_order + 1,
+                    a_plant_def.reanimation_type as i32,
+                ) {
                     unsafe {
                         (*body_reanim).m_loop_type = ReanimLoopType::Loop;
                         (*body_reanim).m_anim_rate = 10.0 + RandFloat(5.0);
@@ -269,8 +295,11 @@ impl Plant {
                     self.set_body_reanim_rate(10.0);
                 }
             }
-            SeedType::Peashooter | SeedType::Snowpea | SeedType::Repeater |
-            SeedType::Leftpeater | SeedType::Gatlingpea => {
+            SeedType::Peashooter
+            | SeedType::Snowpea
+            | SeedType::Repeater
+            | SeedType::Leftpeater
+            | SeedType::Gatlingpea => {
                 self.set_body_reanim_rate(15.0 + RandFloat(5.0));
                 // 头部动画 — 通过 stub 处理
                 self.add_head_reanim("anim_head_idle");
@@ -431,8 +460,11 @@ impl Plant {
 
         // Big Time 模式翻倍血量
         if let Some(app) = self.base.get_app() {
-            if app.game_mode == GameMode::ChallengeBigTime &&
-                (seed_type == SeedType::Wallnut || seed_type == SeedType::Sunflower || seed_type == SeedType::Marigold) {
+            if app.game_mode == GameMode::ChallengeBigTime
+                && (seed_type == SeedType::Wallnut
+                    || seed_type == SeedType::Sunflower
+                    || seed_type == SeedType::Marigold)
+            {
                 self.plant_health *= 2;
             }
         }
@@ -451,7 +483,9 @@ impl Plant {
 
     /// 更新植物（对应 C++ Plant::Update）
     pub fn update(&mut self) {
-        if self.dead { return; }
+        if self.dead {
+            return;
+        }
 
         // 对应 C++ Plant::Update 的 doUpdate 四情形判定（Plant.cpp:2856-2865）
         let app_ptr = self.base.app;
@@ -468,11 +502,14 @@ impl Plant {
                     do_update = true;
                 } else if on_board
                     && self.base.get_board().map_or(false, |b| unsafe {
-                        b.m_cut_scene.map_or(false, |c| unsafe { (*c).should_run_upsell_board() })
+                        b.m_cut_scene
+                            .map_or(false, |c| unsafe { (*c).should_run_upsell_board() })
                     })
                 {
                     do_update = true;
-                } else if !on_board || (*app).game_scene == crate::lawn::lawn_app::GameScenes::Playing {
+                } else if !on_board
+                    || (*app).game_scene == crate::lawn::lawn_app::GameScenes::Playing
+                {
                     do_update = true;
                 }
             }
@@ -568,7 +605,10 @@ impl Plant {
 
     /// 是否位于高台（对应 C++ Plant::IsOnHighGround）
     pub fn is_on_high_ground(&self) -> bool {
-        let board = match self.base.board { Some(b) => b, None => return false };
+        let board = match self.base.board {
+            Some(b) => b,
+            None => return false,
+        };
         unsafe {
             let b = &*board;
             let gx = self.plant_col as usize;
@@ -583,13 +623,28 @@ impl Plant {
     /// 获取植物矩形（对应 C++ Plant::GetPlantRect）
     pub fn get_plant_rect(&self) -> Rect {
         if self.seed_type == SeedType::Tallnut {
-            Rect::new(self.base.x + 10, self.base.y, self.base.width, self.base.height)
+            Rect::new(
+                self.base.x + 10,
+                self.base.y,
+                self.base.width,
+                self.base.height,
+            )
         } else if self.seed_type == SeedType::Pumpkinshell {
-            Rect::new(self.base.x, self.base.y, self.base.width - 20, self.base.height)
+            Rect::new(
+                self.base.x,
+                self.base.y,
+                self.base.width - 20,
+                self.base.height,
+            )
         } else if self.seed_type == SeedType::Cobcannon {
             Rect::new(self.base.x, self.base.y, 140, 80)
         } else {
-            Rect::new(self.base.x + 10, self.base.y, self.base.width - 20, self.base.height)
+            Rect::new(
+                self.base.x + 10,
+                self.base.y,
+                self.base.width - 20,
+                self.base.height,
+            )
         }
     }
 
@@ -644,17 +699,32 @@ impl Plant {
     pub fn update_production_plant(&mut self) {
         // 对应 C++: if (!IsInPlay() || mApp->IsIZombieLevel() ||
         //                mApp->mGameMode == GAMEMODE_UPSELL || mApp->mGameMode == GAMEMODE_INTRO) return;
-        if !self.is_in_play() { return; }
-        let app_mode = self.base.get_app().map_or(GameMode::Adventure, |app| app.game_mode);
-        if app_mode == GameMode::Upsell || app_mode == GameMode::Intro { return; }
-        if self.base.get_app().map_or(true, |app| app.is_izombie_level()) { return; }
+        if !self.is_in_play() {
+            return;
+        }
+        let app_mode = self
+            .base
+            .get_app()
+            .map_or(GameMode::Adventure, |app| app.game_mode);
+        if app_mode == GameMode::Upsell || app_mode == GameMode::Intro {
+            return;
+        }
+        if self
+            .base
+            .get_app()
+            .map_or(true, |app| app.is_izombie_level())
+        {
+            return;
+        }
 
         // 对应 C++: if (mBoard->HasLevelAwardDropped()) return;
         let award_dropped = self
             .base
             .get_board_mut()
             .map_or(false, |board| board.has_level_award_dropped());
-        if award_dropped { return; }
+        if award_dropped {
+            return;
+        }
 
         // 对应 C++: 金盏花在最后一波进入 Ending 状态，倒计时结束后停止生产
         if self.seed_type == SeedType::Marigold {
@@ -675,14 +745,13 @@ impl Plant {
         // 对应 C++: Last Stand 模式仅在 Onslaught 阶段生产
         if app_mode == GameMode::ChallengeLastStand {
             let onslaught = self.base.get_board_mut().map_or(false, |board| {
-                board
-                    .challenge
-                    .as_ref()
-                    .map_or(false, |challenge| {
-                        challenge.challenge_state == ChallengeState::LastStandOnslaught
-                    })
+                board.challenge.as_ref().map_or(false, |challenge| {
+                    challenge.challenge_state == ChallengeState::LastStandOnslaught
+                })
             });
-            if !onslaught { return; }
+            if !onslaught {
+                return;
+            }
         }
 
         // 对应 C++: mLaunchCounter--;
@@ -691,7 +760,12 @@ impl Plant {
             // 对应 C++: mEatenFlashCountdown =
             //     max(mEatenFlashCountdown, PvzpAnimateCurve(100, 0, mLaunchCounter, 0, 100, CURVE_LINEAR));
             let flash_countdown = crate::todlib::tod_common::tod_animate_curve(
-                100, 0, self.launch_counter, 0, 100, crate::lawn::game_enums::TodCurves::Linear,
+                100,
+                0,
+                self.launch_counter,
+                0,
+                100,
+                crate::lawn::game_enums::TodCurves::Linear,
             );
             self.eaten_flash_countdown = self.eaten_flash_countdown.max(flash_countdown);
         }
@@ -710,26 +784,55 @@ impl Plant {
                 SeedType::Sunshroom => {
                     if let Some(board) = self.base.get_board_mut() {
                         if self.state == PlantState::SunshroomSmall {
-                            board.add_coin(plant_x as f32, plant_y as f32, CoinType::SmallSun, CoinMotion::FromPlant);
+                            board.add_coin(
+                                plant_x as f32,
+                                plant_y as f32,
+                                CoinType::SmallSun,
+                                CoinMotion::FromPlant,
+                            );
                         } else {
-                            board.add_coin(plant_x as f32, plant_y as f32, CoinType::Sun, CoinMotion::FromPlant);
+                            board.add_coin(
+                                plant_x as f32,
+                                plant_y as f32,
+                                CoinType::Sun,
+                                CoinMotion::FromPlant,
+                            );
                         }
                     }
                 }
                 SeedType::Sunflower => {
                     if let Some(board) = self.base.get_board_mut() {
-                        board.add_coin(plant_x as f32, plant_y as f32, CoinType::Sun, CoinMotion::FromPlant);
+                        board.add_coin(
+                            plant_x as f32,
+                            plant_y as f32,
+                            CoinType::Sun,
+                            CoinMotion::FromPlant,
+                        );
                     }
                 }
                 SeedType::Twinsunflower => {
                     if let Some(board) = self.base.get_board_mut() {
-                        board.add_coin(plant_x as f32, plant_y as f32, CoinType::Sun, CoinMotion::FromPlant);
-                        board.add_coin(plant_x as f32, plant_y as f32, CoinType::Sun, CoinMotion::FromPlant);
+                        board.add_coin(
+                            plant_x as f32,
+                            plant_y as f32,
+                            CoinType::Sun,
+                            CoinMotion::FromPlant,
+                        );
+                        board.add_coin(
+                            plant_x as f32,
+                            plant_y as f32,
+                            CoinType::Sun,
+                            CoinMotion::FromPlant,
+                        );
                     }
                 }
                 SeedType::Marigold => {
                     if let Some(board) = self.base.get_board_mut() {
-                        let coin_type = if RandRange(100) < 10 { CoinType::Gold } else { CoinType::Silver };
+                        let coin_type = if RandRange(100) < 10 {
+                            CoinType::Gold
+                        } else {
+                            CoinType::Silver
+                        };
                         board.add_coin(plant_x as f32, plant_y as f32, coin_type, CoinMotion::Coin);
                     }
                 }
@@ -741,12 +844,22 @@ impl Plant {
                 match self.seed_type {
                     SeedType::Sunflower => {
                         if let Some(board) = self.base.get_board_mut() {
-                            board.add_coin(plant_x as f32, plant_y as f32, CoinType::Sun, CoinMotion::FromPlant);
+                            board.add_coin(
+                                plant_x as f32,
+                                plant_y as f32,
+                                CoinType::Sun,
+                                CoinMotion::FromPlant,
+                            );
                         }
                     }
                     SeedType::Marigold => {
                         if let Some(board) = self.base.get_board_mut() {
-                            board.add_coin(plant_x as f32, plant_y as f32, CoinType::Silver, CoinMotion::Coin);
+                            board.add_coin(
+                                plant_x as f32,
+                                plant_y as f32,
+                                CoinType::Silver,
+                                CoinMotion::Coin,
+                            );
                         }
                     }
                     _ => {}
@@ -817,7 +930,12 @@ impl Plant {
             }
         } else if self.state == PlantState::CactusHigh {
             // 对应 C++: PlayBodyReanim("anim_shootinghigh", PLAY_ONCE_AND_HOLD, 20, 35); mShootingCounter = 23
-            self.play_body_reanim("anim_shootinghigh", ReanimLoopType::PlayOnceAndHold, 20, 35.0);
+            self.play_body_reanim(
+                "anim_shootinghigh",
+                ReanimLoopType::PlayOnceAndHold,
+                20,
+                35.0,
+            );
             self.shooting_counter = 23;
         } else if self.seed_type == SeedType::Gloomshroom {
             // 对应 C++: PlayBodyReanim("anim_shooting", ..., 14fps); mShootingCounter = 200
@@ -843,8 +961,14 @@ impl Plant {
                     if RandRange(4) == 0 {
                         unsafe {
                             if let Some(a_body) = (*app).reanimation_get_mut(self.body_reanim_id) {
-                                a_body.assign_render_group_to_prefix("Cornpult_butter", crate::todlib::reanimator::RENDER_GROUP_NORMAL);
-                                a_body.assign_render_group_to_prefix("Cornpult_kernal", crate::todlib::reanimator::RENDER_GROUP_HIDDEN);
+                                a_body.assign_render_group_to_prefix(
+                                    "Cornpult_butter",
+                                    crate::todlib::reanimator::RENDER_GROUP_NORMAL,
+                                );
+                                a_body.assign_render_group_to_prefix(
+                                    "Cornpult_kernal",
+                                    crate::todlib::reanimator::RENDER_GROUP_HIDDEN,
+                                );
                             }
                         }
                         self.state = PlantState::KernelpultButter;
@@ -908,7 +1032,12 @@ impl Plant {
     }
 
     /// 开火（对应 C++ Plant::Fire：按 seed_type/weapon 决定弹种、伤害、特效）
-    pub fn fire(&mut self, target_zombie_id: Option<ZombieID>, the_row: i32, the_plant_weapon: PlantWeapon) {
+    pub fn fire(
+        &mut self,
+        target_zombie_id: Option<ZombieID>,
+        the_row: i32,
+        the_plant_weapon: PlantWeapon,
+    ) {
         // 特殊植物直接造成范围伤害
         if self.seed_type == SeedType::Fumeshroom {
             self.do_row_area_damage(20, 2);
@@ -928,10 +1057,16 @@ impl Plant {
 
         // 按 seed_type 选择弹种（对应 C++ switch）
         let mut a_projectile_type = match self.seed_type {
-            SeedType::Peashooter | SeedType::Repeater | SeedType::Threepeater
-            | SeedType::Splitpea | SeedType::Gatlingpea | SeedType::Leftpeater => crate::lawn::projectile::ProjectileType::Pea,
+            SeedType::Peashooter
+            | SeedType::Repeater
+            | SeedType::Threepeater
+            | SeedType::Splitpea
+            | SeedType::Gatlingpea
+            | SeedType::Leftpeater => crate::lawn::projectile::ProjectileType::Pea,
             SeedType::Snowpea => crate::lawn::projectile::ProjectileType::Snowpea,
-            SeedType::Puffshroom | SeedType::Scaredyshroom | SeedType::Seashroom => crate::lawn::projectile::ProjectileType::Puff,
+            SeedType::Puffshroom | SeedType::Scaredyshroom | SeedType::Seashroom => {
+                crate::lawn::projectile::ProjectileType::Puff
+            }
             SeedType::Cactus | SeedType::Cattail => crate::lawn::projectile::ProjectileType::Spike,
             SeedType::Cabbagepult => crate::lawn::projectile::ProjectileType::Cabbage,
             SeedType::Kernelpult => crate::lawn::projectile::ProjectileType::Kernel,
@@ -978,10 +1113,13 @@ impl Plant {
         } else if self.seed_type == SeedType::Cattail {
             a_origin_x = m_x + 20;
             a_origin_y = m_y - 3;
-        } else if self.seed_type == SeedType::Kernelpult && the_plant_weapon == PlantWeapon::Primary {
+        } else if self.seed_type == SeedType::Kernelpult && the_plant_weapon == PlantWeapon::Primary
+        {
             a_origin_x = m_x + 19;
             a_origin_y = m_y - 37;
-        } else if self.seed_type == SeedType::Kernelpult && the_plant_weapon == PlantWeapon::Secondary {
+        } else if self.seed_type == SeedType::Kernelpult
+            && the_plant_weapon == PlantWeapon::Secondary
+        {
             a_origin_x = m_x + 12;
             a_origin_y = m_y - 56;
         } else if self.seed_type == SeedType::Peashooter
@@ -1078,7 +1216,12 @@ impl Plant {
 
         // 发射子弹并设置弹道参数
         if let Some(board) = self.base.get_board_mut() {
-            let idx = board.add_projectile(a_origin_x as f32, a_origin_y as f32, the_row, self.seed_type);
+            let idx = board.add_projectile(
+                a_origin_x as f32,
+                a_origin_y as f32,
+                the_row,
+                self.seed_type,
+            );
             let proj = &mut board.projectiles[idx];
             proj.projectile_type = a_projectile_type;
             proj.damage_range_flags = a_damage_range_flags;
@@ -1103,10 +1246,14 @@ impl Plant {
                     proj.vel_y = 3.0;
                     proj.shadow_y -= 80.0;
                 }
-            } else if self.seed_type == SeedType::Puffshroom || self.seed_type == SeedType::Seashroom {
+            } else if self.seed_type == SeedType::Puffshroom
+                || self.seed_type == SeedType::Seashroom
+            {
                 // C++: aProjectile->mMotionType = MOTION_PUFF（Plant.cpp:4740）
                 proj.motion = crate::lawn::projectile::ProjectileMotion::Puff;
-            } else if self.seed_type == SeedType::Splitpea && the_plant_weapon == PlantWeapon::Secondary {
+            } else if self.seed_type == SeedType::Splitpea
+                && the_plant_weapon == PlantWeapon::Secondary
+            {
                 // C++: aProjectile->mMotionType = MOTION_BACKWARDS（Plant.cpp:4744，向左由运动逻辑处理）
                 proj.motion = crate::lawn::projectile::ProjectileMotion::Backwards;
             } else if self.seed_type == SeedType::Leftpeater {
@@ -1290,13 +1437,20 @@ impl Plant {
         let damage_range_flags = self.get_damage_range_flags(PlantWeapon::Primary);
         let center_star_x = self.base.x + 40;
         let center_star_y = self.base.y + 40;
-        let board = match self.base.board { Some(b) => b, None => return false };
+        let board = match self.base.board {
+            Some(b) => b,
+            None => return false,
+        };
         unsafe {
             let b = &*board;
             for zombie in &b.zombies {
-                if zombie.dead { continue; }
+                if zombie.dead {
+                    continue;
+                }
                 let zombie_rect = zombie.get_zombie_rect();
-                if !zombie.effected_by_damage(damage_range_flags) { continue; }
+                if !zombie.effected_by_damage(damage_range_flags) {
+                    continue;
+                }
                 if zombie.zombie_type == ZombieType::Boss && self.plant_col >= 5 {
                     return true;
                 }
@@ -1312,13 +1466,16 @@ impl Plant {
                     let proj_x = (center_star_x - (rect.x + rect.width / 2)) as f32;
                     let proj_y = (center_star_y - (rect.y + rect.height / 2)) as f32;
                     let projectile_time = (proj_x * proj_x + proj_y * proj_y).sqrt() / 3.33;
-                    let zombie_hit_x = zombie.zombie_target_lead_x(projectile_time) as i32 - rect.width / 2;
+                    let zombie_hit_x =
+                        zombie.zombie_target_lead_x(projectile_time) as i32 - rect.width / 2;
                     if zombie_hit_x + rect.width > center_star_x && zombie_hit_x < center_star_x {
                         return true;
                     }
                     let center_zombie_x = zombie_hit_x + rect.width / 2;
                     let center_zombie_y = rect.y + rect.height / 2;
-                    let angle = ((center_zombie_y - center_star_y) as f32).atan2((center_zombie_x - center_star_x) as f32).to_degrees();
+                    let angle = ((center_zombie_y - center_star_y) as f32)
+                        .atan2((center_zombie_x - center_star_x) as f32)
+                        .to_degrees();
                     if (zombie.base.row - self.base.row).abs() < 2 {
                         if (angle > 20.0 && angle < 40.0) || (angle < -25.0 && angle > -45.0) {
                             return true;
@@ -1366,10 +1523,9 @@ impl Plant {
         // 对应 C++: Tanglekelp（海草）死亡时拖死目标僵尸
         if self.is_on_board() && self.seed_type == SeedType::Tanglekelp {
             let a_target_zombie_id = self.target_zombie_id;
-            let a_has_target = self
-                .base
-                .get_board()
-                .map_or(false, |board| board.zombie_try_to_get(a_target_zombie_id).is_some());
+            let a_has_target = self.base.get_board().map_or(false, |board| {
+                board.zombie_try_to_get(a_target_zombie_id).is_some()
+            });
             if a_has_target {
                 if let Some(board) = self.base.get_board_mut() {
                     if let Some(a_zombie) = board.zombie_try_to_get_mut(a_target_zombie_id) {
@@ -1388,17 +1544,14 @@ impl Plant {
         // 对应 C++: 非飞行植物移除所在格的梯子（IsOnBoard 以 board 存在判定，
         // 与 is_on_board 字段解耦——C++ 中 mDead 置位后 IsOnBoard 仍成立）
         if !Self::is_flying(self.seed_type) && self.base.board.is_some() {
-            let a_ladder_idx = self
-                .base
-                .get_board()
-                .and_then(|board| {
-                    board.grid_items.iter().position(|item| {
-                        !item.dead
-                            && item.grid_item_type == crate::lawn::grid_item::GridItemType::Ladder
-                            && item.grid_x == self.plant_col
-                            && item.grid_y == self.base.row
-                    })
-                });
+            let a_ladder_idx = self.base.get_board().and_then(|board| {
+                board.grid_items.iter().position(|item| {
+                    !item.dead
+                        && item.grid_item_type == crate::lawn::grid_item::GridItemType::Ladder
+                        && item.grid_x == self.plant_col
+                        && item.grid_y == self.base.row
+                })
+            });
             if let Some(idx) = a_ladder_idx {
                 if let Some(board) = self.base.get_board_mut() {
                     board.grid_items[idx].grid_item_die();
@@ -1469,14 +1622,17 @@ impl Plant {
         let mut a_closest_range = 0;
         let mut a_closest_idx: Option<usize> = None;
         for (idx, zombie) in b.zombies.iter().enumerate() {
-            if zombie.dead { continue; }
+            if zombie.dead {
+                continue;
+            }
             if (zombie.base.row == self.base.row || zombie.zombie_type == ZombieType::Boss)
                 && zombie.has_head
                 && !zombie.is_tangle_kelp_target()
                 && zombie.effected_by_damage(a_damage_range_flags)
             {
                 let a_zombie_rect = zombie.get_zombie_rect();
-                let valid_phase = (zombie.zombie_phase == ZombiePhase::PolevaulterPreVault && a_zombie_rect.x < self.base.x + 20)
+                let valid_phase = (zombie.zombie_phase == ZombiePhase::PolevaulterPreVault
+                    && a_zombie_rect.x < self.base.x + 20)
                     || (zombie.zombie_phase != ZombiePhase::PolevaulterPreVault
                         && zombie.zombie_phase != ZombiePhase::PolevaulterInVault
                         && zombie.zombie_phase != ZombiePhase::SnorkelIntoPool
@@ -1484,7 +1640,9 @@ impl Plant {
                         && zombie.zombie_phase != ZombiePhase::DolphinRiding
                         && zombie.zombie_phase != ZombiePhase::DolphinInJump
                         && !zombie.is_bobsled_team_with_sled());
-                if !valid_phase { continue; }
+                if !valid_phase {
+                    continue;
+                }
                 let a_range = -crate::lawn::board::get_rect_overlap(&a_attack_rect, &a_zombie_rect);
                 if a_range <= if zombie.is_eating { 110 } else { 70 } {
                     let mut a_plant_x = a_attack_rect.x;
@@ -1496,7 +1654,9 @@ impl Plant {
                     {
                         a_plant_x = a_attack_rect.x - 60;
                     }
-                    if zombie.is_walking_backwards() || a_zombie_rect.x + a_zombie_rect.width >= a_plant_x {
+                    if zombie.is_walking_backwards()
+                        || a_zombie_rect.x + a_zombie_rect.width >= a_plant_x
+                    {
                         if a_closest_idx.is_none() || a_range < a_closest_range {
                             a_closest_idx = Some(idx);
                             a_closest_range = a_range;
@@ -1516,10 +1676,13 @@ impl Plant {
 
         if let Some(board) = self.base.get_board_mut() {
             for (_idx, zombie) in board.zombies.iter_mut().enumerate() {
-                if zombie.dead { continue; }
+                if zombie.dead {
+                    continue;
+                }
                 if (zombie.base.row == my_row || zombie.zombie_type == ZombieType::Boss) {
                     let z_rect = zombie.get_zombie_rect();
-                    if crate::lawn::board::get_rect_overlap(&a_attack_rect, &z_rect) > 0 {                        zombie.take_damage(1800, 18u32);
+                    if crate::lawn::board::get_rect_overlap(&a_attack_rect, &z_rect) > 0 {
+                        zombie.take_damage(1800, 18u32);
                     }
                 }
             }
@@ -1533,21 +1696,28 @@ impl Plant {
         let my_row = self.base.row;
         let my_seed_type = self.seed_type;
         let is_on_high_ground = self.is_on_high_ground();
-        let board = match self.base.board { Some(b) => b, None => return };
+        let board = match self.base.board {
+            Some(b) => b,
+            None => return,
+        };
 
         // 借用规避：先在 board 借用内收集命中目标索引，退出后统一结算
         let mut targets: Vec<(usize, ZombieType)> = Vec::new();
         unsafe {
             let b = &*board;
             for (idx, zombie) in b.zombies.iter().enumerate() {
-                if zombie.dead { continue; }
+                if zombie.dead {
+                    continue;
+                }
                 let a_diff_y = if zombie.zombie_type == ZombieType::Boss {
                     0
                 } else {
                     zombie.base.row - my_row
                 };
                 if my_seed_type == SeedType::Gloomshroom {
-                    if a_diff_y < -1 || a_diff_y > 1 { continue; }
+                    if a_diff_y < -1 || a_diff_y > 1 {
+                        continue;
+                    }
                 } else if a_diff_y != 0 {
                     continue;
                 }
@@ -1577,11 +1747,7 @@ impl Plant {
                 }
             }
 
-            let a_damage = if is_zamboni_or_catapult {
-                1800
-            } else {
-                damage
-            };
+            let a_damage = if is_zamboni_or_catapult { 1800 } else { damage };
             if let Some(board) = self.base.get_board_mut() {
                 if let Some(zombie) = board.zombies.get_mut(idx) {
                     zombie.take_damage(a_damage, damage_flags);
@@ -1597,14 +1763,27 @@ impl Plant {
     pub fn get_damage_range_flags(&self, weapon: PlantWeapon) -> u32 {
         match self.seed_type {
             SeedType::Cactus => {
-                if weapon == PlantWeapon::Secondary { 1 } else { 2 }
+                if weapon == PlantWeapon::Secondary {
+                    1
+                } else {
+                    2
+                }
             }
-            SeedType::Cherrybomb | SeedType::Jalapeno | SeedType::Cobcannon | SeedType::Doomshroom => 127,
-            SeedType::Melonpult | SeedType::Cabbagepult | SeedType::Kernelpult | SeedType::Wintermelon => 13,
+            SeedType::Cherrybomb
+            | SeedType::Jalapeno
+            | SeedType::Cobcannon
+            | SeedType::Doomshroom => 127,
+            SeedType::Melonpult
+            | SeedType::Cabbagepult
+            | SeedType::Kernelpult
+            | SeedType::Wintermelon => 13,
             SeedType::PotatoMine => 77,
             SeedType::Squash => 13,
-            SeedType::Puffshroom | SeedType::Seashroom | SeedType::Fumeshroom
-            | SeedType::Gloomshroom | SeedType::Chomper => 9,
+            SeedType::Puffshroom
+            | SeedType::Seashroom
+            | SeedType::Fumeshroom
+            | SeedType::Gloomshroom
+            | SeedType::Chomper => 9,
             SeedType::Cattail => 11,
             SeedType::Tanglekelp => 5,
             SeedType::GiantWallnut => 17,
@@ -1618,7 +1797,11 @@ impl Plant {
         let m_y = self.base.y;
         let m_width = self.base.width;
         let m_height = self.base.height;
-        if self.base.get_app().map_or(false, |app| app.is_wallnut_bowling_level()) {
+        if self
+            .base
+            .get_app()
+            .map_or(false, |app| app.is_wallnut_bowling_level())
+        {
             return Rect::new(m_x, m_y, m_width - 20, m_height);
         } else if weapon == PlantWeapon::Secondary && self.seed_type == SeedType::Splitpea {
             return Rect::new(0, m_y, m_x + 16, m_height);
@@ -1627,14 +1810,21 @@ impl Plant {
             SeedType::Leftpeater => Rect::new(0, m_y, m_x, m_height),
             SeedType::Squash => Rect::new(m_x + 20, m_y, m_width - 35, m_height),
             SeedType::Chomper => Rect::new(m_x + 80, m_y, 40, m_height),
-            SeedType::Spikeweed | SeedType::Spikerock => Rect::new(m_x + 20, m_y, m_width - 50, m_height),
+            SeedType::Spikeweed | SeedType::Spikerock => {
+                Rect::new(m_x + 20, m_y, m_width - 50, m_height)
+            }
             SeedType::PotatoMine => Rect::new(m_x, m_y, m_width - 25, m_height),
             SeedType::Torchwood => Rect::new(m_x + 50, m_y, 30, m_height),
             SeedType::Puffshroom | SeedType::Seashroom => Rect::new(m_x + 60, m_y, 230, m_height),
             SeedType::Fumeshroom => Rect::new(m_x + 60, m_y, 340, m_height),
             SeedType::Gloomshroom => Rect::new(m_x - 80, m_y - 80, 240, 240),
             SeedType::Tanglekelp => Rect::new(m_x, m_y, m_width, m_height),
-            SeedType::Cattail => Rect::new(-BOARD_WIDTH, -BOARD_HEIGHT, BOARD_WIDTH * 2, BOARD_HEIGHT * 2),
+            SeedType::Cattail => Rect::new(
+                -BOARD_WIDTH,
+                -BOARD_HEIGHT,
+                BOARD_WIDTH * 2,
+                BOARD_HEIGHT * 2,
+            ),
             _ => Rect::new(m_x + 60, m_y, BOARD_WIDTH, m_height),
         }
     }
@@ -1644,14 +1834,21 @@ impl Plant {
         let damage_range_flags = self.get_damage_range_flags(PlantWeapon::Primary);
         let attack_rect = self.get_plant_attack_rect(PlantWeapon::Primary);
         let mut closest_distance = 1000;
-        let board = match self.base.board { Some(b) => b, None => return closest_distance };
+        let board = match self.base.board {
+            Some(b) => b,
+            None => return closest_distance,
+        };
         unsafe {
             let b = &*board;
             for zombie in &b.zombies {
-                if zombie.dead { continue; }
-                if zombie.base.row == self.base.row && zombie.effected_by_damage(damage_range_flags) {
+                if zombie.dead {
+                    continue;
+                }
+                if zombie.base.row == self.base.row && zombie.effected_by_damage(damage_range_flags)
+                {
                     let zombie_rect = zombie.get_zombie_rect();
-                    let distance = -crate::lawn::board::get_rect_overlap(&attack_rect, &zombie_rect);
+                    let distance =
+                        -crate::lawn::board::get_rect_overlap(&attack_rect, &zombie_rect);
                     if distance < closest_distance {
                         closest_distance = distance.max(0);
                     }
@@ -1669,7 +1866,13 @@ impl Plant {
 
         // 同步 body reanim 位置（对应 C++ UpdateReanim 的 SetPosition）
         if self.body_reanim_id != REANIMATIONID_NULL {
-            let a_offset_y = Self::plant_draw_height_offset(self.base.get_board(), Some(self), self.seed_type, self.plant_col, self.base.row);
+            let a_offset_y = Self::plant_draw_height_offset(
+                self.base.get_board(),
+                Some(self),
+                self.seed_type,
+                self.plant_col,
+                self.base.row,
+            );
             if let Some(app) = self.base.get_app_mut() {
                 if let Some(reanim) = app.reanimation_get_mut(self.body_reanim_id) {
                     reanim.set_position(self.pos_x, self.pos_y + a_offset_y);
@@ -1694,7 +1897,10 @@ impl Plant {
             }
         }
 
-        if self.is_asleep || self.squished || self.on_bungee_state != PlantOnBungeeState::NotOnBungee {
+        if self.is_asleep
+            || self.squished
+            || self.on_bungee_state != PlantOnBungeeState::NotOnBungee
+        {
             return;
         }
 
@@ -1707,7 +1913,11 @@ impl Plant {
         }
 
         // C++: if (mApp->IsWallnutBowlingLevel()) { UpdateBowling(); return; }
-        if self.base.get_app().map_or(false, |app| app.is_wallnut_bowling_level()) {
+        if self
+            .base
+            .get_app()
+            .map_or(false, |app| app.is_wallnut_bowling_level())
+        {
             self.update_bowling();
             return;
         }
@@ -1730,7 +1940,9 @@ impl Plant {
             SeedType::GoldMagnet => self.update_gold_magnet_shroom(),
             SeedType::Sunshroom => self.update_sun_shroom(),
             // 对应 C++: else if (MakesSun() || mSeedType == SEED_MARIGOLD) UpdateProductionPlant();
-            SeedType::Sunflower | SeedType::Twinsunflower | SeedType::Marigold => self.update_production_plant(),
+            SeedType::Sunflower | SeedType::Twinsunflower | SeedType::Marigold => {
+                self.update_production_plant()
+            }
             SeedType::Gravebuster => self.update_grave_buster(),
             SeedType::Torchwood => self.update_torchwood(),
             SeedType::PotatoMine => self.update_potato(),
@@ -1770,7 +1982,10 @@ impl Plant {
             return;
         }
 
-        let a_seed_type = self.base.get_board().map_or(SeedType::None, |b| b.get_seed_type_in_cursor());
+        let a_seed_type = self
+            .base
+            .get_board()
+            .map_or(SeedType::None, |b| b.get_seed_type_in_cursor());
         let mut a_color_override;
 
         // C++: mBoard->mCursorObject->mCursorType == CURSOR_TYPE_PLANT_FROM_GLOVE
@@ -1779,10 +1994,15 @@ impl Plant {
             if board.cursor_object.cursor_type == CursorType::PlantFromGlove {
                 let a_glove_plant_id = board.cursor_object.glove_plant_id;
                 // C++: mBoard->mPlants.DataArrayTryToGet(aGlovePlantID)
-                let a_plant = board.plants.get(a_glove_plant_id as usize).map(|p| p as *const Plant);
+                let a_plant = board
+                    .plants
+                    .get(a_glove_plant_id as usize)
+                    .map(|p| p as *const Plant);
                 if let Some(a_plant) = a_plant {
                     unsafe {
-                        if (*a_plant).plant_col == self.plant_col && (*a_plant).base.row == self.base.row {
+                        if (*a_plant).plant_col == self.plant_col
+                            && (*a_plant).base.row == self.base.row
+                        {
                             is_on_glove = true;
                         }
                     }
@@ -1793,19 +2013,17 @@ impl Plant {
         if is_on_glove {
             a_color_override = Color::new(128, 128, 128, 255);
         } else if self.is_part_of_upgradable_to(a_seed_type)
-            && self
-                .base
-                .get_board()
-                .map_or(false, |b| b.can_plant_at(self.plant_col, self.base.row, a_seed_type) == PlantingReason::Ok)
+            && self.base.get_board().map_or(false, |b| {
+                b.can_plant_at(self.plant_col, self.base.row, a_seed_type) == PlantingReason::Ok
+            })
         {
             let a_counter = self.base.get_board().map_or(0, |b| b.m_main_counter);
             a_color_override = crate::todlib::tod_common::get_flashing_color(a_counter, 90);
         } else if a_seed_type == SeedType::Cobcannon
             && self.seed_type == SeedType::Kernelpult
-            && self
-                .base
-                .get_board()
-                .map_or(false, |b| b.can_plant_at(self.plant_col - 1, self.base.row, a_seed_type) == PlantingReason::Ok)
+            && self.base.get_board().map_or(false, |b| {
+                b.can_plant_at(self.plant_col - 1, self.base.row, a_seed_type) == PlantingReason::Ok
+            })
         {
             let a_counter = self.base.get_board().map_or(0, |b| b.m_main_counter);
             a_color_override = crate::todlib::tod_common::get_flashing_color(a_counter, 90);
@@ -1831,7 +2049,12 @@ impl Plant {
                 }
             } else if self.beghouled_flash_countdown > 0 {
                 let an_alpha = crate::todlib::tod_common::tod_animate_curve(
-                    50, 0, self.beghouled_flash_countdown % 50, 1, 128, TodCurves::Bounce,
+                    50,
+                    0,
+                    self.beghouled_flash_countdown % 50,
+                    1,
+                    128,
+                    TodCurves::Bounce,
                 );
                 a_body_reanim.m_extra_additive_color = Color::new(255, 255, 255, an_alpha as u8);
                 a_body_reanim.m_enable_extra_additive_draw = true;
@@ -1839,9 +2062,14 @@ impl Plant {
                 let a_grayness = crate::todlib::tod_common::clamp_int(
                     self.eaten_flash_countdown * 3,
                     0,
-                    if self.imitater_type == SeedType::Imitater { 128 } else { 255 },
+                    if self.imitater_type == SeedType::Imitater {
+                        128
+                    } else {
+                        255
+                    },
                 ) as u8;
-                a_body_reanim.m_extra_additive_color = Color::new(a_grayness, a_grayness, a_grayness, 255);
+                a_body_reanim.m_extra_additive_color =
+                    Color::new(a_grayness, a_grayness, a_grayness, 255);
                 a_body_reanim.m_enable_extra_additive_draw = true;
             } else {
                 a_body_reanim.m_enable_extra_additive_draw = false;
@@ -1849,7 +2077,12 @@ impl Plant {
 
             if self.beghouled_flash_countdown > 0 {
                 let an_alpha = crate::todlib::tod_common::tod_animate_curve(
-                    50, 0, self.beghouled_flash_countdown % 50, 1, 128, TodCurves::Bounce,
+                    50,
+                    0,
+                    self.beghouled_flash_countdown % 50,
+                    1,
+                    128,
+                    TodCurves::Bounce,
                 );
                 a_body_reanim.m_extra_overlay_color = Color::new(255, 255, 255, an_alpha as u8);
                 a_body_reanim.m_enable_extra_overlay_draw = true;
@@ -1881,7 +2114,11 @@ impl Plant {
         let seed_type = self.seed_type;
         let mut a_offset_x = self.shake_offset_x;
         let mut a_offset_y = Self::plant_draw_height_offset(
-            self.base.get_board(), Some(self), seed_type, self.plant_col, self.base.row,
+            self.base.get_board(),
+            Some(self),
+            seed_type,
+            self.plant_col,
+            self.base.row,
         );
         let mut a_scale_x = 1.0;
         let mut a_scale_y = 1.0;
@@ -1917,12 +2154,22 @@ impl Plant {
         }
         if self.state == PlantState::GravebusterEating {
             a_offset_y += crate::todlib::tod_common::tod_animate_curve_float(
-                400, 0, self.state_countdown, 0.0, 30.0, TodCurves::Linear,
+                400,
+                0,
+                self.state_countdown,
+                0.0,
+                30.0,
+                TodCurves::Linear,
             );
         }
         if self.wake_up_counter > 0 {
             let a_scale_factor = crate::todlib::tod_common::tod_animate_curve_float(
-                70, 0, self.wake_up_counter, 1.0, 0.8, TodCurves::EaseSinWave,
+                70,
+                0,
+                self.wake_up_counter,
+                1.0,
+                0.8,
+                TodCurves::EaseSinWave,
             );
             a_scale_y *= a_scale_factor;
             a_offset_y += 80.0 - 80.0 * a_scale_factor;
@@ -1948,7 +2195,9 @@ impl Plant {
                 unsafe {
                     let a_potted_plant = (*zg).potted_plant_from_index(potted_index);
                     if let Some(a_potted_plant) = a_potted_plant {
-                        if (*a_potted_plant).facing == crate::lawn::system::player_info::FacingDirection::Left {
+                        if (*a_potted_plant).facing
+                            == crate::lawn::system::player_info::FacingDirection::Left
+                        {
                             a_offset_x += 80.0 * a_scale_x;
                             a_scale_x *= -1.0;
                         }
@@ -1982,21 +2231,40 @@ impl Plant {
                             a_scale_end = 1.0;
                         }
 
-                        let a_animated_offset_x = crate::todlib::tod_common::tod_animate_curve_float(
-                            100, 0, self.state_countdown, a_offset_x_start, a_offset_x_end, TodCurves::Linear,
-                        );
-                        let a_animated_offset_y = crate::todlib::tod_common::tod_animate_curve_float(
-                            100, 0, self.state_countdown, a_offset_y_start, a_offset_y_end, TodCurves::Linear,
-                        );
+                        let a_animated_offset_x =
+                            crate::todlib::tod_common::tod_animate_curve_float(
+                                100,
+                                0,
+                                self.state_countdown,
+                                a_offset_x_start,
+                                a_offset_x_end,
+                                TodCurves::Linear,
+                            );
+                        let a_animated_offset_y =
+                            crate::todlib::tod_common::tod_animate_curve_float(
+                                100,
+                                0,
+                                self.state_countdown,
+                                a_offset_y_start,
+                                a_offset_y_end,
+                                TodCurves::Linear,
+                            );
                         let a_animated_scale = crate::todlib::tod_common::tod_animate_curve_float(
-                            100, 0, self.state_countdown, a_scale_start, a_scale_end, TodCurves::Linear,
+                            100,
+                            0,
+                            self.state_countdown,
+                            a_scale_start,
+                            a_scale_end,
+                            TodCurves::Linear,
                         );
 
                         a_offset_x += a_animated_offset_x * a_scale_x;
                         a_offset_y += a_animated_offset_y * a_scale_y;
                         a_scale_x *= a_animated_scale;
                         a_scale_y *= a_animated_scale;
-                        a_offset_x += crate::lawn::zen_garden::ZenGarden::zen_plant_offset_x(&*a_potted_plant);
+                        a_offset_x += crate::lawn::zen_garden::ZenGarden::zen_plant_offset_x(
+                            &*a_potted_plant,
+                        );
                         a_offset_y += (*zg).plant_potted_draw_height_offset(seed_type, a_scale_y);
                     }
                 }
@@ -2013,9 +2281,9 @@ impl Plant {
     }
 
     /// 坚果类受损动画（对应 C++ AnimateNuts，Plant.cpp:3090）
-// [TRANSLATION_NOTE]: C++ 使用 IMAGE_REANIM_WALLNUT_CRACKED1/2 等全局图片资源；
-// Rust 图片未接入，用两个静态哨兵指针表示不同裂纹等级，使 Get/SetImageOverride 的
-// 记录比较成立（C++ 以 Image* 指针比较决定裂纹覆盖与粒子只触发一次）。
+    // [TRANSLATION_NOTE]: C++ 使用 IMAGE_REANIM_WALLNUT_CRACKED1/2 等全局图片资源；
+    // Rust 图片未接入，用两个静态哨兵指针表示不同裂纹等级，使 Get/SetImageOverride 的
+    // 记录比较成立（C++ 以 Image* 指针比较决定裂纹覆盖与粒子只触发一次）。
     pub fn animate_nuts(&mut self) {
         let a_track_to_override = match self.seed_type {
             SeedType::Wallnut => "anim_face",
@@ -2023,8 +2291,10 @@ impl Plant {
             _ => return,
         };
         // C++: aCracked1/aCracked2 = IMAGE_REANIM_*_CRACKED1/2；哨兵指针代替（接入图片后替换为资源指针）
-        let a_cracked1: *mut crate::framework::graphics::image::Image = &CRACK_IMAGE_1 as *const u8 as *mut _;
-        let a_cracked2: *mut crate::framework::graphics::image::Image = &CRACK_IMAGE_2 as *const u8 as *mut _;
+        let a_cracked1: *mut crate::framework::graphics::image::Image =
+            &CRACK_IMAGE_1 as *const u8 as *mut _;
+        let a_cracked2: *mut crate::framework::graphics::image::Image =
+            &CRACK_IMAGE_2 as *const u8 as *mut _;
 
         let mut a_pos_x = self.pos_x as i32 + 40;
         let mut a_pos_y = self.pos_y as i32 + 10;
@@ -2057,7 +2327,12 @@ impl Plant {
             }
         }
         if a_spawn_particle {
-            self.add_attached_particle(a_pos_x, a_pos_y, self.base.render_order + 4, ParticleEffect::WallnutEatLarge);
+            self.add_attached_particle(
+                a_pos_x,
+                a_pos_y,
+                self.base.render_order + 4,
+                ParticleEffect::WallnutEatLarge,
+            );
         }
 
         // C++: if (IsInPlay() && !mApp->IsIZombieLevel())
@@ -2076,8 +2351,11 @@ impl Plant {
                     a_body_reanim.m_anim_rate = 0.1;
                     return;
                 }
-                if a_body_reanim.m_anim_rate < 1.0 && self.on_bungee_state != PlantOnBungeeState::RisingWithBungee {
-                    a_body_reanim.m_anim_rate = crate::todlib::tod_common::rand_range_float(10.0, 15.0);
+                if a_body_reanim.m_anim_rate < 1.0
+                    && self.on_bungee_state != PlantOnBungeeState::RisingWithBungee
+                {
+                    a_body_reanim.m_anim_rate =
+                        crate::todlib::tod_common::rand_range_float(10.0, 15.0);
                 }
             }
         }
@@ -2090,19 +2368,27 @@ impl Plant {
             .base
             .get_app_mut()
             .and_then(|app| app.reanimation_get_mut(self.body_reanim_id));
-        let Some(a_body_reanim) = a_body_reanim else { return; };
+        let Some(a_body_reanim) = a_body_reanim else {
+            return;
+        };
         let a_image_override = a_body_reanim.get_image_override("anim_face");
 
         if self.plant_health < self.plant_max_health / 3 {
             // C++: aImageOverride != IMAGE_REANIM_GARLIC_BODY3 → SetImageOverride(BODY3) + 隐藏茎
-            if a_image_override != (&CRACK_IMAGE_2 as *const u8 as *mut crate::framework::graphics::image::Image) {
-                a_body_reanim.set_image_override("anim_face", &CRACK_IMAGE_2 as *const u8 as *mut _);
+            if a_image_override
+                != (&CRACK_IMAGE_2 as *const u8 as *mut crate::framework::graphics::image::Image)
+            {
+                a_body_reanim
+                    .set_image_override("anim_face", &CRACK_IMAGE_2 as *const u8 as *mut _);
                 a_body_reanim.assign_render_group_to_prefix("Garlic_stem", -1); // RENDER_GROUP_HIDDEN
             }
         } else if self.plant_health < self.plant_max_health * 2 / 3 {
             // C++: aImageOverride != IMAGE_REANIM_GARLIC_BODY2 → SetImageOverride(BODY2)
-            if a_image_override != (&CRACK_IMAGE_1 as *const u8 as *mut crate::framework::graphics::image::Image) {
-                a_body_reanim.set_image_override("anim_face", &CRACK_IMAGE_1 as *const u8 as *mut _);
+            if a_image_override
+                != (&CRACK_IMAGE_1 as *const u8 as *mut crate::framework::graphics::image::Image)
+            {
+                a_body_reanim
+                    .set_image_override("anim_face", &CRACK_IMAGE_1 as *const u8 as *mut _);
             }
         } else {
             // C++: SetImageOverride(nullptr) —— 健康恢复时清除覆盖
@@ -2117,18 +2403,26 @@ impl Plant {
             .base
             .get_app_mut()
             .and_then(|app| app.reanimation_get_mut(self.body_reanim_id));
-        let Some(a_body_reanim) = a_body_reanim else { return; };
+        let Some(a_body_reanim) = a_body_reanim else {
+            return;
+        };
         let a_image_override = a_body_reanim.get_image_override("Pumpkin_front");
 
         if self.plant_health < self.plant_max_health / 3 {
             // C++: != IMAGE_REANIM_PUMPKIN_DAMAGE3 → SetImageOverride(DAMAGE3)
-            if a_image_override != (&CRACK_IMAGE_2 as *const u8 as *mut crate::framework::graphics::image::Image) {
-                a_body_reanim.set_image_override("Pumpkin_front", &CRACK_IMAGE_2 as *const u8 as *mut _);
+            if a_image_override
+                != (&CRACK_IMAGE_2 as *const u8 as *mut crate::framework::graphics::image::Image)
+            {
+                a_body_reanim
+                    .set_image_override("Pumpkin_front", &CRACK_IMAGE_2 as *const u8 as *mut _);
             }
         } else if self.plant_health < self.plant_max_health * 2 / 3 {
             // C++: != IMAGE_REANIM_PUMPKIN_DAMAGE1 → SetImageOverride(DAMAGE1)
-            if a_image_override != (&CRACK_IMAGE_1 as *const u8 as *mut crate::framework::graphics::image::Image) {
-                a_body_reanim.set_image_override("Pumpkin_front", &CRACK_IMAGE_1 as *const u8 as *mut _);
+            if a_image_override
+                != (&CRACK_IMAGE_1 as *const u8 as *mut crate::framework::graphics::image::Image)
+            {
+                a_body_reanim
+                    .set_image_override("Pumpkin_front", &CRACK_IMAGE_1 as *const u8 as *mut _);
             }
         } else {
             // C++: SetImageOverride(nullptr)
@@ -2247,7 +2541,13 @@ impl Plant {
             .base
             .get_app()
             .and_then(|app| app.reanimation_get(self.body_reanim_id))
-            .and_then(|r| if r.track_exists("_ground") { Some(r.get_track_velocity("_ground")) } else { None })
+            .and_then(|r| {
+                if r.track_exists("_ground") {
+                    Some(r.get_track_velocity("_ground"))
+                } else {
+                    None
+                }
+            })
             .map_or(0.0, |a_speed| {
                 if self.seed_type == SeedType::GiantWallnut {
                     a_speed * 2.0
@@ -2266,7 +2566,11 @@ impl Plant {
             self.pos_y += 2.0;
         }
         // C++: int aDistToGrid = mBoard->GridToPixelY(0, mRow) - mY; 超出 ±2 直接返回
-        let a_dist_to_grid = self.base.get_board().map_or(0, |b| b.grid_to_pixel_y(0, self.base.row)) - self.pos_y as i32;
+        let a_dist_to_grid = self
+            .base
+            .get_board()
+            .map_or(0, |b| b.grid_to_pixel_y(0, self.base.row))
+            - self.pos_y as i32;
         if a_dist_to_grid < -2 || a_dist_to_grid > 2 {
             return;
         }
@@ -2287,15 +2591,31 @@ impl Plant {
             if self.seed_type == SeedType::ExplodeONut {
                 if let Some(app) = self.base.get_app() {
                     app.play_foley(crate::todlib::tod_foley::FoleyType::Cherrybomb as i32);
-                    app.play_sample(crate::framework::resources::ResourceId::SoundBowlingimpact2 as i32);
+                    app.play_sample(
+                        crate::framework::resources::ResourceId::SoundBowlingimpact2 as i32,
+                    );
                 }
-                let a_damage_range_flags = self.get_damage_range_flags(PlantWeapon::Primary) | 32u32;
+                let a_damage_range_flags =
+                    self.get_damage_range_flags(PlantWeapon::Primary) | 32u32;
                 let a_row = self.base.row;
                 if let Some(board) = self.base.get_board_mut() {
-                    board.kill_all_zombies_in_radius(a_row, a_pos_x, a_pos_y, 90, 1, true, a_damage_range_flags);
+                    board.kill_all_zombies_in_radius(
+                        a_row,
+                        a_pos_x,
+                        a_pos_y,
+                        90,
+                        1,
+                        true,
+                        a_damage_range_flags,
+                    );
                     board.shake_board(3, -4);
                 }
-                self.add_attached_particle(a_pos_x, a_pos_y, crate::lawn::game_enums::RENDER_LAYER_TOP, ParticleEffect::Powie);
+                self.add_attached_particle(
+                    a_pos_x,
+                    a_pos_y,
+                    crate::lawn::game_enums::RENDER_LAYER_TOP,
+                    ParticleEffect::Powie,
+                );
                 self.die();
                 return;
             }
@@ -2316,7 +2636,9 @@ impl Plant {
                 let a_zombie_ref = &mut board.zombies[a_zombie as usize];
                 if self.seed_type == SeedType::GiantWallnut {
                     a_zombie_take_damage = true;
-                } else if a_zombie_ref.shield_type == ShieldType::Door && self.state != PlantState::NotReady {
+                } else if a_zombie_ref.shield_type == ShieldType::Door
+                    && self.state != PlantState::NotReady
+                {
                     a_zombie_take_damage = true;
                 } else if a_zombie_ref.shield_type != ShieldType::None {
                     a_zombie_take_shield_damage = true;
@@ -2349,10 +2671,13 @@ impl Plant {
             }
 
             // C++: 普通核桃击中 2/3/4/5 次后掉落银币/金币（非首次冒险或已过 10 关）
-            let a_drop_coins = self
-                .base
-                .get_app()
-                .map_or(false, |app| !app.is_first_time_adventure_mode() || app.player_info.as_ref().map_or(false, |p| p.get_level() > 10));
+            let a_drop_coins = self.base.get_app().map_or(false, |app| {
+                !app.is_first_time_adventure_mode()
+                    || app
+                        .player_info
+                        .as_ref()
+                        .map_or(false, |p| p.get_level() > 10)
+            });
             if a_drop_coins && self.seed_type == SeedType::Wallnut {
                 self.launch_counter += 1;
                 if self.launch_counter == 2 {
@@ -2360,31 +2685,66 @@ impl Plant {
                         app.play_foley(crate::todlib::tod_foley::FoleyType::SpawnSun as i32);
                     }
                     if let Some(board) = self.base.get_board_mut() {
-                        board.add_coin(a_pos_x as f32, a_pos_y as f32, CoinType::Silver, CoinMotion::Coin);
+                        board.add_coin(
+                            a_pos_x as f32,
+                            a_pos_y as f32,
+                            CoinType::Silver,
+                            CoinMotion::Coin,
+                        );
                     }
                 } else if self.launch_counter == 3 {
                     if let Some(app) = self.base.get_app() {
                         app.play_foley(crate::todlib::tod_foley::FoleyType::SpawnSun as i32);
                     }
                     if let Some(board) = self.base.get_board_mut() {
-                        board.add_coin(a_pos_x as f32 - 5.0, a_pos_y as f32, CoinType::Silver, CoinMotion::Coin);
-                        board.add_coin(a_pos_x as f32 + 5.0, a_pos_y as f32, CoinType::Silver, CoinMotion::Coin);
+                        board.add_coin(
+                            a_pos_x as f32 - 5.0,
+                            a_pos_y as f32,
+                            CoinType::Silver,
+                            CoinMotion::Coin,
+                        );
+                        board.add_coin(
+                            a_pos_x as f32 + 5.0,
+                            a_pos_y as f32,
+                            CoinType::Silver,
+                            CoinMotion::Coin,
+                        );
                     }
                 } else if self.launch_counter == 4 {
                     if let Some(app) = self.base.get_app() {
                         app.play_foley(crate::todlib::tod_foley::FoleyType::SpawnSun as i32);
                     }
                     if let Some(board) = self.base.get_board_mut() {
-                        board.add_coin(a_pos_x as f32 - 10.0, a_pos_y as f32, CoinType::Silver, CoinMotion::Coin);
-                        board.add_coin(a_pos_x as f32, a_pos_y as f32, CoinType::Silver, CoinMotion::Coin);
-                        board.add_coin(a_pos_x as f32 + 10.0, a_pos_y as f32, CoinType::Silver, CoinMotion::Coin);
+                        board.add_coin(
+                            a_pos_x as f32 - 10.0,
+                            a_pos_y as f32,
+                            CoinType::Silver,
+                            CoinMotion::Coin,
+                        );
+                        board.add_coin(
+                            a_pos_x as f32,
+                            a_pos_y as f32,
+                            CoinType::Silver,
+                            CoinMotion::Coin,
+                        );
+                        board.add_coin(
+                            a_pos_x as f32 + 10.0,
+                            a_pos_y as f32,
+                            CoinType::Silver,
+                            CoinMotion::Coin,
+                        );
                     }
                 } else if self.launch_counter >= 5 {
                     if let Some(app) = self.base.get_app() {
                         app.play_foley(crate::todlib::tod_foley::FoleyType::SpawnSun as i32);
                     }
                     if let Some(board) = self.base.get_board_mut() {
-                        board.add_coin(a_pos_x as f32, a_pos_y as f32, CoinType::Gold, CoinMotion::Coin);
+                        board.add_coin(
+                            a_pos_x as f32,
+                            a_pos_y as f32,
+                            CoinType::Gold,
+                            CoinMotion::Coin,
+                        );
                     }
                     // [TRANSLATION_NOTE]: C++: ReportAchievement::GiveAchievement(mApp, RollSomeHeads, true)；
                     // Rust 成就系统未接入
@@ -2498,9 +2858,12 @@ impl Plant {
                 let (a_head1_loop_type, a_head2_loop_type, a_head3_loop_type) =
                     match self.base.get_app() {
                         Some(app) => (
-                            app.reanimation_get(self.head_reanim_id).map(|r| r.m_loop_type),
-                            app.reanimation_get(self.head_reanim_id2).map(|r| r.m_loop_type),
-                            app.reanimation_get(self.head_reanim_id3).map(|r| r.m_loop_type),
+                            app.reanimation_get(self.head_reanim_id)
+                                .map(|r| r.m_loop_type),
+                            app.reanimation_get(self.head_reanim_id2)
+                                .map(|r| r.m_loop_type),
+                            app.reanimation_get(self.head_reanim_id3)
+                                .map(|r| r.m_loop_type),
                         ),
                         None => (None, None, None),
                     };
@@ -2515,14 +2878,15 @@ impl Plant {
                 }
             } else if self.seed_type == SeedType::Splitpea {
                 // 对应 C++: 前头（mHeadReanimID）需 mLaunchCounter > 25，后头（mHeadReanimID2）
-                let (a_head_front_loop_type, a_head_back_loop_type) =
-                    match self.base.get_app() {
-                        Some(app) => (
-                            app.reanimation_get(self.head_reanim_id).map(|r| r.m_loop_type),
-                            app.reanimation_get(self.head_reanim_id2).map(|r| r.m_loop_type),
-                        ),
-                        None => (None, None),
-                    };
+                let (a_head_front_loop_type, a_head_back_loop_type) = match self.base.get_app() {
+                    Some(app) => (
+                        app.reanimation_get(self.head_reanim_id)
+                            .map(|r| r.m_loop_type),
+                        app.reanimation_get(self.head_reanim_id2)
+                            .map(|r| r.m_loop_type),
+                    ),
+                    None => (None, None),
+                };
                 if a_head_front_loop_type == Some(ReanimLoopType::PlayOnceAndHold)
                     && self.launch_counter > 25
                 {
@@ -2592,10 +2956,9 @@ impl Plant {
             .get_app()
             .and_then(|app| app.reanimation_get(self.body_reanim_id))
             .map_or(0.0, |r| r.m_anim_time);
-        let a_head_exists = self
-            .base
-            .get_app()
-            .map_or(false, |app| app.reanimation_get(self.head_reanim_id).is_some());
+        let a_head_exists = self.base.get_app().map_or(false, |app| {
+            app.reanimation_get(self.head_reanim_id).is_some()
+        });
         let a_head_loop_count = self
             .base
             .get_app()
@@ -2608,8 +2971,10 @@ impl Plant {
                     Some(app) => (
                         app.reanimation_get(self.head_reanim_id2)
                             .map_or(-1, |r| r.m_loop_count),
-                        app.reanimation_get(self.head_reanim_id).map(|r| r.m_loop_type),
-                        app.reanimation_get(self.head_reanim_id3).map(|r| r.m_loop_type),
+                        app.reanimation_get(self.head_reanim_id)
+                            .map(|r| r.m_loop_type),
+                        app.reanimation_get(self.head_reanim_id3)
+                            .map(|r| r.m_loop_type),
                     ),
                     None => (-1, None, None),
                 };
@@ -2783,22 +3148,41 @@ impl Plant {
     }
 
     pub fn is_nocturnal(seed_type: SeedType) -> bool {
-        matches!(seed_type, SeedType::Puffshroom | SeedType::Sunshroom |
-            SeedType::Fumeshroom | SeedType::Hypnoshroom | SeedType::Scaredyshroom |
-            SeedType::Iceshroom | SeedType::Doomshroom | SeedType::Magnetshroom |
-            SeedType::Gloomshroom)
+        matches!(
+            seed_type,
+            SeedType::Puffshroom
+                | SeedType::Sunshroom
+                | SeedType::Fumeshroom
+                | SeedType::Hypnoshroom
+                | SeedType::Scaredyshroom
+                | SeedType::Iceshroom
+                | SeedType::Doomshroom
+                | SeedType::Magnetshroom
+                | SeedType::Gloomshroom
+        )
     }
 
     pub fn is_fungus(seed_type: SeedType) -> bool {
-        matches!(seed_type, SeedType::Puffshroom | SeedType::Sunshroom |
-            SeedType::Fumeshroom | SeedType::Hypnoshroom | SeedType::Scaredyshroom |
-            SeedType::Iceshroom | SeedType::Doomshroom | SeedType::Magnetshroom |
-            SeedType::Gloomshroom | SeedType::Seashroom)
+        matches!(
+            seed_type,
+            SeedType::Puffshroom
+                | SeedType::Sunshroom
+                | SeedType::Fumeshroom
+                | SeedType::Hypnoshroom
+                | SeedType::Scaredyshroom
+                | SeedType::Iceshroom
+                | SeedType::Doomshroom
+                | SeedType::Magnetshroom
+                | SeedType::Gloomshroom
+                | SeedType::Seashroom
+        )
     }
 
     pub fn is_aquatic(seed_type: SeedType) -> bool {
-        matches!(seed_type, SeedType::Lilypad | SeedType::Tanglekelp |
-            SeedType::Cattail | SeedType::Seashroom)
+        matches!(
+            seed_type,
+            SeedType::Lilypad | SeedType::Tanglekelp | SeedType::Cattail | SeedType::Seashroom
+        )
     }
 
     pub fn is_flying(seed_type: SeedType) -> bool {
@@ -2806,7 +3190,13 @@ impl Plant {
     }
 
     /// 附加粒子效果（对应 C++ AddAttachedParticle：先销毁旧粒子再添加新的）
-    pub fn add_attached_particle(&mut self, pos_x: i32, pos_y: i32, render_position: i32, effect: ParticleEffect) -> Option<*mut ParticleSystem> {
+    pub fn add_attached_particle(
+        &mut self,
+        pos_x: i32,
+        pos_y: i32,
+        render_position: i32,
+        effect: ParticleEffect,
+    ) -> Option<*mut ParticleSystem> {
         if let Some(app) = self.base.app {
             unsafe {
                 // 对应 C++ ParticleTryToGet(mParticleID) 后的 ParticleSystemDie
@@ -2815,11 +3205,20 @@ impl Plant {
                         ps.particle_system_die();
                     }
                 }
-                let a_new_particle = (*app).add_tod_particle(pos_x as f32, pos_y as f32, render_position, effect as i32);
+                let a_new_particle = (*app).add_tod_particle(
+                    pos_x as f32,
+                    pos_y as f32,
+                    render_position,
+                    effect as i32,
+                );
                 if let Some(p) = a_new_particle {
                     // 对应 C++ ParticleGetID(aNewParticle)：遍历查找指针匹配的 ID
                     if let Some(es) = (*app).effect_system.as_ref() {
-                        if let Some(idx) = es.particle_systems.iter().position(|ps| std::ptr::eq(ps, p)) {
+                        if let Some(idx) = es
+                            .particle_systems
+                            .iter()
+                            .position(|ps| std::ptr::eq(ps, p))
+                        {
                             self.particle_id = idx as ParticleSystemID;
                         }
                     }
@@ -2832,27 +3231,47 @@ impl Plant {
     }
 
     pub fn is_upgrade(seed_type: SeedType) -> bool {
-        matches!(seed_type, SeedType::Gatlingpea | SeedType::Twinsunflower |
-            SeedType::Gloomshroom | SeedType::Cattail | SeedType::Wintermelon |
-            SeedType::GoldMagnet | SeedType::Spikerock | SeedType::Cobcannon)
+        matches!(
+            seed_type,
+            SeedType::Gatlingpea
+                | SeedType::Twinsunflower
+                | SeedType::Gloomshroom
+                | SeedType::Cattail
+                | SeedType::Wintermelon
+                | SeedType::GoldMagnet
+                | SeedType::Spikerock
+                | SeedType::Cobcannon
+        )
     }
 
     /// 预加载植物资源（对应 C++ Plant::PreloadPlantResources）
     pub fn preload_plant_resources(seed_type: SeedType) {
         let a_plant_def = get_plant_definition(seed_type);
         if a_plant_def.reanimation_type != ReanimationType::None {
-            crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(a_plant_def.reanimation_type);
+            crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(
+                a_plant_def.reanimation_type,
+            );
         }
 
         if seed_type == SeedType::Cherrybomb {
-            crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::ZombieCharred);
+            crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(
+                ReanimationType::ZombieCharred,
+            );
         } else if seed_type == SeedType::Jalapeno {
-            crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::JalapenoFire);
+            crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(
+                ReanimationType::JalapenoFire,
+            );
         } else if seed_type == SeedType::Torchwood {
-            crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::FirePea);
-            crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::JalapenoFire);
+            crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(
+                ReanimationType::FirePea,
+            );
+            crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(
+                ReanimationType::JalapenoFire,
+            );
         } else if Plant::is_nocturnal(seed_type) {
-            crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(ReanimationType::Sleeping);
+            crate::todlib::reanim_loader::reanimator_ensure_definition_loaded(
+                ReanimationType::Sleeping,
+            );
         }
     }
 
@@ -2871,9 +3290,14 @@ impl Plant {
         if seed_type == SeedType::Imitater && imitater_type != SeedType::None {
             a_seed_type = imitater_type;
             a_draw_variation = DrawVariation::Imitater;
-            if matches!(imitater_type, SeedType::Hypnoshroom | SeedType::Squash
-                | SeedType::PotatoMine | SeedType::Garlic | SeedType::Lilypad)
-            {
+            if matches!(
+                imitater_type,
+                SeedType::Hypnoshroom
+                    | SeedType::Squash
+                    | SeedType::PotatoMine
+                    | SeedType::Garlic
+                    | SeedType::Lilypad
+            ) {
                 a_draw_variation = DrawVariation::ImitaterLess;
             }
         } else if draw_variation == DrawVariation::Normal && seed_type == SeedType::Tanglekelp {
@@ -2888,7 +3312,10 @@ impl Plant {
 
         if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
             if app.game_mode == GameMode::ChallengeBigTime
-                && matches!(a_seed_type, SeedType::Wallnut | SeedType::Sunflower | SeedType::Marigold)
+                && matches!(
+                    a_seed_type,
+                    SeedType::Wallnut | SeedType::Sunflower | SeedType::Marigold
+                )
             {
                 a_scale_x *= 1.5;
                 a_scale_y *= 1.5;
@@ -2902,7 +3329,8 @@ impl Plant {
         }
 
         if crate::lawn::challenge::Challenge::is_zombie_seed_type(a_seed_type) != 0 {
-            let a_zombie_type = crate::lawn::challenge::Challenge::i_zombie_seed_type_to_zombie_type(a_seed_type);
+            let a_zombie_type =
+                crate::lawn::challenge::Challenge::i_zombie_seed_type_to_zombie_type(a_seed_type);
             if a_zombie_type == ZombieType::Dancer {
                 a_scale_x *= 0.8;
                 a_scale_y *= 0.8;
@@ -2913,7 +3341,12 @@ impl Plant {
             if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                 unsafe {
                     if let Some(cache) = app.m_reanimator_cache {
-                        (*cache).draw_cached_zombie(g, pos_x + a_offset_x, pos_y + a_offset_y, a_zombie_type);
+                        (*cache).draw_cached_zombie(
+                            g,
+                            pos_x + a_offset_x,
+                            pos_y + a_offset_y,
+                            a_zombie_type,
+                        );
                     }
                 }
             }
@@ -2926,7 +3359,13 @@ impl Plant {
                 if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
                     unsafe {
                         if let Some(cache) = app.m_reanimator_cache {
-                            (*cache).draw_cached_plant(g, pos_x + a_offset_x, pos_y + a_offset_y, a_seed_type, a_draw_variation);
+                            (*cache).draw_cached_plant(
+                                g,
+                                pos_x + a_offset_x,
+                                pos_y + a_offset_y,
+                                a_seed_type,
+                                a_draw_variation,
+                            );
                         }
                     }
                 }
@@ -2964,7 +3403,8 @@ impl Plant {
         }
         if upgraded_type == SeedType::Cattail && self.seed_type == SeedType::Lilypad {
             let top_plant = self.base.board.map_or(false, |b| unsafe {
-                (*b).get_top_plant_at_any(self.plant_col, self.base.row).map_or(true, |p| p.seed_type != SeedType::Cattail)
+                (*b).get_top_plant_at_any(self.plant_col, self.base.row)
+                    .map_or(true, |p| p.seed_type != SeedType::Cattail)
             });
             return top_plant;
         }
@@ -3006,18 +3446,29 @@ impl Plant {
         }
     }
 
-    pub fn get_frame_length_for_type(_seed_type: SeedType) -> i32 { 10 }
-    pub fn get_num_frames_for_type(_seed_type: SeedType) -> i32 { 1 }
+    pub fn get_frame_length_for_type(_seed_type: SeedType) -> i32 {
+        10
+    }
+    pub fn get_num_frames_for_type(_seed_type: SeedType) -> i32 {
+        1
+    }
 
     pub fn makes_sun(&self) -> bool {
-        matches!(self.seed_type, SeedType::Sunflower | SeedType::Twinsunflower |
-            SeedType::Sunshroom | SeedType::Marigold)
+        matches!(
+            self.seed_type,
+            SeedType::Sunflower
+                | SeedType::Twinsunflower
+                | SeedType::Sunshroom
+                | SeedType::Marigold
+        )
     }
 
     // ========== 辅助函数（stub，对应 C++ Plant 方法） ==========
 
     /// 是否在游戏中（对应 C++ IsInPlay）
-    pub fn is_in_play(&self) -> bool { self.is_on_board }
+    pub fn is_in_play(&self) -> bool {
+        self.is_on_board
+    }
 
     /// 设置睡眠状态（对应 C++ SetSleeping）
     pub fn set_sleeping(&mut self, is_asleep: bool) {
@@ -3039,12 +3490,19 @@ impl Plant {
 
             let a_render_order = self.base.render_order + 2;
             if let Some(app) = self.base.get_app_mut() {
-                if let Some(a_sleep_reanim) = app.add_reanimation(a_pos_x, a_pos_y, a_render_order, ReanimationType::Sleeping as i32) {
+                if let Some(a_sleep_reanim) = app.add_reanimation(
+                    a_pos_x,
+                    a_pos_y,
+                    a_render_order,
+                    ReanimationType::Sleeping as i32,
+                ) {
                     // 对应 C++ Plant.cpp:545-548：mLoopType = REANIM_LOOP; mAnimRate = RandRangeFloat(6, 8); mAnimTime = RandRangeFloat(0, 0.9)
                     unsafe {
                         (*a_sleep_reanim).m_loop_type = ReanimLoopType::Loop;
-                        (*a_sleep_reanim).m_anim_rate = crate::todlib::tod_common::rand_range_float(6.0, 8.0);
-                        (*a_sleep_reanim).m_anim_time = crate::todlib::tod_common::rand_range_float(0.0, 0.9);
+                        (*a_sleep_reanim).m_anim_rate =
+                            crate::todlib::tod_common::rand_range_float(6.0, 8.0);
+                        (*a_sleep_reanim).m_anim_time =
+                            crate::todlib::tod_common::rand_range_float(0.0, 0.9);
                     }
                     self.sleeping_reanim_id = app.reanimation_get_id(a_sleep_reanim);
                 }
@@ -3058,7 +3516,10 @@ impl Plant {
 
         // 身体动画切换（对应 C++ 后半段）
         let reanim_id = self.body_reanim_id;
-        let has_reanim = self.base.get_app_mut().map_or(false, |app| app.reanimation_get_mut(reanim_id).is_some());
+        let has_reanim = self
+            .base
+            .get_app_mut()
+            .map_or(false, |app| app.reanimation_get_mut(reanim_id).is_some());
         if !has_reanim {
             return;
         }
@@ -3066,8 +3527,17 @@ impl Plant {
         if is_asleep {
             if !self.is_in_play() && self.seed_type == SeedType::Sunshroom {
                 self.set_body_reanim_frame("anim_bigsleep");
-            } else if self.base.get_app().and_then(|app| app.reanimation_get(reanim_id)).map_or(false, |r| r.track_exists("anim_sleep")) {
-                let a_anim_time = self.base.get_app().and_then(|app| app.reanimation_get(reanim_id)).map_or(0.0, |r| r.m_anim_time);
+            } else if self
+                .base
+                .get_app()
+                .and_then(|app| app.reanimation_get(reanim_id))
+                .map_or(false, |r| r.track_exists("anim_sleep"))
+            {
+                let a_anim_time = self
+                    .base
+                    .get_app()
+                    .and_then(|app| app.reanimation_get(reanim_id))
+                    .map_or(0.0, |r| r.m_anim_time);
                 self.set_body_reanim_frame("anim_sleep");
                 if let Some(app) = self.base.get_app_mut() {
                     if let Some(reanim) = app.reanimation_get_mut(reanim_id) {
@@ -3081,8 +3551,17 @@ impl Plant {
         } else {
             if !self.is_in_play() && self.seed_type == SeedType::Sunshroom {
                 self.set_body_reanim_frame("anim_bigidle");
-            } else if self.base.get_app().and_then(|app| app.reanimation_get(reanim_id)).map_or(false, |r| r.track_exists("anim_idle")) {
-                let a_anim_time = self.base.get_app().and_then(|app| app.reanimation_get(reanim_id)).map_or(0.0, |r| r.m_anim_time);
+            } else if self
+                .base
+                .get_app()
+                .and_then(|app| app.reanimation_get(reanim_id))
+                .map_or(false, |r| r.track_exists("anim_idle"))
+            {
+                let a_anim_time = self
+                    .base
+                    .get_app()
+                    .and_then(|app| app.reanimation_get(reanim_id))
+                    .map_or(0.0, |r| r.m_anim_time);
                 self.set_body_reanim_frame("anim_idle");
                 if let Some(app) = self.base.get_app_mut() {
                     if let Some(reanim) = app.reanimation_get_mut(reanim_id) {
@@ -3090,7 +3569,14 @@ impl Plant {
                     }
                 }
             }
-            if self.is_in_play() && self.base.get_app().and_then(|app| app.reanimation_get(reanim_id)).map_or(0.0, |r| r.m_anim_rate) < 2.0 {
+            if self.is_in_play()
+                && self
+                    .base
+                    .get_app()
+                    .and_then(|app| app.reanimation_get(reanim_id))
+                    .map_or(0.0, |r| r.m_anim_rate)
+                    < 2.0
+            {
                 // C++ RandRangeFloat(10.0f, 15.0f) — 用 10 + rand_float(5) 近似
                 self.set_body_reanim_rate(10.0 + crate::framework::common::rand_float(5.0));
             }
@@ -3228,9 +3714,7 @@ impl Plant {
 
         // C++ 2987-2991
         let a_blink_reanim = match self.base.get_app_mut() {
-            Some(app) => {
-                app.add_reanimation(0.0, 0.0, 0, a_plant_def.reanimation_type as i32)
-            }
+            Some(app) => app.add_reanimation(0.0, 0.0, 0, a_plant_def.reanimation_type as i32),
             None => return None,
         };
         let a_blink_reanim = a_blink_reanim?;
@@ -3263,10 +3747,8 @@ impl Plant {
             };
 
             if let Some(a_resolved_track) = a_resolved_track {
-                (*a_blink_reanim).attach_to_another_reanimation(
-                    &mut *a_anim_to_attach,
-                    a_resolved_track,
-                );
+                (*a_blink_reanim)
+                    .attach_to_another_reanimation(&mut *a_anim_to_attach, a_resolved_track);
             }
             // C++: else PvzpTrace("Missing anim_idle for blink");
 
@@ -3287,9 +3769,13 @@ impl Plant {
         if self.seed_type == SeedType::PotatoMine && self.state != PlantState::PotatoArmed {
             return;
         }
-        if matches!(self.state,
-            PlantState::CactusRising | PlantState::CactusHigh | PlantState::CactusLowering
-            | PlantState::MagnetshroomSucking | PlantState::MagnetshroomCharging
+        if matches!(
+            self.state,
+            PlantState::CactusRising
+                | PlantState::CactusHigh
+                | PlantState::CactusLowering
+                | PlantState::MagnetshroomSucking
+                | PlantState::MagnetshroomCharging
         ) {
             return;
         }
@@ -3313,10 +3799,9 @@ impl Plant {
         unsafe {
             let a_idle_image = (*a_body_reanim).get_image_override("anim_idle");
             let a_face_image = (*a_body_reanim).get_image_override("anim_face");
-            let a_tallnut_cracked2 = reanimator_get_image(resolve_reanim_image_name(
-                "IMAGE_REANIM_TALLNUT_CRACKED2",
-            ))
-            .unwrap_or(std::ptr::null_mut());
+            let a_tallnut_cracked2 =
+                reanimator_get_image(resolve_reanim_image_name("IMAGE_REANIM_TALLNUT_CRACKED2"))
+                    .unwrap_or(std::ptr::null_mut());
             let a_garlic_body3 =
                 reanimator_get_image(resolve_reanim_image_name("IMAGE_REANIM_GARLIC_BODY3"))
                     .unwrap_or(std::ptr::null_mut());
@@ -3327,9 +3812,10 @@ impl Plant {
             }
         }
 
-        if matches!(self.seed_type, SeedType::Wallnut | SeedType::Tallnut
-            | SeedType::ExplodeONut | SeedType::GiantWallnut)
-        {
+        if matches!(
+            self.seed_type,
+            SeedType::Wallnut | SeedType::Tallnut | SeedType::ExplodeONut | SeedType::GiantWallnut
+        ) {
             self.blink_countdown = 1000 + RandRange(1000);
         }
 
@@ -3352,7 +3838,9 @@ impl Plant {
     pub fn end_blink(&mut self) {
         if self.blink_reanim_id != REANIMATIONID_NULL {
             if let Some(app) = self.base.app {
-                unsafe { (*app).remove_reanimation(self.blink_reanim_id); }
+                unsafe {
+                    (*app).remove_reanimation(self.blink_reanim_id);
+                }
             }
             self.blink_reanim_id = REANIMATIONID_NULL;
         }
@@ -3362,7 +3850,9 @@ impl Plant {
     pub fn update_blink(&mut self) {
         if self.blink_reanim_id != REANIMATIONID_NULL {
             let loop_done = self.base.app.map_or(false, |app| unsafe {
-                (*app).reanimation_get(self.blink_reanim_id).map_or(true, |r| r.m_loop_count > 0)
+                (*app)
+                    .reanimation_get(self.blink_reanim_id)
+                    .map_or(true, |r| r.m_loop_count > 0)
             });
             if loop_done {
                 self.end_blink();
@@ -3388,7 +3878,11 @@ impl Plant {
         if self.seed_type == SeedType::Imitater && self.imitater_type != SeedType::None {
             seed_type = self.imitater_type;
         }
-        if self.base.app.map_or(false, |app| unsafe { (*app).is_wallnut_bowling_level() }) {
+        if self
+            .base
+            .app
+            .map_or(false, |app| unsafe { (*app).is_wallnut_bowling_level() })
+        {
             layer = crate::lawn::game_enums::RENDER_LAYER_PROJECTILE;
         } else if seed_type == SeedType::Pumpkinshell {
             order = PlantOrder::Pumpkin;
@@ -3396,11 +3890,17 @@ impl Plant {
             order = PlantOrder::Flyer;
         } else if seed_type == SeedType::Flowerpot
             || (seed_type == SeedType::Lilypad
-                && self.base.app.map_or(false, |app| unsafe { (*app).game_mode != GameMode::ChallengeZenGarden }))
+                && self.base.app.map_or(false, |app| unsafe {
+                    (*app).game_mode != GameMode::ChallengeZenGarden
+                }))
         {
             order = PlantOrder::Lilypad;
         }
-        crate::lawn::board::make_render_order(layer, self.base.row, order as i32 * 5 - self.base.x + 800)
+        crate::lawn::board::make_render_order(
+            layer,
+            self.base.row,
+            order as i32 * 5 - self.base.x + 800,
+        )
     }
 
     /// 设置身体动画帧（对应 C++ 设置 Reanimation 的 FramesForLayer）
@@ -3474,7 +3974,13 @@ impl Plant {
     }
 
     /// 播放身体重动画（对应 C++ Plant::PlayBodyReanim）
-    pub fn play_body_reanim(&mut self, track_name: &str, loop_type: ReanimLoopType, blend_time: i32, anim_rate: f32) {
+    pub fn play_body_reanim(
+        &mut self,
+        track_name: &str,
+        loop_type: ReanimLoopType,
+        blend_time: i32,
+        anim_rate: f32,
+    ) {
         let reanim_id = self.body_reanim_id;
         if let Some(app) = self.base.get_app_mut() {
             if let Some(reanim) = app.reanimation_get_mut(reanim_id) {
@@ -3495,12 +4001,19 @@ impl Plant {
     /// 播放待机动画（对应 C++ Plant::PlayIdleAnim）
     pub fn play_idle_anim(&mut self, rate: f32) {
         let reanim_id = self.body_reanim_id;
-        let has_reanim = self.base.get_app_mut().map_or(false, |app| app.reanimation_get_mut(reanim_id).is_some());
+        let has_reanim = self
+            .base
+            .get_app_mut()
+            .map_or(false, |app| app.reanimation_get_mut(reanim_id).is_some());
         if !has_reanim {
             return;
         }
         self.play_body_reanim("anim_idle", ReanimLoopType::Loop, 20, rate);
-        if self.base.get_app().map_or(false, |app| app.is_izombie_level()) {
+        if self
+            .base
+            .get_app()
+            .map_or(false, |app| app.is_izombie_level())
+        {
             if let Some(app) = self.base.get_app_mut() {
                 if let Some(reanim) = app.reanimation_get_mut(reanim_id) {
                     reanim.m_anim_rate = 0.0;
@@ -3510,7 +4023,13 @@ impl Plant {
     }
 
     /// 绘制高度偏移（对应 C++ PlantDrawHeightOffset，静态函数；thePlant 可为 nullptr）
-    pub fn plant_draw_height_offset(board: Option<&Board>, plant: Option<&Plant>, seed_type: SeedType, grid_x: i32, grid_y: i32) -> f32 {
+    pub fn plant_draw_height_offset(
+        board: Option<&Board>,
+        plant: Option<&Plant>,
+        seed_type: SeedType,
+        grid_x: i32,
+        grid_y: i32,
+    ) -> f32 {
         let mut a_height_offset = 0.0;
 
         let mut do_floating = false;
@@ -3522,16 +4041,23 @@ impl Plant {
             }
         } else if board.map_or(false, |b| b.is_pool_square(grid_x, grid_y)) {
             do_floating = true;
-        } else if plant.is_some() && board.map_or(false, |b| b.m_background_type == BackgroundType::Zombiquarium) {
+        } else if plant.is_some()
+            && board.map_or(false, |b| {
+                b.m_background_type == BackgroundType::Zombiquarium
+            })
+        {
             do_floating = true;
         }
 
         if do_floating {
             let a_counter = match board {
                 Some(b) => b.m_main_counter,
-                None => crate::lawn::lawn_app::LawnApp::instance().map_or(0, |app| app.m_app_counter),
+                None => {
+                    crate::lawn::lawn_app::LawnApp::instance().map_or(0, |app| app.m_app_counter)
+                }
             };
-            let a_pos = grid_y as f32 * std::f32::consts::PI + grid_x as f32 * 0.25 * std::f32::consts::PI;
+            let a_pos =
+                grid_y as f32 * std::f32::consts::PI + grid_x as f32 * 0.25 * std::f32::consts::PI;
             let a_time = (a_counter % 200) as f32 * (2.0 * std::f32::consts::PI / 200.0);
             let a_floating_height = (a_pos + a_time).sin() * 2.0;
             a_height_offset += a_floating_height;
@@ -3589,7 +4115,10 @@ impl Plant {
                 a_height_offset += 15.0;
             } else if board.map_or(false, |b| b.is_pool_square(grid_x, grid_y)) {
                 a_height_offset += 0.0;
-            } else if grid_y == a_bottom_row && grid_x >= 7 && board.map_or(false, |b| b.stage_has_6_rows()) {
+            } else if grid_y == a_bottom_row
+                && grid_x >= 7
+                && board.map_or(false, |b| b.stage_has_6_rows())
+            {
                 a_height_offset += 1.0;
             } else if grid_y == a_bottom_row && grid_x < 7 {
                 a_height_offset += 12.0;
@@ -3617,11 +4146,20 @@ impl Plant {
             SeedType::Sunshroom | SeedType::Puffshroom => {
                 a_scale_offset_fix -= 4.0;
             }
-            SeedType::Hypnoshroom | SeedType::Magnetshroom | SeedType::Peashooter
-            | SeedType::Repeater | SeedType::Leftpeater | SeedType::Snowpea
-            | SeedType::Threepeater | SeedType::Sunflower | SeedType::Marigold
-            | SeedType::Cabbagepult | SeedType::Melonpult | SeedType::Tanglekelp
-            | SeedType::Blover | SeedType::Spikeweed => {
+            SeedType::Hypnoshroom
+            | SeedType::Magnetshroom
+            | SeedType::Peashooter
+            | SeedType::Repeater
+            | SeedType::Leftpeater
+            | SeedType::Snowpea
+            | SeedType::Threepeater
+            | SeedType::Sunflower
+            | SeedType::Marigold
+            | SeedType::Cabbagepult
+            | SeedType::Melonpult
+            | SeedType::Tanglekelp
+            | SeedType::Blover
+            | SeedType::Spikeweed => {
                 a_scale_offset_fix -= 8.0;
             }
             SeedType::Seashroom | SeedType::PotatoMine => {
@@ -3662,7 +4200,10 @@ impl Plant {
     }
     pub fn update_chomper(&mut self) {
         if self.state == PlantState::Ready {
-            if self.find_target_zombie(self.base.row, PlantWeapon::Primary).is_some() {
+            if self
+                .find_target_zombie(self.base.row, PlantWeapon::Primary)
+                .is_some()
+            {
                 self.play_body_reanim("anim_bite", ReanimLoopType::PlayOnceAndHold, 20, 24.0);
                 self.state = PlantState::ChomperBiting;
                 self.state_countdown = 70;
@@ -3706,7 +4247,9 @@ impl Plant {
                         app.play_foley(crate::todlib::tod_foley::FoleyType::Splat as i32);
                     }
                     if let Some(board) = self.base.get_board_mut() {
-                        if let Some(zombie) = a_zombie_id.and_then(|id| board.zombie_try_to_get_mut(id)) {
+                        if let Some(zombie) =
+                            a_zombie_id.and_then(|id| board.zombie_try_to_get_mut(id))
+                        {
                             zombie.take_damage(40, 0);
                         }
                     }
@@ -3715,7 +4258,9 @@ impl Plant {
                     self.state = PlantState::ChomperBitingMissed;
                 } else {
                     if let Some(board) = self.base.get_board_mut() {
-                        if let Some(zombie) = a_zombie_id.and_then(|id| board.zombie_try_to_get_mut(id)) {
+                        if let Some(zombie) =
+                            a_zombie_id.and_then(|id| board.zombie_try_to_get_mut(id))
+                        {
                             zombie.die_with_loot();
                         }
                     }
@@ -3724,7 +4269,11 @@ impl Plant {
             }
         } else if self.state == PlantState::ChomperBitingGotOne {
             // C++: if (aBodyReanim->mLoopCount > 0)
-            let a_loop = self.base.get_app().and_then(|app| app.reanimation_get(self.body_reanim_id)).map_or(0, |r| r.m_loop_count);
+            let a_loop = self
+                .base
+                .get_app()
+                .and_then(|app| app.reanimation_get(self.body_reanim_id))
+                .map_or(0, |r| r.m_loop_count);
             if a_loop > 0 {
                 self.play_body_reanim("anim_chew", ReanimLoopType::Loop, 0, 15.0);
                 // C++: if (mApp->IsIZombieLevel()) aBodyReanim->mAnimRate = 0;
@@ -3743,9 +4292,15 @@ impl Plant {
                 self.play_body_reanim("anim_swallow", ReanimLoopType::PlayOnceAndHold, 20, 12.0);
                 self.state = PlantState::ChomperSwallowing;
             }
-        } else if self.state == PlantState::ChomperSwallowing || self.state == PlantState::ChomperBitingMissed {
+        } else if self.state == PlantState::ChomperSwallowing
+            || self.state == PlantState::ChomperBitingMissed
+        {
             // C++: if (aBodyReanim->mLoopCount > 0) { PlayIdleAnim(0.0f); mState = STATE_READY; }
-            let a_loop = self.base.get_app().and_then(|app| app.reanimation_get(self.body_reanim_id)).map_or(0, |r| r.m_loop_count);
+            let a_loop = self
+                .base
+                .get_app()
+                .and_then(|app| app.reanimation_get(self.body_reanim_id))
+                .map_or(0, |r| r.m_loop_count);
             if a_loop > 0 {
                 self.play_idle_anim(0.0);
                 self.state = PlantState::Ready;
@@ -3761,14 +4316,19 @@ impl Plant {
         if let Some(board) = self.base.get_board_mut() {
             let mut convert: Vec<(usize, bool)> = Vec::new(); // (idx, is_pea)
             for (i, proj) in board.projectiles.iter().enumerate() {
-                if proj.dead { continue; }
+                if proj.dead {
+                    continue;
+                }
                 if proj.base.row == my_row
                     && (proj.projectile_type == crate::lawn::projectile::ProjectileType::Pea
                         || proj.projectile_type == crate::lawn::projectile::ProjectileType::Snowpea)
                 {
                     let proj_rect = proj.get_projectile_rect();
                     if crate::lawn::board::get_rect_overlap(&attack_rect, &proj_rect) >= 10 {
-                        convert.push((i, proj.projectile_type == crate::lawn::projectile::ProjectileType::Pea));
+                        convert.push((
+                            i,
+                            proj.projectile_type == crate::lawn::projectile::ProjectileType::Pea,
+                        ));
                     }
                 }
             }
@@ -3798,7 +4358,12 @@ impl Plant {
                     Some(b) => b,
                     None => return,
                 };
-                board.add_projectile(self.pos_x + 25.0, self.pos_y + 25.0, row, SeedType::Starfruit)
+                board.add_projectile(
+                    self.pos_x + 25.0,
+                    self.pos_y + 25.0,
+                    row,
+                    SeedType::Starfruit,
+                )
             };
             if let Some(board) = self.base.get_board_mut() {
                 if let Some(a_projectile) = board.projectiles.get_mut(a_projectile_idx) {
@@ -3806,11 +4371,26 @@ impl Plant {
                     a_projectile.motion = crate::lawn::projectile::ProjectileMotion::Star;
 
                     match i {
-                        0 => { a_projectile.vel_x = -3.33; a_projectile.vel_y = 0.0; }
-                        1 => { a_projectile.vel_x = 0.0; a_projectile.vel_y = 3.33; }
-                        2 => { a_projectile.vel_x = 0.0; a_projectile.vel_y = -3.33; }
-                        3 => { a_projectile.vel_x = a_shoot_angle_x; a_projectile.vel_y = a_shoot_angle_y; }
-                        4 => { a_projectile.vel_x = a_shoot_angle_x; a_projectile.vel_y = -a_shoot_angle_y; }
+                        0 => {
+                            a_projectile.vel_x = -3.33;
+                            a_projectile.vel_y = 0.0;
+                        }
+                        1 => {
+                            a_projectile.vel_x = 0.0;
+                            a_projectile.vel_y = 3.33;
+                        }
+                        2 => {
+                            a_projectile.vel_x = 0.0;
+                            a_projectile.vel_y = -3.33;
+                        }
+                        3 => {
+                            a_projectile.vel_x = a_shoot_angle_x;
+                            a_projectile.vel_y = a_shoot_angle_y;
+                        }
+                        4 => {
+                            a_projectile.vel_x = a_shoot_angle_x;
+                            a_projectile.vel_y = -a_shoot_angle_y;
+                        }
                         _ => { /* C++: PVZP_ASSERT(false) */ }
                     }
                 }
@@ -3855,13 +4435,19 @@ impl Plant {
         } else if self.state == PlantState::CobcannonLoading {
             // C++: if (aBodyReanim->ShouldTriggerTimedEvent(0.5f)) PlayFoley(FOLEY_SHOOP)
             if let Some(app) = self.base.get_app() {
-                let a_trigger = app.reanimation_get(self.body_reanim_id).map_or(false, |r| r.should_trigger_timed_event(0.5));
+                let a_trigger = app
+                    .reanimation_get(self.body_reanim_id)
+                    .map_or(false, |r| r.should_trigger_timed_event(0.5));
                 if a_trigger {
                     app.play_foley(crate::todlib::tod_foley::FoleyType::Shoop as i32);
                 }
             }
             // C++: if (aBodyReanim->mLoopCount > 0) { mState = READY; PlayIdleAnim(12.0f); }
-            let a_loop = self.base.get_app().and_then(|app| app.reanimation_get(self.body_reanim_id)).map_or(0, |r| r.m_loop_count);
+            let a_loop = self
+                .base
+                .get_app()
+                .and_then(|app| app.reanimation_get(self.body_reanim_id))
+                .map_or(0, |r| r.m_loop_count);
             if a_loop > 0 {
                 self.state = PlantState::CobcannonReady;
                 self.play_idle_anim(12.0);
@@ -3869,18 +4455,24 @@ impl Plant {
         } else if self.state == PlantState::CobcannonReady {
             // C++: aCobTrack = GetTrackInstanceByName("CobCannon_cob");
             //      aCobTrack->mTrackColor = GetFlashingColor(mBoard->mMainCounter, 75);
-            let a_main_counter = self.base.get_board().map_or(0, |b| unsafe { (*b).m_main_counter });
+            let a_main_counter = self
+                .base
+                .get_board()
+                .map_or(0, |b| unsafe { (*b).m_main_counter });
             if let Some(app) = self.base.get_app_mut() {
                 if let Some(r) = app.reanimation_get_mut(self.body_reanim_id) {
                     if let Some(ti) = r.get_track_instance_by_name("CobCannon_cob") {
-                        ti.m_track_color = crate::todlib::tod_common::get_flashing_color(a_main_counter, 75);
+                        ti.m_track_color =
+                            crate::todlib::tod_common::get_flashing_color(a_main_counter, 75);
                     }
                 }
             }
         } else if self.state == PlantState::CobcannonFiring {
             // C++: if (aBodyReanim->ShouldTriggerTimedEvent(0.48f)) PlayFoley(FOLEY_COB_LAUNCH)
             if let Some(app) = self.base.get_app() {
-                let a_trigger = app.reanimation_get(self.body_reanim_id).map_or(false, |r| r.should_trigger_timed_event(0.48));
+                let a_trigger = app
+                    .reanimation_get(self.body_reanim_id)
+                    .map_or(false, |r| r.should_trigger_timed_event(0.48));
                 if a_trigger {
                     app.play_foley(crate::todlib::tod_foley::FoleyType::CobLaunch as i32);
                 }
@@ -3932,10 +4524,15 @@ impl Plant {
     pub fn squish(&mut self) {
         if self.not_on_ground() {
             return;
-        }        if !self.is_asleep {
-            if matches!(self.seed_type,
-                SeedType::Cherrybomb | SeedType::Jalapeno | SeedType::Doomshroom | SeedType::Iceshroom)
-            {
+        }
+        if !self.is_asleep {
+            if matches!(
+                self.seed_type,
+                SeedType::Cherrybomb
+                    | SeedType::Jalapeno
+                    | SeedType::Doomshroom
+                    | SeedType::Iceshroom
+            ) {
                 self.do_special();
                 return;
             } else if self.seed_type == SeedType::PotatoMine && self.state != PlantState::NotReady {
@@ -3977,7 +4574,8 @@ impl Plant {
                 if board.zombies[idx].dead {
                     continue;
                 }
-                if (board.zombies[idx].zombie_type == ZombieType::Boss || board.zombies[idx].base.row == row)
+                if (board.zombies[idx].zombie_type == ZombieType::Boss
+                    || board.zombies[idx].base.row == row)
                     && board.zombies[idx].effected_by_damage(a_damage_range_flags)
                 {
                     board.zombies[idx].remove_cold_effects();
@@ -3989,7 +4587,8 @@ impl Plant {
                     continue;
                 }
                 if board.grid_items[idx].grid_y == row
-                    && board.grid_items[idx].grid_item_type == crate::lawn::grid_item::GridItemType::Ladder
+                    && board.grid_items[idx].grid_item_type
+                        == crate::lawn::grid_item::GridItemType::Ladder
                 {
                     board.grid_items[idx].grid_item_die();
                 }
@@ -4027,7 +4626,8 @@ impl Plant {
         }
         // C++: aBodyReanim = mApp->ReanimationGet(mBodyReanimID)
         let body_reanim_ptr = self.base.get_app_mut().and_then(|app| {
-            app.reanimation_get_mut(self.body_reanim_id).map(|r| r as *mut crate::todlib::reanimator::Reanimation)
+            app.reanimation_get_mut(self.body_reanim_id)
+                .map(|r| r as *mut crate::todlib::reanimator::Reanimation)
         });
         let a_body_fps = unsafe { body_reanim_ptr.map_or(12.0, |p| (*p).m_fps) };
 
@@ -4042,7 +4642,9 @@ impl Plant {
                 if let Some(app) = self.base.get_app() {
                     if app.is_izombie_level() {
                         if let Some(p) = body_reanim_ptr {
-                            unsafe { (*p).m_anim_rate = 0.0; }
+                            unsafe {
+                                (*p).m_anim_rate = 0.0;
+                            }
                         }
                     }
                 }
@@ -4050,10 +4652,18 @@ impl Plant {
             }
         } else if self.state == PlantState::CactusHigh {
             // C++: if (FindTargetZombie(mRow, WEAPON_PRIMARY) == nullptr)
-            if self.find_target_zombie(self.base.row, PlantWeapon::Primary).is_none() {
+            if self
+                .find_target_zombie(self.base.row, PlantWeapon::Primary)
+                .is_none()
+            {
                 self.state = PlantState::CactusLowering;
                 // C++: PlayBodyReanim("anim_lower", REANIM_PLAY_ONCE_AND_HOLD, 20, aBodyReanim->mDefinition->mFPS)
-                self.play_body_reanim("anim_lower", ReanimLoopType::PlayOnceAndHold, 20, a_body_fps);
+                self.play_body_reanim(
+                    "anim_lower",
+                    ReanimLoopType::PlayOnceAndHold,
+                    20,
+                    a_body_fps,
+                );
             }
         } else if self.state == PlantState::CactusLowering {
             // C++: if (aBodyReanim->mLoopCount > 0)
@@ -4063,7 +4673,10 @@ impl Plant {
                 // C++: PlayIdleAnim(0.0f)
                 self.play_idle_anim(0.0);
             }
-        } else if self.find_target_zombie(self.base.row, PlantWeapon::Primary).is_some() {
+        } else if self
+            .find_target_zombie(self.base.row, PlantWeapon::Primary)
+            .is_some()
+        {
             self.state = PlantState::CactusRising;
             // C++: PlayBodyReanim("anim_rise", REANIM_PLAY_ONCE_AND_HOLD, 20, aBodyReanim->mDefinition->mFPS)
             self.play_body_reanim("anim_rise", ReanimLoopType::PlayOnceAndHold, 20, a_body_fps);
@@ -4108,7 +4721,21 @@ impl Plant {
                 )
             })
         });
-        let Some((helm_type, helm_damage_idx, shield_type, shield_damage_idx, zombie_type, zombie_phase, has_arm, zombie_eating, z_pos_x, z_pos_y)) = z_info else { return };
+        let Some((
+            helm_type,
+            helm_damage_idx,
+            shield_type,
+            shield_damage_idx,
+            zombie_type,
+            zombie_phase,
+            has_arm,
+            zombie_eating,
+            z_pos_x,
+            z_pos_y,
+        )) = z_info
+        else {
+            return;
+        };
 
         self.state = PlantState::MagnetshroomSucking;
         self.state_countdown = 1500;
@@ -4133,95 +4760,110 @@ impl Plant {
                 .map_or((z_pos_x, z_pos_y), |z| z.get_track_position(track))
         };
 
-        let (a_item_x, a_item_y, a_dest_offset_x, a_dest_offset_y, a_item_type): (f32, f32, f32, f32, MagnetItemType) =
-            if helm_type == HelmType::Pail {
-                // C++: GetTrackPosition("anim_bucket")；mDestOffsetX/Y = RandRangeFloat(-10,10) + 25/20
-                let (x, y) = track_pos("anim_bucket");
-                (
-                    x,
-                    y,
-                    -10.0 + RandFloat(20.0) + 25.0,
-                    -10.0 + RandFloat(20.0) + 20.0,
-                    match helm_damage_idx {
-                        0 => MagnetItemType::Pail1,
-                        1 => MagnetItemType::Pail2,
-                        _ => MagnetItemType::Pail3,
-                    },
-                )
-            } else if helm_type == HelmType::FootballHelmet {
-                // C++: GetTrackPosition("zombie_football_helmet")；mPosX += 37.0f；mPosY -= 60.0f
-                let (x, y) = track_pos("zombie_football_helmet");
-                (
-                    x + 37.0,
-                    y - 60.0,
-                    -10.0 + RandFloat(20.0) + 20.0,
-                    -10.0 + RandFloat(20.0) + 20.0,
-                    match helm_damage_idx {
-                        0 => MagnetItemType::FootballHelmet1,
-                        1 => MagnetItemType::FootballHelmet2,
-                        _ => MagnetItemType::FootballHelmet3,
-                    },
-                )
-            } else if shield_type == ShieldType::Door {
-                // C++: GetTrackPosition("anim_screendoor")；mDestOffsetX/Y = RandRangeFloat(-10,10) + 30/0
-                let (x, y) = track_pos("anim_screendoor");
-                (
-                    x,
-                    y,
-                    -10.0 + RandFloat(20.0) + 30.0,
-                    -10.0 + RandFloat(20.0),
-                    match shield_damage_idx {
-                        0 => MagnetItemType::Door1,
-                        1 => MagnetItemType::Door2,
-                        _ => MagnetItemType::Door3,
-                    },
-                )
-            } else if shield_type == ShieldType::Ladder {
-                // C++: mPosX = theZombie->mPosX + 31.0f；mPosY = theZombie->mPosY + 20.0f
-                (
-                    z_pos_x + 31.0,
-                    z_pos_y + 20.0,
-                    -10.0 + RandFloat(20.0) + 30.0,
-                    -10.0 + RandFloat(20.0),
-                    match shield_damage_idx {
-                        0 => MagnetItemType::Ladder1,
-                        1 => MagnetItemType::Ladder2,
-                        _ => MagnetItemType::Ladder3,
-                    },
-                )
-            } else if zombie_type == ZombieType::Pogo {
-                // C++: GetTrackPosition("Zombie_pogo_stick")；mPosX += 40.0f；mPosY += 84.0f
-                let (x, y) = track_pos("Zombie_pogo_stick");
-                (
-                    x + 40.0,
-                    y + 84.0,
-                    -10.0 + RandFloat(20.0) + 30.0,
-                    -10.0 + RandFloat(20.0),
-                    if has_arm { MagnetItemType::Pogo1 } else { MagnetItemType::Pogo3 },
-                )
-            } else if zombie_phase == ZombiePhase::JackInTheBoxRunning {
-                // C++: GetTrackPosition("Zombie_jackbox_box")；mDestOffsetX/Y = RandRangeFloat(-10,10) + 20/15
-                let (x, y) = track_pos("Zombie_jackbox_box");
-                (
-                    x,
-                    y,
-                    -10.0 + RandFloat(20.0) + 20.0,
-                    -10.0 + RandFloat(20.0) + 15.0,
-                    MagnetItemType::JackInTheBox,
-                )
-            } else if zombie_type == ZombieType::Digger {
-                // C++: GetTrackPosition("Zombie_digger_pickaxe")；mDestOffsetX/Y = RandRangeFloat(-10,10) + 45/15
-                let (x, y) = track_pos("Zombie_digger_pickaxe");
-                (
-                    x,
-                    y,
-                    -10.0 + RandFloat(20.0) + 45.0,
-                    -10.0 + RandFloat(20.0) + 15.0,
-                    MagnetItemType::PickAxe,
-                )
-            } else {
-                (z_pos_x, z_pos_y, -10.0 + RandFloat(20.0) + 25.0, -10.0 + RandFloat(20.0) + 20.0, MagnetItemType::None)
-            };
+        let (a_item_x, a_item_y, a_dest_offset_x, a_dest_offset_y, a_item_type): (
+            f32,
+            f32,
+            f32,
+            f32,
+            MagnetItemType,
+        ) = if helm_type == HelmType::Pail {
+            // C++: GetTrackPosition("anim_bucket")；mDestOffsetX/Y = RandRangeFloat(-10,10) + 25/20
+            let (x, y) = track_pos("anim_bucket");
+            (
+                x,
+                y,
+                -10.0 + RandFloat(20.0) + 25.0,
+                -10.0 + RandFloat(20.0) + 20.0,
+                match helm_damage_idx {
+                    0 => MagnetItemType::Pail1,
+                    1 => MagnetItemType::Pail2,
+                    _ => MagnetItemType::Pail3,
+                },
+            )
+        } else if helm_type == HelmType::FootballHelmet {
+            // C++: GetTrackPosition("zombie_football_helmet")；mPosX += 37.0f；mPosY -= 60.0f
+            let (x, y) = track_pos("zombie_football_helmet");
+            (
+                x + 37.0,
+                y - 60.0,
+                -10.0 + RandFloat(20.0) + 20.0,
+                -10.0 + RandFloat(20.0) + 20.0,
+                match helm_damage_idx {
+                    0 => MagnetItemType::FootballHelmet1,
+                    1 => MagnetItemType::FootballHelmet2,
+                    _ => MagnetItemType::FootballHelmet3,
+                },
+            )
+        } else if shield_type == ShieldType::Door {
+            // C++: GetTrackPosition("anim_screendoor")；mDestOffsetX/Y = RandRangeFloat(-10,10) + 30/0
+            let (x, y) = track_pos("anim_screendoor");
+            (
+                x,
+                y,
+                -10.0 + RandFloat(20.0) + 30.0,
+                -10.0 + RandFloat(20.0),
+                match shield_damage_idx {
+                    0 => MagnetItemType::Door1,
+                    1 => MagnetItemType::Door2,
+                    _ => MagnetItemType::Door3,
+                },
+            )
+        } else if shield_type == ShieldType::Ladder {
+            // C++: mPosX = theZombie->mPosX + 31.0f；mPosY = theZombie->mPosY + 20.0f
+            (
+                z_pos_x + 31.0,
+                z_pos_y + 20.0,
+                -10.0 + RandFloat(20.0) + 30.0,
+                -10.0 + RandFloat(20.0),
+                match shield_damage_idx {
+                    0 => MagnetItemType::Ladder1,
+                    1 => MagnetItemType::Ladder2,
+                    _ => MagnetItemType::Ladder3,
+                },
+            )
+        } else if zombie_type == ZombieType::Pogo {
+            // C++: GetTrackPosition("Zombie_pogo_stick")；mPosX += 40.0f；mPosY += 84.0f
+            let (x, y) = track_pos("Zombie_pogo_stick");
+            (
+                x + 40.0,
+                y + 84.0,
+                -10.0 + RandFloat(20.0) + 30.0,
+                -10.0 + RandFloat(20.0),
+                if has_arm {
+                    MagnetItemType::Pogo1
+                } else {
+                    MagnetItemType::Pogo3
+                },
+            )
+        } else if zombie_phase == ZombiePhase::JackInTheBoxRunning {
+            // C++: GetTrackPosition("Zombie_jackbox_box")；mDestOffsetX/Y = RandRangeFloat(-10,10) + 20/15
+            let (x, y) = track_pos("Zombie_jackbox_box");
+            (
+                x,
+                y,
+                -10.0 + RandFloat(20.0) + 20.0,
+                -10.0 + RandFloat(20.0) + 15.0,
+                MagnetItemType::JackInTheBox,
+            )
+        } else if zombie_type == ZombieType::Digger {
+            // C++: GetTrackPosition("Zombie_digger_pickaxe")；mDestOffsetX/Y = RandRangeFloat(-10,10) + 45/15
+            let (x, y) = track_pos("Zombie_digger_pickaxe");
+            (
+                x,
+                y,
+                -10.0 + RandFloat(20.0) + 45.0,
+                -10.0 + RandFloat(20.0) + 15.0,
+                MagnetItemType::PickAxe,
+            )
+        } else {
+            (
+                z_pos_x,
+                z_pos_y,
+                -10.0 + RandFloat(20.0) + 25.0,
+                -10.0 + RandFloat(20.0) + 20.0,
+                MagnetItemType::None,
+            )
+        };
 
         let a_magnet_item = &mut self.magnet_items[a_magnet_idx];
         a_magnet_item.pos_x = a_item_x;
@@ -4298,7 +4940,11 @@ impl Plant {
             }
         } else if self.state == PlantState::MagnetshroomSucking {
             // C++: if (aBodyReanim->mLoopCount > 0)
-            let a_loop = self.base.get_app().and_then(|app| app.reanimation_get(self.body_reanim_id)).map_or(0, |r| r.m_loop_count);
+            let a_loop = self
+                .base
+                .get_app()
+                .and_then(|app| app.reanimation_get(self.body_reanim_id))
+                .map_or(0, |r| r.m_loop_count);
             if a_loop > 0 {
                 // C++: PlayBodyReanim("anim_nonactive_idle2", REANIM_LOOP, 20, 2.0f)
                 self.play_body_reanim("anim_nonactive_idle2", ReanimLoopType::Loop, 20, 2.0);
@@ -4316,12 +4962,16 @@ impl Plant {
             let z_target = self.base.get_board().and_then(|board| {
                 let mut closest: Option<(usize, f32)> = None;
                 for (idx, z) in board.zombies.iter().enumerate() {
-                    if z.dead { continue; }
+                    if z.dead {
+                        continue;
+                    }
                     let a_diff_y = z.base.row - self.base.row;
                     if z.mind_controlled || !z.has_head {
                         continue;
                     }
-                    if z.zombie_height != ZombieHeight::Normal || z.zombie_phase == ZombiePhase::RisingFromGrave {
+                    if z.zombie_height != ZombieHeight::Normal
+                        || z.zombie_phase == ZombiePhase::RisingFromGrave
+                    {
                         continue;
                     }
                     if z.is_dead_or_dying() {
@@ -4349,7 +4999,12 @@ impl Plant {
                     }
 
                     let a_radius = if z.is_eating { 320 } else { 270 };
-                    if crate::lawn::board::get_circle_rect_overlap(self.base.x, self.base.y + 20, a_radius, &z_rect) {
+                    if crate::lawn::board::get_circle_rect_overlap(
+                        self.base.x,
+                        self.base.y + 20,
+                        a_radius,
+                        &z_rect,
+                    ) {
                         let dx = (self.base.x as f32 - z_rect.x as f32);
                         let dy = (self.base.y as f32 - z_rect.y as f32);
                         let mut a_distance = (dx * dx + dy * dy).sqrt();
@@ -4370,7 +5025,9 @@ impl Plant {
             let ladder_target = self.base.get_board().and_then(|board| {
                 let mut closest: Option<(usize, f32)> = None;
                 for (idx, gi) in board.grid_items.iter().enumerate() {
-                    if gi.dead { continue; }
+                    if gi.dead {
+                        continue;
+                    }
                     if gi.grid_item_type == crate::lawn::grid_item::GridItemType::Ladder {
                         let a_diff_x = (gi.grid_x - self.plant_col).abs();
                         let a_diff_y = (gi.grid_y - self.base.row).abs();
@@ -4399,7 +5056,12 @@ impl Plant {
                         let gi = &board.grid_items[grid_idx];
                         let (gx, gy) = (gi.grid_x, gi.grid_y);
                         board.grid_items[grid_idx].grid_item_die();
-                        (gx, gy, board.grid_to_pixel_x(gx, gy), board.grid_to_pixel_y(gx, gy))
+                        (
+                            gx,
+                            gy,
+                            board.grid_to_pixel_x(gx, gy),
+                            board.grid_to_pixel_y(gx, gy),
+                        )
                     } else {
                         return;
                     };
@@ -4424,7 +5086,9 @@ impl Plant {
         self.base.get_board().and_then(|board| {
             let mut closest: Option<(usize, f32)> = None;
             for (idx, coin) in board.coins.iter().enumerate() {
-                if coin.dead { continue; }
+                if coin.dead {
+                    continue;
+                }
                 // [TRANSLATION_NOTE]: C++ 检查 mCoinMotion != COIN_MOTION_FROM_PRESENT；Rust CoinMotion 无 FromPresent 变体
                 if coin.is_money() && !coin.is_being_collected && coin.coin_age >= 50 {
                     let dx = plant_x as f32 - (coin.pos_x + 15.0);
@@ -4454,7 +5118,12 @@ impl Plant {
                 Some(i) => i,
                 None => break,
             };
-            let coin_info = match self.base.get_board().and_then(|b| b.coins.get(coin_idx)).map(|c| (c.coin_type, c.pos_x, c.pos_y)) {
+            let coin_info = match self
+                .base
+                .get_board()
+                .and_then(|b| b.coins.get(coin_idx))
+                .map(|c| (c.coin_type, c.pos_x, c.pos_y))
+            {
                 Some(v) => v,
                 None => break,
             };
@@ -4462,8 +5131,8 @@ impl Plant {
             let item = &mut self.magnet_items[free_idx];
             item.pos_x = coin_x + 15.0;
             item.pos_y = coin_y + 15.0;
-            item.dest_offset_x = 20.0 + RandFloat(20.0);   // RandRangeFloat(20,40)
-            item.dest_offset_y = -20.0 + RandFloat(20.0) + 20.0;  // RandRangeFloat(-20,0)+20
+            item.dest_offset_x = 20.0 + RandFloat(20.0); // RandRangeFloat(20,40)
+            item.dest_offset_y = -20.0 + RandFloat(20.0) + 20.0; // RandRangeFloat(-20,0)+20
             item.item_type = match coin_type {
                 CoinType::Silver => MagnetItemType::SilverCoin,
                 CoinType::Gold => MagnetItemType::GoldCoin,
@@ -4483,8 +5152,11 @@ impl Plant {
     fn is_a_gold_magnet_about_to_suck(&self) -> bool {
         if let Some(board) = self.base.get_board() {
             for plant in &board.plants {
-                if plant.dead { continue; }
-                if !plant.not_on_ground() && plant.seed_type == SeedType::GoldMagnet
+                if plant.dead {
+                    continue;
+                }
+                if !plant.not_on_ground()
+                    && plant.seed_type == SeedType::GoldMagnet
                     && plant.state == PlantState::MagnetshroomSucking
                 {
                     // 对应 C++ Plant.cpp:2226-2230：aBodyReanim->mAnimTime < 0.5f
@@ -4561,16 +5233,20 @@ impl Plant {
                 self.gold_magnet_find_targets();
             }
             let a_loop_done = self.base.get_app().map_or(false, |app| {
-                app.reanimation_get(self.body_reanim_id).map_or(false, |r| r.m_loop_count > 0)
+                app.reanimation_get(self.body_reanim_id)
+                    .map_or(false, |r| r.m_loop_count > 0)
             });
             if a_loop_done && !a_is_sucking_coin {
                 self.play_idle_anim(14.0);
                 self.state = PlantState::MagnetshroomCharging;
-                self.state_countdown = 200 + RandRange(101);  // RandRangeInt(200, 300)
+                self.state_countdown = 200 + RandRange(101); // RandRangeInt(200, 300)
             }
-        } else if !self.is_a_gold_magnet_about_to_suck() && RandRange(50) == 0 && self.find_gold_magnet_target().is_some() {
+        } else if !self.is_a_gold_magnet_about_to_suck()
+            && RandRange(50) == 0
+            && self.find_gold_magnet_target().is_some()
+        {
             if let Some(board) = self.base.get_board_mut() {
-                board.show_coin_bank(0);  // [TRANSLATION_NOTE]: 时长参数简化
+                board.show_coin_bank(0); // [TRANSLATION_NOTE]: 时长参数简化
             }
             self.state = PlantState::MagnetshroomSucking;
             self.play_body_reanim("anim_attract", ReanimLoopType::PlayOnceAndHold, 20, 12.0);
@@ -4599,7 +5275,10 @@ impl Plant {
             self.state = PlantState::PotatoArmed;
             self.blink_countdown = 400 + RandRange(4000);
         } else if self.state == PlantState::PotatoArmed {
-            if self.find_target_zombie(self.base.row, PlantWeapon::Primary).is_some() {
+            if self
+                .find_target_zombie(self.base.row, PlantWeapon::Primary)
+                .is_some()
+            {
                 self.do_special();
             } else {
                 // [TRANSLATION_NOTE]: light reanim mFrameCount = PvzpAnimateCurve(200, 50, DistanceToClosestZombie(), 10, 3) — reanim 未接入
@@ -4619,14 +5298,20 @@ impl Plant {
                             // C++: mTargetZombieID = mBoard->ZombieGetID(aZombie);
                             self.target_zombie_id = (*board).zombie_get_id(zombie);
                             // C++: mTargetX = aZombie->ZombieTargetLeadX(0.0f) - mWidth / 2;
-                            self.target_x = (zombie.zombie_target_lead_x(0.0) - self.base.width as f32 / 2.0) as i32;
+                            self.target_x = (zombie.zombie_target_lead_x(0.0)
+                                - self.base.width as f32 / 2.0)
+                                as i32;
                         }
                     }
                 }
                 self.state = PlantState::SquashLook;
                 self.state_countdown = 80;
                 // C++: PlayBodyReanim(mTargetX < mX ? "anim_lookleft" : "anim_lookright", REANIM_PLAY_ONCE_AND_HOLD, 10, 24.0f)
-                let a_look = if self.target_x < self.base.x { "anim_lookleft" } else { "anim_lookright" };
+                let a_look = if self.target_x < self.base.x {
+                    "anim_lookleft"
+                } else {
+                    "anim_lookright"
+                };
                 self.play_body_reanim(a_look, ReanimLoopType::PlayOnceAndHold, 10, 24.0);
                 // C++: mApp->PlayFoley(FOLEY_SQUASH_HMM)
                 if let Some(app) = self.base.get_app() {
@@ -4648,7 +5333,9 @@ impl Plant {
                             let zombies_ref = &(*board).zombies;
                             if let Some(zombie) = zombies_ref.get(a_zombie_idx) {
                                 // C++: mTargetX = aZombie->ZombieTargetLeadX(30.0f) - mWidth / 2;
-                                self.target_x = (zombie.zombie_target_lead_x(30.0) - self.base.width as f32 / 2.0) as i32;
+                                self.target_x = (zombie.zombie_target_lead_x(30.0)
+                                    - self.base.width as f32 / 2.0)
+                                    as i32;
                             }
                         }
                     }
@@ -4656,7 +5343,8 @@ impl Plant {
                 self.state = PlantState::SquashRising;
                 self.state_countdown = 50;
                 // C++: mRenderOrder = Board::MakeRenderOrder(RENDER_LAYER_PARTICLE, mRow, 0);
-                self.base.render_order = crate::lawn::board::make_render_order(RENDER_LAYER_PARTICLE, self.base.row, 0);
+                self.base.render_order =
+                    crate::lawn::board::make_render_order(RENDER_LAYER_PARTICLE, self.base.row, 0);
             }
         } else if self.state == PlantState::SquashRising
             || self.state == PlantState::SquashFalling
@@ -4669,7 +5357,8 @@ impl Plant {
             if let Some(board) = board_ptr {
                 unsafe {
                     // C++: aTargetCol = mBoard->PixelToGridXKeepOnBoard(mTargetX, mY);
-                    a_target_col = (*board).pixel_to_grid_x_keep_on_board(self.target_x, self.base.y);
+                    a_target_col =
+                        (*board).pixel_to_grid_x_keep_on_board(self.target_x, self.base.y);
                     // C++: aDestY = mBoard->GridToPixelY(aTargetCol, mRow) + 8;
                     a_dest_y = (*board).grid_to_pixel_y(a_target_col, self.base.row) + 8;
                 }
@@ -4685,16 +5374,31 @@ impl Plant {
                         let a_start_x = (*board).grid_to_pixel_x(self.plant_col, self.start_row);
                         let a_start_y = (*board).grid_to_pixel_y(self.plant_col, self.start_row);
                         self.base.x = crate::todlib::tod_common::tod_animate_curve(
-                            50, 20, self.state_countdown, a_start_x, self.target_x, TodCurves::EaseInOut,
+                            50,
+                            20,
+                            self.state_countdown,
+                            a_start_x,
+                            self.target_x,
+                            TodCurves::EaseInOut,
                         );
                         self.base.y = crate::todlib::tod_common::tod_animate_curve(
-                            50, 20, self.state_countdown, a_start_y, a_dest_y - 120, TodCurves::EaseInOut,
+                            50,
+                            20,
+                            self.state_countdown,
+                            a_start_y,
+                            a_dest_y - 120,
+                            TodCurves::EaseInOut,
                         );
                     }
                 }
                 if self.state_countdown == 0 {
                     // C++: PlayBodyReanim("anim_jumpdown", REANIM_PLAY_ONCE_AND_HOLD, 0, 60.0f);
-                    self.play_body_reanim("anim_jumpdown", ReanimLoopType::PlayOnceAndHold, 0, 60.0);
+                    self.play_body_reanim(
+                        "anim_jumpdown",
+                        ReanimLoopType::PlayOnceAndHold,
+                        0,
+                        60.0,
+                    );
                     self.state = PlantState::SquashFalling;
                     self.state_countdown = 10;
                 }
@@ -4703,7 +5407,12 @@ impl Plant {
                 if let Some(board) = board_ptr {
                     unsafe {
                         self.base.y = crate::todlib::tod_common::tod_animate_curve(
-                            10, 0, self.state_countdown, a_dest_y - 120, a_dest_y, TodCurves::EaseInOut,
+                            10,
+                            0,
+                            self.state_countdown,
+                            a_dest_y - 120,
+                            a_dest_y,
+                            TodCurves::EaseInOut,
                         );
                     }
                 }
@@ -4711,7 +5420,9 @@ impl Plant {
                     self.do_squash_damage();
                 }
                 if self.state_countdown == 0 {
-                    let a_is_pool = board_ptr.map_or(false, |b| unsafe { (*b).is_pool_square(a_target_col, self.base.row) });
+                    let a_is_pool = board_ptr.map_or(false, |b| unsafe {
+                        (*b).is_pool_square(a_target_col, self.base.row)
+                    });
                     if a_is_pool {
                         // C++: AddReanimation(mX - 11, mY + 20, mRenderOrder + 1, REANIM_SPLASH) + FOLEY_SPLAT + SOUND_ZOMBIESPLASH + Die()
                         let a_splash_x = self.base.x - 11;
@@ -4725,7 +5436,9 @@ impl Plant {
                                 ReanimationType::Splash as i32,
                             );
                             app.play_foley(crate::todlib::tod_foley::FoleyType::Splat as i32);
-                            app.play_sample(unsafe { crate::todlib::tod_foley::SOUND_ZOMBIESPLASH });
+                            app.play_sample(unsafe {
+                                crate::todlib::tod_foley::SOUND_ZOMBIESPLASH
+                            });
                         }
                         self.die();
                     } else {
@@ -4734,14 +5447,20 @@ impl Plant {
                         self.state_countdown = 100;
                         // C++: mBoard->ShakeBoard(1, 4); mApp->PlayFoley(FOLEY_THUMP);
                         if let Some(board) = board_ptr {
-                            unsafe { (*board).shake_board(1, 4); }
+                            unsafe {
+                                (*board).shake_board(1, 4);
+                            }
                         }
                         if let Some(app) = self.base.get_app() {
                             app.play_foley(crate::todlib::tod_foley::FoleyType::Thump as i32);
                         }
                         // C++: aOffsetY = mBoard->StageHasRoof() ? 69.0f : 80.0f;
                         let a_offset_y = board_ptr.map_or(80.0, |b| unsafe {
-                            if (*b).stage_has_roof() { 69.0 } else { 80.0 }
+                            if (*b).stage_has_roof() {
+                                69.0
+                            } else {
+                                80.0
+                            }
                         });
                         // C++: mApp->AddPvzpParticle(mX + 40, mY + aOffsetY, mRenderOrder + 4, PARTICLE_DUST_SQUASH);
                         let a_dust_x = self.base.x + 40;
@@ -4815,12 +5534,19 @@ impl Plant {
         let my_row = self.base.row;
         if let Some(board) = self.base.get_board() {
             for zombie in &board.zombies {
-                if zombie.dead { continue; }
+                if zombie.dead {
+                    continue;
+                }
                 let z_rect = zombie.get_zombie_rect();
-                let a_diff_y = if zombie.zombie_type == ZombieType::Boss { 0 } else { zombie.base.row - my_row };
+                let a_diff_y = if zombie.zombie_type == ZombieType::Boss {
+                    0
+                } else {
+                    zombie.base.row - my_row
+                };
                 if !zombie.mind_controlled
                     && !zombie.is_dead_or_dying()
-                    && a_diff_y <= 1 && a_diff_y >= -1
+                    && a_diff_y <= 1
+                    && a_diff_y >= -1
                     && crate::lawn::board::get_circle_rect_overlap(my_x, my_y + 20, 120, &z_rect)
                 {
                     has_zombie_nearby = true;
@@ -4843,7 +5569,12 @@ impl Plant {
             if !has_zombie_nearby {
                 self.state = PlantState::ScaredyshroomRaising;
                 let a_anim_rate = 7.0 + RandFloat(5.0); // RandRangeFloat(7.0, 12.0)
-                self.play_body_reanim("anim_grow", ReanimLoopType::PlayOnceAndHold, 10, a_anim_rate);
+                self.play_body_reanim(
+                    "anim_grow",
+                    ReanimLoopType::PlayOnceAndHold,
+                    10,
+                    a_anim_rate,
+                );
             }
         } else if self.state == PlantState::ScaredyshroomRaising {
             // [TRANSLATION_NOTE]: C++ 需 aBodyReanim->mLoopCount>0 — reanim 未接入
@@ -4863,7 +5594,7 @@ impl Plant {
         if self.state == PlantState::SpikeweedAttacking {
             if self.state_countdown == 0 {
                 self.state = PlantState::NotReady;
-                self.play_idle_anim(12.0 + RandFloat(3.0));  // RandRangeFloat(12, 15)
+                self.play_idle_anim(12.0 + RandFloat(3.0)); // RandRangeFloat(12, 15)
             } else if self.seed_type == SeedType::Spikerock {
                 if self.state_countdown == 70 || self.state_countdown == 32 {
                     self.do_row_area_damage(20, 33);
@@ -4871,7 +5602,10 @@ impl Plant {
             } else if self.state_countdown == 75 {
                 self.do_row_area_damage(20, 33);
             }
-        } else if self.find_target_zombie(self.base.row, PlantWeapon::Primary).is_some() {
+        } else if self
+            .find_target_zombie(self.base.row, PlantWeapon::Primary)
+            .is_some()
+        {
             self.spikeweed_attack();
         }
     }
@@ -4913,7 +5647,9 @@ impl Plant {
     pub fn blow_away_fliers(&mut self) {
         if let Some(board) = self.base.get_board_mut() {
             for zombie in &mut board.zombies {
-                if zombie.dead { continue; }
+                if zombie.dead {
+                    continue;
+                }
                 if !zombie.is_dead_or_dying() {
                     // 只吹走气球飞行中的僵尸；爆裂中的气球不包含
                     if zombie.zombie_phase == ZombiePhase::BalloonFlying {
@@ -4932,7 +5668,10 @@ impl Plant {
         let my_row = self.base.row;
         let my_col = self.plant_col;
         if let Some(board) = self.base.get_board_mut() {
-            let cols: Vec<usize> = board.plants.iter().enumerate()
+            let cols: Vec<usize> = board
+                .plants
+                .iter()
+                .enumerate()
                 .filter(|(_, p)| !p.dead && p.base.row == my_row && p.plant_col == my_col)
                 .map(|(i, _)| i)
                 .collect();
@@ -4966,7 +5705,9 @@ impl Plant {
                 self.die();
             }
             SeedType::Umbrella => {
-                if self.state != PlantState::UmbrellaTriggered && self.state != PlantState::UmbrellaReflecting {
+                if self.state != PlantState::UmbrellaTriggered
+                    && self.state != PlantState::UmbrellaReflecting
+                {
                     self.state = PlantState::UmbrellaTriggered;
                     self.state_countdown = 5;
                 }
@@ -4986,7 +5727,7 @@ impl Plant {
             _ => {}
         }
     }
-/// 玉米炮开火（对应 C++ CobCannonFire）
+    /// 玉米炮开火（对应 C++ CobCannonFire）
     pub fn cob_cannon_fire(&mut self, target_x: i32, target_y: i32) {
         // C++: PVZP_ASSERT(mState == STATE_COBCANNON_READY)
         self.state = PlantState::CobcannonFiring;
@@ -5067,66 +5808,599 @@ pub fn get_image(seed_type: SeedType) -> Option<*mut Image> {
 /// 获取植物定义（对应 C++ GetPlantDefinition）
 pub fn get_plant_definition(seed_type: SeedType) -> PlantDefinition {
     match seed_type {
-        SeedType::Peashooter => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Peashooter, packet_index: 0, seed_cost: 100, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("PEASHOOTER") },
-        SeedType::Sunflower => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Sunflower, packet_index: 1, seed_cost: 50, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 2500, plant_name: Some("SUNFLOWER") },
-        SeedType::Cherrybomb => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Cherrybomb, packet_index: 3, seed_cost: 150, refresh_time: 5000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("CHERRY_BOMB") },
-        SeedType::Wallnut => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Wallnut, packet_index: 2, seed_cost: 50, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("WALL_NUT") },
-        SeedType::PotatoMine => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Potatomine, packet_index: 37, seed_cost: 25, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("POTATO_MINE") },
-        SeedType::Snowpea => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Snowpea, packet_index: 4, seed_cost: 175, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("SNOW_PEA") },
-        SeedType::Chomper => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Chomper, packet_index: 31, seed_cost: 150, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("CHOMPER") },
-        SeedType::Repeater => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Repeater, packet_index: 5, seed_cost: 200, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("REPEATER") },
-        SeedType::Puffshroom => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Puffshroom, packet_index: 6, seed_cost: 0, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("PUFF_SHROOM") },
-        SeedType::Sunshroom => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Sunshroom, packet_index: 7, seed_cost: 25, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 2500, plant_name: Some("SUN_SHROOM") },
-        SeedType::Fumeshroom => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Fumeshroom, packet_index: 9, seed_cost: 75, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("FUME_SHROOM") },
-        SeedType::Gravebuster => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::GraveBuster, packet_index: 40, seed_cost: 75, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("GRAVE_BUSTER") },
-        SeedType::Hypnoshroom => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Hypnoshroom, packet_index: 10, seed_cost: 75, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("HYPNO_SHROOM") },
-        SeedType::Scaredyshroom => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Scareyshroom, packet_index: 33, seed_cost: 25, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("SCAREDY_SHROOM") },
-        SeedType::Iceshroom => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Iceshroom, packet_index: 36, seed_cost: 75, refresh_time: 5000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("ICE_SHROOM") },
-        SeedType::Doomshroom => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Doomshroom, packet_index: 20, seed_cost: 125, refresh_time: 5000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("DOOM_SHROOM") },
-        SeedType::Lilypad => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Lilypad, packet_index: 19, seed_cost: 25, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("LILY_PAD") },
-        SeedType::Squash => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Squash, packet_index: 21, seed_cost: 50, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("SQUASH") },
-        SeedType::Threepeater => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Threepeater, packet_index: 12, seed_cost: 325, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("THREEPEATER") },
-        SeedType::Tanglekelp => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Tanglekelp, packet_index: 17, seed_cost: 25, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("TANGLE_KELP") },
-        SeedType::Jalapeno => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Jalapeno, packet_index: 11, seed_cost: 125, refresh_time: 5000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("JALAPENO") },
-        SeedType::Spikeweed => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Spikeweed, packet_index: 22, seed_cost: 100, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("SPIKEWEED") },
-        SeedType::Torchwood => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Torchwood, packet_index: 29, seed_cost: 175, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("TORCHWOOD") },
-        SeedType::Tallnut => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Tallnut, packet_index: 28, seed_cost: 125, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("TALL_NUT") },
-        SeedType::Seashroom => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Seashroom, packet_index: 39, seed_cost: 0, refresh_time: 3000, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("SEA_SHROOM") },
-        SeedType::Plantern => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Plantern, packet_index: 38, seed_cost: 25, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 2500, plant_name: Some("PLANTERN") },
-        SeedType::Cactus => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Cactus, packet_index: 15, seed_cost: 125, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("CACTUS") },
-        SeedType::Blover => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Blover, packet_index: 18, seed_cost: 100, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("BLOVER") },
-        SeedType::Splitpea => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Splitpea, packet_index: 32, seed_cost: 125, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("SPLIT_PEA") },
-        SeedType::Starfruit => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Starfruit, packet_index: 30, seed_cost: 125, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("STARFRUIT") },
-        SeedType::Pumpkinshell => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Pumpkin, packet_index: 25, seed_cost: 125, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("PUMPKIN") },
-        SeedType::Magnetshroom => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Magnetshroom, packet_index: 35, seed_cost: 100, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("MAGNET_SHROOM") },
-        SeedType::Cabbagepult => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Cabbagepult, packet_index: 13, seed_cost: 100, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 300, plant_name: Some("CABBAGE_PULT") },
-        SeedType::Flowerpot => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::FlowerPot, packet_index: 33, seed_cost: 25, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("FLOWER_POT") },
-        SeedType::Kernelpult => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Kernelpult, packet_index: 13, seed_cost: 100, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 300, plant_name: Some("KERNEL_PULT") },
-        SeedType::InstantCoffee => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::CoffeeBean, packet_index: 33, seed_cost: 75, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("COFFEE_BEAN") },
-        SeedType::Garlic => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Garlic, packet_index: 8, seed_cost: 50, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("GARLIC") },
-        SeedType::Umbrella => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Umbrellaleaf, packet_index: 23, seed_cost: 100, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("UMBRELLA_LEAF") },
-        SeedType::Marigold => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Marigold, packet_index: 24, seed_cost: 50, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 2500, plant_name: Some("MARIGOLD") },
-        SeedType::Melonpult => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Melonpult, packet_index: 14, seed_cost: 300, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 300, plant_name: Some("MELON_PULT") },
-        SeedType::Gatlingpea => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Gatlingpea, packet_index: 5, seed_cost: 250, refresh_time: 5000, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("GATLING_PEA") },
-        SeedType::Twinsunflower => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::TwinSunflower, packet_index: 1, seed_cost: 150, refresh_time: 5000, sub_class: PlantSubClass::Normal, launch_rate: 2500, plant_name: Some("TWIN_SUNFLOWER") },
-        SeedType::Gloomshroom => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Gloomshroom, packet_index: 27, seed_cost: 150, refresh_time: 5000, sub_class: PlantSubClass::Shooter, launch_rate: 200, plant_name: Some("GLOOM_SHROOM") },
-        SeedType::Cattail => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Cattail, packet_index: 27, seed_cost: 225, refresh_time: 5000, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("CATTAIL") },
-        SeedType::Wintermelon => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::WinterMelon, packet_index: 27, seed_cost: 200, refresh_time: 5000, sub_class: PlantSubClass::Shooter, launch_rate: 300, plant_name: Some("WINTER_MELON") },
-        SeedType::GoldMagnet => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::GoldMagnet, packet_index: 27, seed_cost: 50, refresh_time: 5000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("GOLD_MAGNET") },
-        SeedType::Spikerock => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Spikerock, packet_index: 27, seed_cost: 125, refresh_time: 5000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("SPIKEROCK") },
-        SeedType::Cobcannon => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Cobcannon, packet_index: 16, seed_cost: 500, refresh_time: 5000, sub_class: PlantSubClass::Normal, launch_rate: 600, plant_name: Some("COB_CANNON") },
-        SeedType::Imitater => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Imitater, packet_index: 33, seed_cost: 0, refresh_time: 750, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("IMITATER") },
-        SeedType::ExplodeONut => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Wallnut, packet_index: 2, seed_cost: 0, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("EXPLODE_O_NUT") },
-        SeedType::GiantWallnut => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Wallnut, packet_index: 2, seed_cost: 0, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("GIANT_WALLNUT") },
-        SeedType::Sprout => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::ZengardenSprout, packet_index: 33, seed_cost: 0, refresh_time: 3000, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: Some("SPROUT") },
-        SeedType::Leftpeater => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::Repeater, packet_index: 5, seed_cost: 200, refresh_time: 750, sub_class: PlantSubClass::Shooter, launch_rate: 150, plant_name: Some("REPEATER") },
-        _ => PlantDefinition { seed_type, plant_image: None, reanimation_type: ReanimationType::None, packet_index: 0, seed_cost: 0, refresh_time: 0, sub_class: PlantSubClass::Normal, launch_rate: 0, plant_name: None },
+        SeedType::Peashooter => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Peashooter,
+            packet_index: 0,
+            seed_cost: 100,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Shooter,
+            launch_rate: 150,
+            plant_name: Some("PEASHOOTER"),
+        },
+        SeedType::Sunflower => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Sunflower,
+            packet_index: 1,
+            seed_cost: 50,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 2500,
+            plant_name: Some("SUNFLOWER"),
+        },
+        SeedType::Cherrybomb => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Cherrybomb,
+            packet_index: 3,
+            seed_cost: 150,
+            refresh_time: 5000,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("CHERRY_BOMB"),
+        },
+        SeedType::Wallnut => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Wallnut,
+            packet_index: 2,
+            seed_cost: 50,
+            refresh_time: 3000,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("WALL_NUT"),
+        },
+        SeedType::PotatoMine => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Potatomine,
+            packet_index: 37,
+            seed_cost: 25,
+            refresh_time: 3000,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("POTATO_MINE"),
+        },
+        SeedType::Snowpea => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Snowpea,
+            packet_index: 4,
+            seed_cost: 175,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Shooter,
+            launch_rate: 150,
+            plant_name: Some("SNOW_PEA"),
+        },
+        SeedType::Chomper => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Chomper,
+            packet_index: 31,
+            seed_cost: 150,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("CHOMPER"),
+        },
+        SeedType::Repeater => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Repeater,
+            packet_index: 5,
+            seed_cost: 200,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Shooter,
+            launch_rate: 150,
+            plant_name: Some("REPEATER"),
+        },
+        SeedType::Puffshroom => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Puffshroom,
+            packet_index: 6,
+            seed_cost: 0,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Shooter,
+            launch_rate: 150,
+            plant_name: Some("PUFF_SHROOM"),
+        },
+        SeedType::Sunshroom => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Sunshroom,
+            packet_index: 7,
+            seed_cost: 25,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 2500,
+            plant_name: Some("SUN_SHROOM"),
+        },
+        SeedType::Fumeshroom => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Fumeshroom,
+            packet_index: 9,
+            seed_cost: 75,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Shooter,
+            launch_rate: 150,
+            plant_name: Some("FUME_SHROOM"),
+        },
+        SeedType::Gravebuster => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::GraveBuster,
+            packet_index: 40,
+            seed_cost: 75,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("GRAVE_BUSTER"),
+        },
+        SeedType::Hypnoshroom => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Hypnoshroom,
+            packet_index: 10,
+            seed_cost: 75,
+            refresh_time: 3000,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("HYPNO_SHROOM"),
+        },
+        SeedType::Scaredyshroom => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Scareyshroom,
+            packet_index: 33,
+            seed_cost: 25,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Shooter,
+            launch_rate: 150,
+            plant_name: Some("SCAREDY_SHROOM"),
+        },
+        SeedType::Iceshroom => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Iceshroom,
+            packet_index: 36,
+            seed_cost: 75,
+            refresh_time: 5000,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("ICE_SHROOM"),
+        },
+        SeedType::Doomshroom => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Doomshroom,
+            packet_index: 20,
+            seed_cost: 125,
+            refresh_time: 5000,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("DOOM_SHROOM"),
+        },
+        SeedType::Lilypad => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Lilypad,
+            packet_index: 19,
+            seed_cost: 25,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("LILY_PAD"),
+        },
+        SeedType::Squash => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Squash,
+            packet_index: 21,
+            seed_cost: 50,
+            refresh_time: 3000,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("SQUASH"),
+        },
+        SeedType::Threepeater => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Threepeater,
+            packet_index: 12,
+            seed_cost: 325,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Shooter,
+            launch_rate: 150,
+            plant_name: Some("THREEPEATER"),
+        },
+        SeedType::Tanglekelp => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Tanglekelp,
+            packet_index: 17,
+            seed_cost: 25,
+            refresh_time: 3000,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("TANGLE_KELP"),
+        },
+        SeedType::Jalapeno => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Jalapeno,
+            packet_index: 11,
+            seed_cost: 125,
+            refresh_time: 5000,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("JALAPENO"),
+        },
+        SeedType::Spikeweed => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Spikeweed,
+            packet_index: 22,
+            seed_cost: 100,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("SPIKEWEED"),
+        },
+        SeedType::Torchwood => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Torchwood,
+            packet_index: 29,
+            seed_cost: 175,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("TORCHWOOD"),
+        },
+        SeedType::Tallnut => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Tallnut,
+            packet_index: 28,
+            seed_cost: 125,
+            refresh_time: 3000,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("TALL_NUT"),
+        },
+        SeedType::Seashroom => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Seashroom,
+            packet_index: 39,
+            seed_cost: 0,
+            refresh_time: 3000,
+            sub_class: PlantSubClass::Shooter,
+            launch_rate: 150,
+            plant_name: Some("SEA_SHROOM"),
+        },
+        SeedType::Plantern => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Plantern,
+            packet_index: 38,
+            seed_cost: 25,
+            refresh_time: 3000,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 2500,
+            plant_name: Some("PLANTERN"),
+        },
+        SeedType::Cactus => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Cactus,
+            packet_index: 15,
+            seed_cost: 125,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Shooter,
+            launch_rate: 150,
+            plant_name: Some("CACTUS"),
+        },
+        SeedType::Blover => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Blover,
+            packet_index: 18,
+            seed_cost: 100,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("BLOVER"),
+        },
+        SeedType::Splitpea => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Splitpea,
+            packet_index: 32,
+            seed_cost: 125,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Shooter,
+            launch_rate: 150,
+            plant_name: Some("SPLIT_PEA"),
+        },
+        SeedType::Starfruit => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Starfruit,
+            packet_index: 30,
+            seed_cost: 125,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Shooter,
+            launch_rate: 150,
+            plant_name: Some("STARFRUIT"),
+        },
+        SeedType::Pumpkinshell => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Pumpkin,
+            packet_index: 25,
+            seed_cost: 125,
+            refresh_time: 3000,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("PUMPKIN"),
+        },
+        SeedType::Magnetshroom => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Magnetshroom,
+            packet_index: 35,
+            seed_cost: 100,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("MAGNET_SHROOM"),
+        },
+        SeedType::Cabbagepult => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Cabbagepult,
+            packet_index: 13,
+            seed_cost: 100,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Shooter,
+            launch_rate: 300,
+            plant_name: Some("CABBAGE_PULT"),
+        },
+        SeedType::Flowerpot => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::FlowerPot,
+            packet_index: 33,
+            seed_cost: 25,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("FLOWER_POT"),
+        },
+        SeedType::Kernelpult => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Kernelpult,
+            packet_index: 13,
+            seed_cost: 100,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Shooter,
+            launch_rate: 300,
+            plant_name: Some("KERNEL_PULT"),
+        },
+        SeedType::InstantCoffee => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::CoffeeBean,
+            packet_index: 33,
+            seed_cost: 75,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("COFFEE_BEAN"),
+        },
+        SeedType::Garlic => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Garlic,
+            packet_index: 8,
+            seed_cost: 50,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("GARLIC"),
+        },
+        SeedType::Umbrella => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Umbrellaleaf,
+            packet_index: 23,
+            seed_cost: 100,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("UMBRELLA_LEAF"),
+        },
+        SeedType::Marigold => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Marigold,
+            packet_index: 24,
+            seed_cost: 50,
+            refresh_time: 3000,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 2500,
+            plant_name: Some("MARIGOLD"),
+        },
+        SeedType::Melonpult => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Melonpult,
+            packet_index: 14,
+            seed_cost: 300,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Shooter,
+            launch_rate: 300,
+            plant_name: Some("MELON_PULT"),
+        },
+        SeedType::Gatlingpea => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Gatlingpea,
+            packet_index: 5,
+            seed_cost: 250,
+            refresh_time: 5000,
+            sub_class: PlantSubClass::Shooter,
+            launch_rate: 150,
+            plant_name: Some("GATLING_PEA"),
+        },
+        SeedType::Twinsunflower => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::TwinSunflower,
+            packet_index: 1,
+            seed_cost: 150,
+            refresh_time: 5000,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 2500,
+            plant_name: Some("TWIN_SUNFLOWER"),
+        },
+        SeedType::Gloomshroom => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Gloomshroom,
+            packet_index: 27,
+            seed_cost: 150,
+            refresh_time: 5000,
+            sub_class: PlantSubClass::Shooter,
+            launch_rate: 200,
+            plant_name: Some("GLOOM_SHROOM"),
+        },
+        SeedType::Cattail => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Cattail,
+            packet_index: 27,
+            seed_cost: 225,
+            refresh_time: 5000,
+            sub_class: PlantSubClass::Shooter,
+            launch_rate: 150,
+            plant_name: Some("CATTAIL"),
+        },
+        SeedType::Wintermelon => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::WinterMelon,
+            packet_index: 27,
+            seed_cost: 200,
+            refresh_time: 5000,
+            sub_class: PlantSubClass::Shooter,
+            launch_rate: 300,
+            plant_name: Some("WINTER_MELON"),
+        },
+        SeedType::GoldMagnet => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::GoldMagnet,
+            packet_index: 27,
+            seed_cost: 50,
+            refresh_time: 5000,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("GOLD_MAGNET"),
+        },
+        SeedType::Spikerock => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Spikerock,
+            packet_index: 27,
+            seed_cost: 125,
+            refresh_time: 5000,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("SPIKEROCK"),
+        },
+        SeedType::Cobcannon => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Cobcannon,
+            packet_index: 16,
+            seed_cost: 500,
+            refresh_time: 5000,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 600,
+            plant_name: Some("COB_CANNON"),
+        },
+        SeedType::Imitater => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Imitater,
+            packet_index: 33,
+            seed_cost: 0,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("IMITATER"),
+        },
+        SeedType::ExplodeONut => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Wallnut,
+            packet_index: 2,
+            seed_cost: 0,
+            refresh_time: 3000,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("EXPLODE_O_NUT"),
+        },
+        SeedType::GiantWallnut => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Wallnut,
+            packet_index: 2,
+            seed_cost: 0,
+            refresh_time: 3000,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("GIANT_WALLNUT"),
+        },
+        SeedType::Sprout => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::ZengardenSprout,
+            packet_index: 33,
+            seed_cost: 0,
+            refresh_time: 3000,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: Some("SPROUT"),
+        },
+        SeedType::Leftpeater => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::Repeater,
+            packet_index: 5,
+            seed_cost: 200,
+            refresh_time: 750,
+            sub_class: PlantSubClass::Shooter,
+            launch_rate: 150,
+            plant_name: Some("REPEATER"),
+        },
+        _ => PlantDefinition {
+            seed_type,
+            plant_image: None,
+            reanimation_type: ReanimationType::None,
+            packet_index: 0,
+            seed_cost: 0,
+            refresh_time: 0,
+            sub_class: PlantSubClass::Normal,
+            launch_rate: 0,
+            plant_name: None,
+        },
     }
 }
-
-
-
-
-
-
-

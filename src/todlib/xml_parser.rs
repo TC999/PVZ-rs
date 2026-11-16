@@ -156,7 +156,8 @@ impl Parser {
                 self.pos += 1;
             }
             if self.pos > text_start {
-                node.text.push_str(&self.chars[text_start..self.pos].iter().collect::<String>());
+                node.text
+                    .push_str(&self.chars[text_start..self.pos].iter().collect::<String>());
             }
             if self.pos >= self.chars.len() {
                 return Some(node); // 未闭合元素，照常返回

@@ -3,9 +3,9 @@
 
 #![allow(dead_code)]
 
+use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
 use crate::framework::graphics::memory_image::MemoryImage;
-use crate::framework::graphics::graphics::Graphics;
 use crate::framework::rect::Rect;
 use crate::todlib::definition::ReanimatorDefinition;
 
@@ -20,11 +20,22 @@ pub struct ReanimAtlasImage {
 }
 
 impl ReanimAtlasImage {
-    pub fn new() -> Self { ReanimAtlasImage { x: 0, y: 0, width: 0, height: 0, original_image: std::ptr::null_mut() } }
+    pub fn new() -> Self {
+        ReanimAtlasImage {
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+            original_image: std::ptr::null_mut(),
+        }
+    }
 }
 
 /// 排序比较函数（对应 C++ sSortByNonIncreasingHeight：高降序 → 宽降序 → 指针降序）
-pub fn sort_by_non_increasing_height(a: &ReanimAtlasImage, b: &ReanimAtlasImage) -> std::cmp::Ordering {
+pub fn sort_by_non_increasing_height(
+    a: &ReanimAtlasImage,
+    b: &ReanimAtlasImage,
+) -> std::cmp::Ordering {
     if a.height != b.height {
         return b.height.cmp(&a.height);
     } else if a.width != b.width {
@@ -40,15 +51,23 @@ pub struct ReanimAtlas {
 }
 
 impl ReanimAtlas {
-    pub fn new() -> Self { ReanimAtlas { image_array: Vec::new(), memory_image: std::ptr::null_mut() } }
+    pub fn new() -> Self {
+        ReanimAtlas {
+            image_array: Vec::new(),
+            memory_image: std::ptr::null_mut(),
+        }
+    }
 
     /// 获取编码图集图像（对应 C++ GetEncodedReanimAtlas）
     /// [TRANSLATION_NOTE]: C++ 以 Image* 编码（index + 1，指针值 <= 1000）；Rust 以 i32 编码索引承载
     pub fn get_encoded_reanim_atlas(&self, encoded_index: i32) -> Option<&ReanimAtlasImage> {
-        if encoded_index <= 0 || encoded_index > 1000 {
+        // [TRANSLATION_NOTE]: C++ 用指针值区分"atlas 编码句柄"与"真 Image*"（指针<=1000 视为编码，
+        // 真指针远大于 1000）；Rust 的 transform.m_image 是名字表索引（与编码空间冲突），
+        // 故编码改为 1001+index：>=1001 视为 atlas 句柄，<1001 视为名字表索引走原图回退。
+        if encoded_index < 1001 {
             return None;
         }
-        let a_atlas_index = (encoded_index - 1) as usize;
+        let a_atlas_index = (encoded_index - 1001) as usize;
         self.image_array.get(a_atlas_index)
     }
 
@@ -94,7 +113,12 @@ impl ReanimAtlas {
         max_width: i32,
         to_right: bool,
     ) -> bool {
-        let mut rect_test = Rect::new(0, 0, the_atlas_image_to_place.width + 2, the_atlas_image_to_place.height + 2);
+        let mut rect_test = Rect::new(
+            0,
+            0,
+            the_atlas_image_to_place.width + 2,
+            the_atlas_image_to_place.height + 2,
+        );
         for i in 0..image_count as usize {
             let a_image = &self.image_array[i];
             if to_right {
@@ -121,13 +145,28 @@ impl ReanimAtlas {
     }
 
     /// 寻找放置位置（对应 C++ ImageFindPlace：先右后下）
-    pub fn image_find_place(&mut self, the_atlas_image_to_place: &mut ReanimAtlasImage, image_count: i32, max_width: i32) -> bool {
+    pub fn image_find_place(
+        &mut self,
+        the_atlas_image_to_place: &mut ReanimAtlasImage,
+        image_count: i32,
+        max_width: i32,
+    ) -> bool {
         self.image_find_place_on_side(the_atlas_image_to_place, image_count, max_width, true)
-            || self.image_find_place_on_side(the_atlas_image_to_place, image_count, max_width, false)
+            || self.image_find_place_on_side(
+                the_atlas_image_to_place,
+                image_count,
+                max_width,
+                false,
+            )
     }
 
     /// 放置单张图像（对应 C++ PlaceAtlasImage：首图固定 (1,1)）
-    pub fn place_atlas_image(&mut self, the_atlas_image_to_place: &mut ReanimAtlasImage, image_count: i32, max_width: i32) -> bool {
+    pub fn place_atlas_image(
+        &mut self,
+        the_atlas_image_to_place: &mut ReanimAtlasImage,
+        image_count: i32,
+        max_width: i32,
+    ) -> bool {
         if image_count == 0 {
             the_atlas_image_to_place.x = 1;
             the_atlas_image_to_place.y = 1;
@@ -258,8 +297,8 @@ impl ReanimAtlas {
                     if a_index < 0 {
                         continue; // 未入图集（如多列图）
                     }
-                    // 编码索引 = index + 1，对应 get_encoded_reanim_atlas 的解码
-                    a_key.m_image = a_index + 1;
+                    // 编码索引 = 1001 + index（见 get_encoded_reanim_atlas 的 TRANSLATION_NOTE）
+                    a_key.m_image = 1001 + a_index;
                 }
             }
         }

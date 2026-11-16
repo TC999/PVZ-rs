@@ -15,7 +15,11 @@ pub struct TodListNode<T> {
 
 impl<T> TodListNode<T> {
     pub fn new(value: T) -> Self {
-        TodListNode { value, prev: std::ptr::null_mut(), next: std::ptr::null_mut() }
+        TodListNode {
+            value,
+            prev: std::ptr::null_mut(),
+            next: std::ptr::null_mut(),
+        }
     }
 }
 
@@ -32,19 +36,30 @@ pub struct TodList<T> {
 
 impl<T> TodList<T> {
     pub fn new() -> Self {
-        TodList { head: std::ptr::null_mut(), tail: std::ptr::null_mut(), count: 0, owned: Vec::new() }
+        TodList {
+            head: std::ptr::null_mut(),
+            tail: std::ptr::null_mut(),
+            count: 0,
+            owned: Vec::new(),
+        }
     }
 
-    pub fn is_empty(&self) -> bool { self.head.is_null() }
+    pub fn is_empty(&self) -> bool {
+        self.head.is_null()
+    }
 
     /// 在末尾添加节点
     pub fn push_back(&mut self, node: *mut TodListNode<T>) {
         unsafe {
             (*node).prev = self.tail;
             (*node).next = std::ptr::null_mut();
-            if !self.tail.is_null() { (*self.tail).next = node; }
+            if !self.tail.is_null() {
+                (*self.tail).next = node;
+            }
             self.tail = node;
-            if self.head.is_null() { self.head = node; }
+            if self.head.is_null() {
+                self.head = node;
+            }
         }
         self.count += 1;
     }
@@ -54,9 +69,13 @@ impl<T> TodList<T> {
         unsafe {
             (*node).prev = std::ptr::null_mut();
             (*node).next = self.head;
-            if !self.head.is_null() { (*self.head).prev = node; }
+            if !self.head.is_null() {
+                (*self.head).prev = node;
+            }
             self.head = node;
-            if self.tail.is_null() { self.tail = node; }
+            if self.tail.is_null() {
+                self.tail = node;
+            }
         }
         self.count += 1;
     }
@@ -80,7 +99,9 @@ impl<T> TodList<T> {
     /// 从头部移除并返回其值（对应 C++ RemoveHead；释放节点）
     pub fn remove_head_value(&mut self) -> Option<T> {
         let node = self.head;
-        if node.is_null() { return None; }
+        if node.is_null() {
+            return None;
+        }
         unsafe {
             let value = std::ptr::read(&(*node).value);
             self.remove(node);
@@ -110,10 +131,16 @@ impl<T> TodList<T> {
         unsafe {
             let prev = (*node).prev;
             let next = (*node).next;
-            if !prev.is_null() { (*prev).next = next; }
-            else { self.head = next; }
-            if !next.is_null() { (*next).prev = prev; }
-            else { self.tail = prev; }
+            if !prev.is_null() {
+                (*prev).next = next;
+            } else {
+                self.head = next;
+            }
+            if !next.is_null() {
+                (*next).prev = prev;
+            } else {
+                self.tail = prev;
+            }
         }
         self.count -= 1;
         if let Some(idx) = self.owned.iter().position(|n| *n == node) {
@@ -129,9 +156,15 @@ impl<T> Drop for TodList<T> {
     fn drop(&mut self) {
         // 释放所有由本列表拥有的节点
         for node in self.owned.drain(..) {
-            unsafe { let _ = Box::from_raw(node); }
+            unsafe {
+                let _ = Box::from_raw(node);
+            }
         }
     }
 }
 
-impl<T> Default for TodList<T> { fn default() -> Self { TodList::new() } }
+impl<T> Default for TodList<T> {
+    fn default() -> Self {
+        TodList::new()
+    }
+}

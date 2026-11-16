@@ -3,7 +3,7 @@
 
 #![allow(dead_code)]
 
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 
 /// 性能计时器
 #[derive(Clone)]

@@ -13,9 +13,17 @@ pub struct Ratio {
 }
 
 impl Ratio {
-    pub fn new() -> Self { Ratio { numerator: 1, denominator: 1 } }
+    pub fn new() -> Self {
+        Ratio {
+            numerator: 1,
+            denominator: 1,
+        }
+    }
     pub fn from(n: i32, d: i32) -> Self {
-        let mut r = Ratio { numerator: n, denominator: d };
+        let mut r = Ratio {
+            numerator: n,
+            denominator: d,
+        };
         r.reduce();
         r
     }
@@ -29,13 +37,27 @@ impl Ratio {
 
     fn reduce(&mut self) {
         let (mut a, mut b) = (self.numerator.abs(), self.denominator.abs());
-        while b != 0 { let t = b; b = a % b; a = t; }
-        if a != 0 { self.numerator /= a; self.denominator /= a; }
-        if self.denominator < 0 { self.numerator = -self.numerator; self.denominator = -self.denominator; }
+        while b != 0 {
+            let t = b;
+            b = a % b;
+            a = t;
+        }
+        if a != 0 {
+            self.numerator /= a;
+            self.denominator /= a;
+        }
+        if self.denominator < 0 {
+            self.numerator = -self.numerator;
+            self.denominator = -self.denominator;
+        }
     }
 }
 
-impl Default for Ratio { fn default() -> Self { Ratio::new() } }
+impl Default for Ratio {
+    fn default() -> Self {
+        Ratio::new()
+    }
+}
 
 impl PartialOrd for Ratio {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -47,20 +69,28 @@ impl PartialOrd for Ratio {
 
 impl std::ops::Mul<i32> for Ratio {
     type Output = i32;
-    fn mul(self, rhs: i32) -> i32 { rhs * self.numerator / self.denominator }
+    fn mul(self, rhs: i32) -> i32 {
+        rhs * self.numerator / self.denominator
+    }
 }
 
 impl std::ops::Div<i32> for Ratio {
     type Output = i32;
-    fn div(self, rhs: i32) -> i32 { rhs * self.denominator / self.numerator }
+    fn div(self, rhs: i32) -> i32 {
+        rhs * self.denominator / self.numerator
+    }
 }
 
 impl std::ops::Mul<Ratio> for i32 {
     type Output = i32;
-    fn mul(self, rhs: Ratio) -> i32 { self * rhs.numerator / rhs.denominator }
+    fn mul(self, rhs: Ratio) -> i32 {
+        self * rhs.numerator / rhs.denominator
+    }
 }
 
 impl std::ops::Div<Ratio> for i32 {
     type Output = i32;
-    fn div(self, rhs: Ratio) -> i32 { self * rhs.denominator / rhs.numerator }
+    fn div(self, rhs: Ratio) -> i32 {
+        self * rhs.denominator / rhs.numerator
+    }
 }

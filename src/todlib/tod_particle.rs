@@ -7,22 +7,21 @@
 
 #![allow(dead_code)]
 
-use std::ptr;
 use std::collections::LinkedList;
+use std::ptr;
 
-use crate::lawn::game_enums::{
-    ParticleID, ParticleEmitterID, ParticleSystemID, ParticleEffect,
-    PARTICLESYSTEMID_NULL, PARTICLEID_NULL, PARTICLEEMITTERID_NULL,
-    TodCurves,
-};
 use crate::framework::color::Color;
-use crate::framework::rect::Rect;
+use crate::framework::common::{RandFloat, RandRange, SexyVector2};
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
-use crate::framework::common::{SexyVector2, RandFloat, RandRange};
+use crate::framework::rect::Rect;
+use crate::lawn::game_enums::{
+    ParticleEffect, ParticleEmitterID, ParticleID, ParticleSystemID, TodCurves,
+    PARTICLEEMITTERID_NULL, PARTICLEID_NULL, PARTICLESYSTEMID_NULL,
+};
+use crate::todlib::data_array::DataArray;
 use crate::todlib::tod_common::pvzp_curve_evaluate;
 use crate::todlib::tod_list::TodList;
-use crate::todlib::data_array::DataArray;
 
 // ============================================================
 // 常量
@@ -165,15 +164,22 @@ pub enum ParticleTracks {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum EmitterType {
-    Circle = 0,             // EMITTER_CIRCLE
-    Box = 1,                // EMITTER_BOX
-    BoxPath = 2,            // EMITTER_BOX_PATH
-    CirclePath = 3,         // EMITTER_CIRCLE_PATH
-    CircleEvenSpacing = 4,  // EMITTER_CIRCLE_EVEN_SPACING
+    Circle = 0,            // EMITTER_CIRCLE
+    Box = 1,               // EMITTER_BOX
+    BoxPath = 2,           // EMITTER_BOX_PATH
+    CirclePath = 3,        // EMITTER_CIRCLE_PATH
+    CircleEvenSpacing = 4, // EMITTER_CIRCLE_EVEN_SPACING
 }
 
 /// 缩放旋转矩阵（对应 C++ PvzpLib/PvzpCommon.cpp PvzpScaleRotateTransformMatrix，同 zombie.rs/projectile.rs 副本）
-fn pvzp_scale_rotate_transform_matrix(m: &mut crate::framework::sexy_matrix::SexyMatrix3, x: f32, y: f32, rad: f32, the_scale_x: f32, the_scale_y: f32) {
+fn pvzp_scale_rotate_transform_matrix(
+    m: &mut crate::framework::sexy_matrix::SexyMatrix3,
+    x: f32,
+    y: f32,
+    rad: f32,
+    the_scale_x: f32,
+    the_scale_y: f32,
+) {
     m.m[0][0] = rad.cos() * the_scale_x;
     m.m[1][0] = -rad.sin() * the_scale_x;
     m.m[2][0] = 0.0;
@@ -229,7 +235,9 @@ pub struct FloatParameterTrack {
 }
 
 impl FloatParameterTrack {
-    pub fn new() -> Self { FloatParameterTrack { nodes: Vec::new() } }
+    pub fn new() -> Self {
+        FloatParameterTrack { nodes: Vec::new() }
+    }
 
     /// 设置默认值（对应 C++ FloatTrackSetDefault，Definition.cpp:1362：
     /// 轨道未定义且 theValue != 0 时填单节点；theValue == 0 时保持未设置）
@@ -327,7 +335,9 @@ pub struct EmitterFieldArray {
 }
 
 impl EmitterFieldArray {
-    pub fn new() -> Self { EmitterFieldArray { fields: Vec::new() } }
+    pub fn new() -> Self {
+        EmitterFieldArray { fields: Vec::new() }
+    }
 }
 
 /// 发射器定义（对应 C++ TodEmitterDefinition）
@@ -390,30 +400,54 @@ impl TodEmitterDefinition {
         let new_track = || FloatParameterTrack::new();
         TodEmitterDefinition {
             image: ptr::null_mut(),
-            image_col: 0, image_row: 0, image_frames: 0, animated: 0,
-            particle_flags: 0, emitter_type: EmitterType::Circle,
-            name: String::new(), on_duration: String::new(),
-            system_duration: new_track(), cross_fade_duration: new_track(),
-            spawn_rate: new_track(), spawn_min_active: new_track(),
-            spawn_max_active: new_track(), spawn_max_launched: new_track(),
-            emitter_radius: new_track(), emitter_offset_x: new_track(),
-            emitter_offset_y: new_track(), emitter_box_x: new_track(),
-            emitter_box_y: new_track(), emitter_skew_x: new_track(),
-            emitter_skew_y: new_track(), emitter_path: new_track(),
-            particle_duration: new_track(), launch_speed: new_track(),
-            launch_angle: new_track(), system_red: new_track(),
-            system_green: new_track(), system_blue: new_track(),
-            system_alpha: new_track(), system_brightness: new_track(),
+            image_col: 0,
+            image_row: 0,
+            image_frames: 0,
+            animated: 0,
+            particle_flags: 0,
+            emitter_type: EmitterType::Circle,
+            name: String::new(),
+            on_duration: String::new(),
+            system_duration: new_track(),
+            cross_fade_duration: new_track(),
+            spawn_rate: new_track(),
+            spawn_min_active: new_track(),
+            spawn_max_active: new_track(),
+            spawn_max_launched: new_track(),
+            emitter_radius: new_track(),
+            emitter_offset_x: new_track(),
+            emitter_offset_y: new_track(),
+            emitter_box_x: new_track(),
+            emitter_box_y: new_track(),
+            emitter_skew_x: new_track(),
+            emitter_skew_y: new_track(),
+            emitter_path: new_track(),
+            particle_duration: new_track(),
+            launch_speed: new_track(),
+            launch_angle: new_track(),
+            system_red: new_track(),
+            system_green: new_track(),
+            system_blue: new_track(),
+            system_alpha: new_track(),
+            system_brightness: new_track(),
             particle_fields: EmitterFieldArray::new(),
             system_fields: EmitterFieldArray::new(),
-            particle_red: new_track(), particle_green: new_track(),
-            particle_blue: new_track(), particle_alpha: new_track(),
-            particle_brightness: new_track(), particle_spin_angle: new_track(),
-            particle_spin_speed: new_track(), particle_scale: new_track(),
-            particle_stretch: new_track(), collision_reflect: new_track(),
-            collision_spin: new_track(), clip_top: new_track(),
-            clip_bottom: new_track(), clip_left: new_track(),
-            clip_right: new_track(), animation_rate: new_track(),
+            particle_red: new_track(),
+            particle_green: new_track(),
+            particle_blue: new_track(),
+            particle_alpha: new_track(),
+            particle_brightness: new_track(),
+            particle_spin_angle: new_track(),
+            particle_spin_speed: new_track(),
+            particle_scale: new_track(),
+            particle_stretch: new_track(),
+            collision_reflect: new_track(),
+            collision_spin: new_track(),
+            clip_top: new_track(),
+            clip_bottom: new_track(),
+            clip_left: new_track(),
+            clip_right: new_track(),
+            animation_rate: new_track(),
         }
     }
 }
@@ -426,7 +460,11 @@ pub struct TodParticleDefinition {
 }
 
 impl TodParticleDefinition {
-    pub fn new() -> Self { TodParticleDefinition { emitter_defs: Vec::new() } }
+    pub fn new() -> Self {
+        TodParticleDefinition {
+            emitter_defs: Vec::new(),
+        }
+    }
 }
 
 /// 粒子参数映射（对应 C++ ParticleParams）
@@ -439,112 +477,430 @@ pub struct ParticleParams {
 
 // 粒子参数表（对应 C++ gLawnParticleArray，PvzpParticle.cpp:36）
 pub static G_LAWN_PARTICLE_ARRAY: &[ParticleParams] = &[
-    ParticleParams { effect: ParticleEffect::Melonsplash, file_name: "particles/MelonImpact.xml" },
-    ParticleParams { effect: ParticleEffect::Wintermelon, file_name: "particles/WinterMelonImpact.xml" },
-    ParticleParams { effect: ParticleEffect::Fumecloud, file_name: "particles/FumeCloud.xml" },
-    ParticleParams { effect: ParticleEffect::Popcornsplash, file_name: "particles/PopcornSplash.xml" },
-    ParticleParams { effect: ParticleEffect::Powie, file_name: "particles/Powie.xml" },
-    ParticleParams { effect: ParticleEffect::Jackexplode, file_name: "particles/JackExplode.xml" },
-    ParticleParams { effect: ParticleEffect::ZombieHead, file_name: "particles/ZombieHead.xml" },
-    ParticleParams { effect: ParticleEffect::ZombieArm, file_name: "particles/ZombieArm.xml" },
-    ParticleParams { effect: ParticleEffect::ZombieTrafficCone, file_name: "particles/ZombieTrafficCone.xml" },
-    ParticleParams { effect: ParticleEffect::ZombiePail, file_name: "particles/ZombiePail.xml" },
-    ParticleParams { effect: ParticleEffect::ZombieHelmet, file_name: "particles/ZombieHelmet.xml" },
-    ParticleParams { effect: ParticleEffect::ZombieFlag, file_name: "particles/ZombieFlag.xml" },
-    ParticleParams { effect: ParticleEffect::ZombieDoor, file_name: "particles/ZombieDoor.xml" },
-    ParticleParams { effect: ParticleEffect::ZombieNewspaper, file_name: "particles/ZombieNewspaper.xml" },
-    ParticleParams { effect: ParticleEffect::ZombieHeadlight, file_name: "particles/ZombieHeadLight.xml" },
-    ParticleParams { effect: ParticleEffect::Pow, file_name: "particles/Pow.xml" },
-    ParticleParams { effect: ParticleEffect::ZombiePogo, file_name: "particles/ZombiePogo.xml" },
-    ParticleParams { effect: ParticleEffect::ZombieNewspaperHead, file_name: "particles/ZombieNewspaperHead.xml" },
-    ParticleParams { effect: ParticleEffect::ZombieBalloonHead, file_name: "particles/ZombieBalloonHead.xml" },
-    ParticleParams { effect: ParticleEffect::SodRoll, file_name: "particles/SodRoll.xml" },
-    ParticleParams { effect: ParticleEffect::GraveStoneRise, file_name: "particles/GraveStoneRise.xml" },
-    ParticleParams { effect: ParticleEffect::Planting, file_name: "particles/Planting.xml" },
-    ParticleParams { effect: ParticleEffect::PlantingPool, file_name: "particles/PlantingPool.xml" },
-    ParticleParams { effect: ParticleEffect::ZombieRise, file_name: "particles/ZombieRise.xml" },
-    ParticleParams { effect: ParticleEffect::GraveBuster, file_name: "particles/GraveBuster.xml" },
-    ParticleParams { effect: ParticleEffect::GraveBusterDie, file_name: "particles/GraveBusterDie.xml" },
-    ParticleParams { effect: ParticleEffect::PoolSplash, file_name: "particles/PoolSplash.xml" },
-    ParticleParams { effect: ParticleEffect::IceSparkle, file_name: "particles/IceSparkle.xml" },
-    ParticleParams { effect: ParticleEffect::SeedPacket, file_name: "particles/SeedPacket.xml" },
-    ParticleParams { effect: ParticleEffect::TallNutBlock, file_name: "particles/TallNutBlock.xml" },
-    ParticleParams { effect: ParticleEffect::Doom, file_name: "particles/Doom.xml" },
-    ParticleParams { effect: ParticleEffect::DiggerRise, file_name: "particles/DiggerRise.xml" },
-    ParticleParams { effect: ParticleEffect::DiggerTunnel, file_name: "particles/DiggerTunnel.xml" },
-    ParticleParams { effect: ParticleEffect::DancerRise, file_name: "particles/DancerRise.xml" },
-    ParticleParams { effect: ParticleEffect::PoolSparkly, file_name: "particles/PoolSparkly.xml" },
-    ParticleParams { effect: ParticleEffect::WallnutEatSmall, file_name: "particles/WallnutEatSmall.xml" },
-    ParticleParams { effect: ParticleEffect::WallnutEatLarge, file_name: "particles/WallnutEatLarge.xml" },
-    ParticleParams { effect: ParticleEffect::PeaSplat, file_name: "particles/PeaSplat.xml" },
-    ParticleParams { effect: ParticleEffect::ButterSplat, file_name: "particles/ButterSplat.xml" },
-    ParticleParams { effect: ParticleEffect::CabbageSplat, file_name: "particles/CabbageSplat.xml" },
-    ParticleParams { effect: ParticleEffect::PuffSplat, file_name: "particles/PuffSplat.xml" },
-    ParticleParams { effect: ParticleEffect::StarSplat, file_name: "particles/StarSplat.xml" },
-    ParticleParams { effect: ParticleEffect::IceTrap, file_name: "particles/IceTrap.xml" },
-    ParticleParams { effect: ParticleEffect::SnowpeaSplat, file_name: "particles/SnowPeaSplat.xml" },
-    ParticleParams { effect: ParticleEffect::SnowpeaPuff, file_name: "particles/SnowPeaPuff.xml" },
-    ParticleParams { effect: ParticleEffect::SnowpeaTrail, file_name: "particles/SnowPeaTrail.xml" },
-    ParticleParams { effect: ParticleEffect::LanternShine, file_name: "particles/LanternShine.xml" },
-    ParticleParams { effect: ParticleEffect::SeedPacketPickup, file_name: "particles/Award.xml" },
-    ParticleParams { effect: ParticleEffect::PotatoMine, file_name: "particles/PotatoMine.xml" },
-    ParticleParams { effect: ParticleEffect::PotatoMineRise, file_name: "particles/PotatoMineRise.xml" },
-    ParticleParams { effect: ParticleEffect::PuffshroomTrail, file_name: "particles/PuffShroomTrail.xml" },
-    ParticleParams { effect: ParticleEffect::PuffshroomMuzzle, file_name: "particles/PuffShroomMuzzle.xml" },
-    ParticleParams { effect: ParticleEffect::SeedPacketFlash, file_name: "particles/SeedPacketFlash.xml" },
-    ParticleParams { effect: ParticleEffect::WhackAZombieRise, file_name: "particles/WhackAZombieRise.xml" },
-    ParticleParams { effect: ParticleEffect::ZombieLadder, file_name: "particles/ZombieLadder.xml" },
-    ParticleParams { effect: ParticleEffect::UmbrellaReflect, file_name: "particles/UmbrellaReflect.xml" },
-    ParticleParams { effect: ParticleEffect::SeedPacketPick, file_name: "particles/SeedPacketPick.xml" },
-    ParticleParams { effect: ParticleEffect::IceTrapZombie, file_name: "particles/IceTrapZombie.xml" },
-    ParticleParams { effect: ParticleEffect::IceTrapRelease, file_name: "particles/IceTrapRelease.xml" },
-    ParticleParams { effect: ParticleEffect::ZamboniSmoke, file_name: "particles/ZamboniSmoke.xml" },
-    ParticleParams { effect: ParticleEffect::Gloomcloud, file_name: "particles/GloomCloud.xml" },
-    ParticleParams { effect: ParticleEffect::ZombiePogoHead, file_name: "particles/ZombiePogoHead.xml" },
-    ParticleParams { effect: ParticleEffect::ZamboniTire, file_name: "particles/ZamboniTire.xml" },
-    ParticleParams { effect: ParticleEffect::ZamboniExplosion, file_name: "particles/ZamboniExplosion.xml" },
-    ParticleParams { effect: ParticleEffect::ZamboniExplosion2, file_name: "particles/ZamboniExplosion2.xml" },
-    ParticleParams { effect: ParticleEffect::CatapultExplosion, file_name: "particles/CatapultExplosion.xml" },
-    ParticleParams { effect: ParticleEffect::MowerCloud, file_name: "particles/MowerCloud.xml" },
-    ParticleParams { effect: ParticleEffect::BossIceBall, file_name: "particles/BossIceBallTrail.xml" },
-    ParticleParams { effect: ParticleEffect::Blastmark, file_name: "particles/BlastMark.xml" },
-    ParticleParams { effect: ParticleEffect::CoinPickupArrow, file_name: "particles/CoinPickupArrow.xml" },
-    ParticleParams { effect: ParticleEffect::PresentPickup, file_name: "particles/PresentPickup.xml" },
-    ParticleParams { effect: ParticleEffect::ImitaterMorph, file_name: "particles/ImitaterMorph.xml" },
-    ParticleParams { effect: ParticleEffect::MoweredZombieHead, file_name: "particles/MoweredZombieHead.xml" },
-    ParticleParams { effect: ParticleEffect::MoweredZombieArm, file_name: "particles/MoweredZombieArm.xml" },
-    ParticleParams { effect: ParticleEffect::ZombieHeadPool, file_name: "particles/ZombieHeadPool.xml" },
-    ParticleParams { effect: ParticleEffect::ZombieBossFireball, file_name: "particles/Zombie_boss_fireball.xml" },
-    ParticleParams { effect: ParticleEffect::FireballDeath, file_name: "particles/FireballDeath.xml" },
-    ParticleParams { effect: ParticleEffect::IceballDeath, file_name: "particles/IceballDeath.xml" },
-    ParticleParams { effect: ParticleEffect::IceballTrail, file_name: "particles/Iceball_Trail.xml" },
-    ParticleParams { effect: ParticleEffect::FireballTrail, file_name: "particles/Fireball_Trail.xml" },
-    ParticleParams { effect: ParticleEffect::BossExplosion, file_name: "particles/BossExplosion.xml" },
-    ParticleParams { effect: ParticleEffect::ScreenFlash, file_name: "particles/ScreenFlash.xml" },
-    ParticleParams { effect: ParticleEffect::TrophySparkle, file_name: "particles/TrophySparkle.xml" },
-    ParticleParams { effect: ParticleEffect::PortalCircle, file_name: "particles/PortalCircle.xml" },
-    ParticleParams { effect: ParticleEffect::PortalSquare, file_name: "particles/PortalSquare.xml" },
-    ParticleParams { effect: ParticleEffect::PottedPlantGlow, file_name: "particles/PottedPlantGlow.xml" },
-    ParticleParams { effect: ParticleEffect::PottedWaterPlantGlow, file_name: "particles/PottedWaterPlantGlow.xml" },
-    ParticleParams { effect: ParticleEffect::PottedZenGlow, file_name: "particles/PottedZenGlow.xml" },
-    ParticleParams { effect: ParticleEffect::MindControl, file_name: "particles/MindControl.xml" },
-    ParticleParams { effect: ParticleEffect::VaseShatter, file_name: "particles/VaseShatter.xml" },
-    ParticleParams { effect: ParticleEffect::VaseShatterLeaf, file_name: "particles/VaseShatterLeaf.xml" },
-    ParticleParams { effect: ParticleEffect::VaseShatterZombie, file_name: "particles/VaseShatterZombie.xml" },
-    ParticleParams { effect: ParticleEffect::AwardPickupArrow, file_name: "particles/AwardPickupArrow.xml" },
-    ParticleParams { effect: ParticleEffect::ZombieSeaweed, file_name: "particles/Zombie_seaweed.xml" },
-    ParticleParams { effect: ParticleEffect::ZombieMustache, file_name: "particles/ZombieMustache.xml" },
-    ParticleParams { effect: ParticleEffect::ZombieSunglass, file_name: "particles/ZombieFutureGlasses.xml" },
-    ParticleParams { effect: ParticleEffect::ZombiePinata, file_name: "particles/Pinata.xml" },
-    ParticleParams { effect: ParticleEffect::DustSquash, file_name: "particles/Dust_Squash.xml" },
-    ParticleParams { effect: ParticleEffect::DustFoot, file_name: "particles/Dust_Foot.xml" },
-    ParticleParams { effect: ParticleEffect::ZombieDaisies, file_name: "particles/Daisy.xml" },
-    ParticleParams { effect: ParticleEffect::CreditStrobe, file_name: "particles/Credits_Strobe.xml" },
-    ParticleParams { effect: ParticleEffect::CreditsRayswipe, file_name: "particles/Credits_RaysWipe.xml" },
-    ParticleParams { effect: ParticleEffect::CreditsZombieheadwipe, file_name: "particles/Credits_ZombieHeadWipe.xml" },
-    ParticleParams { effect: ParticleEffect::Starburst, file_name: "particles/Starburst.xml" },
-    ParticleParams { effect: ParticleEffect::CreditsFog, file_name: "particles/Credits_fog.xml" },
-    ParticleParams { effect: ParticleEffect::PresentPickUpArrow, file_name: "particles/UpsellArrow.xml" },
+    ParticleParams {
+        effect: ParticleEffect::Melonsplash,
+        file_name: "particles/MelonImpact.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::Wintermelon,
+        file_name: "particles/WinterMelonImpact.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::Fumecloud,
+        file_name: "particles/FumeCloud.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::Popcornsplash,
+        file_name: "particles/PopcornSplash.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::Powie,
+        file_name: "particles/Powie.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::Jackexplode,
+        file_name: "particles/JackExplode.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombieHead,
+        file_name: "particles/ZombieHead.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombieArm,
+        file_name: "particles/ZombieArm.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombieTrafficCone,
+        file_name: "particles/ZombieTrafficCone.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombiePail,
+        file_name: "particles/ZombiePail.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombieHelmet,
+        file_name: "particles/ZombieHelmet.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombieFlag,
+        file_name: "particles/ZombieFlag.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombieDoor,
+        file_name: "particles/ZombieDoor.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombieNewspaper,
+        file_name: "particles/ZombieNewspaper.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombieHeadlight,
+        file_name: "particles/ZombieHeadLight.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::Pow,
+        file_name: "particles/Pow.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombiePogo,
+        file_name: "particles/ZombiePogo.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombieNewspaperHead,
+        file_name: "particles/ZombieNewspaperHead.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombieBalloonHead,
+        file_name: "particles/ZombieBalloonHead.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::SodRoll,
+        file_name: "particles/SodRoll.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::GraveStoneRise,
+        file_name: "particles/GraveStoneRise.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::Planting,
+        file_name: "particles/Planting.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::PlantingPool,
+        file_name: "particles/PlantingPool.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombieRise,
+        file_name: "particles/ZombieRise.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::GraveBuster,
+        file_name: "particles/GraveBuster.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::GraveBusterDie,
+        file_name: "particles/GraveBusterDie.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::PoolSplash,
+        file_name: "particles/PoolSplash.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::IceSparkle,
+        file_name: "particles/IceSparkle.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::SeedPacket,
+        file_name: "particles/SeedPacket.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::TallNutBlock,
+        file_name: "particles/TallNutBlock.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::Doom,
+        file_name: "particles/Doom.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::DiggerRise,
+        file_name: "particles/DiggerRise.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::DiggerTunnel,
+        file_name: "particles/DiggerTunnel.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::DancerRise,
+        file_name: "particles/DancerRise.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::PoolSparkly,
+        file_name: "particles/PoolSparkly.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::WallnutEatSmall,
+        file_name: "particles/WallnutEatSmall.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::WallnutEatLarge,
+        file_name: "particles/WallnutEatLarge.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::PeaSplat,
+        file_name: "particles/PeaSplat.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ButterSplat,
+        file_name: "particles/ButterSplat.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::CabbageSplat,
+        file_name: "particles/CabbageSplat.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::PuffSplat,
+        file_name: "particles/PuffSplat.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::StarSplat,
+        file_name: "particles/StarSplat.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::IceTrap,
+        file_name: "particles/IceTrap.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::SnowpeaSplat,
+        file_name: "particles/SnowPeaSplat.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::SnowpeaPuff,
+        file_name: "particles/SnowPeaPuff.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::SnowpeaTrail,
+        file_name: "particles/SnowPeaTrail.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::LanternShine,
+        file_name: "particles/LanternShine.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::SeedPacketPickup,
+        file_name: "particles/Award.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::PotatoMine,
+        file_name: "particles/PotatoMine.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::PotatoMineRise,
+        file_name: "particles/PotatoMineRise.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::PuffshroomTrail,
+        file_name: "particles/PuffShroomTrail.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::PuffshroomMuzzle,
+        file_name: "particles/PuffShroomMuzzle.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::SeedPacketFlash,
+        file_name: "particles/SeedPacketFlash.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::WhackAZombieRise,
+        file_name: "particles/WhackAZombieRise.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombieLadder,
+        file_name: "particles/ZombieLadder.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::UmbrellaReflect,
+        file_name: "particles/UmbrellaReflect.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::SeedPacketPick,
+        file_name: "particles/SeedPacketPick.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::IceTrapZombie,
+        file_name: "particles/IceTrapZombie.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::IceTrapRelease,
+        file_name: "particles/IceTrapRelease.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZamboniSmoke,
+        file_name: "particles/ZamboniSmoke.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::Gloomcloud,
+        file_name: "particles/GloomCloud.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombiePogoHead,
+        file_name: "particles/ZombiePogoHead.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZamboniTire,
+        file_name: "particles/ZamboniTire.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZamboniExplosion,
+        file_name: "particles/ZamboniExplosion.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZamboniExplosion2,
+        file_name: "particles/ZamboniExplosion2.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::CatapultExplosion,
+        file_name: "particles/CatapultExplosion.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::MowerCloud,
+        file_name: "particles/MowerCloud.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::BossIceBall,
+        file_name: "particles/BossIceBallTrail.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::Blastmark,
+        file_name: "particles/BlastMark.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::CoinPickupArrow,
+        file_name: "particles/CoinPickupArrow.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::PresentPickup,
+        file_name: "particles/PresentPickup.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ImitaterMorph,
+        file_name: "particles/ImitaterMorph.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::MoweredZombieHead,
+        file_name: "particles/MoweredZombieHead.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::MoweredZombieArm,
+        file_name: "particles/MoweredZombieArm.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombieHeadPool,
+        file_name: "particles/ZombieHeadPool.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombieBossFireball,
+        file_name: "particles/Zombie_boss_fireball.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::FireballDeath,
+        file_name: "particles/FireballDeath.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::IceballDeath,
+        file_name: "particles/IceballDeath.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::IceballTrail,
+        file_name: "particles/Iceball_Trail.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::FireballTrail,
+        file_name: "particles/Fireball_Trail.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::BossExplosion,
+        file_name: "particles/BossExplosion.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ScreenFlash,
+        file_name: "particles/ScreenFlash.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::TrophySparkle,
+        file_name: "particles/TrophySparkle.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::PortalCircle,
+        file_name: "particles/PortalCircle.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::PortalSquare,
+        file_name: "particles/PortalSquare.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::PottedPlantGlow,
+        file_name: "particles/PottedPlantGlow.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::PottedWaterPlantGlow,
+        file_name: "particles/PottedWaterPlantGlow.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::PottedZenGlow,
+        file_name: "particles/PottedZenGlow.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::MindControl,
+        file_name: "particles/MindControl.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::VaseShatter,
+        file_name: "particles/VaseShatter.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::VaseShatterLeaf,
+        file_name: "particles/VaseShatterLeaf.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::VaseShatterZombie,
+        file_name: "particles/VaseShatterZombie.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::AwardPickupArrow,
+        file_name: "particles/AwardPickupArrow.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombieSeaweed,
+        file_name: "particles/Zombie_seaweed.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombieMustache,
+        file_name: "particles/ZombieMustache.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombieSunglass,
+        file_name: "particles/ZombieFutureGlasses.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombiePinata,
+        file_name: "particles/Pinata.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::DustSquash,
+        file_name: "particles/Dust_Squash.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::DustFoot,
+        file_name: "particles/Dust_Foot.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::ZombieDaisies,
+        file_name: "particles/Daisy.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::CreditStrobe,
+        file_name: "particles/Credits_Strobe.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::CreditsRayswipe,
+        file_name: "particles/Credits_RaysWipe.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::CreditsZombieheadwipe,
+        file_name: "particles/Credits_ZombieHeadWipe.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::Starburst,
+        file_name: "particles/Starburst.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::CreditsFog,
+        file_name: "particles/Credits_fog.xml",
+    },
+    ParticleParams {
+        effect: ParticleEffect::PresentPickUpArrow,
+        file_name: "particles/UpsellArrow.xml",
+    },
 ];
 
 // ============================================================
@@ -576,13 +932,23 @@ pub struct ParticleRenderParams {
 impl ParticleRenderParams {
     pub fn new() -> Self {
         ParticleRenderParams {
-            red_is_set: false, green_is_set: false, blue_is_set: false,
-            alpha_is_set: false, particle_scale_is_set: false,
-            particle_stretch_is_set: false, spin_position_is_set: false,
+            red_is_set: false,
+            green_is_set: false,
+            blue_is_set: false,
+            alpha_is_set: false,
+            particle_scale_is_set: false,
+            particle_stretch_is_set: false,
+            spin_position_is_set: false,
             position_is_set: false,
-            red: 0.0, green: 0.0, blue: 0.0, alpha: 1.0,
-            particle_scale: 1.0, particle_stretch: 1.0,
-            spin_position: 0.0, pos_x: 0.0, pos_y: 0.0,
+            red: 0.0,
+            green: 0.0,
+            blue: 0.0,
+            alpha: 1.0,
+            particle_scale: 1.0,
+            particle_stretch: 1.0,
+            spin_position: 0.0,
+            pos_x: 0.0,
+            pos_y: 0.0,
         }
     }
 }
@@ -625,15 +991,21 @@ impl TodParticleHolder {
 
     /// 从定义分配粒子系统（对应 C++ AllocParticleSystemFromDef，:1258）
     pub fn alloc_particle_system_from_def(
-        &mut self, x: f32, y: f32, render_order: i32,
-        definition: &TodParticleDefinition, effect: ParticleEffect,
+        &mut self,
+        x: f32,
+        y: f32,
+        render_order: i32,
+        definition: &TodParticleDefinition,
+        effect: ParticleEffect,
     ) -> Option<&mut TodParticleSystem> {
         // 对应 C++: 系统数组满
         if self.particle_systems.len() as u32 >= self.particle_systems.max_size() {
             return None;
         }
         // 对应 C++: 定义中的发射器数量 + 现有发射器数超过上限
-        if definition.emitter_defs.len() as u32 + self.emitters.len() as u32 > self.emitters.max_size() {
+        if definition.emitter_defs.len() as u32 + self.emitters.len() as u32
+            > self.emitters.max_size()
+        {
             return None;
         }
 
@@ -651,13 +1023,14 @@ impl TodParticleHolder {
 
     /// 按效果类型分配粒子系统（对应 C++ AllocParticleSystem，:1277）
     pub fn alloc_particle_system(
-        &mut self, x: f32, y: f32, render_order: i32,
+        &mut self,
+        x: f32,
+        y: f32,
+        render_order: i32,
         effect: ParticleEffect,
     ) -> Option<&mut TodParticleSystem> {
         let a_def = particle_get_definition(effect)?;
-        unsafe {
-            self.alloc_particle_system_from_def(x, y, render_order, &*a_def, effect)
-        }
+        unsafe { self.alloc_particle_system_from_def(x, y, render_order, &*a_def, effect) }
     }
 
     /// 是否过载（对应 C++ IsOverLoaded，:1253：任一数组超过上限）
@@ -687,7 +1060,7 @@ pub struct TodParticle {
     pub spin_velocity: f32,
     pub cross_fade_particle_id: ParticleID,
     pub cross_fade_duration: i32,
-    pub particle_interp: [f32; 16],  // NUM_PARTICLE_TRACKS
+    pub particle_interp: [f32; 16], // NUM_PARTICLE_TRACKS
     pub particle_field_interp: [[f32; 2]; MAX_PARTICLE_FIELDS],
     pub active: bool,
 }
@@ -696,12 +1069,16 @@ impl Default for TodParticle {
     fn default() -> Self {
         TodParticle {
             particle_emitter: ptr::null_mut(),
-            particle_duration: 0, particle_age: 0,
-            particle_time_value: 0.0, particle_last_time_value: 0.0,
+            particle_duration: 0,
+            particle_age: 0,
+            particle_time_value: 0.0,
+            particle_last_time_value: 0.0,
             animation_time_value: 0.0,
             velocity: SexyVector2::ZERO,
             position: SexyVector2::ZERO,
-            image_frame: 0, spin_position: 0.0, spin_velocity: 0.0,
+            image_frame: 0,
+            spin_position: 0.0,
+            spin_velocity: 0.0,
             cross_fade_particle_id: PARTICLEID_NULL,
             cross_fade_duration: 0,
             particle_interp: [0.0; 16],
@@ -747,7 +1124,7 @@ pub struct TodParticleEmitter {
     pub cross_fade_emitter_id: ParticleEmitterID,
     pub emitter_cross_fade_count_down: i32,
     pub frame_override: i32,
-    pub track_interp: [f32; 10],  // NUM_SYSTEM_TRACKS
+    pub track_interp: [f32; 10], // NUM_SYSTEM_TRACKS
     pub system_field_interp: [[f32; 2]; MAX_PARTICLE_FIELDS],
 }
 
@@ -759,8 +1136,11 @@ impl TodParticleEmitter {
             particle_list: TodList::new(),
             spawn_accum: 0.0,
             system_center: SexyVector2::ZERO,
-            particles_spawned: 0, system_age: 0, system_duration: 0,
-            system_time_value: 0.0, system_last_time_value: 0.0,
+            particles_spawned: 0,
+            system_age: 0,
+            system_duration: 0,
+            system_time_value: 0.0,
+            system_last_time_value: 0.0,
             dead: false,
             color_override: Color::WHITE,
             extra_additive_draw_override: false,
@@ -774,8 +1154,13 @@ impl TodParticleEmitter {
         }
     }
 
-    pub fn tod_emitter_initialize(&mut self, x: f32, y: f32,
-        system: *mut TodParticleSystem, def: *mut TodEmitterDefinition) {
+    pub fn tod_emitter_initialize(
+        &mut self,
+        x: f32,
+        y: f32,
+        system: *mut TodParticleSystem,
+        def: *mut TodEmitterDefinition,
+    ) {
         // 对应 C++ PvzpEmitterInitialize（PvzpParticle.cpp:282）
         self.spawn_accum = 0.0;
         self.particles_spawned = 0;
@@ -821,7 +1206,9 @@ impl TodParticleEmitter {
     }
     /// 更新发射器（对应 C++ PvzpParticleEmitter::Update，PvzpParticle.cpp:784）
     pub fn update(&mut self) {
-        if self.dead { return; }
+        if self.dead {
+            return;
+        }
 
         self.system_age += 1;
         let mut a_die = false;
@@ -829,7 +1216,10 @@ impl TodParticleEmitter {
         {
             let def = unsafe { &*self.emitter_def };
             if self.system_age >= self.system_duration {
-                if crate::lawn::zombie::test_bit(def.particle_flags as u32, ParticleFlags::SystemLoops as u32) {
+                if crate::lawn::zombie::test_bit(
+                    def.particle_flags as u32,
+                    ParticleFlags::SystemLoops as u32,
+                ) {
                     self.system_age = 0;
                 } else {
                     self.system_age = self.system_duration - 1;
@@ -854,7 +1244,10 @@ impl TodParticleEmitter {
                     if holder.is_null() {
                         false
                     } else {
-                        (*holder).emitters.try_to_get(self.cross_fade_emitter_id).map_or(false, |e| !e.dead)
+                        (*holder)
+                            .emitters
+                            .try_to_get(self.cross_fade_emitter_id)
+                            .map_or(false, |e| !e.dead)
                     }
                 }
             };
@@ -900,7 +1293,9 @@ impl TodParticleEmitter {
                     }
                 }
             };
-            if a_particle_ptr.is_null() { continue; }
+            if a_particle_ptr.is_null() {
+                continue;
+            }
             let a_keep = { self.update_particle(unsafe { &mut *a_particle_ptr }) };
             if !a_keep {
                 self.delete_particle(a_particle_ptr);
@@ -999,7 +1394,12 @@ impl TodParticleEmitter {
                             }
                         };
                         if !a_source_particle_ptr.is_null() {
-                            self.render_particle(g, &mut *a_source_particle_ptr, a_color, &a_params);
+                            self.render_particle(
+                                g,
+                                &mut *a_source_particle_ptr,
+                                a_color,
+                                &a_params,
+                            );
                         }
                     }
                 }
@@ -1007,12 +1407,22 @@ impl TodParticleEmitter {
         }
     }
 
-        /// 渲染单个粒子（对应 C++ RenderParticle，PvzpParticle.cpp:945）
+    /// 渲染单个粒子（对应 C++ RenderParticle，PvzpParticle.cpp:945）
     /// [TRANSLATION_NOTE]: C++ 经 PvzpTriangleGroup::AddTriangle 批处理；Rust 直接经
     /// Graphics 矩阵绘制（旋转/缩放一致），FULLSCREEN 全屏填充保留
-    fn render_particle(&self, g: &mut Graphics, the_particle: &TodParticle, the_color: Color, the_params: &ParticleRenderParams) {
+    fn render_particle(
+        &self,
+        g: &mut Graphics,
+        the_particle: &TodParticle,
+        the_color: Color,
+        the_params: &ParticleRenderParams,
+    ) {
         let a_emitter_def = unsafe { &*self.emitter_def };
-        let a_image = if !self.image_override.is_null() { self.image_override } else { a_emitter_def.image };
+        let a_image = if !self.image_override.is_null() {
+            self.image_override
+        } else {
+            a_emitter_def.image
+        };
         if a_image.is_null() {
             return;
         }
@@ -1023,10 +1433,12 @@ impl TodParticleEmitter {
         let mut a_frame = self.frame_override;
         if a_frame == -1 {
             if !a_emitter_def.animation_rate.nodes.is_empty() {
-                a_frame = ((the_particle.animation_time_value * a_emitter_def.image_frames as f32) as i32)
+                a_frame = ((the_particle.animation_time_value * a_emitter_def.image_frames as f32)
+                    as i32)
                     .clamp(0, a_emitter_def.image_frames - 1);
             } else if a_emitter_def.animated != 0 {
-                a_frame = ((the_particle.particle_time_value * a_emitter_def.image_frames as f32) as i32)
+                a_frame = ((the_particle.particle_time_value * a_emitter_def.image_frames as f32)
+                    as i32)
                     .clamp(0, a_emitter_def.image_frames - 1);
             } else {
                 a_frame = the_particle.image_frame;
@@ -1037,17 +1449,33 @@ impl TodParticleEmitter {
             a_frame = a_image_ref.num_cols - 1;
         }
 
-        let a_clip_top = self.particle_track_evaluate(&a_emitter_def.clip_top, the_particle, ParticleTracks::ClipTop);
-        let a_clip_bottom = self.particle_track_evaluate(&a_emitter_def.clip_bottom, the_particle, ParticleTracks::ClipBottom);
-        let a_clip_left = self.particle_track_evaluate(&a_emitter_def.clip_left, the_particle, ParticleTracks::ClipLeft);
-        let a_clip_right = self.particle_track_evaluate(&a_emitter_def.clip_right, the_particle, ParticleTracks::ClipRight);
+        let a_clip_top = self.particle_track_evaluate(
+            &a_emitter_def.clip_top,
+            the_particle,
+            ParticleTracks::ClipTop,
+        );
+        let a_clip_bottom = self.particle_track_evaluate(
+            &a_emitter_def.clip_bottom,
+            the_particle,
+            ParticleTracks::ClipBottom,
+        );
+        let a_clip_left = self.particle_track_evaluate(
+            &a_emitter_def.clip_left,
+            the_particle,
+            ParticleTracks::ClipLeft,
+        );
+        let a_clip_right = self.particle_track_evaluate(
+            &a_emitter_def.clip_right,
+            the_particle,
+            ParticleTracks::ClipRight,
+        );
 
         let mut a_pos_x = the_params.pos_x + a_clip_left * a_cel_width as f32;
         let mut a_pos_y = the_params.pos_y + a_clip_top * a_cel_height as f32;
         let mut a_src_rect = Rect::new(
-            (a_frame * a_cel_width + (a_clip_left * a_cel_width as f32).round() as i32)
-                .max(0),
-            (a_emitter_def.image_row.min(a_image_ref.num_rows - 1) * a_cel_height + (a_clip_top * a_cel_height as f32).round() as i32)
+            (a_frame * a_cel_width + (a_clip_left * a_cel_width as f32).round() as i32).max(0),
+            (a_emitter_def.image_row.min(a_image_ref.num_rows - 1) * a_cel_height
+                + (a_clip_top * a_cel_height as f32).round() as i32)
                 .max(0),
             a_cel_width - (a_cel_width as f32 * (a_clip_left + a_clip_right)).round() as i32,
             a_cel_height - (a_cel_height as f32 * (a_clip_bottom + a_clip_top)).round() as i32,
@@ -1057,20 +1485,34 @@ impl TodParticleEmitter {
         }
 
         // C++: PARTICLE_ALIGN_TO_PIXELS
-        if crate::lawn::zombie::test_bit(a_emitter_def.particle_flags as u32, ParticleFlags::AlignToPixels as u32) {
+        if crate::lawn::zombie::test_bit(
+            a_emitter_def.particle_flags as u32,
+            ParticleFlags::AlignToPixels as u32,
+        ) {
             a_pos_x = a_pos_x.round();
             a_pos_y = a_pos_y.round();
         }
         let mut a_draw_mode = g.draw_mode;
-        if crate::lawn::zombie::test_bit(a_emitter_def.particle_flags as u32, ParticleFlags::Additive as u32) {
+        if crate::lawn::zombie::test_bit(
+            a_emitter_def.particle_flags as u32,
+            ParticleFlags::Additive as u32,
+        ) {
             a_draw_mode = crate::framework::graphics::graphics::DrawMode::Additive as i32;
         }
-        if crate::lawn::zombie::test_bit(a_emitter_def.particle_flags as u32, ParticleFlags::Fullscreen as u32) {
+        if crate::lawn::zombie::test_bit(
+            a_emitter_def.particle_flags as u32,
+            ParticleFlags::Fullscreen as u32,
+        ) {
             // C++: FULLSCREEN 粒子以纯色填满屏幕
             let an_old_color = g.color;
             let an_old_draw_mode = g.draw_mode;
             g.set_color(&the_color);
-            g.fill_rect_xywh(-g.trans_x as i32, -g.trans_y as i32, crate::lawn::game_enums::BOARD_WIDTH, crate::lawn::game_enums::BOARD_HEIGHT);
+            g.fill_rect_xywh(
+                -g.trans_x as i32,
+                -g.trans_y as i32,
+                crate::lawn::game_enums::BOARD_WIDTH,
+                crate::lawn::game_enums::BOARD_HEIGHT,
+            );
             g.set_color(&an_old_color);
             g.set_draw_mode(an_old_draw_mode);
         } else {
@@ -1110,7 +1552,10 @@ impl TodParticleEmitter {
         self.system_center.y = y;
         // 对应 C++: PARTICLES_DONT_FOLLOW 时粒子不随系统移动
         let def = unsafe { &*self.emitter_def };
-        if !crate::lawn::zombie::test_bit(def.particle_flags as u32, ParticleFlags::ParticlesDontFollow as u32) {
+        if !crate::lawn::zombie::test_bit(
+            def.particle_flags as u32,
+            ParticleFlags::ParticlesDontFollow as u32,
+        ) {
             let a_particle_ids: Vec<ParticleID> = unsafe {
                 let mut ids = Vec::new();
                 let mut node = self.particle_list.head;
@@ -1125,7 +1570,9 @@ impl TodParticleEmitter {
                     let holder = (*self.particle_system).particle_holder;
                     if !holder.is_null() {
                         for a_particle_id in a_particle_ids {
-                            if let Some(a_particle) = (*holder).particles.try_to_get_mut(a_particle_id) {
+                            if let Some(a_particle) =
+                                (*holder).particles.try_to_get_mut(a_particle_id)
+                            {
                                 a_particle.position.x += a_delta_x;
                                 a_particle.position.y += a_delta_y;
                             }
@@ -1139,7 +1586,9 @@ impl TodParticleEmitter {
     pub fn update_spawning(&mut self) {
         // 对应 C++: 发射数据源——cross-fade 目标发射器（primary）或自身
         let a_spawning_ptr: *mut TodParticleEmitter = unsafe {
-            if self.cross_fade_emitter_id != PARTICLEEMITTERID_NULL && !self.particle_system.is_null() {
+            if self.cross_fade_emitter_id != PARTICLEEMITTERID_NULL
+                && !self.particle_system.is_null()
+            {
                 let holder = (*self.particle_system).particle_holder;
                 if holder.is_null() {
                     self as *mut TodParticleEmitter
@@ -1159,26 +1608,34 @@ impl TodParticleEmitter {
             let a_spawning = &mut *a_spawning_ptr;
             let a_def = &*a_spawning.emitter_def;
 
-            a_spawning.spawn_accum += a_spawning.system_track_evaluate(&a_def.spawn_rate, ParticleSystemTracks::SpawnRate) * 0.01;
+            a_spawning.spawn_accum += a_spawning
+                .system_track_evaluate(&a_def.spawn_rate, ParticleSystemTracks::SpawnRate)
+                * 0.01;
             let mut a_spawn_count = a_spawning.spawn_accum as i32;
             a_spawning.spawn_accum -= a_spawn_count as f32;
 
             // 对应 C++: aSpawnMinActive 下限
-            let a_spawn_min_active =
-                a_spawning.system_track_evaluate(&a_def.spawn_min_active, ParticleSystemTracks::SpawnMinActive) as i32;
+            let a_spawn_min_active = a_spawning.system_track_evaluate(
+                &a_def.spawn_min_active,
+                ParticleSystemTracks::SpawnMinActive,
+            ) as i32;
             if a_spawn_min_active >= 0 && a_spawn_count < a_spawn_min_active - a_active_count {
                 a_spawn_count = a_spawn_min_active - a_active_count;
             }
             // 对应 C++: aSpawnMaxActive 上限
-            let a_spawn_max_active =
-                a_spawning.system_track_evaluate(&a_def.spawn_max_active, ParticleSystemTracks::SpawnMaxActive) as i32;
+            let a_spawn_max_active = a_spawning.system_track_evaluate(
+                &a_def.spawn_max_active,
+                ParticleSystemTracks::SpawnMaxActive,
+            ) as i32;
             if a_spawn_max_active >= 0 && a_spawn_count > a_spawn_max_active - a_active_count {
                 a_spawn_count = a_spawn_max_active - a_active_count;
             }
             // 对应 C++: aSpawnMaxLaunched 总数上限
             if !a_def.spawn_max_launched.nodes.is_empty() {
-                let a_spawn_max_launched =
-                    a_spawning.system_track_evaluate(&a_def.spawn_max_launched, ParticleSystemTracks::SpawnMaxLaunched) as i32;
+                let a_spawn_max_launched = a_spawning.system_track_evaluate(
+                    &a_def.spawn_max_launched,
+                    ParticleSystemTracks::SpawnMaxLaunched,
+                ) as i32;
                 if a_spawn_count > a_spawn_max_launched - a_spawned_count {
                     a_spawn_count = a_spawn_max_launched - a_spawned_count;
                 }
@@ -1186,7 +1643,9 @@ impl TodParticleEmitter {
 
             // 对应 C++: cross-fade 目标发射器（存在时新粒子全部淡入该发射器）
             let a_cross_fade_ptr: *mut TodParticleEmitter = unsafe {
-                if self.cross_fade_emitter_id != PARTICLEEMITTERID_NULL && !self.particle_system.is_null() {
+                if self.cross_fade_emitter_id != PARTICLEEMITTERID_NULL
+                    && !self.particle_system.is_null()
+                {
                     let holder = (*self.particle_system).particle_holder;
                     if holder.is_null() {
                         std::ptr::null_mut()
@@ -1205,20 +1664,36 @@ impl TodParticleEmitter {
                     .spawn_particle(i, a_spawn_count)
                     .map_or(std::ptr::null_mut(), |p| p as *mut TodParticle);
                 if !a_cross_fade_ptr.is_null() && !a_particle_ptr.is_null() {
-                    a_spawning.cross_fade_particle(unsafe { &mut *a_particle_ptr }, a_cross_fade_ptr);
+                    a_spawning
+                        .cross_fade_particle(unsafe { &mut *a_particle_ptr }, a_cross_fade_ptr);
                 }
             }
         }
     }
 
     /// 粒子轨道评估（对应 C++ PvzpParticleEmitter::ParticleTrackEvaluate）
-    fn particle_track_evaluate(&self, the_track: &FloatParameterTrack, the_particle: &TodParticle, the_particle_track: ParticleTracks) -> f32 {
-        the_track.evaluate(the_particle.particle_time_value, the_particle.particle_interp[the_particle_track as usize])
+    fn particle_track_evaluate(
+        &self,
+        the_track: &FloatParameterTrack,
+        the_particle: &TodParticle,
+        the_particle_track: ParticleTracks,
+    ) -> f32 {
+        the_track.evaluate(
+            the_particle.particle_time_value,
+            the_particle.particle_interp[the_particle_track as usize],
+        )
     }
 
     /// 系统轨道评估（对应 C++ PvzpParticleEmitter::SystemTrackEvaluate）
-    fn system_track_evaluate(&self, the_track: &FloatParameterTrack, the_system_track: ParticleSystemTracks) -> f32 {
-        the_track.evaluate(self.system_time_value, self.track_interp[the_system_track as usize])
+    fn system_track_evaluate(
+        &self,
+        the_track: &FloatParameterTrack,
+        the_system_track: ParticleSystemTracks,
+    ) -> f32 {
+        the_track.evaluate(
+            self.system_time_value,
+            self.track_interp[the_system_track as usize],
+        )
     }
 
     /// 更新粒子字段（对应 C++ PvzpParticleEmitter::UpdateParticleField，:480）
@@ -1231,8 +1706,12 @@ impl TodParticleEmitter {
     ) {
         let a_interp_x = the_particle.particle_field_interp[the_field_index as usize][0];
         let a_interp_y = the_particle.particle_field_interp[the_field_index as usize][1];
-        let x = the_particle_field.x.evaluate(the_particle_time_value, a_interp_x);
-        let y = the_particle_field.y.evaluate(the_particle_time_value, a_interp_y);
+        let x = the_particle_field
+            .x
+            .evaluate(the_particle_time_value, a_interp_x);
+        let y = the_particle_field
+            .y
+            .evaluate(the_particle_time_value, a_interp_y);
 
         match the_particle_field.field_type {
             ParticleFieldType::Invalid => {}
@@ -1260,8 +1739,12 @@ impl TodParticleEmitter {
                 the_particle.position.y += 0.01 * y;
             }
             ParticleFieldType::Position => {
-                let a_last_x = the_particle_field.x.evaluate(the_particle.particle_last_time_value, a_interp_x);
-                let a_last_y = the_particle_field.y.evaluate(the_particle.particle_last_time_value, a_interp_y);
+                let a_last_x = the_particle_field
+                    .x
+                    .evaluate(the_particle.particle_last_time_value, a_interp_x);
+                let a_last_y = the_particle_field
+                    .y
+                    .evaluate(the_particle.particle_last_time_value, a_interp_y);
                 the_particle.position.x += x - a_last_x;
                 the_particle.position.y += y - a_last_y;
             }
@@ -1287,21 +1770,27 @@ impl TodParticleEmitter {
                 }
             }
             ParticleFieldType::Shake => {
-                let a_last_x = the_particle_field.x.evaluate(the_particle.particle_last_time_value, a_interp_x);
-                let a_last_y = the_particle_field.y.evaluate(the_particle.particle_last_time_value, a_interp_y);
+                let a_last_x = the_particle_field
+                    .x
+                    .evaluate(the_particle.particle_last_time_value, a_interp_x);
+                let a_last_y = the_particle_field
+                    .y
+                    .evaluate(the_particle.particle_last_time_value, a_interp_y);
                 // 对应 C++: 撤销上一帧震动（确定性随机种子 = 上一帧年龄 * 粒子地址）
                 let mut a_last_rand_seed = the_particle.particle_age - 1;
                 if a_last_rand_seed == -1 {
                     a_last_rand_seed = the_particle.particle_duration - 1;
                 }
                 crate::framework::common::SRand(
-                    (a_last_rand_seed as u32).wrapping_mul(the_particle as *const TodParticle as usize as u32),
+                    (a_last_rand_seed as u32)
+                        .wrapping_mul(the_particle as *const TodParticle as usize as u32),
                 );
                 the_particle.position.x -= a_last_x * (RandFloat(2.0) - 1.0);
                 the_particle.position.y -= a_last_y * (RandFloat(2.0) - 1.0);
                 // 应用本帧震动
                 crate::framework::common::SRand(
-                    (the_particle.particle_age as u32).wrapping_mul(the_particle as *const TodParticle as usize as u32),
+                    (the_particle.particle_age as u32)
+                        .wrapping_mul(the_particle as *const TodParticle as usize as u32),
                 );
                 the_particle.position.x += x * (RandFloat(2.0) - 1.0);
                 the_particle.position.y += y * (RandFloat(2.0) - 1.0);
@@ -1325,16 +1814,29 @@ impl TodParticleEmitter {
     }
 
     /// 更新系统字段（对应 C++ PvzpParticleEmitter::UpdateSystemField，:586）
-    fn update_system_field(&mut self, the_particle_field: &ParticleField, the_particle_time_value: f32, the_field_index: i32) {
+    fn update_system_field(
+        &mut self,
+        the_particle_field: &ParticleField,
+        the_particle_time_value: f32,
+        the_field_index: i32,
+    ) {
         let a_interp_x = self.system_field_interp[the_field_index as usize][0];
         let a_interp_y = self.system_field_interp[the_field_index as usize][1];
-        let x = the_particle_field.x.evaluate(the_particle_time_value, a_interp_x);
-        let y = the_particle_field.y.evaluate(the_particle_time_value, a_interp_y);
+        let x = the_particle_field
+            .x
+            .evaluate(the_particle_time_value, a_interp_x);
+        let y = the_particle_field
+            .y
+            .evaluate(the_particle_time_value, a_interp_y);
 
         match the_particle_field.field_type {
             ParticleFieldType::SystemPosition => {
-                let a_last_x = the_particle_field.x.evaluate(self.system_last_time_value, a_interp_x);
-                let a_last_y = the_particle_field.y.evaluate(self.system_last_time_value, a_interp_y);
+                let a_last_x = the_particle_field
+                    .x
+                    .evaluate(self.system_last_time_value, a_interp_x);
+                let a_last_y = the_particle_field
+                    .y
+                    .evaluate(self.system_last_time_value, a_interp_y);
                 self.system_center.x += x - a_last_x;
                 self.system_center.y += y - a_last_y;
             }
@@ -1349,11 +1851,16 @@ impl TodParticleEmitter {
         let def = unsafe { &*self.emitter_def };
         // 对应 C++: 粒子到达寿命终点
         if the_particle.particle_age >= the_particle.particle_duration {
-            if crate::lawn::zombie::test_bit(def.particle_flags as u32, ParticleFlags::ParticleLoops as u32) {
+            if crate::lawn::zombie::test_bit(
+                def.particle_flags as u32,
+                ParticleFlags::ParticleLoops as u32,
+            ) {
                 the_particle.particle_age = 0;
             } else if the_particle.cross_fade_duration > 0 {
                 the_particle.particle_age = the_particle.particle_duration - 1; // 对应 C++: 粒子在其末帧保持
-            } else if def.on_duration.is_empty() || !self.cross_fade_particle_to_name(the_particle, &def.on_duration) {
+            } else if def.on_duration.is_empty()
+                || !self.cross_fade_particle_to_name(the_particle, &def.on_duration)
+            {
                 return false;
             }
         }
@@ -1364,7 +1871,11 @@ impl TodParticleEmitter {
                     false
                 } else {
                     let holder = (*self.particle_system).particle_holder;
-                    !holder.is_null() && (*holder).particles.try_to_get(the_particle.cross_fade_particle_id).is_some()
+                    !holder.is_null()
+                        && (*holder)
+                            .particles
+                            .try_to_get(the_particle.cross_fade_particle_id)
+                            .is_some()
                 }
             };
             if !a_source_alive {
@@ -1378,23 +1889,41 @@ impl TodParticleEmitter {
         let a_num_fields = def.particle_fields.fields.len().min(MAX_PARTICLE_FIELDS);
         for i in 0..a_num_fields {
             let a_field = &def.particle_fields.fields[i];
-            self.update_particle_field(the_particle, a_field, the_particle.particle_time_value, i as i32);
+            self.update_particle_field(
+                the_particle,
+                a_field,
+                the_particle.particle_time_value,
+                i as i32,
+            );
         }
         the_particle.position += the_particle.velocity;
 
         // 对应 C++: 自旋
-        let a_spin_speed = self.particle_track_evaluate(&def.particle_spin_speed, the_particle, ParticleTracks::SpinSpeed) * 0.01;
-        let a_spin_angle = self.particle_track_evaluate(&def.particle_spin_angle, the_particle, ParticleTracks::SpinAngle);
+        let a_spin_speed = self.particle_track_evaluate(
+            &def.particle_spin_speed,
+            the_particle,
+            ParticleTracks::SpinSpeed,
+        ) * 0.01;
+        let a_spin_angle = self.particle_track_evaluate(
+            &def.particle_spin_angle,
+            the_particle,
+            ParticleTracks::SpinAngle,
+        );
         let a_last_spin_angle = def.particle_spin_angle.evaluate(
             the_particle.particle_last_time_value,
             the_particle.particle_interp[ParticleTracks::SpinAngle as usize],
         );
-        the_particle.spin_position +=
-            (a_spin_speed + a_spin_angle - a_last_spin_angle).to_radians() + the_particle.spin_velocity;
+        the_particle.spin_position += (a_spin_speed + a_spin_angle - a_last_spin_angle)
+            .to_radians()
+            + the_particle.spin_velocity;
 
         // 对应 C++: 动画速率（循环缠绕到 [0, 1)）
         if !def.animation_rate.nodes.is_empty() {
-            let a_anim_time = self.particle_track_evaluate(&def.animation_rate, the_particle, ParticleTracks::AnimationRate) * 0.01;
+            let a_anim_time = self.particle_track_evaluate(
+                &def.animation_rate,
+                the_particle,
+                ParticleTracks::AnimationRate,
+            ) * 0.01;
             the_particle.animation_time_value += a_anim_time;
             while the_particle.animation_time_value >= 1.0 {
                 the_particle.animation_time_value -= 1.0;
@@ -1410,7 +1939,11 @@ impl TodParticleEmitter {
     }
 
     /// 淡出到指定名称发射器（对应 C++ CrossFadeParticleToName，:610）
-    pub fn cross_fade_particle_to_name(&mut self, the_particle: &mut TodParticle, the_emitter_name: &str) -> bool {
+    pub fn cross_fade_particle_to_name(
+        &mut self,
+        the_particle: &mut TodParticle,
+        the_emitter_name: &str,
+    ) -> bool {
         // 对应 C++: 在系统定义中按名称查找目标发射器定义
         let a_def_ptr: *mut TodEmitterDefinition = unsafe {
             if self.particle_system.is_null() {
@@ -1449,7 +1982,11 @@ impl TodParticleEmitter {
     }
 
     /// 交叉淡入淡出粒子（对应 C++ CrossFadeParticle，:739）
-    pub fn cross_fade_particle(&mut self, the_particle: &mut TodParticle, the_to_emitter: *mut TodParticleEmitter) -> bool {
+    pub fn cross_fade_particle(
+        &mut self,
+        the_particle: &mut TodParticle,
+        the_to_emitter: *mut TodParticleEmitter,
+    ) -> bool {
         unsafe {
             // 对应 C++: 不支持连续多次淡出
             if the_particle.cross_fade_duration > 0 {
@@ -1470,8 +2007,10 @@ impl TodParticleEmitter {
                 the_particle.cross_fade_duration = self.emitter_cross_fade_count_down;
             } else {
                 let a_cross_fade_duration_interp = RandRange(1) as f32;
-                let a_cross_fade_duration =
-                    to_def.cross_fade_duration.evaluate(self.system_time_value, a_cross_fade_duration_interp) as i32;
+                let a_cross_fade_duration = to_def
+                    .cross_fade_duration
+                    .evaluate(self.system_time_value, a_cross_fade_duration_interp)
+                    as i32;
                 the_particle.cross_fade_duration = a_cross_fade_duration.max(1);
             }
             // 对应 C++: 目标发射器粒子时长未定义时使用淡出时长
@@ -1499,8 +2038,10 @@ impl TodParticleEmitter {
         }
         // 对应 C++: 随机淡出时长（至少 1 帧）
         let a_cross_fade_duration_interp = RandFloat(1.0);
-        self.emitter_cross_fade_count_down =
-            to_def.cross_fade_duration.evaluate(self.system_time_value, a_cross_fade_duration_interp) as i32;
+        self.emitter_cross_fade_count_down = to_def
+            .cross_fade_duration
+            .evaluate(self.system_time_value, a_cross_fade_duration_interp)
+            as i32;
         self.emitter_cross_fade_count_down = self.emitter_cross_fade_count_down.max(1);
         // 对应 C++: 记录淡出目标发射器 ID
         unsafe {
@@ -1517,7 +2058,11 @@ impl TodParticleEmitter {
     }
 
     /// 获取粒子渲染参数（对应 C++ PvzpParticleEmitter::GetRenderParams，:849）
-    pub fn get_render_params(&self, the_particle: &TodParticle, the_params: &mut ParticleRenderParams) -> bool {
+    pub fn get_render_params(
+        &self,
+        the_particle: &TodParticle,
+        the_params: &mut ParticleRenderParams,
+    ) -> bool {
         let a_emitter = the_particle.particle_emitter;
         if a_emitter.is_null() {
             return false;
@@ -1550,10 +2095,14 @@ impl TodParticleEmitter {
         the_params.spin_position_is_set = false;
         the_params.spin_position_is_set |= !a_def.particle_spin_speed.nodes.is_empty();
         the_params.spin_position_is_set |= !a_def.particle_spin_angle.nodes.is_empty();
-        the_params.spin_position_is_set |=
-            crate::lawn::zombie::test_bit(a_def.particle_flags as u32, ParticleFlags::RandomLaunchSpin as u32);
-        the_params.spin_position_is_set |=
-            crate::lawn::zombie::test_bit(a_def.particle_flags as u32, ParticleFlags::AlignLaunchSpin as u32);
+        the_params.spin_position_is_set |= crate::lawn::zombie::test_bit(
+            a_def.particle_flags as u32,
+            ParticleFlags::RandomLaunchSpin as u32,
+        );
+        the_params.spin_position_is_set |= crate::lawn::zombie::test_bit(
+            a_def.particle_flags as u32,
+            ParticleFlags::AlignLaunchSpin as u32,
+        );
         the_params.position_is_set = false;
         the_params.position_is_set |= a_def.particle_fields.fields.len() > 0;
         the_params.position_is_set |= !a_def.emitter_radius.nodes.is_empty();
@@ -1563,25 +2112,68 @@ impl TodParticleEmitter {
         the_params.position_is_set |= !a_def.emitter_box_y.nodes.is_empty();
 
         // 对应 C++: 颜色 = 粒子 × 系统 × 覆盖色 × 亮度
-        let a_system_red = a_emitter_ref.system_track_evaluate(&a_def.system_red, ParticleSystemTracks::SystemRed);
-        let a_system_green = a_emitter_ref.system_track_evaluate(&a_def.system_green, ParticleSystemTracks::SystemGreen);
-        let a_system_blue = a_emitter_ref.system_track_evaluate(&a_def.system_blue, ParticleSystemTracks::SystemBlue);
-        let a_system_alpha = a_emitter_ref.system_track_evaluate(&a_def.system_alpha, ParticleSystemTracks::SystemAlpha);
-        let a_system_brightness = a_emitter_ref.system_track_evaluate(&a_def.system_brightness, ParticleSystemTracks::SystemBrightness);
-        let a_particle_red = a_emitter_ref.particle_track_evaluate(&a_def.particle_red, the_particle, ParticleTracks::ParticleRed);
-        let a_particle_green = a_emitter_ref.particle_track_evaluate(&a_def.particle_green, the_particle, ParticleTracks::ParticleGreen);
-        let a_particle_blue = a_emitter_ref.particle_track_evaluate(&a_def.particle_blue, the_particle, ParticleTracks::ParticleBlue);
-        let a_particle_alpha = a_emitter_ref.particle_track_evaluate(&a_def.particle_alpha, the_particle, ParticleTracks::ParticleAlpha);
-        let a_particle_brightness = a_emitter_ref.particle_track_evaluate(&a_def.particle_brightness, the_particle, ParticleTracks::ParticleBrightness);
+        let a_system_red =
+            a_emitter_ref.system_track_evaluate(&a_def.system_red, ParticleSystemTracks::SystemRed);
+        let a_system_green = a_emitter_ref
+            .system_track_evaluate(&a_def.system_green, ParticleSystemTracks::SystemGreen);
+        let a_system_blue = a_emitter_ref
+            .system_track_evaluate(&a_def.system_blue, ParticleSystemTracks::SystemBlue);
+        let a_system_alpha = a_emitter_ref
+            .system_track_evaluate(&a_def.system_alpha, ParticleSystemTracks::SystemAlpha);
+        let a_system_brightness = a_emitter_ref.system_track_evaluate(
+            &a_def.system_brightness,
+            ParticleSystemTracks::SystemBrightness,
+        );
+        let a_particle_red = a_emitter_ref.particle_track_evaluate(
+            &a_def.particle_red,
+            the_particle,
+            ParticleTracks::ParticleRed,
+        );
+        let a_particle_green = a_emitter_ref.particle_track_evaluate(
+            &a_def.particle_green,
+            the_particle,
+            ParticleTracks::ParticleGreen,
+        );
+        let a_particle_blue = a_emitter_ref.particle_track_evaluate(
+            &a_def.particle_blue,
+            the_particle,
+            ParticleTracks::ParticleBlue,
+        );
+        let a_particle_alpha = a_emitter_ref.particle_track_evaluate(
+            &a_def.particle_alpha,
+            the_particle,
+            ParticleTracks::ParticleAlpha,
+        );
+        let a_particle_brightness = a_emitter_ref.particle_track_evaluate(
+            &a_def.particle_brightness,
+            the_particle,
+            ParticleTracks::ParticleBrightness,
+        );
         let a_brightness = a_particle_brightness * a_system_brightness;
-        the_params.red = a_particle_red * a_system_red * a_emitter_ref.color_override.r as f32 * a_brightness;
-        the_params.green = a_particle_green * a_system_green * a_emitter_ref.color_override.g as f32 * a_brightness;
-        the_params.blue = a_particle_blue * a_system_blue * a_emitter_ref.color_override.b as f32 * a_brightness;
-        the_params.alpha = a_particle_alpha * a_system_alpha * a_emitter_ref.color_override.a as f32 * a_brightness;
+        the_params.red =
+            a_particle_red * a_system_red * a_emitter_ref.color_override.r as f32 * a_brightness;
+        the_params.green = a_particle_green
+            * a_system_green
+            * a_emitter_ref.color_override.g as f32
+            * a_brightness;
+        the_params.blue =
+            a_particle_blue * a_system_blue * a_emitter_ref.color_override.b as f32 * a_brightness;
+        the_params.alpha = a_particle_alpha
+            * a_system_alpha
+            * a_emitter_ref.color_override.a as f32
+            * a_brightness;
         the_params.pos_x = the_particle.position.x;
         the_params.pos_y = the_particle.position.y;
-        let a_particle_scale = a_emitter_ref.particle_track_evaluate(&a_def.particle_scale, the_particle, ParticleTracks::Scale);
-        the_params.particle_stretch = a_emitter_ref.particle_track_evaluate(&a_def.particle_stretch, the_particle, ParticleTracks::Stretch);
+        let a_particle_scale = a_emitter_ref.particle_track_evaluate(
+            &a_def.particle_scale,
+            the_particle,
+            ParticleTracks::Scale,
+        );
+        the_params.particle_stretch = a_emitter_ref.particle_track_evaluate(
+            &a_def.particle_stretch,
+            the_particle,
+            ParticleTracks::Stretch,
+        );
         the_params.particle_scale = a_particle_scale * a_emitter_ref.scale_override;
         the_params.spin_position = the_particle.spin_position;
 
@@ -1603,37 +2195,85 @@ impl TodParticleEmitter {
             if let Some(a_cross_fade_ref) = a_cross_fade_particle {
                 let mut a_cross_fade_params = ParticleRenderParams::new();
                 let a_cross_emitter = a_cross_fade_ref.particle_emitter;
-                if !a_cross_emitter.is_null() && unsafe { (*a_cross_emitter).get_render_params(a_cross_fade_ref, &mut a_cross_fade_params) } {
-                    let a_fraction =
-                        the_particle.particle_age as f32 / (a_cross_fade_ref.cross_fade_duration - 1) as f32;
+                if !a_cross_emitter.is_null()
+                    && unsafe {
+                        (*a_cross_emitter)
+                            .get_render_params(a_cross_fade_ref, &mut a_cross_fade_params)
+                    }
+                {
+                    let a_fraction = the_particle.particle_age as f32
+                        / (a_cross_fade_ref.cross_fade_duration - 1) as f32;
                     the_params.red = crate::todlib::tod_particle::cross_fade_lerp(
-                        a_cross_fade_params.red, the_params.red, a_cross_fade_params.red_is_set, the_params.red_is_set, a_fraction);
+                        a_cross_fade_params.red,
+                        the_params.red,
+                        a_cross_fade_params.red_is_set,
+                        the_params.red_is_set,
+                        a_fraction,
+                    );
                     the_params.green = crate::todlib::tod_particle::cross_fade_lerp(
-                        a_cross_fade_params.green, the_params.green, a_cross_fade_params.green_is_set, the_params.green_is_set, a_fraction);
+                        a_cross_fade_params.green,
+                        the_params.green,
+                        a_cross_fade_params.green_is_set,
+                        the_params.green_is_set,
+                        a_fraction,
+                    );
                     the_params.blue = crate::todlib::tod_particle::cross_fade_lerp(
-                        a_cross_fade_params.blue, the_params.blue, a_cross_fade_params.blue_is_set, the_params.blue_is_set, a_fraction);
+                        a_cross_fade_params.blue,
+                        the_params.blue,
+                        a_cross_fade_params.blue_is_set,
+                        the_params.blue_is_set,
+                        a_fraction,
+                    );
                     the_params.alpha = crate::todlib::tod_particle::cross_fade_lerp(
-                        a_cross_fade_params.alpha, the_params.alpha, a_cross_fade_params.alpha_is_set, the_params.alpha_is_set, a_fraction);
+                        a_cross_fade_params.alpha,
+                        the_params.alpha,
+                        a_cross_fade_params.alpha_is_set,
+                        the_params.alpha_is_set,
+                        a_fraction,
+                    );
                     the_params.particle_scale = crate::todlib::tod_particle::cross_fade_lerp(
-                        a_cross_fade_params.particle_scale, the_params.particle_scale,
-                        a_cross_fade_params.particle_scale_is_set, the_params.particle_scale_is_set, a_fraction);
+                        a_cross_fade_params.particle_scale,
+                        the_params.particle_scale,
+                        a_cross_fade_params.particle_scale_is_set,
+                        the_params.particle_scale_is_set,
+                        a_fraction,
+                    );
                     the_params.particle_stretch = crate::todlib::tod_particle::cross_fade_lerp(
-                        a_cross_fade_params.particle_stretch, the_params.particle_stretch,
-                        a_cross_fade_params.particle_stretch_is_set, the_params.particle_stretch_is_set, a_fraction);
+                        a_cross_fade_params.particle_stretch,
+                        the_params.particle_stretch,
+                        a_cross_fade_params.particle_stretch_is_set,
+                        the_params.particle_stretch_is_set,
+                        a_fraction,
+                    );
                     the_params.spin_position = crate::todlib::tod_particle::cross_fade_lerp(
-                        a_cross_fade_params.spin_position, the_params.spin_position,
-                        a_cross_fade_params.spin_position_is_set, the_params.spin_position_is_set, a_fraction);
+                        a_cross_fade_params.spin_position,
+                        the_params.spin_position,
+                        a_cross_fade_params.spin_position_is_set,
+                        the_params.spin_position_is_set,
+                        a_fraction,
+                    );
                     the_params.pos_x = crate::todlib::tod_particle::cross_fade_lerp(
-                        a_cross_fade_params.pos_x, the_params.pos_x, a_cross_fade_params.position_is_set, the_params.position_is_set, a_fraction);
+                        a_cross_fade_params.pos_x,
+                        the_params.pos_x,
+                        a_cross_fade_params.position_is_set,
+                        the_params.position_is_set,
+                        a_fraction,
+                    );
                     the_params.pos_y = crate::todlib::tod_particle::cross_fade_lerp(
-                        a_cross_fade_params.pos_y, the_params.pos_y, a_cross_fade_params.position_is_set, the_params.position_is_set, a_fraction);
+                        a_cross_fade_params.pos_y,
+                        the_params.pos_y,
+                        a_cross_fade_params.position_is_set,
+                        the_params.position_is_set,
+                        a_fraction,
+                    );
                     // 对应 C++: 源端已设置的通道也计入
                     the_params.red_is_set |= a_cross_fade_params.red_is_set;
                     the_params.green_is_set |= a_cross_fade_params.green_is_set;
                     the_params.blue_is_set |= a_cross_fade_params.blue_is_set;
                     the_params.alpha_is_set |= a_cross_fade_params.alpha_is_set;
                     the_params.particle_scale_is_set |= a_cross_fade_params.particle_scale_is_set;
-                    the_params.particle_stretch_is_set |= a_cross_fade_params.particle_stretch_is_set;
+                    the_params.particle_stretch_is_set |=
+                        a_cross_fade_params.particle_stretch_is_set;
                     the_params.spin_position_is_set |= a_cross_fade_params.spin_position_is_set;
                     the_params.position_is_set |= a_cross_fade_params.position_is_set;
                 }
@@ -1678,7 +2318,11 @@ impl TodParticleEmitter {
             }
         }
     }
-    pub fn spawn_particle(&mut self, the_index: i32, the_spawn_count: i32) -> Option<&mut TodParticle> {
+    pub fn spawn_particle(
+        &mut self,
+        the_index: i32,
+        the_spawn_count: i32,
+    ) -> Option<&mut TodParticle> {
         // 对应 C++ SpawnParticle（PvzpParticle.cpp:331）
         let a_system_ptr = self.particle_system;
         if a_system_ptr.is_null() {
@@ -1711,8 +2355,10 @@ impl TodParticleEmitter {
             let a_launch_speed_interp = RandFloat(1.0);
             let a_emitter_offset_x_interp = RandFloat(1.0);
             let a_emitter_offset_y_interp = RandFloat(1.0);
-            a_particle.particle_duration =
-                def.particle_duration.evaluate(self.system_time_value, a_particle_duration_interp) as i32;
+            a_particle.particle_duration = def
+                .particle_duration
+                .evaluate(self.system_time_value, a_particle_duration_interp)
+                as i32;
             a_particle.particle_duration = a_particle.particle_duration.max(1); // duration 至少 1
             a_particle.particle_age = 0;
             a_particle.particle_emitter = self as *mut TodParticleEmitter;
@@ -1725,20 +2371,31 @@ impl TodParticleEmitter {
             ) {
                 a_particle.particle_age = RandRange(a_particle.particle_duration);
             }
-            let a_launch_speed = def.launch_speed.evaluate(self.system_time_value, a_launch_speed_interp) * 0.01;
+            let a_launch_speed = def
+                .launch_speed
+                .evaluate(self.system_time_value, a_launch_speed_interp)
+                * 0.01;
             let a_launch_angle_interp = RandFloat(1.0);
 
             // 对应 C++: 发射角计算（按发射器类型）
             let a_launch_angle;
             if def.emitter_type == EmitterType::CirclePath {
-                a_launch_angle = def.emitter_path
-                    .evaluate(self.system_time_value, self.track_interp[ParticleSystemTracks::EmitterPath as usize])
-                    * (2.0 * std::f32::consts::PI)
-                    + def.launch_angle.evaluate(self.system_time_value, a_launch_angle_interp).to_radians();
+                a_launch_angle = def.emitter_path.evaluate(
+                    self.system_time_value,
+                    self.track_interp[ParticleSystemTracks::EmitterPath as usize],
+                ) * (2.0 * std::f32::consts::PI)
+                    + def
+                        .launch_angle
+                        .evaluate(self.system_time_value, a_launch_angle_interp)
+                        .to_radians();
             } else if def.emitter_type == EmitterType::CircleEvenSpacing {
                 // 对应 C++: 基础角把 theSpawnCount 个粒子均布于圆周
-                a_launch_angle = 2.0 * std::f32::consts::PI * the_index as f32 / the_spawn_count as f32
-                    + def.launch_angle.evaluate(self.system_time_value, a_launch_angle_interp).to_radians();
+                a_launch_angle = 2.0 * std::f32::consts::PI * the_index as f32
+                    / the_spawn_count as f32
+                    + def
+                        .launch_angle
+                        .evaluate(self.system_time_value, a_launch_angle_interp)
+                        .to_radians();
             } else {
                 // 对应 C++: FloatTrackIsConstantZero(mLaunchAngle)：单节点全零则随机角
                 let a_angle_constant_zero = def.launch_angle.nodes.len() == 1
@@ -1747,7 +2404,10 @@ impl TodParticleEmitter {
                 if a_angle_constant_zero {
                     a_launch_angle = RandFloat(2.0 * std::f32::consts::PI);
                 } else {
-                    a_launch_angle = def.launch_angle.evaluate(self.system_time_value, a_launch_angle_interp).to_radians();
+                    a_launch_angle = def
+                        .launch_angle
+                        .evaluate(self.system_time_value, a_launch_angle_interp)
+                        .to_radians();
                 }
             }
 
@@ -1757,7 +2417,9 @@ impl TodParticleEmitter {
             match def.emitter_type {
                 EmitterType::Circle | EmitterType::CirclePath | EmitterType::CircleEvenSpacing => {
                     let a_emitter_radius_interp = RandFloat(1.0);
-                    let a_radius = def.emitter_radius.evaluate(self.system_time_value, a_emitter_radius_interp);
+                    let a_radius = def
+                        .emitter_radius
+                        .evaluate(self.system_time_value, a_emitter_radius_interp);
                     // 对应 C++: 角度 0 指向正下方
                     a_pos_x = a_launch_angle.sin() * a_radius;
                     a_pos_y = a_launch_angle.cos() * a_radius;
@@ -1765,20 +2427,27 @@ impl TodParticleEmitter {
                 EmitterType::Box => {
                     let a_emitter_box_x_interp = RandFloat(1.0);
                     let a_emitter_box_y_interp = RandFloat(1.0);
-                    a_pos_x = def.emitter_box_x.evaluate(self.system_time_value, a_emitter_box_x_interp);
-                    a_pos_y = def.emitter_box_y.evaluate(self.system_time_value, a_emitter_box_y_interp);
+                    a_pos_x = def
+                        .emitter_box_x
+                        .evaluate(self.system_time_value, a_emitter_box_x_interp);
+                    a_pos_y = def
+                        .emitter_box_y
+                        .evaluate(self.system_time_value, a_emitter_box_y_interp);
                 }
                 EmitterType::BoxPath => {
                     // 对应 C++: 沿矩形边界的路径位置
-                    let a_emitter_path_position = def.emitter_path
-                        .evaluate(self.system_time_value, self.track_interp[ParticleSystemTracks::EmitterPath as usize]);
+                    let a_emitter_path_position = def.emitter_path.evaluate(
+                        self.system_time_value,
+                        self.track_interp[ParticleSystemTracks::EmitterPath as usize],
+                    );
                     let a_min_x = def.emitter_box_x.evaluate(self.system_time_value, 0.0);
                     let a_max_x = def.emitter_box_x.evaluate(self.system_time_value, 1.0);
                     let a_min_y = def.emitter_box_y.evaluate(self.system_time_value, 0.0);
                     let a_max_y = def.emitter_box_y.evaluate(self.system_time_value, 1.0);
                     let a_distance_x = a_max_x - a_min_x;
                     let a_distance_y = a_max_y - a_min_y;
-                    let a_path_pos = a_emitter_path_position * (a_distance_y + a_distance_x + a_distance_y + a_distance_x);
+                    let a_path_pos = a_emitter_path_position
+                        * (a_distance_y + a_distance_x + a_distance_y + a_distance_x);
                     if a_path_pos < a_distance_y {
                         a_pos_x = a_min_x;
                         a_pos_y = a_min_y + a_path_pos;
@@ -1789,7 +2458,8 @@ impl TodParticleEmitter {
                         a_pos_x = a_max_x;
                         a_pos_y = a_max_y - (a_path_pos - a_distance_y - a_distance_x);
                     } else {
-                        a_pos_x = a_max_x - (a_path_pos - a_distance_y - a_distance_x - a_distance_y);
+                        a_pos_x =
+                            a_max_x - (a_path_pos - a_distance_y - a_distance_x - a_distance_y);
                         a_pos_y = a_min_y;
                     }
                 }
@@ -1798,14 +2468,22 @@ impl TodParticleEmitter {
             // 对应 C++: 偏斜（X 偏斜随 Y 坐标缩放，反之亦然）
             let a_emitter_skew_x_interp = RandFloat(1.0);
             let a_emitter_skew_y_interp = RandFloat(1.0);
-            let a_skew_x = def.emitter_skew_x.evaluate(self.system_time_value, a_emitter_skew_x_interp);
-            let a_skew_y = def.emitter_skew_y.evaluate(self.system_time_value, a_emitter_skew_y_interp);
+            let a_skew_x = def
+                .emitter_skew_x
+                .evaluate(self.system_time_value, a_emitter_skew_x_interp);
+            let a_skew_y = def
+                .emitter_skew_y
+                .evaluate(self.system_time_value, a_emitter_skew_y_interp);
             a_particle.position.x = self.system_center.x + a_pos_x + a_pos_y * a_skew_x;
             a_particle.position.y = self.system_center.y + a_pos_y + a_pos_x * a_skew_y;
             a_particle.velocity.x = a_launch_angle.sin() * a_launch_speed;
             a_particle.velocity.y = a_launch_angle.cos() * a_launch_speed;
-            a_particle.position.x += def.emitter_offset_x.evaluate(self.system_time_value, a_emitter_offset_x_interp);
-            a_particle.position.y += def.emitter_offset_y.evaluate(self.system_time_value, a_emitter_offset_y_interp);
+            a_particle.position.x += def
+                .emitter_offset_x
+                .evaluate(self.system_time_value, a_emitter_offset_x_interp);
+            a_particle.position.y += def
+                .emitter_offset_y
+                .evaluate(self.system_time_value, a_emitter_offset_y_interp);
 
             // 对应 C++: 动画帧/旋转初值
             a_particle.animation_time_value = 0.0;
@@ -1817,7 +2495,8 @@ impl TodParticleEmitter {
             let a_flags = def.particle_flags as u32;
             if crate::lawn::zombie::test_bit(a_flags, ParticleFlags::RandomLaunchSpin as u32) {
                 a_particle.spin_position = RandFloat(2.0 * std::f32::consts::PI);
-            } else if crate::lawn::zombie::test_bit(a_flags, ParticleFlags::AlignLaunchSpin as u32) {
+            } else if crate::lawn::zombie::test_bit(a_flags, ParticleFlags::AlignLaunchSpin as u32)
+            {
                 a_particle.spin_position = a_launch_angle;
             } else {
                 a_particle.spin_position = 0.0;
@@ -1874,7 +2553,10 @@ impl TodParticleEmitter {
     /// 删除全部粒子（对应 C++ PvzpParticleEmitter::DeleteAll，:712）
     pub fn delete_all(&mut self) {
         while self.particle_list.count != 0 {
-            let an_id = self.particle_list.remove_head_value().unwrap_or(ParticleID::MAX);
+            let an_id = self
+                .particle_list
+                .remove_head_value()
+                .unwrap_or(ParticleID::MAX);
             unsafe {
                 if !self.particle_system.is_null() {
                     let holder = (*self.particle_system).particle_holder;
@@ -1946,8 +2628,10 @@ impl TodParticleSystem {
             // 对应 C++: 设置了 cross-fade 时长的发射器不在此创建（由淡出时生成）
             if a_emitter_def.cross_fade_duration.nodes.is_empty() {
                 // 对应 C++: PARTICLE_DIE_IF_OVERLOADED + 过载 → 系统死亡
-                if crate::lawn::zombie::test_bit(a_emitter_def.particle_flags as u32, ParticleFlags::DieIfOverloaded as u32)
-                    && unsafe { (*self.particle_holder).is_overloaded() }
+                if crate::lawn::zombie::test_bit(
+                    a_emitter_def.particle_flags as u32,
+                    ParticleFlags::DieIfOverloaded as u32,
+                ) && unsafe { (*self.particle_holder).is_overloaded() }
                 {
                     self.particle_system_die();
                     break;
@@ -2003,7 +2687,9 @@ impl TodParticleSystem {
 
     /// 更新粒子系统（对应 C++ PvzpParticleSystem::Update，PvzpParticle.cpp:722）
     pub fn update(&mut self) {
-        if self.dont_update { return; }
+        if self.dont_update {
+            return;
+        }
         if self.particle_holder.is_null() {
             self.dead = true;
             return;
@@ -2026,8 +2712,13 @@ impl TodParticleSystem {
                 let a_emitter = &mut *holder.emitters.get_mut(a_emitter_id);
                 a_emitter.update();
                 // 对应 C++: 有 cross-fade 时长且仍有粒子，或未死亡的发射器视作存活
-                let a_has_cross_fade_duration = !(*a_emitter.emitter_def).cross_fade_duration.nodes.is_empty();
-                if (a_has_cross_fade_duration && a_emitter.particle_list.count > 0) || !a_emitter.dead {
+                let a_has_cross_fade_duration = !(*a_emitter.emitter_def)
+                    .cross_fade_duration
+                    .nodes
+                    .is_empty();
+                if (a_has_cross_fade_duration && a_emitter.particle_list.count > 0)
+                    || !a_emitter.dead
+                {
                     a_emitter_alive = true;
                 }
             }
@@ -2088,9 +2779,10 @@ impl TodParticleSystem {
                 let a_emitter_id = (*a_node).value;
                 let a_emitter = (&mut *self.particle_holder).emitters.get_mut(a_emitter_id);
                 let a_matches = the_emitter_name.is_empty()
-                    || a_emitter.emitter_def.as_ref().map_or(false, |d| {
-                        (*d).name.eq_ignore_ascii_case(the_emitter_name)
-                    });
+                    || a_emitter
+                        .emitter_def
+                        .as_ref()
+                        .map_or(false, |d| (*d).name.eq_ignore_ascii_case(the_emitter_name));
                 if a_matches {
                     a_emitter.color_override = *the_color;
                 }
@@ -2106,9 +2798,10 @@ impl TodParticleSystem {
                 let a_emitter_id = (*a_node).value;
                 let a_emitter = (&mut *self.particle_holder).emitters.get_mut(a_emitter_id);
                 let a_matches = the_emitter_name.is_empty()
-                    || a_emitter.emitter_def.as_ref().map_or(false, |d| {
-                        (*d).name.eq_ignore_ascii_case(the_emitter_name)
-                    });
+                    || a_emitter
+                        .emitter_def
+                        .as_ref()
+                        .map_or(false, |d| (*d).name.eq_ignore_ascii_case(the_emitter_name));
                 if a_matches {
                     a_emitter.extra_additive_draw_override = the_enable;
                 }
@@ -2124,9 +2817,10 @@ impl TodParticleSystem {
                 let a_emitter_id = (*a_node).value;
                 let a_emitter = (&mut *self.particle_holder).emitters.get_mut(a_emitter_id);
                 let a_matches = the_emitter_name.is_empty()
-                    || a_emitter.emitter_def.as_ref().map_or(false, |d| {
-                        (*d).name.eq_ignore_ascii_case(the_emitter_name)
-                    });
+                    || a_emitter
+                        .emitter_def
+                        .as_ref()
+                        .map_or(false, |d| (*d).name.eq_ignore_ascii_case(the_emitter_name));
                 if a_matches {
                     a_emitter.image_override = the_image;
                 }
@@ -2142,9 +2836,10 @@ impl TodParticleSystem {
                 let a_emitter_id = (*a_node).value;
                 let a_emitter = (&mut *self.particle_holder).emitters.get_mut(a_emitter_id);
                 let a_matches = the_emitter_name.is_empty()
-                    || a_emitter.emitter_def.as_ref().map_or(false, |d| {
-                        (*d).name.eq_ignore_ascii_case(the_emitter_name)
-                    });
+                    || a_emitter
+                        .emitter_def
+                        .as_ref()
+                        .map_or(false, |d| (*d).name.eq_ignore_ascii_case(the_emitter_name));
                 if a_matches {
                     a_emitter.frame_override = the_frame;
                 }
@@ -2160,9 +2855,10 @@ impl TodParticleSystem {
                 let a_emitter_id = (*a_node).value;
                 let a_emitter = (&mut *self.particle_holder).emitters.get_mut(a_emitter_id);
                 let a_matches = the_emitter_name.is_empty()
-                    || a_emitter.emitter_def.as_ref().map_or(false, |d| {
-                        (*d).name.eq_ignore_ascii_case(the_emitter_name)
-                    });
+                    || a_emitter
+                        .emitter_def
+                        .as_ref()
+                        .map_or(false, |d| (*d).name.eq_ignore_ascii_case(the_emitter_name));
                 if a_matches {
                     a_emitter.scale_override = the_scale;
                 }
@@ -2175,21 +2871,25 @@ impl TodParticleSystem {
     /// 系统级淡出（对应 C++ PvzpParticleSystem::CrossFade，PvzpParticle.cpp:1196）
     pub fn cross_fade(&mut self, emitter_name: &str) {
         // 对应 C++: 按名称查找目标发射器定义
-        let a_emitter_def_ptr: *mut TodEmitterDefinition = match self.find_emitter_def_by_name(emitter_name) {
-            Some(d) => d as *const TodEmitterDefinition as *mut TodEmitterDefinition,
-            None => {
-                return;
-            }
-        };
+        let a_emitter_def_ptr: *mut TodEmitterDefinition =
+            match self.find_emitter_def_by_name(emitter_name) {
+                Some(d) => d as *const TodEmitterDefinition as *mut TodEmitterDefinition,
+                None => {
+                    return;
+                }
+            };
         // 对应 C++: 目标发射器必须设置了 cross-fade 时长
-        let a_has_cross_fade_duration = unsafe { !(*a_emitter_def_ptr).cross_fade_duration.nodes.is_empty() };
+        let a_has_cross_fade_duration =
+            unsafe { !(*a_emitter_def_ptr).cross_fade_duration.nodes.is_empty() };
         if !a_has_cross_fade_duration {
             return;
         }
         // 对应 C++: 发射器数量上限（当前 + 淡出新增）→ 系统死亡
         unsafe {
             let holder = &mut *self.particle_holder;
-            if holder.emitters.len() as u32 + self.emitter_list.count as u32 > holder.emitters.max_size() {
+            if holder.emitters.len() as u32 + self.emitter_list.count as u32
+                > holder.emitters.max_size()
+            {
                 self.particle_system_die();
                 return;
             }
@@ -2209,7 +2909,8 @@ impl TodParticleSystem {
         for a_emitter_id in a_emitter_ids {
             unsafe {
                 let holder = &mut *self.particle_holder;
-                let a_same_kind = holder.emitters.get(a_emitter_id).emitter_def == a_emitter_def_ptr;
+                let a_same_kind =
+                    holder.emitters.get(a_emitter_id).emitter_def == a_emitter_def_ptr;
                 if a_same_kind {
                     continue;
                 }
@@ -2225,7 +2926,10 @@ impl TodParticleSystem {
                 let a_cross_fade_id = holder.emitters.get_id(a_cross_fade_emitter);
                 self.emitter_list.push_back_value(a_cross_fade_id);
                 // 对应 C++: aEmitter->CrossFadeEmitter(aCrossFadeEmitter)
-                holder.emitters.get_mut(a_emitter_id).cross_fade_emitter(a_cross_fade_emitter);
+                holder
+                    .emitters
+                    .get_mut(a_emitter_id)
+                    .cross_fade_emitter(a_cross_fade_emitter);
             }
         }
     }
@@ -2236,9 +2940,10 @@ impl TodParticleSystem {
             unsafe {
                 let a_emitter_id = (*a_node).value;
                 let a_emitter = (*self.particle_holder).emitters.get(a_emitter_id);
-                let a_matches = a_emitter.emitter_def.as_ref().map_or(false, |d| {
-                    (*d).name.eq_ignore_ascii_case(the_name)
-                });
+                let a_matches = a_emitter
+                    .emitter_def
+                    .as_ref()
+                    .map_or(false, |d| (*d).name.eq_ignore_ascii_case(the_name));
                 if a_matches {
                     return Some(a_emitter);
                 }
@@ -2317,7 +3022,7 @@ pub(crate) fn parse_float_track(text: &str) -> Option<FloatParameterTrack> {
             node.high_value = a_value;
             if idx >= len || chars[idx] != ']' {
                 idx += 1; // space (' ')
-                // <curve> — could be the distribution
+                          // <curve> — could be the distribution
                 let rest: String = chars[idx..].iter().collect();
                 if let Some((a_name, a_str_len)) = leading_curve_name(&rest) {
                     node.distribution = a_name;
@@ -2542,44 +3247,196 @@ fn parse_emitter_node(node: &crate::todlib::xml_parser::XmlNode) -> TodEmitterDe
             }
             "Name" => def.name = text,
             "OnDuration" => def.on_duration = text,
-            "SystemDuration" => { if let Some(t) = parse_float_track(&text) { def.system_duration = t; } }
-            "CrossFadeDuration" => { if let Some(t) = parse_float_track(&text) { def.cross_fade_duration = t; } }
-            "SpawnRate" => { if let Some(t) = parse_float_track(&text) { def.spawn_rate = t; } }
-            "SpawnMinActive" => { if let Some(t) = parse_float_track(&text) { def.spawn_min_active = t; } }
-            "SpawnMaxActive" => { if let Some(t) = parse_float_track(&text) { def.spawn_max_active = t; } }
-            "SpawnMaxLaunched" => { if let Some(t) = parse_float_track(&text) { def.spawn_max_launched = t; } }
-            "EmitterRadius" => { if let Some(t) = parse_float_track(&text) { def.emitter_radius = t; } }
-            "EmitterOffsetX" => { if let Some(t) = parse_float_track(&text) { def.emitter_offset_x = t; } }
-            "EmitterOffsetY" => { if let Some(t) = parse_float_track(&text) { def.emitter_offset_y = t; } }
-            "EmitterBoxX" => { if let Some(t) = parse_float_track(&text) { def.emitter_box_x = t; } }
-            "EmitterBoxY" => { if let Some(t) = parse_float_track(&text) { def.emitter_box_y = t; } }
-            "EmitterPath" => { if let Some(t) = parse_float_track(&text) { def.emitter_path = t; } }
-            "EmitterSkewX" => { if let Some(t) = parse_float_track(&text) { def.emitter_skew_x = t; } }
-            "EmitterSkewY" => { if let Some(t) = parse_float_track(&text) { def.emitter_skew_y = t; } }
-            "ParticleDuration" => { if let Some(t) = parse_float_track(&text) { def.particle_duration = t; } }
-            "SystemRed" => { if let Some(t) = parse_float_track(&text) { def.system_red = t; } }
-            "SystemGreen" => { if let Some(t) = parse_float_track(&text) { def.system_green = t; } }
-            "SystemBlue" => { if let Some(t) = parse_float_track(&text) { def.system_blue = t; } }
-            "SystemAlpha" => { if let Some(t) = parse_float_track(&text) { def.system_alpha = t; } }
-            "SystemBrightness" => { if let Some(t) = parse_float_track(&text) { def.system_brightness = t; } }
-            "LaunchSpeed" => { if let Some(t) = parse_float_track(&text) { def.launch_speed = t; } }
-            "LaunchAngle" => { if let Some(t) = parse_float_track(&text) { def.launch_angle = t; } }
-            "ParticleRed" => { if let Some(t) = parse_float_track(&text) { def.particle_red = t; } }
-            "ParticleGreen" => { if let Some(t) = parse_float_track(&text) { def.particle_green = t; } }
-            "ParticleBlue" => { if let Some(t) = parse_float_track(&text) { def.particle_blue = t; } }
-            "ParticleAlpha" => { if let Some(t) = parse_float_track(&text) { def.particle_alpha = t; } }
-            "ParticleBrightness" => { if let Some(t) = parse_float_track(&text) { def.particle_brightness = t; } }
-            "ParticleSpinAngle" => { if let Some(t) = parse_float_track(&text) { def.particle_spin_angle = t; } }
-            "ParticleSpinSpeed" => { if let Some(t) = parse_float_track(&text) { def.particle_spin_speed = t; } }
-            "ParticleScale" => { if let Some(t) = parse_float_track(&text) { def.particle_scale = t; } }
-            "ParticleStretch" => { if let Some(t) = parse_float_track(&text) { def.particle_stretch = t; } }
-            "CollisionReflect" => { if let Some(t) = parse_float_track(&text) { def.collision_reflect = t; } }
-            "CollisionSpin" => { if let Some(t) = parse_float_track(&text) { def.collision_spin = t; } }
-            "ClipTop" => { if let Some(t) = parse_float_track(&text) { def.clip_top = t; } }
-            "ClipBottom" => { if let Some(t) = parse_float_track(&text) { def.clip_bottom = t; } }
-            "ClipLeft" => { if let Some(t) = parse_float_track(&text) { def.clip_left = t; } }
-            "ClipRight" => { if let Some(t) = parse_float_track(&text) { def.clip_right = t; } }
-            "AnimationRate" => { if let Some(t) = parse_float_track(&text) { def.animation_rate = t; } }
+            "SystemDuration" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.system_duration = t;
+                }
+            }
+            "CrossFadeDuration" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.cross_fade_duration = t;
+                }
+            }
+            "SpawnRate" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.spawn_rate = t;
+                }
+            }
+            "SpawnMinActive" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.spawn_min_active = t;
+                }
+            }
+            "SpawnMaxActive" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.spawn_max_active = t;
+                }
+            }
+            "SpawnMaxLaunched" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.spawn_max_launched = t;
+                }
+            }
+            "EmitterRadius" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.emitter_radius = t;
+                }
+            }
+            "EmitterOffsetX" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.emitter_offset_x = t;
+                }
+            }
+            "EmitterOffsetY" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.emitter_offset_y = t;
+                }
+            }
+            "EmitterBoxX" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.emitter_box_x = t;
+                }
+            }
+            "EmitterBoxY" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.emitter_box_y = t;
+                }
+            }
+            "EmitterPath" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.emitter_path = t;
+                }
+            }
+            "EmitterSkewX" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.emitter_skew_x = t;
+                }
+            }
+            "EmitterSkewY" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.emitter_skew_y = t;
+                }
+            }
+            "ParticleDuration" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.particle_duration = t;
+                }
+            }
+            "SystemRed" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.system_red = t;
+                }
+            }
+            "SystemGreen" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.system_green = t;
+                }
+            }
+            "SystemBlue" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.system_blue = t;
+                }
+            }
+            "SystemAlpha" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.system_alpha = t;
+                }
+            }
+            "SystemBrightness" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.system_brightness = t;
+                }
+            }
+            "LaunchSpeed" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.launch_speed = t;
+                }
+            }
+            "LaunchAngle" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.launch_angle = t;
+                }
+            }
+            "ParticleRed" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.particle_red = t;
+                }
+            }
+            "ParticleGreen" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.particle_green = t;
+                }
+            }
+            "ParticleBlue" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.particle_blue = t;
+                }
+            }
+            "ParticleAlpha" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.particle_alpha = t;
+                }
+            }
+            "ParticleBrightness" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.particle_brightness = t;
+                }
+            }
+            "ParticleSpinAngle" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.particle_spin_angle = t;
+                }
+            }
+            "ParticleSpinSpeed" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.particle_spin_speed = t;
+                }
+            }
+            "ParticleScale" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.particle_scale = t;
+                }
+            }
+            "ParticleStretch" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.particle_stretch = t;
+                }
+            }
+            "CollisionReflect" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.collision_reflect = t;
+                }
+            }
+            "CollisionSpin" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.collision_spin = t;
+                }
+            }
+            "ClipTop" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.clip_top = t;
+                }
+            }
+            "ClipBottom" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.clip_bottom = t;
+                }
+            }
+            "ClipLeft" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.clip_left = t;
+                }
+            }
+            "ClipRight" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.clip_right = t;
+                }
+            }
+            "AnimationRate" => {
+                if let Some(t) = parse_float_track(&text) {
+                    def.animation_rate = t;
+                }
+            }
             "Field" => {
                 // 对应 C++ DT_ARRAY：ParticleField
                 let mut a_field = ParticleField::new();
@@ -2601,8 +3458,16 @@ fn parse_emitter_node(node: &crate::todlib::xml_parser::XmlNode) -> TodEmitterDe
                                 _ => ParticleFieldType::Invalid,
                             }
                         }
-                        "X" | "x" => { if let Some(t) = parse_float_track(fc.text.trim()) { a_field.x = t; } }
-                        "Y" | "y" => { if let Some(t) = parse_float_track(fc.text.trim()) { a_field.y = t; } }
+                        "X" | "x" => {
+                            if let Some(t) = parse_float_track(fc.text.trim()) {
+                                a_field.x = t;
+                            }
+                        }
+                        "Y" | "y" => {
+                            if let Some(t) = parse_float_track(fc.text.trim()) {
+                                a_field.y = t;
+                            }
+                        }
                         _ => {}
                     }
                 }
@@ -2628,8 +3493,16 @@ fn parse_emitter_node(node: &crate::todlib::xml_parser::XmlNode) -> TodEmitterDe
                                 _ => ParticleFieldType::Invalid,
                             }
                         }
-                        "X" | "x" => { if let Some(t) = parse_float_track(fc.text.trim()) { a_field.x = t; } }
-                        "Y" | "y" => { if let Some(t) = parse_float_track(fc.text.trim()) { a_field.y = t; } }
+                        "X" | "x" => {
+                            if let Some(t) = parse_float_track(fc.text.trim()) {
+                                a_field.x = t;
+                            }
+                        }
+                        "Y" | "y" => {
+                            if let Some(t) = parse_float_track(fc.text.trim()) {
+                                a_field.y = t;
+                            }
+                        }
                         _ => {}
                     }
                 }
@@ -2738,9 +3611,15 @@ pub fn tod_particle_free_definitions() {
 
 /// 交叉淡入淡出插值（对应 C++ CrossFadeLerp）
 pub fn cross_fade_lerp(from: f32, to: f32, from_is_set: bool, to_is_set: bool, frac: f32) -> f32 {
-    if !from_is_set && !to_is_set { return 0.0; }
-    if !from_is_set { return to; }
-    if !to_is_set { return from; }
+    if !from_is_set && !to_is_set {
+        return 0.0;
+    }
+    if !from_is_set {
+        return to;
+    }
+    if !to_is_set {
+        return from;
+    }
     from + (to - from) * frac
 }
 
@@ -2828,15 +3707,27 @@ mod integration_tests {
         assert_eq!(e.spawn_max_launched.nodes[0].low_value, 15.0);
         assert_eq!(e.particle_duration.nodes[0].low_value, 50.0);
         assert_eq!(e.image_frames, 9);
-        assert!(!e.image.is_null(), "Image 应加载（IMAGE_MELONPULT_PARTICLES）");
+        assert!(
+            !e.image.is_null(),
+            "Image 应加载（IMAGE_MELONPULT_PARTICLES）"
+        );
         // EmitterRadius=[5 30] → low=5 high=30
         assert_eq!(e.emitter_radius.nodes[0].low_value, 5.0);
         assert_eq!(e.emitter_radius.nodes[0].high_value, 30.0);
         // 3 个 Field
         assert_eq!(e.particle_fields.fields.len(), 3);
-        assert_eq!(e.particle_fields.fields[0].field_type, ParticleFieldType::Friction);
-        assert_eq!(e.particle_fields.fields[1].field_type, ParticleFieldType::Acceleration);
-        assert_eq!(e.particle_fields.fields[2].field_type, ParticleFieldType::Position);
+        assert_eq!(
+            e.particle_fields.fields[0].field_type,
+            ParticleFieldType::Friction
+        );
+        assert_eq!(
+            e.particle_fields.fields[1].field_type,
+            ParticleFieldType::Acceleration
+        );
+        assert_eq!(
+            e.particle_fields.fields[2].field_type,
+            ParticleFieldType::Position
+        );
     }
 
     #[test]
@@ -2858,7 +3749,6 @@ mod integration_tests {
     }
 }
 
-
 #[cfg(test)]
 mod integration_tests2 {
     use super::*;
@@ -2866,10 +3756,15 @@ mod integration_tests2 {
     #[test]
     fn test_alloc_particle_system_from_def() {
         crate::framework::paklib::init_pak_interface();
-        crate::framework::paklib::with_pak_interface_mut(|pak| { pak.add_pak_file("main.pak"); });
+        crate::framework::paklib::with_pak_interface_mut(|pak| {
+            pak.add_pak_file("main.pak");
+        });
         // 加载 MelonImpact 定义
         let mut def = TodParticleDefinition::new();
-        assert!(tod_particle_load_a_def(&mut def, "particles/MelonImpact.xml"));
+        assert!(tod_particle_load_a_def(
+            &mut def,
+            "particles/MelonImpact.xml"
+        ));
         // 放入全局定义数组（effect 0 = Melonsplash）
         unsafe {
             if G_PARTICLE_DEF_ARRAY.is_empty() {

@@ -4,7 +4,7 @@
 
 #![allow(non_camel_case_types, dead_code)]
 
-use std::os::raw::{c_int, c_uint, c_void, c_char, c_float};
+use std::os::raw::{c_char, c_float, c_int, c_uint, c_void};
 
 // ============================================================
 // 类型定义
@@ -17,10 +17,21 @@ pub type openmpt_module = c_void;
 // ============================================================
 
 struct OpenMPTFuncs {
-    create_from_memory: unsafe extern "C" fn(data: *const c_void, size: usize, log_func: Option<unsafe extern "C" fn(*const c_char, *mut c_void)>, log_user: *mut c_void, ctls: *const *const c_char) -> *mut openmpt_module,
+    create_from_memory: unsafe extern "C" fn(
+        data: *const c_void,
+        size: usize,
+        log_func: Option<unsafe extern "C" fn(*const c_char, *mut c_void)>,
+        log_user: *mut c_void,
+        ctls: *const *const c_char,
+    ) -> *mut openmpt_module,
     destroy: unsafe extern "C" fn(mod_: *mut openmpt_module),
     /// openmpt_module_read_interleaved_stereo(mod, samplerate, count, buf)
-    read_interleaved_stereo: unsafe extern "C" fn(mod_: *mut openmpt_module, sample_rate: c_int, count: usize, buf: *mut i16) -> usize,
+    read_interleaved_stereo: unsafe extern "C" fn(
+        mod_: *mut openmpt_module,
+        sample_rate: c_int,
+        count: usize,
+        buf: *mut i16,
+    ) -> usize,
     get_duration_seconds: unsafe extern "C" fn(mod_: *mut openmpt_module) -> c_float,
     get_num_channels: unsafe extern "C" fn(mod_: *mut openmpt_module) -> c_int,
     set_repeat_count: unsafe extern "C" fn(mod_: *mut openmpt_module, count: c_int) -> c_int,
@@ -38,13 +49,19 @@ unsafe extern "system" {
 
 #[cfg(not(windows))]
 #[allow(non_snake_case)]
-unsafe fn LoadLibraryA(_lpLibFileName: *const i8) -> *mut c_void { std::ptr::null_mut() }
+unsafe fn LoadLibraryA(_lpLibFileName: *const i8) -> *mut c_void {
+    std::ptr::null_mut()
+}
 #[cfg(not(windows))]
 #[allow(non_snake_case)]
-unsafe fn GetProcAddress(_hModule: *mut c_void, _lpProcName: *const i8) -> *mut c_void { std::ptr::null_mut() }
+unsafe fn GetProcAddress(_hModule: *mut c_void, _lpProcName: *const i8) -> *mut c_void {
+    std::ptr::null_mut()
+}
 #[cfg(not(windows))]
 #[allow(non_snake_case)]
-unsafe fn FreeLibrary(_hLibModule: *mut c_void) -> c_int { 0 }
+unsafe fn FreeLibrary(_hLibModule: *mut c_void) -> c_int {
+    0
+}
 
 pub fn is_available() -> bool {
     unsafe { OPENMPT.is_some() }
@@ -52,16 +69,23 @@ pub fn is_available() -> bool {
 
 pub fn load_library() -> bool {
     unsafe {
-        if OPENMPT.is_some() { return true; }
+        if OPENMPT.is_some() {
+            return true;
+        }
 
         let dll_name = "libopenmpt.dll\0".as_ptr() as *const i8;
         let hmod = LoadLibraryA(dll_name);
-        if hmod.is_null() { return false; }
+        if hmod.is_null() {
+            return false;
+        }
 
         macro_rules! get {
             ($n:literal) => {{
                 let p = GetProcAddress(hmod, concat!($n, "\0").as_ptr() as *const i8);
-                if p.is_null() { FreeLibrary(hmod); return false; }
+                if p.is_null() {
+                    FreeLibrary(hmod);
+                    return false;
+                }
                 std::mem::transmute::<*mut c_void, _>(p)
             }};
         }
@@ -86,34 +110,64 @@ pub fn load_library() -> bool {
 pub fn create_from_memory(data: &[u8]) -> *mut openmpt_module {
     unsafe {
         match OPENMPT {
-            Some(ref f) => (f.create_from_memory)(data.as_ptr() as *const c_void, data.len(), None, std::ptr::null_mut(), std::ptr::null()),
+            Some(ref f) => (f.create_from_memory)(
+                data.as_ptr() as *const c_void,
+                data.len(),
+                None,
+                std::ptr::null_mut(),
+                std::ptr::null(),
+            ),
             None => std::ptr::null_mut(),
         }
     }
 }
 
 pub fn destroy(mod_: *mut openmpt_module) {
-    unsafe { if let Some(ref f) = OPENMPT { (f.destroy)(mod_); } }
+    unsafe {
+        if let Some(ref f) = OPENMPT {
+            (f.destroy)(mod_);
+        }
+    }
 }
 
 /// 返回实际读取的样本数（立体声交错，i16 对）
-pub fn read_interleaved_stereo(mod_: *mut openmpt_module, sample_rate: c_int, buf: &mut [i16]) -> usize {
+pub fn read_interleaved_stereo(
+    mod_: *mut openmpt_module,
+    sample_rate: c_int,
+    buf: &mut [i16],
+) -> usize {
     unsafe {
         match OPENMPT {
-            Some(ref f) => (f.read_interleaved_stereo)(mod_, sample_rate, buf.len(), buf.as_mut_ptr()),
+            Some(ref f) => {
+                (f.read_interleaved_stereo)(mod_, sample_rate, buf.len(), buf.as_mut_ptr())
+            }
             None => 0,
         }
     }
 }
 
 pub fn get_duration_seconds(mod_: *mut openmpt_module) -> f32 {
-    unsafe { match OPENMPT { Some(ref f) => (f.get_duration_seconds)(mod_), None => 0.0 } }
+    unsafe {
+        match OPENMPT {
+            Some(ref f) => (f.get_duration_seconds)(mod_),
+            None => 0.0,
+        }
+    }
 }
 
 pub fn get_num_channels(mod_: *mut openmpt_module) -> c_int {
-    unsafe { match OPENMPT { Some(ref f) => (f.get_num_channels)(mod_), None => 0 } }
+    unsafe {
+        match OPENMPT {
+            Some(ref f) => (f.get_num_channels)(mod_),
+            None => 0,
+        }
+    }
 }
 
 pub fn set_repeat_count(mod_: *mut openmpt_module, count: c_int) {
-    unsafe { if let Some(ref f) = OPENMPT { (f.set_repeat_count)(mod_, count); } }
+    unsafe {
+        if let Some(ref f) = OPENMPT {
+            (f.set_repeat_count)(mod_, count);
+        }
+    }
 }

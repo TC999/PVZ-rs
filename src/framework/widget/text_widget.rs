@@ -11,20 +11,26 @@
 #![allow(dead_code)]
 
 use crate::framework::color::Color;
-use crate::framework::rect::Rect;
-use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::font::Font;
-use crate::framework::widget::widget_manager::WidgetManager;
-use crate::framework::widget::insets::Insets;
-use crate::framework::widget::scrollbar_widget::{ScrollbarWidget, ScrollListener};
+use crate::framework::graphics::graphics::Graphics;
 use crate::framework::key_codes::KeyCode;
+use crate::framework::rect::Rect;
+use crate::framework::widget::insets::Insets;
+use crate::framework::widget::scrollbar_widget::{ScrollListener, ScrollbarWidget};
+use crate::framework::widget::widget_manager::WidgetManager;
 
 /// 文本控件（对应 C++ TextWidget，继承 Widget 和 ScrollListener）
 pub struct TextWidget {
-    pub x: i32, pub y: i32, pub width: i32, pub height: i32,
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
     pub widget_manager: Option<*mut WidgetManager>,
-    pub visible: bool, pub disabled: bool,
-    pub has_focus: bool, pub is_down: bool, pub is_over: bool,
+    pub visible: bool,
+    pub disabled: bool,
+    pub has_focus: bool,
+    pub is_down: bool,
+    pub is_over: bool,
     pub colors: Vec<Color>,
     pub mouse_insets: Insets,
     pub font: Option<Box<Font>>,
@@ -42,12 +48,18 @@ pub struct TextWidget {
 impl TextWidget {
     pub fn new() -> Self {
         TextWidget {
-            x: 0, y: 0, width: 0, height: 0,
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
             widget_manager: None,
-            visible: true, disabled: false,
-            has_focus: false, is_down: false, is_over: false,
+            visible: true,
+            disabled: false,
+            has_focus: false,
+            is_down: false,
+            is_over: false,
             colors: Vec::new(),
-            mouse_insets: Insets::new(0,0,0,0),
+            mouse_insets: Insets::new(0, 0, 0, 0),
             font: None,
             scrollbar: None,
             logical_lines: Vec::new(),
@@ -61,14 +73,20 @@ impl TextWidget {
         }
     }
 
-    pub fn get_lines(&self) -> &[String] { &self.logical_lines }
-    pub fn set_lines(&mut self, lines: Vec<String>) { self.logical_lines = lines; }
+    pub fn get_lines(&self) -> &[String] {
+        &self.logical_lines
+    }
+    pub fn set_lines(&mut self, lines: Vec<String>) {
+        self.logical_lines = lines;
+    }
 
     pub fn clear(&mut self) {
         self.logical_lines.clear();
         self.physical_lines.clear();
         self.position = 0.0;
-        if let Some(ref mut sb) = self.scrollbar { sb.set_max_value(0.0); }
+        if let Some(ref mut sb) = self.scrollbar {
+            sb.set_max_value(0.0);
+        }
     }
 
     /// 绘制带颜色的字符串（0x00 后跟 RGB 作为颜色标记）
@@ -77,17 +95,21 @@ impl TextWidget {
         let mut cur_str = String::new();
         let bytes = s.as_bytes();
         let mut i = 0;
-        if use_colors { g.set_color(&Color::new(0, 0, 0, 255)); }
+        if use_colors {
+            g.set_color(&Color::new(0, 0, 0, 255));
+        }
 
         while i < bytes.len() {
             if bytes[i] == 0x00 && i + 3 < bytes.len() {
                 if !cur_str.is_empty() {
                     g.draw_string(&cur_str, cur_x, y);
-                    if let Some(f) = &self.font { cur_x += f.string_width(&cur_str); }
+                    if let Some(f) = &self.font {
+                        cur_x += f.string_width(&cur_str);
+                    }
                 }
                 cur_str.clear();
                 if use_colors {
-                    g.set_color(&Color::new(bytes[i+1], bytes[i+2], bytes[i+3], 255));
+                    g.set_color(&Color::new(bytes[i + 1], bytes[i + 2], bytes[i + 3], 255));
                 }
                 i += 4;
             } else {
@@ -95,7 +117,9 @@ impl TextWidget {
                 i += 1;
             }
         }
-        if !cur_str.is_empty() { g.draw_string(&cur_str, cur_x, y); }
+        if !cur_str.is_empty() {
+            g.draw_string(&cur_str, cur_x, y);
+        }
     }
 
     /// 获取颜色字符串宽度
@@ -105,40 +129,63 @@ impl TextWidget {
         let bytes = s.as_bytes();
         let mut i = 0;
         while i < bytes.len() {
-            if bytes[i] == 0x00 && i + 3 < bytes.len() { i += 4; continue; }
+            if bytes[i] == 0x00 && i + 3 < bytes.len() {
+                i += 4;
+                continue;
+            }
             tmp.push(bytes[i] as char);
             i += 1;
         }
-        if let Some(f) = &self.font { w = f.string_width(&tmp); }
+        if let Some(f) = &self.font {
+            w = f.string_width(&tmp);
+        }
         w
     }
 
     pub fn resize(&mut self, the_x: i32, the_y: i32, the_w: i32, the_h: i32) {
-        self.x = the_x; self.y = the_y; self.width = the_w; self.height = the_h;
+        self.x = the_x;
+        self.y = the_y;
+        self.width = the_w;
+        self.height = the_h;
         // 预先提取所需值，避免借用冲突
         let fh = self.font.as_ref().map(|f| f.font_height).unwrap_or(0);
         let sb_val = self.scrollbar.as_ref().map(|sb| sb.value).unwrap_or(0.0);
         let log_val = if !self.line_map.is_empty() && sb_val >= 0.0 {
             self.line_map.get(sb_val as usize).copied().unwrap_or(0)
-        } else { 0 };
+        } else {
+            0
+        };
         let lines = self.logical_lines.clone();
         let mw = if self.width > 8 { self.width - 8 } else { 0 };
 
-        self.line_map.clear(); self.physical_lines.clear();
+        self.line_map.clear();
+        self.physical_lines.clear();
         let mut new_phys = 0i32;
         if fh > 0 {
-            let page = if self.height > fh + 16 { (self.height - 8) as f64 / fh as f64 } else { 1.0 };
+            let page = if self.height > fh + 16 {
+                (self.height - 8) as f64 / fh as f64
+            } else {
+                1.0
+            };
             for i in 0..lines.len() {
-                if i == log_val as usize { new_phys = self.physical_lines.len() as i32; }
+                if i == log_val as usize {
+                    new_phys = self.physical_lines.len() as i32;
+                }
                 self.add_to_physical_lines(i as i32, &lines[i], mw);
             }
-            let at_bottom = self.scrollbar.as_ref().map(|sb| sb.at_bottom()).unwrap_or(false);
+            let at_bottom = self
+                .scrollbar
+                .as_ref()
+                .map(|sb| sb.at_bottom())
+                .unwrap_or(false);
             self.page_size = page;
             if let Some(ref mut sb) = self.scrollbar {
                 sb.set_max_value(self.physical_lines.len() as f64);
                 sb.set_page_size(page as i32 as f64);
                 sb.set_value(new_phys as f64);
-                if self.stick_to_bottom && at_bottom { sb.go_to_bottom(); }
+                if self.stick_to_bottom && at_bottom {
+                    sb.go_to_bottom();
+                }
             }
         }
     }
@@ -152,8 +199,13 @@ impl TextWidget {
             let mut cur_pos = 0usize;
             while cur_pos < line.len() {
                 let mut next_check = cur_pos;
-                while next_check < line.len() && line.as_bytes()[next_check] == b' ' { next_check += 1; }
-                let space_pos = line[cur_pos..].find(' ').map(|p| cur_pos + p).unwrap_or(line.len());
+                while next_check < line.len() && line.as_bytes()[next_check] == b' ' {
+                    next_check += 1;
+                }
+                let space_pos = line[cur_pos..]
+                    .find(' ')
+                    .map(|p| cur_pos + p)
+                    .unwrap_or(line.len());
                 let new_str = format!("{}{}", cur_str, &line[cur_pos..space_pos]);
                 if self.get_color_string_width(&new_str) > mw {
                     self.physical_lines.push(cur_str.clone());
@@ -173,7 +225,11 @@ impl TextWidget {
 
     pub fn add_line(&mut self, line: &str) {
         let l = if line.is_empty() { " " } else { line };
-        let at_bottom = self.scrollbar.as_ref().map(|sb| sb.at_bottom()).unwrap_or(false);
+        let at_bottom = self
+            .scrollbar
+            .as_ref()
+            .map(|sb| sb.at_bottom())
+            .unwrap_or(false);
         self.logical_lines.push(l.to_string());
 
         if self.logical_lines.len() as i32 > self.max_lines {
@@ -182,12 +238,19 @@ impl TextWidget {
             let phys_remove = self.line_map.iter().take_while(|&&v| v < remove).count();
             self.line_map.drain(..phys_remove);
             self.physical_lines.drain(..phys_remove);
-            for v in &mut self.line_map { *v -= remove; }
+            for v in &mut self.line_map {
+                *v -= remove;
+            }
             for i in 0..2 {
                 self.hilite_area[i][1] -= remove;
-                if self.hilite_area[i][1] < 0 { self.hilite_area[i][0] = 0; self.hilite_area[i][1] = 0; }
+                if self.hilite_area[i][1] < 0 {
+                    self.hilite_area[i][0] = 0;
+                    self.hilite_area[i][1] = 0;
+                }
             }
-            if let Some(ref mut sb) = self.scrollbar { sb.set_value(sb.value - remove as f64); }
+            if let Some(ref mut sb) = self.scrollbar {
+                sb.set_value(sb.value - remove as f64);
+            }
         }
 
         let idx = self.logical_lines.len() as i32 - 1;
@@ -196,7 +259,9 @@ impl TextWidget {
         if let Some(ref mut sb) = self.scrollbar {
             sb.set_max_value(self.physical_lines.len() as f64);
             sb.set_page_size(self.page_size as i32 as f64);
-            if self.stick_to_bottom && at_bottom { sb.go_to_bottom(); }
+            if self.stick_to_bottom && at_bottom {
+                sb.go_to_bottom();
+            }
         }
     }
 
@@ -224,12 +289,16 @@ impl TextWidget {
         }
     }
 
-    pub fn scroll_position(&mut self, _id: i32, position: f64) { self.position = position; }
+    pub fn scroll_position(&mut self, _id: i32, position: f64) {
+        self.position = position;
+    }
     pub fn mouse_down(&mut self, _x: i32, _y: i32, _c: i32) {}
     pub fn mouse_drag(&mut self, _x: i32, _y: i32) {}
     pub fn key_down(&mut self, _key: KeyCode) {}
 }
 
 impl ScrollListener for TextWidget {
-    fn scroll_position(&mut self, id: i32, val: f64) { self.scroll_position(id, val); }
+    fn scroll_position(&mut self, id: i32, val: f64) {
+        self.scroll_position(id, val);
+    }
 }

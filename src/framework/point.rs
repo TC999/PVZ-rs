@@ -3,7 +3,7 @@
 
 #![allow(dead_code)]
 
-use std::ops::{Add, Sub, Mul, Neg};
+use std::ops::{Add, Mul, Neg, Sub};
 
 /// 二维整数点
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -29,28 +29,40 @@ impl Point {
 impl Add for Point {
     type Output = Point;
     fn add(self, other: Point) -> Point {
-        Point { x: self.x + other.x, y: self.y + other.y }
+        Point {
+            x: self.x + other.x,
+            y: self.y + other.y,
+        }
     }
 }
 
 impl Sub for Point {
     type Output = Point;
     fn sub(self, other: Point) -> Point {
-        Point { x: self.x - other.x, y: self.y - other.y }
+        Point {
+            x: self.x - other.x,
+            y: self.y - other.y,
+        }
     }
 }
 
 impl Mul<i32> for Point {
     type Output = Point;
     fn mul(self, scalar: i32) -> Point {
-        Point { x: self.x * scalar, y: self.y * scalar }
+        Point {
+            x: self.x * scalar,
+            y: self.y * scalar,
+        }
     }
 }
 
 impl Neg for Point {
     type Output = Point;
     fn neg(self) -> Point {
-        Point { x: -self.x, y: -self.y }
+        Point {
+            x: -self.x,
+            y: -self.y,
+        }
     }
 }
 
@@ -78,7 +90,10 @@ impl PointF {
 
 impl From<Point> for PointF {
     fn from(p: Point) -> Self {
-        PointF { x: p.x as f64, y: p.y as f64 }
+        PointF {
+            x: p.x as f64,
+            y: p.y as f64,
+        }
     }
 }
 

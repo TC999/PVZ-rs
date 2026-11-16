@@ -74,7 +74,11 @@ impl std::ops::DerefMut for GameOverDialog {
 
 impl GameOverDialog {
     /// 构造（对应 C++ GameOverDialog::GameOverDialog，LawnDialog.cpp:451-480）
-    pub fn new(app: Option<*mut LawnApp>, the_message: &str, the_show_challenge_name: bool) -> Self {
+    pub fn new(
+        app: Option<*mut LawnApp>,
+        the_message: &str,
+        the_show_challenge_name: bool,
+    ) -> Self {
         // C++: LawnDialog(gLawnApp, DIALOG_GAME_OVER, true, "[GAME_OVER]", theMessage, "", Dialog::BUTTONS_FOOTER)
         let mut d = LawnDialog::new();
         d.app = app;
@@ -119,7 +123,8 @@ impl GameOverDialog {
         {
             let weak = Rc::downgrade(&wrapper);
             let listener: Box<dyn ButtonListener> = Box::new(WeakButtonListener { host: weak });
-            let mut db = DialogButton::new(std::ptr::null_mut(), GAME_OVER_MENU_BUTTON, Some(listener));
+            let mut db =
+                DialogButton::new(std::ptr::null_mut(), GAME_OVER_MENU_BUTTON, Some(listener));
             db.label = "[MAIN_MENU_BUTTON]".to_string();
             db.has_alpha = true;
             db.has_transparencies = true;

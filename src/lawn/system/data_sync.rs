@@ -34,12 +34,20 @@ impl DataReader {
         let mut file = File::open(path).ok()?;
         let mut data = Vec::new();
         file.read_to_end(&mut data).ok()?;
-        Some(DataReader { data, pos: 0, m_error: false })
+        Some(DataReader {
+            data,
+            pos: 0,
+            m_error: false,
+        })
     }
 
     /// 从内存打开
     pub fn open_memory(data: Vec<u8>) -> Self {
-        DataReader { data, pos: 0, m_error: false }
+        DataReader {
+            data,
+            pos: 0,
+            m_error: false,
+        }
     }
 
     /// 关闭
@@ -163,7 +171,10 @@ impl DataWriter {
     /// 打开文件写入
     pub fn open_file<P: AsRef<Path>>(&self, path: P) -> bool {
         // 写入由 write_to_file 完成
-        Path::new(path.as_ref()).parent().map(|p| std::fs::create_dir_all(p)).is_some()
+        Path::new(path.as_ref())
+            .parent()
+            .map(|p| std::fs::create_dir_all(p))
+            .is_some()
     }
 
     /// 打开内存写入

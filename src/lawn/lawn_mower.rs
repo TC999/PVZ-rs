@@ -1,10 +1,10 @@
 // PvZ Portable Rust 翻译 — LawnMower（割草机）
 // 对应 C++ src/Lawn/LawnMower.h / LawnMower.cpp
 
-use crate::lawn::game_enums::*;
-use crate::lawn::game_object::GameObject;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::rect::Rect;
+use crate::lawn::game_enums::*;
+use crate::lawn::game_object::GameObject;
 
 /// 割草机（对应 C++ class LawnMower）
 pub struct LawnMower {
@@ -64,13 +64,9 @@ impl LawnMower {
         self.base.render_order =
             crate::lawn::board::make_render_order(RENDER_LAYER_LAWN_MOWER, the_row, 0);
         // C++: mPosY = mBoard->GetPosYBasedOnRow(mPosX + 40.0f, theRow) + 23.0f;
-        self.pos_y = self
-            .base
-            .get_board()
-            .map_or(0.0, |b| {
-                b.get_pos_y_based_on_row(self.base.x as f32 + 40.0, the_row)
-            })
-            + 23.0;
+        self.pos_y = self.base.get_board().map_or(0.0, |b| {
+            b.get_pos_y_based_on_row(self.base.x as f32 + 40.0, the_row)
+        }) + 23.0;
         self.dead = false;
         self.mower_state = LawnMowerState::Ready;
         self.visible = true;
@@ -81,10 +77,9 @@ impl LawnMower {
 
         // C++ 46-61: 依屋顶 / 泳池（且已购买泳池清洁器）/ 普通草坪决定割草机类型与 reanim
         let a_stage_has_roof = self.base.get_board().map_or(false, |b| b.stage_has_roof());
-        let a_is_pool_row = self
-            .base
-            .get_board()
-            .map_or(false, |b| b.m_plant_row[the_row as usize] == PlantRowType::Pool);
+        let a_is_pool_row = self.base.get_board().map_or(false, |b| {
+            b.m_plant_row[the_row as usize] == PlantRowType::Pool
+        });
         let a_has_pool_cleaner = self.base.get_app().map_or(false, |app| unsafe {
             app.player_info.as_ref().map_or(false, |pi| {
                 pi.m_purchases
@@ -120,10 +115,9 @@ impl LawnMower {
                 (*a_mower_reanim).m_is_attachment = true;
                 (*a_mower_reanim).override_scale(0.85, 0.85);
             }
-            self.mower_anim_id = self
-                .base
-                .get_app()
-                .map_or(REANIMATIONID_NULL, |app| app.reanimation_get_id(a_mower_reanim));
+            self.mower_anim_id = self.base.get_app().map_or(REANIMATIONID_NULL, |app| {
+                app.reanimation_get_id(a_mower_reanim)
+            });
 
             // C++ 70-79: 草坪用 anim_normal；泳池额外缩放并播 anim_land
             if self.mower_type == LawnMowerType::Lawn {
@@ -183,7 +177,9 @@ impl LawnMower {
 
     /// 更新割草机（对应 C++ LawnMower::Update）
     pub fn update(&mut self) {
-        if self.dead { return; }
+        if self.dead {
+            return;
+        }
 
         // 被压碎状态
         if self.mower_state == LawnMowerState::Squished {
@@ -209,8 +205,14 @@ impl LawnMower {
         // [TRANSLATION_NOTE]: 碰撞检测→MowZombie 已统一到 Board::check_collisions（mower.update 内因借用无法取 zombie 可变引用）
 
         // 触发/碾压状态
-        if self.mower_state == LawnMowerState::Triggered || self.mower_state == LawnMowerState::Squished {
-            let mut a_speed = if self.mower_type == LawnMowerType::Pool { 2.5 } else { 3.33 };
+        if self.mower_state == LawnMowerState::Triggered
+            || self.mower_state == LawnMowerState::Squished
+        {
+            let mut a_speed = if self.mower_type == LawnMowerType::Pool {
+                2.5
+            } else {
+                3.33
+            };
             if self.chomp_counter > 0 {
                 self.chomp_counter -= 1;
                 // PvzpAnimateCurveFloat(50, 0, chompCounter, aSpeed, 1.0, BOUNCE_SLOW_MIDDLE)
@@ -225,7 +227,9 @@ impl LawnMower {
             // 陆地割草机进入泳池行
             if self.mower_type == LawnMowerType::Lawn {
                 if let Some(board) = self.base.get_board() {
-                    if board.m_plant_row[self.base.row as usize] == PlantRowType::Pool && self.pos_x > 50.0 {
+                    if board.m_plant_row[self.base.row as usize] == PlantRowType::Pool
+                        && self.pos_x > 50.0
+                    {
                         // [TRANSLATION_NOTE]: 水花动画+音效暂未实现
                         self.die();
                     }
@@ -300,7 +304,9 @@ impl LawnMower {
         if is_pool_range && self.mower_height == MowerHeight::Land {
             if let Some(app) = self.base.get_app_mut() {
                 if let Some(a_splash_reanim) = app.add_reanimation(
-                    self.pos_x, self.pos_y + 25.0, self.render_order + 1,
+                    self.pos_x,
+                    self.pos_y + 25.0,
+                    self.render_order + 1,
                     ReanimationType::Splash as i32,
                 ) {
                     unsafe {
@@ -308,7 +314,9 @@ impl LawnMower {
                     }
                 }
                 app.add_tod_particle(
-                    self.pos_x + 50.0, self.pos_y + 42.0, self.render_order + 1,
+                    self.pos_x + 50.0,
+                    self.pos_y + 42.0,
+                    self.render_order + 1,
                     ParticleEffect::PlantingPool as i32,
                 );
                 app.play_foley(crate::todlib::tod_foley::FoleyType::ZombieSplash as i32);
@@ -321,7 +329,12 @@ impl LawnMower {
                 self.mower_height = MowerHeight::InPool;
                 if let Some(app) = self.base.get_app_mut() {
                     if let Some(a_mower_reanim) = app.reanimation_get_mut(self.mower_anim_id) {
-                        a_mower_reanim.play_reanim("anim_water", crate::todlib::reanimator::ReanimLoopType::Loop, 0, 0.0);
+                        a_mower_reanim.play_reanim(
+                            "anim_water",
+                            crate::todlib::reanimator::ReanimLoopType::Loop,
+                            0,
+                            0.0,
+                        );
                     }
                 }
             }
@@ -331,7 +344,9 @@ impl LawnMower {
                 self.mower_height = MowerHeight::UpToLand;
                 if let Some(app) = self.base.get_app_mut() {
                     if let Some(a_splash_reanim) = app.add_reanimation(
-                        self.pos_x, self.pos_y + 25.0, self.render_order + 1,
+                        self.pos_x,
+                        self.pos_y + 25.0,
+                        self.render_order + 1,
                         ReanimationType::Splash as i32,
                     ) {
                         unsafe {
@@ -339,14 +354,21 @@ impl LawnMower {
                         }
                     }
                     app.add_tod_particle(
-                        self.pos_x + 50.0, self.pos_y + 42.0, self.render_order + 1,
+                        self.pos_x + 50.0,
+                        self.pos_y + 42.0,
+                        self.render_order + 1,
                         ParticleEffect::PlantingPool as i32,
                     );
                     app.play_foley(crate::todlib::tod_foley::FoleyType::PlantWater as i32);
                 }
                 if let Some(app) = self.base.get_app_mut() {
                     if let Some(a_mower_reanim) = app.reanimation_get_mut(self.mower_anim_id) {
-                        a_mower_reanim.play_reanim("anim_land", crate::todlib::reanimator::ReanimLoopType::Loop, 0, 0.0);
+                        a_mower_reanim.play_reanim(
+                            "anim_land",
+                            crate::todlib::reanimator::ReanimLoopType::Loop,
+                            0,
+                            0.0,
+                        );
                     }
                 }
             }
@@ -361,10 +383,16 @@ impl LawnMower {
         if self.mower_height == MowerHeight::InPool {
             if let Some(app) = self.base.get_app_mut() {
                 if let Some(a_mower_reanim) = app.reanimation_get_mut(self.mower_anim_id) {
-                    if a_mower_reanim.m_loop_type == crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold
+                    if a_mower_reanim.m_loop_type
+                        == crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold
                         && a_mower_reanim.m_loop_count > 0
                     {
-                        a_mower_reanim.play_reanim("anim_water", crate::todlib::reanimator::ReanimLoopType::Loop, 10, 35.0);
+                        a_mower_reanim.play_reanim(
+                            "anim_water",
+                            crate::todlib::reanimator::ReanimLoopType::Loop,
+                            10,
+                            35.0,
+                        );
                     }
                 }
             }
@@ -455,7 +483,9 @@ impl LawnMower {
                 g.trans_y -= 33.0;
             }
 
-            if self.mower_height == MowerHeight::UpToLand || self.mower_height == MowerHeight::DownToPool {
+            if self.mower_height == MowerHeight::UpToLand
+                || self.mower_height == MowerHeight::DownToPool
+            {
                 g.set_clip_rect_xywh(-50, -50, 150, (132.0 + self.altitude) as i32);
             }
         } else if self.mower_type == LawnMowerType::Roof {
@@ -471,7 +501,9 @@ impl LawnMower {
             Some(a) => a,
             None => return,
         };
-        if self.mower_state == LawnMowerState::Triggered || self.mower_state == LawnMowerState::Squished {
+        if self.mower_state == LawnMowerState::Triggered
+            || self.mower_state == LawnMowerState::Squished
+        {
             // mApp->ReanimationGet(mReanimID)->Draw(&aMowerGraphics)
             if let Some(a_mower_reanim) = app.reanimation_get(self.mower_anim_id) {
                 a_mower_reanim.draw(g);
@@ -480,7 +512,10 @@ impl LawnMower {
             // mApp->mReanimatorCache->DrawCachedMower(&aMowerGraphics, 0.0f, 19.0f, aMowerType)
             let mut a_mower_type = self.mower_type;
             if self.mower_type == LawnMowerType::Lawn
-                && self.base.get_board().map_or(false, |b| b.m_super_mower_mode)
+                && self
+                    .base
+                    .get_board()
+                    .map_or(false, |b| b.m_super_mower_mode)
             {
                 a_mower_type = LawnMowerType::SuperMower;
             }

@@ -6,7 +6,7 @@
 use crate::framework::color::Color;
 use crate::framework::graphics::font::Font;
 use crate::framework::graphics::graphics::Graphics;
-use crate::lawn::game_enums::{BOARD_WIDTH, BOARD_HEIGHT};
+use crate::lawn::game_enums::{BOARD_HEIGHT, BOARD_WIDTH};
 
 /// 工具提示小部件（鼠标悬停时显示的文字提示框）
 #[derive(Debug)]
@@ -91,7 +91,8 @@ impl ToolTipWidget {
 
         self.m_gets_lines_width = std::cmp::max(a_max_width - 30, 100);
         if self.m_max_lines_width > 0 {
-            self.m_gets_lines_width = std::cmp::min(self.m_gets_lines_width, self.m_max_lines_width);
+            self.m_gets_lines_width =
+                std::cmp::min(self.m_gets_lines_width, self.m_max_lines_width);
         }
 
         let mut a_height = 6;

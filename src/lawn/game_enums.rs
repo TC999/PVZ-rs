@@ -1064,6 +1064,9 @@ pub const PARTICLEEMITTERID_NULL: ParticleEmitterID = 0;
 pub const PARTICLESYSTEMID_NULL: ParticleSystemID = 0;
 pub const PLANTID_NULL: PlantID = 0;
 pub const REANIMATIONID_NULL: ReanimationID = 0;
+/// RUST-ONLY：因为 Rust 侧 reanimation ID 为 0 基 Vec 下标（与 C++ DataArray 1 基不同），
+/// 0 是合法 ID，"无动画"哨兵改用 u32::MAX
+pub const REANIMATIONID_NONE: ReanimationID = u32::MAX;
 pub const ZOMBIEID_NULL: ZombieID = 0;
 
 /// 绘制字符串对齐方式（对应 C++ DrawStringJustification）
@@ -1475,7 +1478,6 @@ pub enum GridItemState {
     RakeTriggered = 28,
     /// 脑子被碾碎（对应 C++ GRIDITEM_STATE_BRAIN_SQUISHED）
     BrainSquished = 29,
-
 }
 
 /// MessageStyle — 消息样式

@@ -22,25 +22,38 @@ pub static mut gLawnStringFormatCount: i32 = 0;
 /// 这些格式控制对话框中不同段落的颜色和行间距。
 pub fn init_lawn_string_formats() {
     let list_formats = vec![
-        ("NORMAL",         Color::new(40,   50,   90,   255), 0),
-        ("FLAVOR",         Color::new(143,  67,   27,   255), TodStringFormatFlag::IgnoreNewlines as u32),
-        ("KEYWORD",        Color::new(143,  67,   27,   255), 0),
-        ("NOCTURNAL",      Color::new(136,  50,   170,  255), 0),
-        ("AQUATIC",        Color::new(11,   161,  219,  255), 0),
-        ("STAT",           Color::new(204,  36,   29,   255), 0),
-        ("METAL",          Color::new(204,  36,   29,   255), TodStringFormatFlag::HideUntilMagnetshroom as u32),
-        ("KEYMETAL",       Color::new(143,  67,   27,   255), TodStringFormatFlag::HideUntilMagnetshroom as u32),
-        ("SHORTLINE",      Color::new(0,    0,    0,    0),   0),
-        ("EXTRASHORTLINE", Color::new(0,    0,    0,    0),   0),
-        ("CREDITS1",       Color::new(0,    0,    0,    0),   0),
-        ("CREDITS2",       Color::new(0,    0,    0,    0),   0),
+        ("NORMAL", Color::new(40, 50, 90, 255), 0),
+        (
+            "FLAVOR",
+            Color::new(143, 67, 27, 255),
+            TodStringFormatFlag::IgnoreNewlines as u32,
+        ),
+        ("KEYWORD", Color::new(143, 67, 27, 255), 0),
+        ("NOCTURNAL", Color::new(136, 50, 170, 255), 0),
+        ("AQUATIC", Color::new(11, 161, 219, 255), 0),
+        ("STAT", Color::new(204, 36, 29, 255), 0),
+        (
+            "METAL",
+            Color::new(204, 36, 29, 255),
+            TodStringFormatFlag::HideUntilMagnetshroom as u32,
+        ),
+        (
+            "KEYMETAL",
+            Color::new(143, 67, 27, 255),
+            TodStringFormatFlag::HideUntilMagnetshroom as u32,
+        ),
+        ("SHORTLINE", Color::new(0, 0, 0, 0), 0),
+        ("EXTRASHORTLINE", Color::new(0, 0, 0, 0), 0),
+        ("CREDITS1", Color::new(0, 0, 0, 0), 0),
+        ("CREDITS2", Color::new(0, 0, 0, 0), 0),
     ];
-    let formats: Vec<TodStringFormat> = list_formats.iter().map(|(tag, color, _flags)| {
-        TodStringFormat {
+    let formats: Vec<TodStringFormat> = list_formats
+        .iter()
+        .map(|(tag, color, _flags)| TodStringFormat {
             tag: tag.to_string(),
             color: color.to_argb(),
-        }
-    }).collect();
+        })
+        .collect();
     tod_string_list_set_colors(&formats, 12);
 }
 
@@ -104,7 +117,7 @@ pub enum TodStringFormatFlag {
 #[derive(Debug, Clone)]
 pub struct TodStringListFormat {
     pub format_name: Option<&'static str>,
-    pub new_font: Option<*mut std::ffi::c_void>,   // _Font**
+    pub new_font: Option<*mut std::ffi::c_void>, // _Font**
     pub new_color: Color,
     pub line_spacing_offset: i32,
     pub format_flags: u32,

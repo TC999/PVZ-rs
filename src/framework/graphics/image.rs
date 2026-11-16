@@ -1,16 +1,16 @@
 // PvZ Portable Rust 翻译 — 图像基类
 // 对应 C++ SexyAppFramework/graphics/Image.h / Image.cpp
-// 
+//
 // 此文件包含 Image 基类的数据结构定义以及其虚方法的默认实现。
 // MemoryImage 和 GLImage 会通过类型标记分发覆盖部分方法。
 
 #![allow(dead_code)]
 
-use std::any::Any;
 use crate::framework::color::Color;
+use crate::framework::graphics::graphics::Graphics;
 use crate::framework::point::Point;
 use crate::framework::rect::Rect;
-use crate::framework::graphics::graphics::Graphics;
+use std::any::Any;
 
 /// 扫描线跨度（用于多边形填充）
 #[derive(Debug, Clone, Copy)]
@@ -35,7 +35,7 @@ pub enum AnimType {
 #[derive(Debug, Clone)]
 pub struct AnimInfo {
     pub anim_type: AnimType,
-    pub frame_delay: i32,      // 1/100s
+    pub frame_delay: i32, // 1/100s
     pub num_cels: i32,
     pub per_frame_delay: Vec<i32>,
     pub frame_map: Vec<i32>,
@@ -62,7 +62,12 @@ impl AnimInfo {
     }
 
     /// 计算动画总时间和帧映射
-    pub fn compute(&mut self, the_num_cels: i32, the_begin_frame_time: i32, the_end_frame_time: i32) {
+    pub fn compute(
+        &mut self,
+        the_num_cels: i32,
+        the_begin_frame_time: i32,
+        the_end_frame_time: i32,
+    ) {
         self.num_cels = the_num_cels;
         let mut a_total = 0i32;
         self.frame_map.clear();
@@ -205,13 +210,25 @@ impl Image {
         }
     }
 
-    pub fn get_width(&self) -> i32 { self.width }
-    pub fn get_height(&self) -> i32 { self.height }
-    pub fn get_x(&self) -> f64 { self.x }
-    pub fn get_y(&self) -> f64 { self.y }
+    pub fn get_width(&self) -> i32 {
+        self.width
+    }
+    pub fn get_height(&self) -> i32 {
+        self.height
+    }
+    pub fn get_x(&self) -> f64 {
+        self.x
+    }
+    pub fn get_y(&self) -> f64 {
+        self.y
+    }
 
-    pub fn set_x(&mut self, x: f64) { self.x = x; }
-    pub fn set_y(&mut self, y: f64) { self.y = y; }
+    pub fn set_x(&mut self, x: f64) {
+        self.x = x;
+    }
+    pub fn set_y(&mut self, y: f64) {
+        self.y = y;
+    }
     pub fn set_pos(&mut self, x: f64, y: f64) {
         self.x = x;
         self.y = y;
@@ -325,11 +342,19 @@ impl Image {
         // 上边
         self.fill_rect_impl(&Rect::new(r.x, r.y, r.width + 1, 1), color, draw_mode);
         // 下边
-        self.fill_rect_impl(&Rect::new(r.x, r.y + r.height, r.width + 1, 1), color, draw_mode);
+        self.fill_rect_impl(
+            &Rect::new(r.x, r.y + r.height, r.width + 1, 1),
+            color,
+            draw_mode,
+        );
         // 左边
         self.fill_rect_impl(&Rect::new(r.x, r.y + 1, 1, r.height - 1), color, draw_mode);
         // 右边
-        self.fill_rect_impl(&Rect::new(r.x + r.width, r.y + 1, 1, r.height - 1), color, draw_mode);
+        self.fill_rect_impl(
+            &Rect::new(r.x + r.width, r.y + 1, 1, r.height - 1),
+            color,
+            draw_mode,
+        );
     }
 
     /// 清除矩形区域（设为全透明）
@@ -346,7 +371,7 @@ impl Image {
             for x in x_start..x_end {
                 let idx = ((y * self.width + x) * 4) as usize;
                 if idx + 3 < self.pixels.len() {
-                    self.pixels[idx] = 0;     // R
+                    self.pixels[idx] = 0; // R
                     self.pixels[idx + 1] = 0; // G
                     self.pixels[idx + 2] = 0; // B
                     self.pixels[idx + 3] = 0; // A
@@ -356,7 +381,15 @@ impl Image {
     }
 
     /// 绘制线段
-    pub fn draw_line(&mut self, start_x: f64, start_y: f64, end_x: f64, end_y: f64, color: &Color, draw_mode: i32) {
+    pub fn draw_line(
+        &mut self,
+        start_x: f64,
+        start_y: f64,
+        end_x: f64,
+        end_y: f64,
+        color: &Color,
+        draw_mode: i32,
+    ) {
         // Bresenham 线算法
         let mut x0 = start_x.round() as i32;
         let mut y0 = start_y.round() as i32;
@@ -494,8 +527,7 @@ impl Image {
 
         // [TRANSLATION_NOTE]: C++ 靠调用方保证索引在范围内；Rust 侧对越界像素跳过（避免 panic）。
         let a_pixels_len = self.pixels.len();
-        let in_range =
-            |idx: i32| -> bool { idx >= 0 && ((idx as usize) * 4 + 3) < a_pixels_len };
+        let in_range = |idx: i32| -> bool { idx >= 0 && ((idx as usize) * 4 + 3) < a_pixels_len };
 
         if dx >= dy {
             // 偏水平
@@ -592,7 +624,15 @@ impl Image {
     }
 
     /// 绘制抗锯齿线段（对应 C++ MemoryImage::DrawLineAA，MemoryImage.cpp:697-719）
-    pub fn draw_line_aa(&mut self, start_x: f64, start_y: f64, end_x: f64, end_y: f64, color: &Color, draw_mode: i32) {
+    pub fn draw_line_aa(
+        &mut self,
+        start_x: f64,
+        start_y: f64,
+        end_x: f64,
+        end_y: f64,
+        color: &Color,
+        draw_mode: i32,
+    ) {
         if start_y == end_y {
             let a_start_x = start_x.min(end_x) as i32;
             let a_end_x = start_x.max(end_x) as i32;
@@ -675,7 +715,16 @@ impl Image {
     /// C++ MemoryImage::Blt（MemoryImage.cpp:1364-1367）首行即
     /// `(void)linearFilter; // Software rendering does not use texture filtering`。
     /// 因此编译告警中的 "unused variable: linear_filter"（memory_image.rs:160）属预期行为。
-    pub fn blt(&mut self, src: &Image, dest_x: i32, dest_y: i32, src_rect: &Rect, color: &Color, draw_mode: i32, _linear_filter: bool) {
+    pub fn blt(
+        &mut self,
+        src: &Image,
+        dest_x: i32,
+        dest_y: i32,
+        src_rect: &Rect,
+        color: &Color,
+        draw_mode: i32,
+        _linear_filter: bool,
+    ) {
         if src.pixels.is_empty() || self.pixels.is_empty() {
             return;
         }
@@ -718,7 +767,16 @@ impl Image {
     /// —— 即"旋转角与旋转中心均为 0 的 BltRotated"，因此同样带 clip 裁剪与双线性采样。
     /// [TRANSLATION_NOTE]: 原实现是"四舍五入后转调整型 blt"，既丢掉了 theClipRect 裁剪，
     /// 也与 C++ 的采样方式（双线性）不同；现按 C++ 转调 blt_rotated。
-    pub fn blt_f(&mut self, src: &Image, dest_x: f32, dest_y: f32, src_rect: &Rect, clip_rect: &Rect, color: &Color, draw_mode: i32) {
+    pub fn blt_f(
+        &mut self,
+        src: &Image,
+        dest_x: f32,
+        dest_y: f32,
+        src_rect: &Rect,
+        clip_rect: &Rect,
+        color: &Color,
+        draw_mode: i32,
+    ) {
         self.blt_rotated(
             src, dest_x, dest_y, src_rect, clip_rect, color, draw_mode, 0.0, 0.0, 0.0,
         );
@@ -739,18 +797,8 @@ impl Image {
         let a_sin = the_rot.sin() as f32;
 
         // C++: 把源矩形四角映射到目标空间，求包围盒
-        let px = [
-            0.0f32,
-            src_rect.width as f32,
-            src_rect.width as f32,
-            0.0,
-        ];
-        let py = [
-            0.0f32,
-            0.0,
-            src_rect.height as f32,
-            src_rect.height as f32,
-        ];
+        let px = [0.0f32, src_rect.width as f32, src_rect.width as f32, 0.0];
+        let py = [0.0f32, 0.0, src_rect.height as f32, src_rect.height as f32];
         let mut a_min_x = 10000000.0f32;
         let mut a_max_x = -10000000.0f32;
         let mut a_min_y = 10000000.0f32;
@@ -763,10 +811,18 @@ impl Image {
             let nx = (rot_center_x + ox * a_cos + oy * a_sin) + the_x;
             let ny = (rot_center_y + oy * a_cos - ox * a_sin) + the_y;
 
-            if nx < a_min_x { a_min_x = nx; }
-            if nx > a_max_x { a_max_x = nx; }
-            if ny < a_min_y { a_min_y = ny; }
-            if ny > a_max_y { a_max_y = ny; }
+            if nx < a_min_x {
+                a_min_x = nx;
+            }
+            if nx > a_max_x {
+                a_max_x = nx;
+            }
+            if ny < a_min_y {
+                a_min_y = ny;
+            }
+            if ny > a_max_y {
+                a_max_y = ny;
+            }
         }
 
         // C++: FRect(aMinX, aMinY, aMaxX-aMinX, aMaxY-aMinY).Intersection(aClipRect)
@@ -817,7 +873,13 @@ impl Image {
         }
 
         let a_dest_rect = match Self::blt_rotated_clip_helper(
-            dest_x, dest_y, src_rect, clip_rect, rot, rot_center_x, rot_center_y,
+            dest_x,
+            dest_y,
+            src_rect,
+            clip_rect,
+            rot,
+            rot_center_x,
+            rot_center_y,
         ) {
             Some(r) => r,
             None => return,
@@ -849,10 +911,12 @@ impl Image {
             let a_base_x = a_dest_x as f32 + 0.0 - rot_center_x - dest_x;
             let a_base_y = a_dest_y as f32 + y as f32 - rot_center_y - dest_y;
 
-            let mut a_u =
-                ((a_cos * a_base_x as f64 - a_sin * a_base_y as f64 + rot_center_x as f64) * 0x10000 as f64) as i32;
+            let mut a_u = ((a_cos * a_base_x as f64 - a_sin * a_base_y as f64
+                + rot_center_x as f64)
+                * 0x10000 as f64) as i32;
             let mut a_v =
-                ((a_cos * a_base_y as f64 + a_sin * a_base_x as f64 + rot_center_y as f64) * 0x10000 as f64) as i32;
+                ((a_cos * a_base_y as f64 + a_sin * a_base_x as f64 + rot_center_y as f64)
+                    * 0x10000 as f64) as i32;
 
             let mut a_left = 0i32;
             let mut a_right = a_dest_w - 1;
@@ -862,33 +926,57 @@ impl Image {
 
             // C++: 依据 cos/sin 的符号收缩扫描区间（0x27FFF/0x17FFF/0x07FFF 为边距常量）
             if a_cos_long <= -0x0001 {
-                if a_u_int < 0 { continue; }
+                if a_u_int < 0 {
+                    continue;
+                }
                 let an_edge_left = ((src_rect.width << 16) - 0x27FFF - a_u) / a_cos_long;
-                if an_edge_left >= a_left { a_left = an_edge_left; }
+                if an_edge_left >= a_left {
+                    a_left = an_edge_left;
+                }
                 let an_edge_right = (0x07FFF - a_u) / a_cos_long;
-                if an_edge_right < a_right { a_right = an_edge_right; }
+                if an_edge_right < a_right {
+                    a_right = an_edge_right;
+                }
             } else if a_cos_long >= 0x0001 {
-                if a_u_int >= src_rect.width - 1 { continue; }
+                if a_u_int >= src_rect.width - 1 {
+                    continue;
+                }
                 let an_edge_left = (0x10000 - a_u) / a_cos_long;
-                if an_edge_left > a_left { a_left = an_edge_left; }
+                if an_edge_left > a_left {
+                    a_left = an_edge_left;
+                }
                 let an_edge_right = ((src_rect.width << 16) - 0x17FFF - a_u) / a_cos_long;
-                if an_edge_right < a_right { a_right = an_edge_right; }
+                if an_edge_right < a_right {
+                    a_right = an_edge_right;
+                }
             } else if a_u < 0 || a_u >= (src_rect.width - 1) << 16 {
                 continue;
             }
 
             if a_sin_long <= -0x0001 {
-                if a_v_int < 0 { continue; }
+                if a_v_int < 0 {
+                    continue;
+                }
                 let an_edge_left = ((src_rect.height << 16) - 0x27FFF - a_v) / a_sin_long;
-                if an_edge_left > a_left { a_left = an_edge_left; }
+                if an_edge_left > a_left {
+                    a_left = an_edge_left;
+                }
                 let an_edge_right = (0x0000 - a_v) / a_sin_long;
-                if an_edge_right < a_right { a_right = an_edge_right; }
+                if an_edge_right < a_right {
+                    a_right = an_edge_right;
+                }
             } else if a_sin_long >= 0x0001 {
-                if a_v_int >= src_rect.height - 1 { continue; }
+                if a_v_int >= src_rect.height - 1 {
+                    continue;
+                }
                 let an_edge_left = (0x10000 - a_v) / a_sin_long;
-                if an_edge_left > a_left { a_left = an_edge_left; }
+                if an_edge_left > a_left {
+                    a_left = an_edge_left;
+                }
                 let an_edge_right = ((src_rect.height << 16) - 0x17FFF - a_v) / a_sin_long;
-                if an_edge_right < a_right { a_right = an_edge_right; }
+                if an_edge_right < a_right {
+                    a_right = an_edge_right;
+                }
             } else if a_v < 0 || a_v >= (src_rect.height - 1) << 16 {
                 continue;
             }
@@ -911,10 +999,7 @@ impl Image {
                 let a_idx2 = a_idx + 1;
                 let a_idx3 = a_idx + a_src_width;
                 let a_idx4 = a_idx + 1 + a_src_width;
-                if a_idx < 0
-                    || a_idx4 < 0
-                    || ((a_idx4 as usize) * 4 + 3) >= src.pixels.len()
-                {
+                if a_idx < 0 || a_idx4 < 0 || ((a_idx4 as usize) * 4 + 3) >= src.pixels.len() {
                     a_u += a_cos_long;
                     a_v += a_sin_long;
                     x += 1;
@@ -981,22 +1066,18 @@ impl Image {
                             let dg = (((a_dest_pixel & 0x00FF00) * a_da) >> 8) & 0x00FF00;
                             let db = (((a_dest_pixel & 0x0000FF) * a_da) >> 8) & 0x0000FF;
 
-                            let a_final_alpha =
-                                256 - (((256 - a) * (256 - a_da as i32)) >> 8);
+                            let a_final_alpha = 256 - (((256 - a) * (256 - a_da as i32)) >> 8);
 
                             // [TRANSLATION_NOTE]: a（权重和）最大 1020 > 256，故 (256 - a) 可能为负；
                             // C++ 是 `uint32_t r + (int)(256-a)*dr`（int→uint32 回绕），
                             // 这里用 wrapping_mul/wrapping_add 保持同一数值语义（避免 debug 溢出 panic）。
-                            r = r
-                                .wrapping_add(((256 - a).wrapping_mul(dr as i32)) as u32)
+                            r = r.wrapping_add(((256 - a).wrapping_mul(dr as i32)) as u32)
                                 / a_final_alpha as u32
                                 & 0xFF0000;
-                            g = g
-                                .wrapping_add(((256 - a).wrapping_mul(dg as i32)) as u32)
+                            g = g.wrapping_add(((256 - a).wrapping_mul(dg as i32)) as u32)
                                 / a_final_alpha as u32
                                 & 0x00FF00;
-                            b = b
-                                .wrapping_add(((256 - a).wrapping_mul(db as i32)) as u32)
+                            b = b.wrapping_add(((256 - a).wrapping_mul(db as i32)) as u32)
                                 / a_final_alpha as u32
                                 & 0x0000FF;
 
@@ -1028,16 +1109,13 @@ impl Image {
                             + ((src4 & 0x0000FF) as u64 * a4 as u64);
 
                         // C++: r = cr * (sum_r >> 8) & 0xFF000000
-                        let mut r =
-                            (cr as u32).wrapping_mul((a_sum_r >> 8) as u32) & 0xFF000000;
+                        let mut r = (cr as u32).wrapping_mul((a_sum_r >> 8) as u32) & 0xFF000000;
                         // C++: g = ((sum_g & 0x00FF0000) * cg) & 0xFF000000
-                        let mut g = ((a_sum_g & 0x00FF0000) as u32)
-                            .wrapping_mul(cg as u32)
-                            & 0xFF000000;
+                        let mut g =
+                            ((a_sum_g & 0x00FF0000) as u32).wrapping_mul(cg as u32) & 0xFF000000;
                         // C++: b = ((sum_b & 0x0000FF00) * cb) & 0x00FF0000
-                        let mut b = ((a_sum_b & 0x0000FF00) as u32)
-                            .wrapping_mul(cb as u32)
-                            & 0x00FF0000;
+                        let mut b =
+                            ((a_sum_b & 0x0000FF00) as u32).wrapping_mul(cb as u32) & 0x00FF0000;
 
                         if a > 250 {
                             Some(0xFF000000 | (r >> 8) | (g >> 16) | (b >> 16))
@@ -1047,20 +1125,16 @@ impl Image {
                             let dg = (((a_dest_pixel & 0x00FF00) * a_da) >> 8) & 0x00FF00;
                             let db = (((a_dest_pixel & 0x0000FF) * a_da) >> 8) & 0x0000FF;
 
-                            let a_final_alpha =
-                                256 - (((256 - a) * (256 - a_da as i32)) >> 8);
+                            let a_final_alpha = 256 - (((256 - a) * (256 - a_da as i32)) >> 8);
 
                             // [TRANSLATION_NOTE]: 同 White 分支，用 wrapping 保持 C++ 的 int→uint32 回绕语义。
-                            r = r
-                                .wrapping_add(((256 - a).wrapping_mul(dr as i32)) as u32)
+                            r = r.wrapping_add(((256 - a).wrapping_mul(dr as i32)) as u32)
                                 / a_final_alpha as u32
                                 & 0xFF0000;
-                            g = (g >> 8)
-                                .wrapping_add(((256 - a).wrapping_mul(dg as i32)) as u32)
+                            g = (g >> 8).wrapping_add(((256 - a).wrapping_mul(dg as i32)) as u32)
                                 / a_final_alpha as u32
                                 & 0x00FF00;
-                            b = (b >> 8)
-                                .wrapping_add(((256 - a).wrapping_mul(db as i32)) as u32)
+                            b = (b >> 8).wrapping_add(((256 - a).wrapping_mul(db as i32)) as u32)
                                 / a_final_alpha as u32
                                 & 0x0000FF;
 
@@ -1191,8 +1265,7 @@ impl Image {
                 }
                 let a_src_idx = a_src_idx_i as usize;
                 let a_dest_idx = a_dest_idx_i as usize;
-                if a_src_idx * 4 + 3 >= src.pixels.len()
-                    || a_dest_idx * 4 + 3 >= self.pixels.len()
+                if a_src_idx * 4 + 3 >= src.pixels.len() || a_dest_idx * 4 + 3 >= self.pixels.len()
                 {
                     continue;
                 }
@@ -1294,8 +1367,8 @@ impl Image {
                     let a_factor = (257.0 * a_dest_x_factor) as i32;
                     for _ in 0..a_src_hi {
                         let a_pixel = Self::read_packed_pixel_raw(&src.pixels, s1 as usize);
-                        a_horz[d] = a_horz[d]
-                            .wrapping_add((a_factor * ((a_pixel & 0xFF) as i32)) as u32);
+                        a_horz[d] =
+                            a_horz[d].wrapping_add((a_factor * ((a_pixel & 0xFF) as i32)) as u32);
                         a_horz[d + 1] = a_horz[d + 1]
                             .wrapping_add((a_factor * (((a_pixel >> 8) & 0xFF) as i32)) as u32);
                         a_horz[d + 2] = a_horz[d + 2]
@@ -1312,8 +1385,8 @@ impl Image {
                     for _ in 0..a_src_hi {
                         let a_pixel = Self::read_packed_pixel_raw(&src.pixels, s1 as usize);
 
-                        a_horz[d] = a_horz[d]
-                            .wrapping_add((a_factor1 * ((a_pixel & 0xFF) as i32)) as u32);
+                        a_horz[d] =
+                            a_horz[d].wrapping_add((a_factor1 * ((a_pixel & 0xFF) as i32)) as u32);
                         a_horz[d + 1] = a_horz[d + 1]
                             .wrapping_add((a_factor1 * (((a_pixel >> 8) & 0xFF) as i32)) as u32);
                         a_horz[d + 2] = a_horz[d + 2]
@@ -1357,7 +1430,8 @@ impl Image {
                     let a_pixel2 = Self::read_packed_pixel_raw(&src.pixels, s as usize);
 
                     a_horz[d] = ((a_factor1 * ((a_pixel1 & 0xFF) as i32))
-                        + (a_factor2 * ((a_pixel2 & 0xFF) as i32))) as u32;
+                        + (a_factor2 * ((a_pixel2 & 0xFF) as i32)))
+                        as u32;
                     a_horz[d + 1] = ((a_factor1 * (((a_pixel1 >> 8) & 0xFF) as i32))
                         + (a_factor2 * (((a_pixel2 >> 8) & 0xFF) as i32)))
                         as u32;
@@ -1429,8 +1503,8 @@ impl Image {
             for a_dest_y in 1..(dest_rect.height + 1) {
                 let mut d = ((a_dest_y * a_temp_w + 1) * 4) as usize;
 
-                let a_src_y = (a_dest_y - 1) as f64 * a_src_y_factor
-                    + (a_src_yf - (a_src_yf as i32) as f64);
+                let a_src_y =
+                    (a_dest_y - 1) as f64 * a_src_y_factor + (a_src_yf - (a_src_yf as i32) as f64);
                 let a_src_yi_sub = a_src_y as i32;
 
                 let a_factor1 = (256.0 * (1.0 - (a_src_y - a_src_yi_sub as f64))) as i32;
@@ -1500,11 +1574,24 @@ impl Image {
     }
 
     /// 拉伸 Blt（对应 C++ MemoryImage::StretchBlt，MemoryImage.cpp:1640-1654）
-    pub fn stretch_blt(&mut self, src: &Image, dest_rect: &Rect, src_rect: &Rect, clip_rect: &Rect, color: &Color, draw_mode: i32, fast_stretch: bool) {
+    pub fn stretch_blt(
+        &mut self,
+        src: &Image,
+        dest_rect: &Rect,
+        src_rect: &Rect,
+        clip_rect: &Rect,
+        color: &Color,
+        draw_mode: i32,
+        fast_stretch: bool,
+    ) {
         if src.pixels.is_empty() || self.pixels.is_empty() {
             return;
         }
-        if dest_rect.width <= 0 || dest_rect.height <= 0 || src_rect.width <= 0 || src_rect.height <= 0 {
+        if dest_rect.width <= 0
+            || dest_rect.height <= 0
+            || src_rect.width <= 0
+            || src_rect.height <= 0
+        {
             return;
         }
 
@@ -1535,7 +1622,16 @@ impl Image {
         _blend: bool,
     ) {
         // 软件光栅化（GLImage 子类覆写为 GL 路径）
-        self.blt_triangles_impl(Some(_texture), vertices, num_triangles, clip_rect, color, draw_mode, tx, ty);
+        self.blt_triangles_impl(
+            Some(_texture),
+            vertices,
+            num_triangles,
+            clip_rect,
+            color,
+            draw_mode,
+            tx,
+            ty,
+        );
     }
 
     /// 纯色三角形绘制（无纹理，扫描线光栅化）
@@ -1550,7 +1646,16 @@ impl Image {
         tx: f32,
         ty: f32,
     ) {
-        self.blt_triangles_impl(None, vertices, num_triangles, clip_rect, color, draw_mode, tx, ty);
+        self.blt_triangles_impl(
+            None,
+            vertices,
+            num_triangles,
+            clip_rect,
+            color,
+            draw_mode,
+            tx,
+            ty,
+        );
     }
 
     /// 三角形纹理光栅化（软件路径）
@@ -1569,7 +1674,9 @@ impl Image {
             return;
         }
         for tri in vertices.iter().take(num_triangles.max(0) as usize) {
-            self.blt_triangle_scanline(&tri[0], &tri[1], &tri[2], texture, clip_rect, color, draw_mode, tx, ty);
+            self.blt_triangle_scanline(
+                &tri[0], &tri[1], &tri[2], texture, clip_rect, color, draw_mode, tx, ty,
+            );
         }
     }
 
@@ -1613,16 +1720,38 @@ impl Image {
             let v_long = v0 + (v2 - v0) * t02;
             let c_long = Self::lerp_color(c0, c2, t02);
             let (x_short, u_short, v_short, c_short) = if y < y1 {
-                let t01 = if (y1 - y0).abs() < 0.001 { 0.0 } else { ((y - y0) / (y1 - y0)).clamp(0.0, 1.0) };
-                (x0 + (x1 - x0) * t01, u0 + (u1 - u0) * t01, v0 + (v1 - v0) * t01, Self::lerp_color(c0, c1, t01))
+                let t01 = if (y1 - y0).abs() < 0.001 {
+                    0.0
+                } else {
+                    ((y - y0) / (y1 - y0)).clamp(0.0, 1.0)
+                };
+                (
+                    x0 + (x1 - x0) * t01,
+                    u0 + (u1 - u0) * t01,
+                    v0 + (v1 - v0) * t01,
+                    Self::lerp_color(c0, c1, t01),
+                )
             } else {
-                let t12 = if (y2 - y1).abs() < 0.001 { 0.0 } else { ((y - y1) / (y2 - y1)).clamp(0.0, 1.0) };
-                (x1 + (x2 - x1) * t12, u1 + (u2 - u1) * t12, v1 + (v2 - v1) * t12, Self::lerp_color(c1, c2, t12))
+                let t12 = if (y2 - y1).abs() < 0.001 {
+                    0.0
+                } else {
+                    ((y - y1) / (y2 - y1)).clamp(0.0, 1.0)
+                };
+                (
+                    x1 + (x2 - x1) * t12,
+                    u1 + (u2 - u1) * t12,
+                    v1 + (v2 - v1) * t12,
+                    Self::lerp_color(c1, c2, t12),
+                )
             };
             let (x_l, x_r, u_l, u_r, v_l, v_r, c_l, c_r) = if x_long < x_short {
-                (x_long, x_short, u_long, u_short, v_long, v_short, c_long, c_short)
+                (
+                    x_long, x_short, u_long, u_short, v_long, v_short, c_long, c_short,
+                )
             } else {
-                (x_short, x_long, u_short, u_long, v_short, v_long, c_short, c_long)
+                (
+                    x_short, x_long, u_short, u_long, v_short, v_long, c_short, c_long,
+                )
             };
             let sx_lo = clip.x.max(x_l.ceil() as i32);
             let sx_hi = (clip.x + clip.width).min(x_r.floor() as i32 + 1);
@@ -1716,21 +1845,66 @@ impl Image {
         let white = 0xFFFFFFFFu32;
         let verts = [
             [
-                crate::framework::graphics::gl_interface::TriVertex { x: ax, y: ay, u: u0, v: v0, color: white },
-                crate::framework::graphics::gl_interface::TriVertex { x: bx, y: by, u: u1, v: v0, color: white },
-                crate::framework::graphics::gl_interface::TriVertex { x: cx, y: cy, u: u0, v: v1, color: white },
+                crate::framework::graphics::gl_interface::TriVertex {
+                    x: ax,
+                    y: ay,
+                    u: u0,
+                    v: v0,
+                    color: white,
+                },
+                crate::framework::graphics::gl_interface::TriVertex {
+                    x: bx,
+                    y: by,
+                    u: u1,
+                    v: v0,
+                    color: white,
+                },
+                crate::framework::graphics::gl_interface::TriVertex {
+                    x: cx,
+                    y: cy,
+                    u: u0,
+                    v: v1,
+                    color: white,
+                },
             ],
             [
-                crate::framework::graphics::gl_interface::TriVertex { x: cx, y: cy, u: u0, v: v1, color: white },
-                crate::framework::graphics::gl_interface::TriVertex { x: bx, y: by, u: u1, v: v0, color: white },
-                crate::framework::graphics::gl_interface::TriVertex { x: dx, y: dy, u: u1, v: v1, color: white },
+                crate::framework::graphics::gl_interface::TriVertex {
+                    x: cx,
+                    y: cy,
+                    u: u0,
+                    v: v1,
+                    color: white,
+                },
+                crate::framework::graphics::gl_interface::TriVertex {
+                    x: bx,
+                    y: by,
+                    u: u1,
+                    v: v0,
+                    color: white,
+                },
+                crate::framework::graphics::gl_interface::TriVertex {
+                    x: dx,
+                    y: dy,
+                    u: u1,
+                    v: v1,
+                    color: white,
+                },
             ],
         ];
         self.blt_triangles_impl(Some(src), &verts, 2, clip_rect, color, draw_mode, 0.0, 0.0);
     }
 
     /// 镜像 Blt
-    pub fn blt_mirror(&mut self, src: &Image, dest_x: i32, dest_y: i32, src_rect: &Rect, color: &Color, draw_mode: i32, _linear_filter: bool) {
+    pub fn blt_mirror(
+        &mut self,
+        src: &Image,
+        dest_x: i32,
+        dest_y: i32,
+        src_rect: &Rect,
+        color: &Color,
+        draw_mode: i32,
+        _linear_filter: bool,
+    ) {
         if src.pixels.is_empty() || self.pixels.is_empty() {
             return;
         }
@@ -1773,11 +1947,24 @@ impl Image {
     /// 基类 Image::StretchBltMirror 是空实现，真正实现仅在 GLImage）。Rust 侧 GLImage 从未被实例化
     /// （报告 §5.10），若照抄空实现会导致镜像拉伸完全不绘制，故保留 Rust 既有的软件绘制，
     /// 并按 C++ 的 StretchBltMirrorClipHelper 语义补上裁剪（mirror=true）。
-    pub fn stretch_blt_mirror(&mut self, src: &Image, dest_rect: &Rect, src_rect: &Rect, clip_rect: &Rect, color: &Color, draw_mode: i32, _fast_stretch: bool) {
+    pub fn stretch_blt_mirror(
+        &mut self,
+        src: &Image,
+        dest_rect: &Rect,
+        src_rect: &Rect,
+        clip_rect: &Rect,
+        color: &Color,
+        draw_mode: i32,
+        _fast_stretch: bool,
+    ) {
         if src.pixels.is_empty() || self.pixels.is_empty() {
             return;
         }
-        if dest_rect.width <= 0 || dest_rect.height <= 0 || src_rect.width <= 0 || src_rect.height <= 0 {
+        if dest_rect.width <= 0
+            || dest_rect.height <= 0
+            || src_rect.width <= 0
+            || src_rect.height <= 0
+        {
             return;
         }
 
@@ -1860,9 +2047,14 @@ impl Image {
                         let da = dst_a;
                         let out_a = sa + da - (sa * da / 255);
                         if out_a > 0 {
-                            let r = ((color.r as u32 * sa + self.pixels[idx] as u32 * (255 - sa)) / 255) as u8;
-                            let g = ((color.g as u32 * sa + self.pixels[idx + 1] as u32 * (255 - sa)) / 255) as u8;
-                            let b = ((color.b as u32 * sa + self.pixels[idx + 2] as u32 * (255 - sa)) / 255) as u8;
+                            let r = ((color.r as u32 * sa + self.pixels[idx] as u32 * (255 - sa))
+                                / 255) as u8;
+                            let g = ((color.g as u32 * sa
+                                + self.pixels[idx + 1] as u32 * (255 - sa))
+                                / 255) as u8;
+                            let b = ((color.b as u32 * sa
+                                + self.pixels[idx + 2] as u32 * (255 - sa))
+                                / 255) as u8;
                             self.pixels[idx] = r;
                             self.pixels[idx + 1] = g;
                             self.pixels[idx + 2] = b;

@@ -4,16 +4,16 @@
 #![allow(dead_code)]
 
 use crate::framework::graphics::graphics::Graphics;
-use crate::lawn::game_enums::*;
+use crate::framework::widget::dialog::BUTTONS_YES_NO;
 use crate::lawn::board::Board;
 use crate::lawn::board::HitResult;
-use crate::lawn::plant::Plant;
+use crate::lawn::game_enums::*;
 use crate::lawn::grid_item::GridItem;
-use crate::lawn::system::player_info::{FacingDirection, PottedPlant};
-use crate::framework::widget::dialog::BUTTONS_YES_NO;
-use crate::todlib::tod_foley::FoleyType;
-use crate::todlib::reanimator::Reanimation;
+use crate::lawn::plant::Plant;
 use crate::lawn::system::music::MusicTune;
+use crate::lawn::system::player_info::{FacingDirection, PottedPlant};
+use crate::todlib::reanimator::Reanimation;
+use crate::todlib::tod_foley::FoleyType;
 
 /// 禅境花园网格尺寸（对应 C++ ZEN_MAX_GRIDSIZE_X/Y）
 pub const ZEN_MAX_GRIDSIZE_X: i32 = 8;
@@ -32,62 +32,302 @@ pub struct SpecialGridPlacement {
 
 /// 温室网格表（对应 C++ gGreenhouseGridPlacement）
 pub static GREENHOUSE_GRID_PLACEMENT: [SpecialGridPlacement; 32] = [
-    SpecialGridPlacement { pixel_x: 73, pixel_y: 73, grid_x: 0, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 155, pixel_y: 71, grid_x: 1, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 239, pixel_y: 68, grid_x: 2, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 321, pixel_y: 73, grid_x: 3, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 406, pixel_y: 71, grid_x: 4, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 484, pixel_y: 67, grid_x: 5, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 566, pixel_y: 70, grid_x: 6, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 648, pixel_y: 72, grid_x: 7, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 67, pixel_y: 168, grid_x: 0, grid_y: 1 },
-    SpecialGridPlacement { pixel_x: 150, pixel_y: 165, grid_x: 1, grid_y: 1 },
-    SpecialGridPlacement { pixel_x: 232, pixel_y: 170, grid_x: 2, grid_y: 1 },
-    SpecialGridPlacement { pixel_x: 314, pixel_y: 175, grid_x: 3, grid_y: 1 },
-    SpecialGridPlacement { pixel_x: 416, pixel_y: 173, grid_x: 4, grid_y: 1 },
-    SpecialGridPlacement { pixel_x: 497, pixel_y: 170, grid_x: 5, grid_y: 1 },
-    SpecialGridPlacement { pixel_x: 578, pixel_y: 164, grid_x: 6, grid_y: 1 },
-    SpecialGridPlacement { pixel_x: 660, pixel_y: 168, grid_x: 7, grid_y: 1 },
-    SpecialGridPlacement { pixel_x: 41, pixel_y: 268, grid_x: 0, grid_y: 2 },
-    SpecialGridPlacement { pixel_x: 130, pixel_y: 266, grid_x: 1, grid_y: 2 },
-    SpecialGridPlacement { pixel_x: 219, pixel_y: 260, grid_x: 2, grid_y: 2 },
-    SpecialGridPlacement { pixel_x: 310, pixel_y: 266, grid_x: 3, grid_y: 2 },
-    SpecialGridPlacement { pixel_x: 416, pixel_y: 267, grid_x: 4, grid_y: 2 },
-    SpecialGridPlacement { pixel_x: 504, pixel_y: 261, grid_x: 5, grid_y: 2 },
-    SpecialGridPlacement { pixel_x: 594, pixel_y: 265, grid_x: 6, grid_y: 2 },
-    SpecialGridPlacement { pixel_x: 684, pixel_y: 269, grid_x: 7, grid_y: 2 },
-    SpecialGridPlacement { pixel_x: 37, pixel_y: 371, grid_x: 0, grid_y: 3 },
-    SpecialGridPlacement { pixel_x: 124, pixel_y: 369, grid_x: 1, grid_y: 3 },
-    SpecialGridPlacement { pixel_x: 211, pixel_y: 368, grid_x: 2, grid_y: 3 },
-    SpecialGridPlacement { pixel_x: 302, pixel_y: 369, grid_x: 3, grid_y: 3 },
-    SpecialGridPlacement { pixel_x: 425, pixel_y: 375, grid_x: 4, grid_y: 3 },
-    SpecialGridPlacement { pixel_x: 512, pixel_y: 368, grid_x: 5, grid_y: 3 },
-    SpecialGridPlacement { pixel_x: 602, pixel_y: 365, grid_x: 6, grid_y: 3 },
-    SpecialGridPlacement { pixel_x: 691, pixel_y: 368, grid_x: 7, grid_y: 3 },
+    SpecialGridPlacement {
+        pixel_x: 73,
+        pixel_y: 73,
+        grid_x: 0,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 155,
+        pixel_y: 71,
+        grid_x: 1,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 239,
+        pixel_y: 68,
+        grid_x: 2,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 321,
+        pixel_y: 73,
+        grid_x: 3,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 406,
+        pixel_y: 71,
+        grid_x: 4,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 484,
+        pixel_y: 67,
+        grid_x: 5,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 566,
+        pixel_y: 70,
+        grid_x: 6,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 648,
+        pixel_y: 72,
+        grid_x: 7,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 67,
+        pixel_y: 168,
+        grid_x: 0,
+        grid_y: 1,
+    },
+    SpecialGridPlacement {
+        pixel_x: 150,
+        pixel_y: 165,
+        grid_x: 1,
+        grid_y: 1,
+    },
+    SpecialGridPlacement {
+        pixel_x: 232,
+        pixel_y: 170,
+        grid_x: 2,
+        grid_y: 1,
+    },
+    SpecialGridPlacement {
+        pixel_x: 314,
+        pixel_y: 175,
+        grid_x: 3,
+        grid_y: 1,
+    },
+    SpecialGridPlacement {
+        pixel_x: 416,
+        pixel_y: 173,
+        grid_x: 4,
+        grid_y: 1,
+    },
+    SpecialGridPlacement {
+        pixel_x: 497,
+        pixel_y: 170,
+        grid_x: 5,
+        grid_y: 1,
+    },
+    SpecialGridPlacement {
+        pixel_x: 578,
+        pixel_y: 164,
+        grid_x: 6,
+        grid_y: 1,
+    },
+    SpecialGridPlacement {
+        pixel_x: 660,
+        pixel_y: 168,
+        grid_x: 7,
+        grid_y: 1,
+    },
+    SpecialGridPlacement {
+        pixel_x: 41,
+        pixel_y: 268,
+        grid_x: 0,
+        grid_y: 2,
+    },
+    SpecialGridPlacement {
+        pixel_x: 130,
+        pixel_y: 266,
+        grid_x: 1,
+        grid_y: 2,
+    },
+    SpecialGridPlacement {
+        pixel_x: 219,
+        pixel_y: 260,
+        grid_x: 2,
+        grid_y: 2,
+    },
+    SpecialGridPlacement {
+        pixel_x: 310,
+        pixel_y: 266,
+        grid_x: 3,
+        grid_y: 2,
+    },
+    SpecialGridPlacement {
+        pixel_x: 416,
+        pixel_y: 267,
+        grid_x: 4,
+        grid_y: 2,
+    },
+    SpecialGridPlacement {
+        pixel_x: 504,
+        pixel_y: 261,
+        grid_x: 5,
+        grid_y: 2,
+    },
+    SpecialGridPlacement {
+        pixel_x: 594,
+        pixel_y: 265,
+        grid_x: 6,
+        grid_y: 2,
+    },
+    SpecialGridPlacement {
+        pixel_x: 684,
+        pixel_y: 269,
+        grid_x: 7,
+        grid_y: 2,
+    },
+    SpecialGridPlacement {
+        pixel_x: 37,
+        pixel_y: 371,
+        grid_x: 0,
+        grid_y: 3,
+    },
+    SpecialGridPlacement {
+        pixel_x: 124,
+        pixel_y: 369,
+        grid_x: 1,
+        grid_y: 3,
+    },
+    SpecialGridPlacement {
+        pixel_x: 211,
+        pixel_y: 368,
+        grid_x: 2,
+        grid_y: 3,
+    },
+    SpecialGridPlacement {
+        pixel_x: 302,
+        pixel_y: 369,
+        grid_x: 3,
+        grid_y: 3,
+    },
+    SpecialGridPlacement {
+        pixel_x: 425,
+        pixel_y: 375,
+        grid_x: 4,
+        grid_y: 3,
+    },
+    SpecialGridPlacement {
+        pixel_x: 512,
+        pixel_y: 368,
+        grid_x: 5,
+        grid_y: 3,
+    },
+    SpecialGridPlacement {
+        pixel_x: 602,
+        pixel_y: 365,
+        grid_x: 6,
+        grid_y: 3,
+    },
+    SpecialGridPlacement {
+        pixel_x: 691,
+        pixel_y: 368,
+        grid_x: 7,
+        grid_y: 3,
+    },
 ];
 
 /// 蘑菇园网格表（对应 C++ gMushroomGridPlacement）
 pub static MUSHROOM_GRID_PLACEMENT: [SpecialGridPlacement; 8] = [
-    SpecialGridPlacement { pixel_x: 110, pixel_y: 441, grid_x: 0, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 237, pixel_y: 360, grid_x: 1, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 298, pixel_y: 458, grid_x: 2, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 355, pixel_y: 296, grid_x: 3, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 387, pixel_y: 203, grid_x: 4, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 460, pixel_y: 385, grid_x: 5, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 486, pixel_y: 478, grid_x: 6, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 552, pixel_y: 283, grid_x: 7, grid_y: 0 },
+    SpecialGridPlacement {
+        pixel_x: 110,
+        pixel_y: 441,
+        grid_x: 0,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 237,
+        pixel_y: 360,
+        grid_x: 1,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 298,
+        pixel_y: 458,
+        grid_x: 2,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 355,
+        pixel_y: 296,
+        grid_x: 3,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 387,
+        pixel_y: 203,
+        grid_x: 4,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 460,
+        pixel_y: 385,
+        grid_x: 5,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 486,
+        pixel_y: 478,
+        grid_x: 6,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 552,
+        pixel_y: 283,
+        grid_x: 7,
+        grid_y: 0,
+    },
 ];
 
 /// 水族馆网格表（对应 C++ gAquariumGridPlacement）
 pub static AQUARIUM_GRID_PLACEMENT: [SpecialGridPlacement; 8] = [
-    SpecialGridPlacement { pixel_x: 113, pixel_y: 185, grid_x: 0, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 306, pixel_y: 120, grid_x: 1, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 356, pixel_y: 270, grid_x: 2, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 622, pixel_y: 120, grid_x: 3, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 669, pixel_y: 270, grid_x: 4, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 122, pixel_y: 355, grid_x: 5, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 365, pixel_y: 458, grid_x: 6, grid_y: 0 },
-    SpecialGridPlacement { pixel_x: 504, pixel_y: 417, grid_x: 7, grid_y: 0 },
+    SpecialGridPlacement {
+        pixel_x: 113,
+        pixel_y: 185,
+        grid_x: 0,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 306,
+        pixel_y: 120,
+        grid_x: 1,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 356,
+        pixel_y: 270,
+        grid_x: 2,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 622,
+        pixel_y: 120,
+        grid_x: 3,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 669,
+        pixel_y: 270,
+        grid_x: 4,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 122,
+        pixel_y: 355,
+        grid_x: 5,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 365,
+        pixel_y: 458,
+        grid_x: 6,
+        grid_y: 0,
+    },
+    SpecialGridPlacement {
+        pixel_x: 504,
+        pixel_y: 417,
+        grid_x: 7,
+        grid_y: 0,
+    },
 ];
 
 /// 禅境花园（对应 C++ ZenGarden）
@@ -96,7 +336,7 @@ pub struct ZenGarden {
     pub board: Option<*mut Board>,
     pub garden_type: GardenType,
     pub loaded_resource_names: Vec<String>,
-    pub now_time: i64,  // time_t → i64
+    pub now_time: i64,                                         // time_t → i64
     pub now_tm: (i32, i32, i32, i32, i32, i32, i32, i32, i32), // tm 结构体简化
 }
 
@@ -124,7 +364,12 @@ impl ZenGarden {
         self.now_time = unsafe { (*app_ptr).get_now_time() };
         self.now_tm = unsafe { (*app_ptr).get_local_time(self.now_time) };
 
-        let num_potted = unsafe { (*app_ptr).player_info.as_ref().map_or(0, |p| p.m_num_potted_plants) };
+        let num_potted = unsafe {
+            (*app_ptr)
+                .player_info
+                .as_ref()
+                .map_or(0, |p| p.m_num_potted_plants)
+        };
         for i in 0..num_potted {
             if let Some(pp) = self.potted_plant_from_index(i as usize) {
                 unsafe {
@@ -148,12 +393,26 @@ impl ZenGarden {
         }
     }
 
-    pub fn draw_potted_plant_icon(&self, g: &mut Graphics, x: f32, y: f32, potted_plant: &PottedPlant) {
+    pub fn draw_potted_plant_icon(
+        &self,
+        g: &mut Graphics,
+        x: f32,
+        y: f32,
+        potted_plant: &PottedPlant,
+    ) {
         // 对应 C++ DrawPottedPlantIcon
         self.draw_potted_plant(g, x, y, potted_plant, 0.7, true);
     }
 
-    pub fn draw_potted_plant(&self, g: &mut Graphics, x: f32, y: f32, potted_plant: &PottedPlant, scale: f32, draw_pot: bool) {
+    pub fn draw_potted_plant(
+        &self,
+        g: &mut Graphics,
+        x: f32,
+        y: f32,
+        potted_plant: &PottedPlant,
+        scale: f32,
+        draw_pot: bool,
+    ) {
         // 对应 C++ DrawPottedPlant（缩放/变体/偏移计算完整；核心绘制依赖
         // Plant::DrawSeedType，Rust 侧尚未实现，绘制处留注释）
         let mut a_plant_variation = DrawVariation::Normal;
@@ -175,15 +434,20 @@ impl ZenGarden {
         let mut a_offset_x = 0.0f32;
         let mut a_offset_y = Plant::plant_draw_height_offset(board_ref, None, a_seed_type, -1, -1);
         if draw_pot {
-            let a_pot_offset_y = Plant::plant_draw_height_offset(board_ref, None, SeedType::Flowerpot, -1, -1);
+            let a_pot_offset_y =
+                Plant::plant_draw_height_offset(board_ref, None, SeedType::Flowerpot, -1, -1);
             let mut a_pot_variation = DrawVariation::ZenGarden;
             if Plant::is_aquatic(a_seed_type) {
                 a_pot_variation = DrawVariation::ZenGardenWater;
             }
             // 对应 C++ Plant::DrawSeedType(&aPottedPlantG, FLOWERPOT, SEED_NONE, aPotVariation2, ...)
             crate::lawn::plant::Plant::draw_seed_type(
-                g, SeedType::Flowerpot, SeedType::None, a_pot_variation,
-                x, y + a_pot_offset_y * scale,
+                g,
+                SeedType::Flowerpot,
+                SeedType::None,
+                a_pot_variation,
+                x,
+                y + a_pot_offset_y * scale,
             );
         }
 
@@ -207,8 +471,12 @@ impl ZenGarden {
 
         // 对应 C++ Plant::DrawSeedType(&aPottedPlantG, aSeedType, SEED_NONE, aPlantVariation, ...)
         crate::lawn::plant::Plant::draw_seed_type(
-            g, a_seed_type, SeedType::None, a_plant_variation,
-            x + a_offset_x, y + a_offset_y,
+            g,
+            a_seed_type,
+            SeedType::None,
+            a_plant_variation,
+            x + a_offset_x,
+            y + a_offset_y,
         );
     }
 
@@ -237,7 +505,8 @@ impl ZenGarden {
                 }
             }
         }
-        num_dropped_presents + num_potted_plants_in_garden >= ZEN_MAX_GRIDSIZE_X * ZEN_MAX_GRIDSIZE_Y
+        num_dropped_presents + num_potted_plants_in_garden
+            >= ZEN_MAX_GRIDSIZE_X * ZEN_MAX_GRIDSIZE_Y
     }
 
     pub fn find_open_zen_garden_spot(&self, spot_x: &mut i32, spot_y: &mut i32) {
@@ -247,7 +516,10 @@ impl ZenGarden {
             (*app).m_crazy_dave_message_index != -1
         });
         let num_potted = self.app.map_or(0, |app| unsafe {
-            (*app).player_info.as_ref().map_or(0, |p| p.m_num_potted_plants)
+            (*app)
+                .player_info
+                .as_ref()
+                .map_or(0, |p| p.m_num_potted_plants)
         });
         for x in 0..ZEN_MAX_GRIDSIZE_X {
             'col: for y in 0..ZEN_MAX_GRIDSIZE_Y {
@@ -261,7 +533,10 @@ impl ZenGarden {
                             for i in 0..num_potted as usize {
                                 if i < info.m_potted_plant.len() {
                                     let p = &info.m_potted_plant[i];
-                                    if p.which_zen_garden == GardenType::Main && p.x == x && p.y == y {
+                                    if p.which_zen_garden == GardenType::Main
+                                        && p.x == x
+                                        && p.y == y
+                                    {
                                         continue 'col;
                                     }
                                 }
@@ -278,10 +553,17 @@ impl ZenGarden {
             return;
         }
         let pick_count = picks.len();
-        let pick = crate::todlib::tod_common::tod_pick_from_weighted_grid_array(&mut picks, pick_count);
+        let pick =
+            crate::todlib::tod_common::tod_pick_from_weighted_grid_array(&mut picks, pick_count);
         match pick {
-            Some(i) => { *spot_x = picks[i].x; *spot_y = picks[i].y; }
-            None => { *spot_x = 0; *spot_y = 0; }
+            Some(i) => {
+                *spot_x = picks[i].x;
+                *spot_y = picks[i].y;
+            }
+            None => {
+                *spot_x = 0;
+                *spot_y = 0;
+            }
         }
     }
 
@@ -292,7 +574,9 @@ impl ZenGarden {
             unsafe {
                 let info = &mut (*app).player_info;
                 if let Some(info) = info.as_mut() {
-                    if info.m_potted_plant.len() >= crate::lawn::system::player_info::MAX_POTTED_PLANTS {
+                    if info.m_potted_plant.len()
+                        >= crate::lawn::system::player_info::MAX_POTTED_PLANTS
+                    {
                         return;
                     }
                     potted_plant_index = info.m_num_potted_plants;
@@ -333,7 +617,9 @@ impl ZenGarden {
                 let info = &mut (*app).player_info;
                 if let Some(info) = info.as_mut() {
                     if potted_plant_index < info.m_potted_plant.len() {
-                        return Some(&mut info.m_potted_plant[potted_plant_index] as *mut PottedPlant);
+                        return Some(
+                            &mut info.m_potted_plant[potted_plant_index] as *mut PottedPlant,
+                        );
                     }
                 }
             }
@@ -343,7 +629,9 @@ impl ZenGarden {
 
     pub fn mouse_down_with_tool(&mut self, x: i32, y: i32, cursor_type: CursorType) {
         // 对应 C++ MouseDownWithTool：工具分发
-        if cursor_type == CursorType::Wheelbarrow && self.get_potted_plant_in_wheelbarrow().is_some() {
+        if cursor_type == CursorType::Wheelbarrow
+            && self.get_potted_plant_in_wheelbarrow().is_some()
+        {
             self.mouse_down_with_full_wheel_barrow(x, y);
             if let Some(board_ptr) = self.board {
                 let board = unsafe { &mut *board_ptr };
@@ -424,7 +712,9 @@ impl ZenGarden {
         let board_ptr = self.board?;
         let board = unsafe { &*board_ptr };
         for (i, p) in board.plants.iter().enumerate() {
-            if p.dead { continue; }
+            if p.dead {
+                continue;
+            }
             let (px, pw) = (p.base.x, p.base.width);
             let (py, ph) = (p.base.y, p.base.height);
             if x >= px && x <= px + pw && y >= py && y <= py + ph {
@@ -449,7 +739,10 @@ impl ZenGarden {
         };
         let (a_pos_x, a_pos_y) = unsafe {
             let b = &*board_ptr;
-            (b.grid_to_pixel_x(grid_x, grid_y), b.grid_to_pixel_y(grid_x, grid_y))
+            (
+                b.grid_to_pixel_x(grid_x, grid_y),
+                b.grid_to_pixel_y(grid_x, grid_y),
+            )
         };
 
         // 找到下方花盆（同格 Flowerpot），一起移动
@@ -458,8 +751,13 @@ impl ZenGarden {
         let mut a_pot_positions: Option<(i32, i32)> = None;
         let board = unsafe { &*board_ptr };
         for p in board.plants.iter() {
-            if p.dead { continue; }
-            if p.plant_col == a_old_col && p.base.row == a_old_row && p.seed_type == SeedType::Flowerpot {
+            if p.dead {
+                continue;
+            }
+            if p.plant_col == a_old_col
+                && p.base.row == a_old_row
+                && p.seed_type == SeedType::Flowerpot
+            {
                 a_pot_positions = Some((p.pos_x as i32, p.pos_y as i32));
                 break;
             }
@@ -473,21 +771,30 @@ impl ZenGarden {
         plant.plant_col = grid_x;
         plant.base.row = grid_y;
         plant.base.render_order = crate::lawn::board::make_render_order(
-            crate::lawn::game_enums::RENDER_LAYER_PLANT, 0, a_pos_y + 1,
+            crate::lawn::game_enums::RENDER_LAYER_PLANT,
+            0,
+            a_pos_y + 1,
         );
 
         // 移动花盆
         if let Some((pot_x, pot_y)) = a_pot_positions {
             let board = unsafe { &mut *board_ptr };
             for p in board.plants.iter_mut() {
-                if p.dead { continue; }
-                if p.plant_col == a_old_col && p.base.row == a_old_row && p.seed_type == SeedType::Flowerpot {
+                if p.dead {
+                    continue;
+                }
+                if p.plant_col == a_old_col
+                    && p.base.row == a_old_row
+                    && p.seed_type == SeedType::Flowerpot
+                {
                     p.base.x = pot_x + a_delta_x;
                     p.base.y = pot_y + a_delta_y;
                     p.plant_col = grid_x;
                     p.base.row = grid_y;
                     p.base.render_order = crate::lawn::board::make_render_order(
-                        crate::lawn::game_enums::RENDER_LAYER_PLANT, 0, a_pos_y,
+                        crate::lawn::game_enums::RENDER_LAYER_PLANT,
+                        0,
+                        a_pos_y,
                     );
                     break;
                 }
@@ -514,14 +821,20 @@ impl ZenGarden {
     pub fn mouse_down_with_money_sign(&mut self, plant: &mut Plant) {
         // 对应 C++ MouseDownWithMoneySign：确认出售盆栽植物
         if let Some(board) = self.board {
-            unsafe { (*board).clear_cursor(); }
+            unsafe {
+                (*board).clear_cursor();
+            }
         }
         let a_header = "[ZEN_SELL_HEADER]".to_string();
         let a_lines = "[ZEN_SELL_LINES]".to_string();
         let a_price = self.get_plant_sell_price(plant);
 
         if let Some(app) = self.app {
-            unsafe { if (*app).m_crazy_dave_state == CrazyDaveState::Off { (*app).crazy_dave_enter(); } }
+            unsafe {
+                if (*app).m_crazy_dave_state == CrazyDaveState::Off {
+                    (*app).crazy_dave_enter();
+                }
+            }
         }
 
         let a_potted_plant = self.potted_plant_from_index(plant.potted_plant_index as usize);
@@ -543,7 +856,12 @@ impl ZenGarden {
             unsafe {
                 (*app).crazy_dave_talk_message(&a_message_text);
                 if let Some(r) = (*app).reanimation_get_mut((*app).m_crazy_dave_reanim_id) {
-                    r.play_reanim("anim_blahblah", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, 20, 12.0);
+                    r.play_reanim(
+                        "anim_blahblah",
+                        crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,
+                        20,
+                        12.0,
+                    );
                 }
             }
         }
@@ -552,7 +870,14 @@ impl ZenGarden {
         let a_plant_id = self.plant_index_of(plant);
 
         let a_dialog = self.app.and_then(|app| unsafe {
-            (*app).do_dialog(Dialogs::ZenSell as i32, true, &a_header, &a_lines, "", BUTTONS_YES_NO)
+            (*app).do_dialog(
+                Dialogs::ZenSell as i32,
+                true,
+                &a_header,
+                &a_lines,
+                "",
+                BUTTONS_YES_NO,
+            )
         });
         if let Some(d) = a_dialog {
             unsafe {
@@ -561,11 +886,15 @@ impl ZenGarden {
             }
         }
         if let Some(board) = self.board {
-            unsafe { (*board).show_coin_bank(0); }
+            unsafe {
+                (*board).show_coin_bank(0);
+            }
         }
         let a_result = a_dialog.map_or(0, |d| unsafe { (*d).wait_for_result(true) });
         if let Some(app) = self.app {
-            unsafe { (*app).crazy_dave_leave(); }
+            unsafe {
+                (*app).crazy_dave_leave();
+            }
         }
 
         if a_result == crate::framework::widget::dialog::ID_YES {
@@ -669,7 +998,8 @@ impl ZenGarden {
 
         // 需花盆判定（C++ needPot）：蘑菇园非水生不用花盆，水族馆不用
         let a_garden_type = self.garden_type;
-        let a_need_pot = !(a_garden_type == GardenType::Mushroom && !Plant::is_aquatic(a_plant_seed))
+        let a_need_pot = !(a_garden_type == GardenType::Mushroom
+            && !Plant::is_aquatic(a_plant_seed))
             && a_garden_type != GardenType::Aquarium;
         if a_need_pot {
             if let Some(_pot) = board.new_plant(a_x, a_y, SeedType::Flowerpot, SeedType::None) {
@@ -680,7 +1010,9 @@ impl ZenGarden {
         let a_plant = board.new_plant(a_x, a_y, a_plant_seed, SeedType::None)?;
         a_plant.potted_plant_index = potted_plant_index as i32;
         a_plant.base.render_order = crate::lawn::board::make_render_order(
-            crate::lawn::game_enums::RENDER_LAYER_PLANT, 0, a_plant.base.y + 1,
+            crate::lawn::game_enums::RENDER_LAYER_PLANT,
+            0,
+            a_plant.base.y + 1,
         );
         // [TRANSLATION_NOTE]: 发芽/水族馆/变体帧层与 UpdateReanim 依赖 reanim 系统，暂留基础动画
         let idx = board.plants.len() - 1;
@@ -691,7 +1023,11 @@ impl ZenGarden {
         // 对应 C++ ZenGardenUpdate：商店打开时跳过更新
         if let Some(app) = self.app {
             unsafe {
-                if (*app).base.dialog_map.contains_key(&(Dialogs::Store as i32)) {
+                if (*app)
+                    .base
+                    .dialog_map
+                    .contains_key(&(Dialogs::Store as i32))
+                {
                     return;
                 }
                 self.now_time = (*app).get_now_time();
@@ -712,7 +1048,9 @@ impl ZenGarden {
                         if ch.challenge_state_counter > 0 {
                             ch.challenge_state_counter -= 1;
                         }
-                        if ch.challenge_state == ChallengeState::Normal && ch.challenge_state_counter == 0 {
+                        if ch.challenge_state == ChallengeState::Normal
+                            && ch.challenge_state_counter == 0
+                        {
                             ch.challenge_state = ChallengeState::ZenFading;
                             ch.challenge_state_counter = 50;
                         }
@@ -772,7 +1110,9 @@ impl ZenGarden {
     pub fn mouse_down_with_full_wheel_barrow(&mut self, x: i32, y: i32) {
         // 对应 C++ MouseDownWithFullWheelBarrow：从独轮车取出盆栽放到网格
         let a_potted_plant = self.get_potted_plant_in_wheelbarrow();
-        let Some(a_potted_plant) = a_potted_plant else { return };
+        let Some(a_potted_plant) = a_potted_plant else {
+            return;
+        };
 
         unsafe {
             if self.garden_type == GardenType::Aquarium
@@ -788,8 +1128,12 @@ impl ZenGarden {
                 return;
             }
 
-            let a_grid_x = self.board.map_or(-1, |b| unsafe { (*b).pixel_to_grid_x(x, y) });
-            let a_grid_y = self.board.map_or(-1, |b| unsafe { (*b).pixel_to_grid_y(x, y) });
+            let a_grid_x = self
+                .board
+                .map_or(-1, |b| unsafe { (*b).pixel_to_grid_x(x, y) });
+            let a_grid_y = self
+                .board
+                .map_or(-1, |b| unsafe { (*b).pixel_to_grid_y(x, y) });
             if a_grid_x == -1 || a_grid_y == -1 {
                 return;
             }
@@ -806,7 +1150,9 @@ impl ZenGarden {
 
             // 对应 C++ 指针差计算 PottedPlantIndex
             let a_potted_plant_index = self.potted_plant_index_of(a_potted_plant);
-            let Some(a_potted_plant_index) = a_potted_plant_index else { return };
+            let Some(a_potted_plant_index) = a_potted_plant_index else {
+                return;
+            };
 
             let a_plant = self.place_potted_plant(a_potted_plant_index);
             if let Some(board) = self.board {
@@ -849,7 +1195,9 @@ impl ZenGarden {
             }
         }
         if let Some(app) = self.app {
-            unsafe { (*app).play_foley(FoleyType::Plant as i32); }
+            unsafe {
+                (*app).play_foley(FoleyType::Plant as i32);
+            }
         }
     }
 
@@ -857,10 +1205,14 @@ impl ZenGarden {
         // 对应 C++ GotoNextGarden：离开当前花园并切换到下一个已购花园（或智慧树）
         self.leave_garden();
         if let Some(board) = self.board {
-            unsafe { (*board).clear_advice(AdviceType::None); }
+            unsafe {
+                (*board).clear_advice(AdviceType::None);
+            }
         }
         if let Some(app) = self.app {
-            unsafe { (*app).crazy_dave_die(); }
+            unsafe {
+                (*app).crazy_dave_die();
+            }
         }
         if let Some(board) = self.board {
             unsafe {
@@ -882,12 +1234,16 @@ impl ZenGarden {
             if self.has_purchased_item(StoreItem::MushroomGarden) {
                 self.garden_type = GardenType::Mushroom;
                 if let Some(board) = self.board {
-                    unsafe { (*board).m_background_type = BackgroundType::MushroomGarden; }
+                    unsafe {
+                        (*board).m_background_type = BackgroundType::MushroomGarden;
+                    }
                 }
             } else if self.has_purchased_item(StoreItem::AquariumGarden) {
                 self.garden_type = GardenType::Aquarium;
                 if let Some(board) = self.board {
-                    unsafe { (*board).m_background_type = BackgroundType::Zombiquarium; }
+                    unsafe {
+                        (*board).m_background_type = BackgroundType::Zombiquarium;
+                    }
                 }
             } else if self.has_purchased_item(StoreItem::TreeOfWisdom) {
                 a_go_to_tree = true;
@@ -896,14 +1252,18 @@ impl ZenGarden {
             if self.has_purchased_item(StoreItem::AquariumGarden) {
                 self.garden_type = GardenType::Aquarium;
                 if let Some(board) = self.board {
-                    unsafe { (*board).m_background_type = BackgroundType::Zombiquarium; }
+                    unsafe {
+                        (*board).m_background_type = BackgroundType::Zombiquarium;
+                    }
                 }
             } else if self.has_purchased_item(StoreItem::TreeOfWisdom) {
                 a_go_to_tree = true;
             } else {
                 self.garden_type = GardenType::Main;
                 if let Some(board) = self.board {
-                    unsafe { (*board).m_background_type = BackgroundType::Greenhouse; }
+                    unsafe {
+                        (*board).m_background_type = BackgroundType::Greenhouse;
+                    }
                 }
             }
         } else if self.garden_type == GardenType::Aquarium {
@@ -912,7 +1272,9 @@ impl ZenGarden {
             } else {
                 self.garden_type = GardenType::Main;
                 if let Some(board) = self.board {
-                    unsafe { (*board).m_background_type = BackgroundType::Greenhouse; }
+                    unsafe {
+                        (*board).m_background_type = BackgroundType::Greenhouse;
+                    }
                 }
             }
         }
@@ -933,7 +1295,9 @@ impl ZenGarden {
         if let Some(app) = self.app {
             unsafe {
                 if let Some(rm) = (*app).base.resource_manager.as_mut() {
-                    let background = self.board.map_or(BackgroundType::Greenhouse, |b| unsafe { (*b).m_background_type });
+                    let background = self.board.map_or(BackgroundType::Greenhouse, |b| unsafe {
+                        (*b).m_background_type
+                    });
                     match background {
                         BackgroundType::MushroomGarden => {
                             let _ = (**rm).load_resources("DelayLoad_MushroomGarden");
@@ -955,7 +1319,8 @@ impl ZenGarden {
         if let Some(board) = self.board {
             unsafe {
                 let background = (*board).m_background_type;
-                if (background == BackgroundType::MushroomGarden || background == BackgroundType::Zombiquarium)
+                if (background == BackgroundType::MushroomGarden
+                    || background == BackgroundType::Zombiquarium)
                     && !self.has_purchased_item(StoreItem::WheelBarrow)
                 {
                     (*board).display_advice(
@@ -1009,8 +1374,11 @@ impl ZenGarden {
             // C++: GetTopPlantAt(col, row, TOPPLANT_ONLY_UNDER_PLANT) 找下方花盆
             let mut a_pot_idx: Option<usize> = None;
             for (i, p) in board.plants.iter().enumerate() {
-                if p.dead { continue; }
-                if p.plant_col == a_plant_col && p.base.row == a_plant_row
+                if p.dead {
+                    continue;
+                }
+                if p.plant_col == a_plant_col
+                    && p.base.row == a_plant_row
                     && p.seed_type == SeedType::Flowerpot
                 {
                     a_pot_idx = Some(i);
@@ -1023,9 +1391,14 @@ impl ZenGarden {
         }
     }
 
-    pub fn get_special_grid_placements(&self, count: &mut i32) -> Option<*const SpecialGridPlacement> {
+    pub fn get_special_grid_placements(
+        &self,
+        count: &mut i32,
+    ) -> Option<*const SpecialGridPlacement> {
         // 对应 C++ GetSpecialGridPlacements：按背景类型返回对应静态网格表
-        let background = self.board.map_or(BackgroundType::Greenhouse, |b| unsafe { (*b).m_background_type });
+        let background = self.board.map_or(BackgroundType::Greenhouse, |b| unsafe {
+            (*b).m_background_type
+        });
         match background {
             BackgroundType::MushroomGarden => {
                 *count = MUSHROOM_GRID_PLACEMENT.len() as i32;
@@ -1052,7 +1425,11 @@ impl ZenGarden {
         if let Some(placements) = self.get_special_grid_placements(&mut count) {
             let placements = unsafe { std::slice::from_raw_parts(placements, count as usize) };
             for grid in placements {
-                if x >= grid.pixel_x && x <= grid.pixel_x + 80 && y >= grid.pixel_y && y <= grid.pixel_y + 85 {
+                if x >= grid.pixel_x
+                    && x <= grid.pixel_x + 80
+                    && y >= grid.pixel_y
+                    && y <= grid.pixel_y + 85
+                {
                     return grid.grid_x;
                 }
             }
@@ -1066,7 +1443,11 @@ impl ZenGarden {
         if let Some(placements) = self.get_special_grid_placements(&mut count) {
             let placements = unsafe { std::slice::from_raw_parts(placements, count as usize) };
             for grid in placements {
-                if x >= grid.pixel_x && x <= grid.pixel_x + 80 && y >= grid.pixel_y && y <= grid.pixel_y + 85 {
+                if x >= grid.pixel_x
+                    && x <= grid.pixel_x + 80
+                    && y >= grid.pixel_y
+                    && y <= grid.pixel_y + 85
+                {
                     return grid.grid_y;
                 }
             }
@@ -1119,7 +1500,10 @@ impl ZenGarden {
                     if let Some(p) = placements {
                         for i in 0..count {
                             let a_grid = unsafe { &*p.add(i as usize) };
-                            if (*board).get_top_plant_at_any(a_grid.grid_x, a_grid.grid_y).is_none() {
+                            if (*board)
+                                .get_top_plant_at_any(a_grid.grid_x, a_grid.grid_y)
+                                .is_none()
+                            {
                                 // [TRANSLATION_NOTE]: C++ 中 PvzpDrawImageCelScaled(
                                 // IMAGE_PLANTSHADOW, aGrid.mPixelX-35, aGrid.mPixelY+33, 0,0, 1.7,1.7)
                                 // 绘制植物阴影；Rust 侧图片资源未接入，暂略
@@ -1132,7 +1516,13 @@ impl ZenGarden {
         }
     }
 
-    pub fn mouse_down_zen_garden(&mut self, x: i32, y: i32, click_count: i32, hit_result: &mut HitResult) -> bool {
+    pub fn mouse_down_zen_garden(
+        &mut self,
+        x: i32,
+        y: i32,
+        click_count: i32,
+        hit_result: &mut HitResult,
+    ) -> bool {
         // 对应 C++ MouseDownZenGarden
         if let Some(board) = self.board {
             unsafe {
@@ -1149,7 +1539,8 @@ impl ZenGarden {
                     self.wake_stinky();
                 } else if (*board).cursor_object.cursor_type == CursorType::Glove {
                     if (*board).can_use_game_object(GameObjectType::Wheelbarrow) {
-                        let a_button_rect = (*board).get_zen_button_rect(GameObjectType::Wheelbarrow);
+                        let a_button_rect =
+                            (*board).get_zen_button_rect(GameObjectType::Wheelbarrow);
                         let a_potted_plant = self.get_potted_plant_in_wheelbarrow();
                         if a_button_rect.contains(x, y) && a_potted_plant.is_some() {
                             (*board).clear_cursor();
@@ -1162,14 +1553,17 @@ impl ZenGarden {
                     }
                 } else if (*board).cursor_object.cursor_type == CursorType::PlantFromGlove {
                     if (*board).can_use_game_object(GameObjectType::Wheelbarrow) {
-                        let a_button_rect = (*board).get_zen_button_rect(GameObjectType::Wheelbarrow);
+                        let a_button_rect =
+                            (*board).get_zen_button_rect(GameObjectType::Wheelbarrow);
                         let glove_id = (*board).cursor_object.glove_plant_id as usize;
                         let b = &mut *board;
                         let plant_alive = glove_id < b.plants.len() && !b.plants[glove_id].dead;
-                        if plant_alive && a_button_rect.contains(x, y)
+                        if plant_alive
+                            && a_button_rect.contains(x, y)
                             && self.get_potted_plant_in_wheelbarrow().is_none()
                         {
-                            let plant_ptr = &mut b.plants[glove_id] as *mut crate::lawn::plant::Plant;
+                            let plant_ptr =
+                                &mut b.plants[glove_id] as *mut crate::lawn::plant::Plant;
                             self.mouse_down_with_empty_wheel_barrow(unsafe { &mut *plant_ptr });
                             b.clear_cursor();
                             return true;
@@ -1182,7 +1576,9 @@ impl ZenGarden {
                 {
                     // C++: mApp->PlaySample(Sexy::SOUND_TAPGLASS);
                     if let Some(app) = self.app {
-                        unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_TAPGLASS); }
+                        unsafe {
+                            (*app).play_sample(crate::todlib::tod_foley::SOUND_TAPGLASS);
+                        }
                     }
                 }
             }
@@ -1209,7 +1605,8 @@ impl ZenGarden {
         if let Some(app) = self.app {
             unsafe {
                 if let Some(info) = (*app).player_info.as_mut() {
-                    if a_potted_index >= 0 && (a_potted_index as usize) < info.m_potted_plant.len() {
+                    if a_potted_index >= 0 && (a_potted_index as usize) < info.m_potted_plant.len()
+                    {
                         let pp = &mut info.m_potted_plant[a_potted_index as usize];
                         pp.last_need_fulfilled_time = self.now_time;
                         pp.plant_need = PottedPlantNeed::None;
@@ -1222,10 +1619,25 @@ impl ZenGarden {
         }
         if let Some(board) = self.board {
             let b = unsafe { &mut *board };
-            b.add_coin((a_x + 40) as f32, a_y as f32, CoinType::Gold, CoinMotion::Coin);
+            b.add_coin(
+                (a_x + 40) as f32,
+                a_y as f32,
+                CoinType::Gold,
+                CoinMotion::Coin,
+            );
             if Plant::is_nocturnal(a_seed_type) || Plant::is_aquatic(a_seed_type) {
-                b.add_coin((a_x + 10) as f32, a_y as f32, CoinType::Gold, CoinMotion::Coin);
-                b.add_coin((a_x + 70) as f32, a_y as f32, CoinType::Gold, CoinMotion::Coin);
+                b.add_coin(
+                    (a_x + 10) as f32,
+                    a_y as f32,
+                    CoinType::Gold,
+                    CoinMotion::Coin,
+                );
+                b.add_coin(
+                    (a_x + 70) as f32,
+                    a_y as f32,
+                    CoinType::Gold,
+                    CoinMotion::Coin,
+                );
             }
         }
     }
@@ -1238,11 +1650,14 @@ impl ZenGarden {
         if let Some(app) = self.app {
             unsafe {
                 if let Some(info) = (*app).player_info.as_mut() {
-                    if a_potted_index >= 0 && (a_potted_index as usize) < info.m_potted_plant.len() {
+                    if a_potted_index >= 0 && (a_potted_index as usize) < info.m_potted_plant.len()
+                    {
                         let pp = &mut info.m_potted_plant[a_potted_index as usize];
                         pp.times_fed += 1;
                         let mut a_time_span = crate::framework::common::rand_range(9); // RandRangeInt(0, 8)
-                        let tutorial = self.board.map_or(TutorialState::Off, |b| unsafe { (*b).m_tutorial_state });
+                        let tutorial = self
+                            .board
+                            .map_or(TutorialState::Off, |b| unsafe { (*b).m_tutorial_state });
                         if tutorial == TutorialState::ZenGardenWaterPlant
                             || tutorial == TutorialState::ZenGardenKeepWatering
                         {
@@ -1256,7 +1671,12 @@ impl ZenGarden {
         }
         if let Some(board) = self.board {
             let b = unsafe { &mut *board };
-            b.add_coin((a_x + 40) as f32, a_y as f32, CoinType::Silver, CoinMotion::Coin);
+            b.add_coin(
+                (a_x + 40) as f32,
+                a_y as f32,
+                CoinType::Silver,
+                CoinMotion::Coin,
+            );
         }
     }
 
@@ -1281,7 +1701,9 @@ impl ZenGarden {
         {
             return PottedPlantNeed::None;
         }
-        if Plant::is_aquatic(potted_plant.seed_type) && potted_plant.plant_age != PottedPlantAge::Sprout {
+        if Plant::is_aquatic(potted_plant.seed_type)
+            && potted_plant.plant_age != PottedPlantAge::Sprout
+        {
             if potted_plant.plant_age == PottedPlantAge::Full {
                 if self.plant_should_refresh_need(potted_plant) {
                     return PottedPlantNeed::None;
@@ -1416,7 +1838,12 @@ impl ZenGarden {
                                 0,
                                 ReanimationType::ZengardenWateringcan as i32,
                             ) {
-                                (*rp).play_reanim("anim_water_area", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, 0, 8.0);
+                                (*rp).play_reanim(
+                                    "anim_water_area",
+                                    crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,
+                                    0,
+                                    8.0,
+                                );
                                 a_zen_tool.grid_item_reanim_id = (*a).reanimation_get_id(rp);
                             }
                             a_zen_tool.grid_item_state = GridItemState::ZenToolGoldWateringCan;
@@ -1430,7 +1857,12 @@ impl ZenGarden {
                                 0,
                                 ReanimationType::ZengardenWateringcan as i32,
                             ) {
-                                (*rp).play_reanim("anim_water", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, 0, 0.0);
+                                (*rp).play_reanim(
+                                    "anim_water",
+                                    crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,
+                                    0,
+                                    0.0,
+                                );
                                 a_zen_tool.grid_item_reanim_id = (*a).reanimation_get_id(rp);
                             }
                             a_zen_tool.grid_item_state = GridItemState::ZenToolWateringCan;
@@ -1445,7 +1877,8 @@ impl ZenGarden {
                             0,
                             ReanimationType::ZengardenFertilizer as i32,
                         ) {
-                            (*rp).m_loop_type = crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold;
+                            (*rp).m_loop_type =
+                                crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold;
                             a_zen_tool.grid_item_reanim_id = (*a).reanimation_get_id(rp);
                         }
                         a_zen_tool.grid_item_state = GridItemState::ZenToolFertilizer;
@@ -1464,7 +1897,8 @@ impl ZenGarden {
                             0,
                             ReanimationType::ZengardenBugspray as i32,
                         ) {
-                            (*rp).m_loop_type = crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold;
+                            (*rp).m_loop_type =
+                                crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold;
                             a_zen_tool.grid_item_reanim_id = (*a).reanimation_get_id(rp);
                         }
                         a_zen_tool.grid_item_state = GridItemState::ZenToolBugSpray;
@@ -1513,8 +1947,10 @@ impl ZenGarden {
         // [TRANSLATION_NOTE]: C++ 中绘制 IMAGE_PLANTSPEECHBUBBLE 并按下述需求绘制
         // IMAGE_ZEN_NEED_ICONS（列 0/1/2）或 IMAGE_WATERDROP 图标；Rust 侧图片资源未接入，暂略
         match a_plant_need {
-            PottedPlantNeed::Fertilizer | PottedPlantNeed::Bugspray
-            | PottedPlantNeed::Phonograph | PottedPlantNeed::Water => {}
+            PottedPlantNeed::Fertilizer
+            | PottedPlantNeed::Bugspray
+            | PottedPlantNeed::Phonograph
+            | PottedPlantNeed::Water => {}
             _ => {}
         }
         let _ = g;
@@ -1526,7 +1962,7 @@ impl ZenGarden {
         if a_now - potted_plant.last_need_fulfilled_time < 3600 {
             return true;
         }
-        let a_last_need_fulfilled_tm = self.app.map_or((0,0,0,0,0,0,0,0,0), |app| unsafe {
+        let a_last_need_fulfilled_tm = self.app.map_or((0, 0, 0, 0, 0, 0, 0, 0, 0), |app| unsafe {
             (*app).get_local_time(potted_plant.last_need_fulfilled_time)
         });
         let m_tm = self.now_tm;
@@ -1540,7 +1976,7 @@ impl ZenGarden {
         if a_now - potted_plant.last_watered_time < 3600 {
             return false;
         }
-        let a_last_watered_tm = self.app.map_or((0,0,0,0,0,0,0,0,0), |app| unsafe {
+        let a_last_watered_tm = self.app.map_or((0, 0, 0, 0, 0, 0, 0, 0, 0), |app| unsafe {
             (*app).get_local_time(potted_plant.last_watered_time)
         });
         let m_tm = self.now_tm;
@@ -1549,7 +1985,9 @@ impl ZenGarden {
 
     pub fn refresh_plant_needs(&self, potted_plant: &mut PottedPlant) {
         // 对应 C++ RefreshPlantNeeds
-        if potted_plant.plant_age != PottedPlantAge::Full || !self.plant_should_refresh_need(potted_plant) {
+        if potted_plant.plant_age != PottedPlantAge::Full
+            || !self.plant_should_refresh_need(potted_plant)
+        {
             return;
         }
         if Plant::is_aquatic(potted_plant.seed_type) {
@@ -1558,7 +1996,7 @@ impl ZenGarden {
             let max_need = PottedPlantNeed::Phonograph as i32;
             potted_plant.plant_need = unsafe {
                 std::mem::transmute::<i32, PottedPlantNeed>(
-                    crate::framework::common::rand_range(max_need - min_need + 1) + min_need
+                    crate::framework::common::rand_range(max_need - min_need + 1) + min_need,
                 )
             };
         } else {
@@ -1724,7 +2162,8 @@ impl ZenGarden {
                 PottedPlantAge::Small => 300,
                 PottedPlantAge::Medium => 500,
                 PottedPlantAge::Full => {
-                    if Plant::is_nocturnal(pp_ref.seed_type) || Plant::is_aquatic(pp_ref.seed_type) {
+                    if Plant::is_nocturnal(pp_ref.seed_type) || Plant::is_aquatic(pp_ref.seed_type)
+                    {
                         1000
                     } else {
                         800
@@ -1769,9 +2208,14 @@ impl ZenGarden {
                 a_height_offset -= 10.0;
                 a_scale_offset_fix += 30.0;
             }
-            SeedType::Hypnoshroom | SeedType::Marigold | SeedType::Peashooter
-            | SeedType::Repeater | SeedType::Leftpeater | SeedType::Snowpea
-            | SeedType::Threepeater | SeedType::Sunflower => {
+            SeedType::Hypnoshroom
+            | SeedType::Marigold
+            | SeedType::Peashooter
+            | SeedType::Repeater
+            | SeedType::Leftpeater
+            | SeedType::Snowpea
+            | SeedType::Threepeater
+            | SeedType::Sunflower => {
                 a_scale_offset_fix += 10.0;
             }
             SeedType::Starfruit => {
@@ -1825,10 +2269,13 @@ impl ZenGarden {
         if let Some(app) = self.app {
             unsafe {
                 if let Some(info) = (*app).player_info.as_mut() {
-                    if a_potted_index >= 0 && (a_potted_index as usize) < info.m_potted_plant.len() {
+                    if a_potted_index >= 0 && (a_potted_index as usize) < info.m_potted_plant.len()
+                    {
                         let pp = &mut info.m_potted_plant[a_potted_index as usize];
                         pp.last_fertilized_time = self.now_time;
-                        pp.plant_age = unsafe { std::mem::transmute::<i32, PottedPlantAge>(pp.plant_age as i32 + 1) };
+                        pp.plant_age = unsafe {
+                            std::mem::transmute::<i32, PottedPlantAge>(pp.plant_age as i32 + 1)
+                        };
                         pp.plant_need = PottedPlantNeed::None;
                         pp.times_fed = 0;
                     }
@@ -1842,18 +2289,48 @@ impl ZenGarden {
                 let pp_ref = unsafe { &*pp };
                 match pp_ref.plant_age {
                     PottedPlantAge::Small => {
-                        b.add_coin((a_x + 40) as f32, a_y as f32, CoinType::Gold, CoinMotion::Coin);
+                        b.add_coin(
+                            (a_x + 40) as f32,
+                            a_y as f32,
+                            CoinType::Gold,
+                            CoinMotion::Coin,
+                        );
                     }
                     PottedPlantAge::Medium => {
-                        b.add_coin((a_x + 30) as f32, a_y as f32, CoinType::Gold, CoinMotion::Coin);
-                        b.add_coin((a_x + 50) as f32, a_y as f32, CoinType::Gold, CoinMotion::Coin);
+                        b.add_coin(
+                            (a_x + 30) as f32,
+                            a_y as f32,
+                            CoinType::Gold,
+                            CoinMotion::Coin,
+                        );
+                        b.add_coin(
+                            (a_x + 50) as f32,
+                            a_y as f32,
+                            CoinType::Gold,
+                            CoinMotion::Coin,
+                        );
                     }
                     PottedPlantAge::Full => {
                         if pp_ref.seed_type == SeedType::Marigold {
-                            b.add_coin((a_x + 40) as f32, a_y as f32, CoinType::Diamond, CoinMotion::Coin);
+                            b.add_coin(
+                                (a_x + 40) as f32,
+                                a_y as f32,
+                                CoinType::Diamond,
+                                CoinMotion::Coin,
+                            );
                         } else {
-                            b.add_coin((a_x + 10) as f32, a_y as f32, CoinType::Diamond, CoinMotion::Coin);
-                            b.add_coin((a_x + 70) as f32, a_y as f32, CoinType::Diamond, CoinMotion::Coin);
+                            b.add_coin(
+                                (a_x + 10) as f32,
+                                a_y as f32,
+                                CoinType::Diamond,
+                                CoinMotion::Coin,
+                            );
+                            b.add_coin(
+                                (a_x + 70) as f32,
+                                a_y as f32,
+                                CoinType::Diamond,
+                                CoinMotion::Coin,
+                            );
                         }
                     }
                     _ => {}
@@ -1896,9 +2373,9 @@ impl ZenGarden {
 
     pub fn add_happy_effect(&self, plant: &mut Plant) {
         // 对应 C++ AddHappyEffect：在植物或花盆上附加开心发光粒子
-        let a_flower_pot = self.board.and_then(|b| unsafe {
-            (*b).get_top_plant_at_any(plant.plant_col, plant.start_row)
-        });
+        let a_flower_pot = self
+            .board
+            .and_then(|b| unsafe { (*b).get_top_plant_at_any(plant.plant_col, plant.start_row) });
 
         // 通过数组地址匹配获得花盆可变引用（避免 &T -> &mut T 的 UB 转换）
         let mut a_flower_pot_ptr: *mut Plant = std::ptr::null_mut();
@@ -1945,9 +2422,9 @@ impl ZenGarden {
 
     pub fn remove_happy_effect(&self, plant: &mut Plant) {
         // 对应 C++ RemoveHappyEffect：销毁花盆或植物上的特效粒子
-        let a_flower_pot = self.board.and_then(|b| unsafe {
-            (*b).get_top_plant_at_any(plant.plant_col, plant.start_row)
-        });
+        let a_flower_pot = self
+            .board
+            .and_then(|b| unsafe { (*b).get_top_plant_at_any(plant.plant_col, plant.start_row) });
         let particle_id = if let Some(fp) = a_flower_pot {
             fp.particle_id
         } else {
@@ -1972,9 +2449,8 @@ impl ZenGarden {
         plant.launch_counter -= 1;
         self.set_plant_anim_speed(plant);
         let a_potted_plant = self.potted_plant_from_index(plant.potted_plant_index as usize);
-        let a_high_on_chocolate = a_potted_plant.map_or(false, |pp| unsafe {
-            self.plant_high_on_chocolate(&*pp)
-        });
+        let a_high_on_chocolate =
+            a_potted_plant.map_or(false, |pp| unsafe { self.plant_high_on_chocolate(&*pp) });
         if a_high_on_chocolate {
             plant.launch_counter -= 1;
         }
@@ -1982,12 +2458,18 @@ impl ZenGarden {
         if plant.launch_counter <= 0 {
             self.plant_set_launch_counter(plant);
             if let Some(app) = self.app {
-                unsafe { (*app).play_foley(FoleyType::SpawnSun as i32); }
+                unsafe {
+                    (*app).play_foley(FoleyType::SpawnSun as i32);
+                }
             }
 
             let mut a_coin_hit = crate::framework::common::rand_range(1000);
             a_coin_hit += crate::todlib::tod_common::tod_animate_curve(
-                5, 30, self.plant_get_minutes_since_happy(plant), 0, 80,
+                5,
+                30,
+                self.plant_get_minutes_since_happy(plant),
+                0,
+                80,
                 crate::lawn::game_enums::TodCurves::Linear,
             );
             let mut a_coin_type = CoinType::Silver;
@@ -1995,16 +2477,16 @@ impl ZenGarden {
                 a_coin_type = CoinType::Gold;
             }
             if let Some(board) = self.board {
-                unsafe { (*board).add_coin(plant.pos_x, plant.pos_y, a_coin_type, CoinMotion::Coin); }
+                unsafe {
+                    (*board).add_coin(plant.pos_x, plant.pos_y, a_coin_type, CoinMotion::Coin);
+                }
             }
         }
     }
 
     pub fn can_drop_potted_plant_loot(&self) -> bool {
         if let Some(app) = self.app {
-            unsafe {
-                (*app).has_finished_adventure() && !self.is_zen_garden_full(true)
-            }
+            unsafe { (*app).has_finished_adventure() && !self.is_zen_garden_full(true) }
         } else {
             false
         }
@@ -2066,7 +2548,9 @@ impl ZenGarden {
             plant.set_sleeping(false);
             self.add_happy_effect(plant);
         } else if Plant::is_nocturnal(plant.seed_type)
-            && !self.board.map_or(false, |b| unsafe { (*b).stage_is_night() })
+            && !self
+                .board
+                .map_or(false, |b| unsafe { (*b).stage_is_night() })
         {
             plant.set_sleeping(true);
         }
@@ -2074,22 +2558,31 @@ impl ZenGarden {
 
     /// 是否可使用园艺工具（对应 C++ Board::CanUseGameObject，Board.cpp:9411；经 board 转发）
     pub fn can_use_game_object(&self, object_type: GameObjectType) -> bool {
-        self.board.map_or(false, |b| unsafe { (*b).can_use_game_object(object_type) })
+        self.board
+            .map_or(false, |b| unsafe { (*b).can_use_game_object(object_type) })
     }
 
     pub fn zen_tool_update(&mut self, zen_tool: &mut GridItem) {
         // 对应 C++ ZenToolUpdate：工具动画播完后执行喂养并销毁
         let a_tool_reanim = self.app.and_then(|app| unsafe {
-            (*app).reanimation_get(zen_tool.grid_item_reanim_id).map(|r| r as *const Reanimation)
+            (*app)
+                .reanimation_get(zen_tool.grid_item_reanim_id)
+                .map(|r| r as *const Reanimation)
         });
-        let Some(a_tool_reanim) = a_tool_reanim else { return };
+        let Some(a_tool_reanim) = a_tool_reanim else {
+            return;
+        };
 
         let mut a_play_time = 1;
         if zen_tool.grid_item_state == GridItemState::ZenToolPhonograph {
             a_play_time = 2;
         }
         if unsafe { (*a_tool_reanim).m_loop_count >= a_play_time } {
-            self.do_feeding_tool(zen_tool.pos_x as i32, zen_tool.pos_y as i32, zen_tool.grid_item_state);
+            self.do_feeding_tool(
+                zen_tool.pos_x as i32,
+                zen_tool.pos_y as i32,
+                zen_tool.grid_item_state,
+            );
             zen_tool.grid_item_die();
         }
     }
@@ -2121,9 +2614,15 @@ impl ZenGarden {
             return;
         }
 
-        let a_grid_x = self.board.map_or(-1, |b| unsafe { (*b).pixel_to_grid_x(x, y) });
-        let a_grid_y = self.board.map_or(-1, |b| unsafe { (*b).pixel_to_grid_y(x, y) });
-        let a_plant = self.board.and_then(|b| unsafe { (*b).get_top_plant_at_any(a_grid_x, a_grid_y) });
+        let a_grid_x = self
+            .board
+            .map_or(-1, |b| unsafe { (*b).pixel_to_grid_x(x, y) });
+        let a_grid_y = self
+            .board
+            .map_or(-1, |b| unsafe { (*b).pixel_to_grid_y(x, y) });
+        let a_plant = self
+            .board
+            .and_then(|b| unsafe { (*b).get_top_plant_at_any(a_grid_x, a_grid_y) });
         let Some(a_plant_ref) = a_plant else { return };
         if a_plant_ref.potted_plant_index == -1 {
             return;
@@ -2153,11 +2652,16 @@ impl ZenGarden {
 
         if a_need == PottedPlantNeed::Water && tool_type == GridItemState::ZenToolWateringCan {
             self.plant_watered(unsafe { &mut *a_plant_ptr });
-        } else if a_need == PottedPlantNeed::Fertilizer && tool_type == GridItemState::ZenToolFertilizer {
+        } else if a_need == PottedPlantNeed::Fertilizer
+            && tool_type == GridItemState::ZenToolFertilizer
+        {
             self.plant_fertilized(unsafe { &mut *a_plant_ptr });
-        } else if a_need == PottedPlantNeed::Bugspray && tool_type == GridItemState::ZenToolBugSpray {
+        } else if a_need == PottedPlantNeed::Bugspray && tool_type == GridItemState::ZenToolBugSpray
+        {
             self.plant_fulfill_need(unsafe { &mut *a_plant_ptr });
-        } else if a_need == PottedPlantNeed::Phonograph && tool_type == GridItemState::ZenToolPhonograph {
+        } else if a_need == PottedPlantNeed::Phonograph
+            && tool_type == GridItemState::ZenToolPhonograph
+        {
             self.plant_fulfill_need(unsafe { &mut *a_plant_ptr });
         }
 
@@ -2255,8 +2759,14 @@ impl ZenGarden {
                 stinky.grid_item_state = GridItemState::StinkyWalkingLeft;
                 if let Some(app) = self.app {
                     unsafe {
-                        if let Some(reanim) = (*app).reanimation_get_mut(stinky.grid_item_reanim_id) {
-                            reanim.play_reanim("anim_crawl", crate::todlib::reanimator::ReanimLoopType::Loop, 10, 6.0);
+                        if let Some(reanim) = (*app).reanimation_get_mut(stinky.grid_item_reanim_id)
+                        {
+                            reanim.play_reanim(
+                                "anim_crawl",
+                                crate::todlib::reanimator::ReanimLoopType::Loop,
+                                10,
+                                6.0,
+                            );
                         }
                     }
                 }
@@ -2284,11 +2794,15 @@ impl ZenGarden {
         if let Some(board_ptr) = self.board {
             let board = unsafe { &mut *board_ptr };
             for coin in board.coins.iter_mut() {
-                if coin.dead { continue; }
+                if coin.dead {
+                    continue;
+                }
                 if !coin.is_being_collected
                     && crate::todlib::tod_common::distance(
-                        coin.pos_x, coin.pos_y + 30.0,
-                        stinky.pos_x, stinky.pos_y,
+                        coin.pos_x,
+                        coin.pos_y + 30.0,
+                        stinky.pos_x,
+                        stinky.pos_y,
                     ) < 20.0
                 {
                     coin.collect();
@@ -2322,8 +2836,14 @@ impl ZenGarden {
                 stinky.grid_item_state = new_state;
                 if let Some(app) = self.app {
                     unsafe {
-                        if let Some(reanim) = (*app).reanimation_get_mut(stinky.grid_item_reanim_id) {
-                            reanim.play_reanim("anim_crawl", crate::todlib::reanimator::ReanimLoopType::Loop, 10, 6.0);
+                        if let Some(reanim) = (*app).reanimation_get_mut(stinky.grid_item_reanim_id)
+                        {
+                            reanim.play_reanim(
+                                "anim_crawl",
+                                crate::todlib::reanimator::ReanimLoopType::Loop,
+                                10,
+                                6.0,
+                            );
                         }
                     }
                 }
@@ -2342,7 +2862,10 @@ impl ZenGarden {
             unsafe {
                 if (*board).m_tutorial_state == TutorialState::ZenGardenVisitStore {
                     if let Some(s) = a_store {
-                        unsafe { (*(s as *mut crate::lawn::widget::store_screen::StoreScreen)).setup_for_intro(2600); }
+                        unsafe {
+                            (*(s as *mut crate::lawn::widget::store_screen::StoreScreen))
+                                .setup_for_intro(2600);
+                        }
                     }
                     if let Some(app) = self.app {
                         unsafe {
@@ -2407,7 +2930,8 @@ impl ZenGarden {
         if let Some(board_ptr) = self.board {
             let board = unsafe { &mut *board_ptr };
             for item in board.grid_items.iter_mut() {
-                if !item.dead && item.grid_item_type == crate::lawn::grid_item::GridItemType::Stinky {
+                if !item.dead && item.grid_item_type == crate::lawn::grid_item::GridItemType::Stinky
+                {
                     return Some(item as *mut GridItem);
                 }
             }
@@ -2418,7 +2942,10 @@ impl ZenGarden {
     pub fn stinky_pick_goal(&mut self, stinky: &mut GridItem) {
         // 对应 C++ StinkyPickGoal
         let a_cur_dist_to_goal = crate::todlib::tod_common::distance(
-            stinky.goal_x, stinky.goal_y, stinky.pos_x, stinky.pos_y,
+            stinky.goal_x,
+            stinky.goal_y,
+            stinky.pos_x,
+            stinky.pos_y,
         );
 
         // C++: 找最近的未收集金币
@@ -2428,10 +2955,15 @@ impl ZenGarden {
         if let Some(board_ptr) = self.board {
             let board = unsafe { &*board_ptr };
             for (i, coin) in board.coins.iter().enumerate() {
-                if coin.dead { continue; }
+                if coin.dead {
+                    continue;
+                }
                 if !coin.is_being_collected && coin.pos_y == coin.ground_y {
                     let mut a_weight = crate::todlib::tod_common::distance(
-                        coin.pos_x, coin.pos_y + 30.0, stinky.pos_x, stinky.pos_y,
+                        coin.pos_x,
+                        coin.pos_y + 30.0,
+                        stinky.pos_x,
+                        stinky.pos_y,
                     );
                     if coin.coin_type == CoinType::Gold {
                         a_weight -= 40.0;
@@ -2439,7 +2971,10 @@ impl ZenGarden {
                         a_weight -= 80.0;
                     }
                     let a_dist_from_last_goal = crate::todlib::tod_common::distance(
-                        coin.pos_x, coin.pos_y + 30.0, stinky.goal_x, stinky.goal_y,
+                        coin.pos_x,
+                        coin.pos_y + 30.0,
+                        stinky.goal_x,
+                        stinky.goal_y,
                     );
                     if a_dist_from_last_goal < 5.0 {
                         a_weight -= 20.0;
@@ -2464,11 +2999,17 @@ impl ZenGarden {
         } else if a_cur_dist_to_goal <= 10.0 {
             // C++: 无硬币时随机选一个网格目标（简化：选最近网格中心）
             let mut count = 0;
-            let mut target = crate::lawn::zen_garden::SpecialGridPlacement { pixel_x: 0, pixel_y: 0, grid_x: 0, grid_y: 0 };
+            let mut target = crate::lawn::zen_garden::SpecialGridPlacement {
+                pixel_x: 0,
+                pixel_y: 0,
+                grid_x: 0,
+                grid_y: 0,
+            };
             if let Some(placements) = self.get_special_grid_placements(&mut count) {
                 let placements = unsafe { std::slice::from_raw_parts(placements, count as usize) };
                 if !placements.is_empty() {
-                    let idx = crate::framework::common::rand_range(placements.len() as i32) as usize;
+                    let idx =
+                        crate::framework::common::rand_range(placements.len() as i32) as usize;
                     target = crate::lawn::zen_garden::SpecialGridPlacement {
                         pixel_x: placements[idx].pixel_x,
                         pixel_y: placements[idx].pixel_y,
@@ -2488,9 +3029,13 @@ impl ZenGarden {
 
         stinky.counter = 100;
         // C++: 目标方向与当前行走方向不符时转身
-        let turn_to = if stinky.goal_x < stinky.pos_x && stinky.grid_item_state == GridItemState::StinkyWalkingRight {
+        let turn_to = if stinky.goal_x < stinky.pos_x
+            && stinky.grid_item_state == GridItemState::StinkyWalkingRight
+        {
             Some(GridItemState::StinkyTurningLeft)
-        } else if stinky.goal_x > stinky.pos_x && stinky.grid_item_state == GridItemState::StinkyWalkingLeft {
+        } else if stinky.goal_x > stinky.pos_x
+            && stinky.grid_item_state == GridItemState::StinkyWalkingLeft
+        {
             Some(GridItemState::StinkyTurningRight)
         } else {
             None
@@ -2501,7 +3046,12 @@ impl ZenGarden {
             if let Some(app) = self.app {
                 unsafe {
                     if let Some(reanim) = (*app).reanimation_get_mut(stinky.grid_item_reanim_id) {
-                        reanim.play_reanim("turn", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, 10, 6.0);
+                        reanim.play_reanim(
+                            "turn",
+                            crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,
+                            10,
+                            6.0,
+                        );
                     }
                 }
             }
@@ -2544,7 +3094,9 @@ impl ZenGarden {
         }
         // C++: mApp->PlaySample(Sexy::SOUND_TAP);
         if let Some(app) = self.app {
-            unsafe { (*app).play_sample(crate::todlib::tod_foley::SOUND_TAP); }
+            unsafe {
+                (*app).play_sample(crate::todlib::tod_foley::SOUND_TAP);
+            }
         }
         // [TRANSLATION_NOTE]: C++ 中 ClearAdvice(ADVICE_STINKY_SLEEPING) 依赖提示系统，暂不执行
     }
@@ -2568,9 +3120,7 @@ impl ZenGarden {
     pub fn is_stinky_sleeping(&self) -> bool {
         // 对应 C++ IsStinkySleeping
         if let Some(stinky) = self.get_stinky() {
-            unsafe {
-                (*stinky).grid_item_state == GridItemState::StinkySleeping
-            }
+            unsafe { (*stinky).grid_item_state == GridItemState::StinkySleeping }
         } else {
             false
         }
@@ -2597,7 +3147,12 @@ impl ZenGarden {
         if let Some(app) = self.app {
             unsafe {
                 if let Some(reanim) = (*app).reanimation_get_mut(stinky.grid_item_reanim_id) {
-                    reanim.play_reanim("anim_out", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, 20, 6.0);
+                    reanim.play_reanim(
+                        "anim_out",
+                        crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,
+                        20,
+                        6.0,
+                    );
                 }
             }
         }
@@ -2617,7 +3172,12 @@ impl ZenGarden {
         if let Some(app) = self.app {
             unsafe {
                 if let Some(reanim) = (*app).reanimation_get_mut(stinky.grid_item_reanim_id) {
-                    reanim.play_reanim("anim_in", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, 20, 6.0);
+                    reanim.play_reanim(
+                        "anim_in",
+                        crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,
+                        20,
+                        6.0,
+                    );
                 }
             }
         }
@@ -2629,7 +3189,12 @@ impl ZenGarden {
         if let Some(app) = self.app {
             unsafe {
                 if let Some(reanim) = (*app).reanimation_get_mut(stinky.grid_item_reanim_id) {
-                    reanim.play_reanim("anim_out", crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold, blend_time, 0.0);
+                    reanim.play_reanim(
+                        "anim_out",
+                        crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,
+                        blend_time,
+                        0.0,
+                    );
                     reanim.m_anim_rate = 0.0;
                 }
                 // [TRANSLATION_NOTE]: AddReanimation(REANIM_SLEEPING) + AttachReanim 依赖附着系统，暂不执行
@@ -2652,8 +3217,14 @@ impl ZenGarden {
         let Some(app) = self.app else { return };
         unsafe {
             if (*app).m_crazy_dave_message_index == -1
-                || (*app).base.dialog_map.contains_key(&(Dialogs::Store as i32))
-                || (*app).base.dialog_map.contains_key(&(Dialogs::ZenSell as i32))
+                || (*app)
+                    .base
+                    .dialog_map
+                    .contains_key(&(Dialogs::Store as i32))
+                || (*app)
+                    .base
+                    .dialog_map
+                    .contains_key(&(Dialogs::ZenSell as i32))
             {
                 return;
             }
@@ -2668,7 +3239,10 @@ impl ZenGarden {
             }
 
             if (*app).m_crazy_dave_message_index == 2102 {
-                let num_potted = (*app).player_info.as_ref().map_or(0, |info| info.m_num_potted_plants);
+                let num_potted = (*app)
+                    .player_info
+                    .as_ref()
+                    .map_or(0, |info| info.m_num_potted_plants);
                 if num_potted == 0 {
                     for _ in 0..2 {
                         let mut a_potted_plant = PottedPlant::new();
@@ -2701,7 +3275,11 @@ impl ZenGarden {
                     let item_type = b.grid_items[i].grid_item_type;
                     if item_type == crate::lawn::grid_item::GridItemType::ZenTool {
                         let tool = &mut b.grid_items[i];
-                        self.do_feeding_tool(tool.pos_x as i32, tool.pos_y as i32, tool.grid_item_state);
+                        self.do_feeding_tool(
+                            tool.pos_x as i32,
+                            tool.pos_y as i32,
+                            tool.grid_item_state,
+                        );
                         tool.grid_item_die();
                     } else if item_type == crate::lawn::grid_item::GridItemType::Stinky {
                         if let Some(app) = self.app {
@@ -2745,7 +3323,9 @@ impl ZenGarden {
     pub fn feed_chocolate_to_plant(&self, plant: &mut Plant) {
         // 对应 C++ FeedChocolateToPlant：记录巧克力时间并重置生产倒计时
         if let Some(pp) = self.potted_plant_from_index(plant.potted_plant_index as usize) {
-            unsafe { (*pp).last_chocolate_time = self.now_time; }
+            unsafe {
+                (*pp).last_chocolate_time = self.now_time;
+            }
         }
         plant.launch_counter = 60;
         // C++ ZenGarden.cpp:1022: mApp->AddPvzpParticle(thePlant->mX + 40.0f, thePlant->mY + 40.0f,
@@ -2765,13 +3345,16 @@ impl ZenGarden {
     pub fn set_plant_anim_speed(&self, plant: &mut Plant) {
         // 对应 C++ SetPlantAnimSpeed
         let a_body_reanim = self.app.and_then(|app| unsafe {
-            (*app).reanimation_get_mut(plant.body_reanim_id).map(|r| r as *mut Reanimation)
+            (*app)
+                .reanimation_get_mut(plant.body_reanim_id)
+                .map(|r| r as *mut Reanimation)
         });
-        let Some(a_body_reanim) = a_body_reanim else { return };
+        let Some(a_body_reanim) = a_body_reanim else {
+            return;
+        };
         let a_potted_plant = self.potted_plant_from_index(plant.potted_plant_index as usize);
-        let a_plant_high_on_chocolate = a_potted_plant.map_or(false, |pp| unsafe {
-            self.plant_high_on_chocolate(&*pp)
-        });
+        let a_plant_high_on_chocolate =
+            a_potted_plant.map_or(false, |pp| unsafe { self.plant_high_on_chocolate(&*pp) });
         let a_plant_at_high_rate = unsafe { (*a_body_reanim).m_anim_rate >= 25.0 };
         if a_plant_at_high_rate == a_plant_high_on_chocolate {
             return;
@@ -2779,9 +3362,14 @@ impl ZenGarden {
 
         let mut a_target_rate;
         match plant.seed_type {
-            SeedType::Peashooter | SeedType::Snowpea | SeedType::Repeater
-            | SeedType::Leftpeater | SeedType::Gatlingpea | SeedType::Splitpea
-            | SeedType::Threepeater | SeedType::Marigold => {
+            SeedType::Peashooter
+            | SeedType::Snowpea
+            | SeedType::Repeater
+            | SeedType::Leftpeater
+            | SeedType::Gatlingpea
+            | SeedType::Splitpea
+            | SeedType::Threepeater
+            | SeedType::Marigold => {
                 a_target_rate = crate::todlib::tod_common::rand_range_float(15.0, 20.0);
             }
             SeedType::PotatoMine => {
@@ -2797,9 +3385,15 @@ impl ZenGarden {
             a_target_rate = a_target_rate.max(25.0);
         }
 
-        unsafe { (*a_body_reanim).m_anim_rate = a_target_rate; }
+        unsafe {
+            (*a_body_reanim).m_anim_rate = a_target_rate;
+        }
         let body_anim_time = unsafe { (*a_body_reanim).m_anim_time };
-        for head_id in [plant.head_reanim_id, plant.head_reanim_id2, plant.head_reanim_id3] {
+        for head_id in [
+            plant.head_reanim_id,
+            plant.head_reanim_id2,
+            plant.head_reanim_id3,
+        ] {
             if let Some(app) = self.app {
                 unsafe {
                     if let Some(h) = (*app).reanimation_get_mut(head_id) {
@@ -2811,11 +3405,20 @@ impl ZenGarden {
         }
     }
 
-    pub fn update_stinky_motion_trail(&self, stinky: &mut GridItem, stinky_high_on_chocolate: bool) {
+    pub fn update_stinky_motion_trail(
+        &self,
+        stinky: &mut GridItem,
+        stinky_high_on_chocolate: bool,
+    ) {
         // 对应 C++ UpdateStinkyMotionTrail
-        let a_stinky_reanim_time = self.app.and_then(|app| unsafe {
-            (*app).reanimation_get(stinky.grid_item_reanim_id).map(|r| r.m_anim_time)
-        }).unwrap_or(0.0);
+        let a_stinky_reanim_time = self
+            .app
+            .and_then(|app| unsafe {
+                (*app)
+                    .reanimation_get(stinky.grid_item_reanim_id)
+                    .map(|r| r.m_anim_time)
+            })
+            .unwrap_or(0.0);
         if !stinky_high_on_chocolate {
             stinky.motion_trail_count = 0;
             return;
@@ -2874,7 +3477,12 @@ impl ZenGarden {
         // 对应 C++ PlantSetLaunchCounter
         let a_time = self.plant_get_minutes_since_happy(plant);
         let a_counter_max = crate::todlib::tod_common::tod_animate_curve(
-            5, 30, a_time, 3000, 15000, crate::lawn::game_enums::TodCurves::Linear,
+            5,
+            30,
+            a_time,
+            3000,
+            15000,
+            crate::lawn::game_enums::TodCurves::Linear,
         );
         plant.launch_counter = crate::todlib::tod_common::rand_range_int(1800, a_counter_max);
     }
@@ -2897,7 +3505,10 @@ impl ZenGarden {
         // 对应 C++ IsStinkyHighOnChocolate（无符号比较近似）
         let a_now = self.now_time as u32;
         let a_last = self.app.map_or(0u32, |app| unsafe {
-            (*app).player_info.as_ref().map_or(0u32, |info| info.m_last_stinky_chocolate_time)
+            (*app)
+                .player_info
+                .as_ref()
+                .map_or(0u32, |info| info.m_last_stinky_chocolate_time)
         });
         a_now.wrapping_sub(a_last) < 3600
     }
@@ -2911,7 +3522,11 @@ impl ZenGarden {
         if !walking {
             return;
         }
-        let a_rate = if self.is_stinky_high_on_chocolate() { 12.0 } else { 6.0 };
+        let a_rate = if self.is_stinky_high_on_chocolate() {
+            12.0
+        } else {
+            6.0
+        };
         if let Some(app) = self.app {
             unsafe {
                 if let Some(reanim) = (*app).reanimation_get_mut(stinky.grid_item_reanim_id) {
@@ -2927,11 +3542,3 @@ impl Default for ZenGarden {
         ZenGarden::new()
     }
 }
-
-
-
-
-
-
-
-

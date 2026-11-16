@@ -13,47 +13,37 @@ pub struct SexyMatrix3 {
 impl SexyMatrix3 {
     pub fn identity() -> Self {
         SexyMatrix3 {
-            m: [
-                [1.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0],
-                [0.0, 0.0, 1.0],
-            ],
+            m: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
         }
     }
 
     pub fn new_from_values(
-        m00: f32, m01: f32, m02: f32,
-        m10: f32, m11: f32, m12: f32,
-        m20: f32, m21: f32, m22: f32,
+        m00: f32,
+        m01: f32,
+        m02: f32,
+        m10: f32,
+        m11: f32,
+        m12: f32,
+        m20: f32,
+        m21: f32,
+        m22: f32,
     ) -> Self {
         SexyMatrix3 {
-            m: [
-                [m00, m01, m02],
-                [m10, m11, m12],
-                [m20, m21, m22],
-            ],
+            m: [[m00, m01, m02], [m10, m11, m12], [m20, m21, m22]],
         }
     }
 
     /// 创建平移矩阵
     pub fn translation(tx: f32, ty: f32) -> Self {
         SexyMatrix3 {
-            m: [
-                [1.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0],
-                [tx, ty, 1.0],
-            ],
+            m: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [tx, ty, 1.0]],
         }
     }
 
     /// 创建缩放矩阵
     pub fn scaling(sx: f32, sy: f32) -> Self {
         SexyMatrix3 {
-            m: [
-                [sx, 0.0, 0.0],
-                [0.0, sy, 0.0],
-                [0.0, 0.0, 1.0],
-            ],
+            m: [[sx, 0.0, 0.0], [0.0, sy, 0.0], [0.0, 0.0, 1.0]],
         }
     }
 
@@ -62,11 +52,7 @@ impl SexyMatrix3 {
         let c = angle.cos();
         let s = angle.sin();
         SexyMatrix3 {
-            m: [
-                [c, s, 0.0],
-                [-s, c, 0.0],
-                [0.0, 0.0, 1.0],
-            ],
+            m: [[c, s, 0.0], [-s, c, 0.0], [0.0, 0.0, 1.0]],
         }
     }
 
@@ -159,7 +145,12 @@ impl SexyMatrix4 {
                 [2.0 / (r - l), 0.0, 0.0, 0.0],
                 [0.0, 2.0 / (t - b), 0.0, 0.0],
                 [0.0, 0.0, -2.0 / (f - n), 0.0],
-                [-(r + l) / (r - l), -(t + b) / (t - b), -(f + n) / (f - n), 1.0],
+                [
+                    -(r + l) / (r - l),
+                    -(t + b) / (t - b),
+                    -(f + n) / (f - n),
+                    1.0,
+                ],
             ],
         }
     }
@@ -335,7 +326,10 @@ impl std::ops::Mul<crate::framework::common::SexyVector2> for SexyMatrix3 {
     type Output = crate::framework::common::SexyVector2;
     /// 对应 C++ SexyMatrix3::operator*(const SexyVector2&)（SexyMatrix.cpp）：
     /// x = m00*v.x + m01*v.y + m02；y = m10*v.x + m11*v.y + m12（行主序约定）
-    fn mul(self, v: crate::framework::common::SexyVector2) -> crate::framework::common::SexyVector2 {
+    fn mul(
+        self,
+        v: crate::framework::common::SexyVector2,
+    ) -> crate::framework::common::SexyVector2 {
         crate::framework::common::SexyVector2::new(
             self.m[0][0] * v.x + self.m[0][1] * v.y + self.m[0][2],
             self.m[1][0] * v.x + self.m[1][1] * v.y + self.m[1][2],

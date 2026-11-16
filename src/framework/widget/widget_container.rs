@@ -9,9 +9,9 @@
 use std::cmp;
 use std::collections::LinkedList;
 
+use crate::framework::graphics::graphics::Graphics;
 use crate::framework::point::Point;
 use crate::framework::rect::Rect;
-use crate::framework::graphics::graphics::Graphics;
 
 /// 通用容器指针（用于子容器列表）
 pub type WidgetContainerPtr = *mut WidgetContainer;
@@ -53,7 +53,10 @@ impl WidgetContainer {
             parent: None,
             update_cnt: 0,
             dirty: false,
-            x: 0, y: 0, width: 0, height: 0,
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
             has_alpha: false,
             clip: true,
             priority: 0,
@@ -74,9 +77,7 @@ impl WidgetContainer {
     /// 获取绝对位置
     pub fn get_abs_pos(&self) -> Point {
         match self.parent {
-            Some(parent) => unsafe {
-                Point::new(self.x, self.y) + (*parent).get_abs_pos()
-            },
+            Some(parent) => unsafe { Point::new(self.x, self.y) + (*parent).get_abs_pos() },
             None => Point::new(self.x, self.y),
         }
     }
@@ -114,7 +115,9 @@ impl WidgetContainer {
         // LinkedList::retain 尚不稳定，使用 split_off 方式
         if let Some(pos) = self.widgets.iter().position(|w| *w == child) {
             let mut rest = self.widgets.split_off(pos);
-            if !rest.is_empty() { rest.pop_front(); }
+            if !rest.is_empty() {
+                rest.pop_front();
+            }
             self.widgets.append(&mut rest);
         }
         unsafe {
@@ -146,7 +149,9 @@ impl WidgetContainer {
     pub fn mark_all_dirty(&mut self) {
         self.dirty = true;
         for w in &self.widgets {
-            unsafe { (**w).mark_all_dirty(); }
+            unsafe {
+                (**w).mark_all_dirty();
+            }
         }
     }
 
@@ -180,7 +185,11 @@ impl WidgetContainer {
     /// 从指定位置起按 z-order 插入（对应 C++ `InsertWidgetHelper(where, theWidget)`）
     /// C++ 的循环条件是 `(*anItr)->mZOrder <= theWidget->mZOrder` —— 即**跳过** z 更小或相等的，
     /// 插入到第一个 z 更大的之前（注意与上面 insert_widget_helper 的 `>=` 停止条件不同）。
-    fn insert_widget_helper_from(widgets: &mut ContainerList, from: usize, new_widget: WidgetContainerPtr) {
+    fn insert_widget_helper_from(
+        widgets: &mut ContainerList,
+        from: usize,
+        new_widget: WidgetContainerPtr,
+    ) {
         let z = unsafe { (*new_widget).zorder };
         let mut a_target: Option<usize> = None;
         for (idx, a_w) in widgets.iter().enumerate() {
@@ -215,7 +224,11 @@ impl WidgetContainer {
 
     /// 置于指定控件之后（对应 C++ WidgetContainer::PutBehind，WidgetContainer.cpp:301-318）
     /// C++ 中参数顺序为 (theWidget, theRefWidget)：把 theWidget 移到 theRefWidget 的**原位置之前**。
-    pub fn put_behind(&mut self, the_widget: WidgetContainerPtr, the_ref_widget: WidgetContainerPtr) {
+    pub fn put_behind(
+        &mut self,
+        the_widget: WidgetContainerPtr,
+        the_ref_widget: WidgetContainerPtr,
+    ) {
         if Self::remove_widget(&mut self.widgets, the_widget) {
             // C++: anItr = find(theRefWidget); InsertWidgetHelper(anItr, theWidget)
             // ref 不存在时 anItr == end() → 直接插到末尾
@@ -228,7 +241,11 @@ impl WidgetContainer {
     }
 
     /// 置于指定控件之前（对应 C++ WidgetContainer::PutInfront，WidgetContainer.cpp:320-339）
-    pub fn put_infront(&mut self, the_widget: WidgetContainerPtr, the_ref_widget: WidgetContainerPtr) {
+    pub fn put_infront(
+        &mut self,
+        the_widget: WidgetContainerPtr,
+        the_ref_widget: WidgetContainerPtr,
+    ) {
         if Self::remove_widget(&mut self.widgets, the_widget) {
             // C++: anItr = find(theRefWidget); if (anItr != end()) anItr++; InsertWidgetHelper(anItr, theWidget)
             let from = match self.widgets.iter().position(|w| *w == the_ref_widget) {

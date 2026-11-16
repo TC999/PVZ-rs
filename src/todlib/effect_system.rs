@@ -3,13 +3,13 @@
 
 #![allow(dead_code)]
 
-use crate::lawn::game_enums::{ParticleID, ReanimationID, CoinID, ATTACHMENTID_NULL};
+use crate::framework::graphics::graphics::Graphics;
+use crate::lawn::game_enums::{CoinID, ParticleID, ReanimationID, ATTACHMENTID_NULL};
+use crate::todlib::attachment::Attachment;
 use crate::todlib::reanimator::Reanimation;
 use crate::todlib::tod_particle::ParticleSystem;
 use crate::todlib::tod_particle::MAX_PARTICLES_SIZE;
-use crate::todlib::attachment::Attachment;
 use crate::todlib::trail::Trail;
-use crate::framework::graphics::graphics::Graphics;
 
 /// 特效类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,6 +90,9 @@ impl EffectSystem {
 
     /// 添加动画
     pub fn add_reanimation(&mut self, reanim: Reanimation) -> ReanimationID {
+        // [TRANSLATION_NOTE]: C++ mReanimations 为 DataArray（ID 1 起、0=NULL）；
+        // Rust 存量以 Vec 0 基下标直索引（attachment/board 等十余处），故保持 0 基。
+        // "无 reanim"的判定用 u32::MAX 哨兵（见 REANIMATIONID_NONE），不用 0。
         let id = self.reanimations.len() as ReanimationID;
         self.reanimations.push(reanim);
         id
@@ -163,7 +166,8 @@ impl EffectSystem {
         if id == 0 {
             return None;
         }
-        self.particle_systems.get_mut((id - 1) as usize)
+        self.particle_systems
+            .get_mut((id - 1) as usize)
             .filter(|ps| ps.self_id == id && !ps.dead)
     }
 

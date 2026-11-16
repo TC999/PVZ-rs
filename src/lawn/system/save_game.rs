@@ -13,6 +13,8 @@ use crate::lawn::board::{MAX_GRID_SIZE_X, MAX_GRID_SIZE_Y, MAX_ZOMBIES_IN_WAVE, 
 use crate::lawn::challenge::Challenge;
 use crate::lawn::coin::Coin;
 use crate::lawn::cursor_object::{CursorObject, CursorPreview};
+use crate::lawn::game_enums::*;
+use crate::lawn::game_object::GameObject;
 use crate::lawn::grid_item::{GridItem, NUM_MOTION_TRAIL_FRAMES};
 use crate::lawn::lawn_mower::LawnMower;
 use crate::lawn::plant::{Plant, MAX_MAGNET_ITEMS};
@@ -26,11 +28,9 @@ use crate::todlib::attachment::{Attachment, MAX_EFFECTS_PER_ATTACHMENT};
 use crate::todlib::definition::{ReanimatorTrackInstance, ReanimatorTransform};
 use crate::todlib::effect_system::EffectSystem;
 use crate::todlib::reanimator::Reanimation;
+use crate::todlib::tod_common::TodSmoothArray;
 use crate::todlib::tod_particle::TodParticleSystem;
 use crate::todlib::trail::Trail;
-use crate::lawn::game_enums::*;
-use crate::lawn::game_object::GameObject;
-use crate::todlib::tod_common::TodSmoothArray;
 
 // ── 常量 ──────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ const SAVE4_CHUNK_VERSION: u32 = 1;
 /// V4 存档文件头（对应 C++ SaveFileHeaderV4）
 #[repr(C)]
 pub struct SaveFileHeaderV4 {
-    pub magic: [u8; 12],       // "PVZP_SAVE4"
+    pub magic: [u8; 12], // "PVZP_SAVE4"
     pub version: u32,
     pub payload_size: u32,
     pub payload_crc: u32,
@@ -591,7 +591,11 @@ impl SaveGameContext {
             if self.bytes_left_to_read() < 4 {
                 self.failed = true;
             }
-            *value = if self.failed { 0 } else { self.buffer.read_i32() };
+            *value = if self.failed {
+                0
+            } else {
+                self.buffer.read_i32()
+            };
         } else {
             self.buffer.write_i32(*value);
         }
@@ -843,9 +847,13 @@ fn read_chunk_v4(chunk_type: u32, data: &[u8], board: &mut Board) -> bool {
                 SaveChunkTypeV4::SeedPackets => sync_seed_packets_portable(&mut a_context, board),
                 SaveChunkTypeV4::Challenge => sync_challenge_portable(&mut a_context, board),
                 SaveChunkTypeV4::Music => sync_music_portable(&mut a_context, board),
-                SaveChunkTypeV4::ParticleEmitters => sync_particle_emitters_portable(&mut a_context),
+                SaveChunkTypeV4::ParticleEmitters => {
+                    sync_particle_emitters_portable(&mut a_context)
+                }
                 SaveChunkTypeV4::ParticleParticles => sync_particles_portable(&mut a_context),
-                SaveChunkTypeV4::ParticleSystems => sync_particle_systems_portable(&mut a_context, board),
+                SaveChunkTypeV4::ParticleSystems => {
+                    sync_particle_systems_portable(&mut a_context, board)
+                }
                 SaveChunkTypeV4::Reanimations => sync_reanimations_portable(&mut a_context, board),
                 SaveChunkTypeV4::Trails => sync_trails_portable(&mut a_context, board),
                 SaveChunkTypeV4::Attachments => sync_attachments_portable(&mut a_context, board),
@@ -893,13 +901,25 @@ pub fn lawn_save_game(board: Option<*mut Board>, file_path: &str) -> bool {
             if !write_chunk_v4(&mut payload, SaveChunkTypeV4::GridItems as u32, _board) {
                 return false;
             }
-            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::ParticleEmitters as u32, _board) {
+            if !write_chunk_v4(
+                &mut payload,
+                SaveChunkTypeV4::ParticleEmitters as u32,
+                _board,
+            ) {
                 return false;
             }
-            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::ParticleParticles as u32, _board) {
+            if !write_chunk_v4(
+                &mut payload,
+                SaveChunkTypeV4::ParticleParticles as u32,
+                _board,
+            ) {
                 return false;
             }
-            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::ParticleSystems as u32, _board) {
+            if !write_chunk_v4(
+                &mut payload,
+                SaveChunkTypeV4::ParticleSystems as u32,
+                _board,
+            ) {
                 return false;
             }
             if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Reanimations as u32, _board) {
@@ -1001,7 +1021,9 @@ const ZOMBIE_ALLOWED_COUNT: usize = 100; // C++ SyncBoolArray(&mZombieAllowed[0]
 
 /// 写入 BoardBase 字段 blob（对应 C++ SyncBoardBasePortable 写入分支的 AppendFieldWithSync 序列）
 fn append_board_base_fields(a_blob: &mut Vec<u8>, board: &mut Board) {
-    append_field_with_sync(a_blob, BoardBaseFieldId::Paused as u32, |c| c.sync_bool(&mut board.m_paused));
+    append_field_with_sync(a_blob, BoardBaseFieldId::Paused as u32, |c| {
+        c.sync_bool(&mut board.m_paused)
+    });
     append_field_with_sync(a_blob, BoardBaseFieldId::GridSquareType as u32, |c| {
         for row in 0..MAX_GRID_SIZE_Y {
             for col in 0..MAX_GRID_SIZE_X {
@@ -1032,22 +1054,42 @@ fn append_board_base_fields(a_blob: &mut Vec<u8>, board: &mut Board) {
             }
         }
     });
-    append_field_with_sync(a_blob, BoardBaseFieldId::EnableGravestones as u32, |c| c.sync_bool(&mut board.m_enable_grave_stones));
-    append_field_with_sync(a_blob, BoardBaseFieldId::SpecialGravestoneX as u32, |c| c.sync_i32(&mut board.m_special_grave_stone_x));
-    append_field_with_sync(a_blob, BoardBaseFieldId::SpecialGravestoneY as u32, |c| c.sync_i32(&mut board.m_special_grave_stone_y));
-    append_field_with_sync(a_blob, BoardBaseFieldId::FogOffset as u32, |c| c.sync_f32(&mut board.m_fog_offset));
-    append_field_with_sync(a_blob, BoardBaseFieldId::FogBlownCountdown as u32, |c| c.sync_i32(&mut board.m_fog_blown_count_down));
+    append_field_with_sync(a_blob, BoardBaseFieldId::EnableGravestones as u32, |c| {
+        c.sync_bool(&mut board.m_enable_grave_stones)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::SpecialGravestoneX as u32, |c| {
+        c.sync_i32(&mut board.m_special_grave_stone_x)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::SpecialGravestoneY as u32, |c| {
+        c.sync_i32(&mut board.m_special_grave_stone_y)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::FogOffset as u32, |c| {
+        c.sync_f32(&mut board.m_fog_offset)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::FogBlownCountdown as u32, |c| {
+        c.sync_i32(&mut board.m_fog_blown_count_down)
+    });
     append_field_with_sync(a_blob, BoardBaseFieldId::PlantRow as u32, |c| {
         for row in 0..MAX_GRID_SIZE_Y {
             c.sync_enum(&mut board.m_plant_row[row]);
         }
     });
-    append_field_with_sync(a_blob, BoardBaseFieldId::WaveRowGotLawnMowered as u32, |c| {
-        sync_i32_array(c, &mut board.m_wave_row_got_lawn_mowered)
+    append_field_with_sync(
+        a_blob,
+        BoardBaseFieldId::WaveRowGotLawnMowered as u32,
+        |c| sync_i32_array(c, &mut board.m_wave_row_got_lawn_mowered),
+    );
+    append_field_with_sync(
+        a_blob,
+        BoardBaseFieldId::BonusLawnMowersRemaining as u32,
+        |c| c.sync_i32(&mut board.m_bonus_lawn_mowers_remaining),
+    );
+    append_field_with_sync(a_blob, BoardBaseFieldId::IceMinX as u32, |c| {
+        sync_i32_array(c, &mut board.m_ice_min_x)
     });
-    append_field_with_sync(a_blob, BoardBaseFieldId::BonusLawnMowersRemaining as u32, |c| c.sync_i32(&mut board.m_bonus_lawn_mowers_remaining));
-    append_field_with_sync(a_blob, BoardBaseFieldId::IceMinX as u32, |c| sync_i32_array(c, &mut board.m_ice_min_x));
-    append_field_with_sync(a_blob, BoardBaseFieldId::IceTimer as u32, |c| sync_i32_array(c, &mut board.m_ice_timer));
+    append_field_with_sync(a_blob, BoardBaseFieldId::IceTimer as u32, |c| {
+        sync_i32_array(c, &mut board.m_ice_timer)
+    });
     append_field_with_sync(a_blob, BoardBaseFieldId::IceParticleId as u32, |c| {
         for row in 0..MAX_GRID_SIZE_Y {
             c.sync_u32(&mut board.m_ice_particle_id[row]);
@@ -1066,63 +1108,161 @@ fn append_board_base_fields(a_blob: &mut Vec<u8>, board: &mut Board) {
     // C++: SyncBoolArray(&mZombieAllowed[0], 100)；Rust 数组为 NUM_ZOMBIE_TYPES(33)，超出部分占位
     append_field_with_sync(a_blob, BoardBaseFieldId::ZombieAllowed as u32, |c| {
         for i in 0..ZOMBIE_ALLOWED_COUNT {
-            let mut v = if i < board.m_zombie_allowed.len() { board.m_zombie_allowed[i] } else { false };
+            let mut v = if i < board.m_zombie_allowed.len() {
+                board.m_zombie_allowed[i]
+            } else {
+                false
+            };
             c.sync_bool(&mut v);
             if i < board.m_zombie_allowed.len() {
                 board.m_zombie_allowed[i] = v;
             }
         }
     });
-    append_field_with_sync(a_blob, BoardBaseFieldId::SunCountdown as u32, |c| c.sync_i32(&mut board.m_sun_countdown));
-    append_field_with_sync(a_blob, BoardBaseFieldId::NumSunsFallen as u32, |c| c.sync_i32(&mut board.m_num_suns_fallen));
-    append_field_with_sync(a_blob, BoardBaseFieldId::ShakeCounter as u32, |c| c.sync_i32(&mut board.m_shake_counter));
-    append_field_with_sync(a_blob, BoardBaseFieldId::ShakeAmountX as u32, |c| c.sync_i32(&mut board.m_shake_amount_x));
-    append_field_with_sync(a_blob, BoardBaseFieldId::ShakeAmountY as u32, |c| c.sync_i32(&mut board.m_shake_amount_y));
-    append_field_with_sync(a_blob, BoardBaseFieldId::BackgroundType as u32, |c| c.sync_enum(&mut board.m_background_type));
-    append_field_with_sync(a_blob, BoardBaseFieldId::Level as u32, |c| c.sync_i32(&mut board.level));
-    append_field_with_sync(a_blob, BoardBaseFieldId::SodPosition as u32, |c| c.sync_i32(&mut board.m_sod_position));
-    append_field_with_sync(a_blob, BoardBaseFieldId::PrevMouseX as u32, |c| c.sync_i32(&mut board.m_prev_mouse_x));
-    append_field_with_sync(a_blob, BoardBaseFieldId::PrevMouseY as u32, |c| c.sync_i32(&mut board.m_prev_mouse_y));
-    append_field_with_sync(a_blob, BoardBaseFieldId::SunMoney as u32, |c| c.sync_i32(&mut board.m_sun_money));
-    append_field_with_sync(a_blob, BoardBaseFieldId::NumWaves as u32, |c| c.sync_i32(&mut board.m_num_waves));
-    append_field_with_sync(a_blob, BoardBaseFieldId::MainCounter as u32, |c| c.sync_u32(&mut board.m_main_counter));
-    append_field_with_sync(a_blob, BoardBaseFieldId::EffectCounter as u32, |c| c.sync_u32(&mut board.m_effect_counter));
-    append_field_with_sync(a_blob, BoardBaseFieldId::DrawCount as u32, |c| c.sync_u32(&mut board.m_draw_count));
-    append_field_with_sync(a_blob, BoardBaseFieldId::RiseFromGraveCounter as u32, |c| c.sync_i32(&mut board.m_rise_from_grave_counter));
-    append_field_with_sync(a_blob, BoardBaseFieldId::OutOfMoneyCounter as u32, |c| c.sync_i32(&mut board.m_out_of_money_counter));
-    append_field_with_sync(a_blob, BoardBaseFieldId::CurrentWave as u32, |c| c.sync_i32(&mut board.m_current_wave));
-    append_field_with_sync(a_blob, BoardBaseFieldId::TotalSpawnedWaves as u32, |c| c.sync_i32(&mut board.m_total_spawned_waves));
-    append_field_with_sync(a_blob, BoardBaseFieldId::TutorialState as u32, |c| c.sync_enum(&mut board.m_tutorial_state));
-    append_field_with_sync(a_blob, BoardBaseFieldId::TutorialParticleId as u32, |c| c.sync_u32(&mut board.m_tutorial_particle_id));
-    append_field_with_sync(a_blob, BoardBaseFieldId::TutorialTimer as u32, |c| c.sync_i32(&mut board.m_tutorial_timer));
-    append_field_with_sync(a_blob, BoardBaseFieldId::LastBungeeWave as u32, |c| c.sync_i32(&mut board.m_last_bungee_wave));
-    append_field_with_sync(a_blob, BoardBaseFieldId::ZombieHealthToNextWave as u32, |c| c.sync_i32(&mut board.m_zombie_health_to_next_wave));
-    append_field_with_sync(a_blob, BoardBaseFieldId::ZombieHealthWaveStart as u32, |c| c.sync_i32(&mut board.m_zombie_health_wave_start));
-    append_field_with_sync(a_blob, BoardBaseFieldId::ZombieCountdown as u32, |c| c.sync_i32(&mut board.m_zombie_count_down));
-    append_field_with_sync(a_blob, BoardBaseFieldId::ZombieCountdownStart as u32, |c| c.sync_i32(&mut board.m_zombie_count_down_start));
-    append_field_with_sync(a_blob, BoardBaseFieldId::HugeWaveCountdown as u32, |c| c.sync_i32(&mut board.m_huge_wave_count_down));
+    append_field_with_sync(a_blob, BoardBaseFieldId::SunCountdown as u32, |c| {
+        c.sync_i32(&mut board.m_sun_countdown)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::NumSunsFallen as u32, |c| {
+        c.sync_i32(&mut board.m_num_suns_fallen)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::ShakeCounter as u32, |c| {
+        c.sync_i32(&mut board.m_shake_counter)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::ShakeAmountX as u32, |c| {
+        c.sync_i32(&mut board.m_shake_amount_x)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::ShakeAmountY as u32, |c| {
+        c.sync_i32(&mut board.m_shake_amount_y)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::BackgroundType as u32, |c| {
+        c.sync_enum(&mut board.m_background_type)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::Level as u32, |c| {
+        c.sync_i32(&mut board.level)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::SodPosition as u32, |c| {
+        c.sync_i32(&mut board.m_sod_position)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::PrevMouseX as u32, |c| {
+        c.sync_i32(&mut board.m_prev_mouse_x)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::PrevMouseY as u32, |c| {
+        c.sync_i32(&mut board.m_prev_mouse_y)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::SunMoney as u32, |c| {
+        c.sync_i32(&mut board.m_sun_money)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::NumWaves as u32, |c| {
+        c.sync_i32(&mut board.m_num_waves)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::MainCounter as u32, |c| {
+        c.sync_u32(&mut board.m_main_counter)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::EffectCounter as u32, |c| {
+        c.sync_u32(&mut board.m_effect_counter)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::DrawCount as u32, |c| {
+        c.sync_u32(&mut board.m_draw_count)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::RiseFromGraveCounter as u32, |c| {
+        c.sync_i32(&mut board.m_rise_from_grave_counter)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::OutOfMoneyCounter as u32, |c| {
+        c.sync_i32(&mut board.m_out_of_money_counter)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::CurrentWave as u32, |c| {
+        c.sync_i32(&mut board.m_current_wave)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::TotalSpawnedWaves as u32, |c| {
+        c.sync_i32(&mut board.m_total_spawned_waves)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::TutorialState as u32, |c| {
+        c.sync_enum(&mut board.m_tutorial_state)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::TutorialParticleId as u32, |c| {
+        c.sync_u32(&mut board.m_tutorial_particle_id)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::TutorialTimer as u32, |c| {
+        c.sync_i32(&mut board.m_tutorial_timer)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::LastBungeeWave as u32, |c| {
+        c.sync_i32(&mut board.m_last_bungee_wave)
+    });
+    append_field_with_sync(
+        a_blob,
+        BoardBaseFieldId::ZombieHealthToNextWave as u32,
+        |c| c.sync_i32(&mut board.m_zombie_health_to_next_wave),
+    );
+    append_field_with_sync(
+        a_blob,
+        BoardBaseFieldId::ZombieHealthWaveStart as u32,
+        |c| c.sync_i32(&mut board.m_zombie_health_wave_start),
+    );
+    append_field_with_sync(a_blob, BoardBaseFieldId::ZombieCountdown as u32, |c| {
+        c.sync_i32(&mut board.m_zombie_count_down)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::ZombieCountdownStart as u32, |c| {
+        c.sync_i32(&mut board.m_zombie_count_down_start)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::HugeWaveCountdown as u32, |c| {
+        c.sync_i32(&mut board.m_huge_wave_count_down)
+    });
     append_field_with_sync(a_blob, BoardBaseFieldId::HelpDisplayed as u32, |c| {
         sync_bool_array(c, &mut board.m_help_displayed)
     });
-    append_field_with_sync(a_blob, BoardBaseFieldId::HelpIndex as u32, |c| c.sync_enum(&mut board.m_advice));
-    append_field_with_sync(a_blob, BoardBaseFieldId::FinalBossKilled as u32, |c| c.sync_bool(&mut board.m_final_boss_killed));
-    append_field_with_sync(a_blob, BoardBaseFieldId::ShowShovel as u32, |c| c.sync_bool(&mut board.m_show_shovel));
-    append_field_with_sync(a_blob, BoardBaseFieldId::CoinBankFadeCount as u32, |c| c.sync_i32(&mut board.m_coin_bank_fade_count));
-    append_field_with_sync(a_blob, BoardBaseFieldId::DebugTextMode as u32, |c| c.sync_enum(&mut board.m_debug_text_mode));
-    append_field_with_sync(a_blob, BoardBaseFieldId::LevelComplete as u32, |c| c.sync_bool(&mut board.m_level_complete));
-    append_field_with_sync(a_blob, BoardBaseFieldId::BoardFadeOutCounter as u32, |c| c.sync_i32(&mut board.m_board_fade_out_counter));
-    append_field_with_sync(a_blob, BoardBaseFieldId::NextSurvivalStageCounter as u32, |c| c.sync_i32(&mut board.m_next_survival_stage_counter));
-    append_field_with_sync(a_blob, BoardBaseFieldId::ScoreNextMowerCounter as u32, |c| c.sync_i32(&mut board.m_score_next_mower_counter));
-    append_field_with_sync(a_blob, BoardBaseFieldId::LevelAwardSpawned as u32, |c| c.sync_bool(&mut board.m_level_award_spawned));
-    append_field_with_sync(a_blob, BoardBaseFieldId::ProgressMeterWidth as u32, |c| c.sync_i32(&mut board.m_progress_meter_width));
-    append_field_with_sync(a_blob, BoardBaseFieldId::FlagRaiseCounter as u32, |c| c.sync_i32(&mut board.m_flag_raise_counter));
-    append_field_with_sync(a_blob, BoardBaseFieldId::IceTrapCounter as u32, |c| c.sync_i32(&mut board.m_ice_trap_counter));
+    append_field_with_sync(a_blob, BoardBaseFieldId::HelpIndex as u32, |c| {
+        c.sync_enum(&mut board.m_advice)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::FinalBossKilled as u32, |c| {
+        c.sync_bool(&mut board.m_final_boss_killed)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::ShowShovel as u32, |c| {
+        c.sync_bool(&mut board.m_show_shovel)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::CoinBankFadeCount as u32, |c| {
+        c.sync_i32(&mut board.m_coin_bank_fade_count)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::DebugTextMode as u32, |c| {
+        c.sync_enum(&mut board.m_debug_text_mode)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::LevelComplete as u32, |c| {
+        c.sync_bool(&mut board.m_level_complete)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::BoardFadeOutCounter as u32, |c| {
+        c.sync_i32(&mut board.m_board_fade_out_counter)
+    });
+    append_field_with_sync(
+        a_blob,
+        BoardBaseFieldId::NextSurvivalStageCounter as u32,
+        |c| c.sync_i32(&mut board.m_next_survival_stage_counter),
+    );
+    append_field_with_sync(
+        a_blob,
+        BoardBaseFieldId::ScoreNextMowerCounter as u32,
+        |c| c.sync_i32(&mut board.m_score_next_mower_counter),
+    );
+    append_field_with_sync(a_blob, BoardBaseFieldId::LevelAwardSpawned as u32, |c| {
+        c.sync_bool(&mut board.m_level_award_spawned)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::ProgressMeterWidth as u32, |c| {
+        c.sync_i32(&mut board.m_progress_meter_width)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::FlagRaiseCounter as u32, |c| {
+        c.sync_i32(&mut board.m_flag_raise_counter)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::IceTrapCounter as u32, |c| {
+        c.sync_i32(&mut board.m_ice_trap_counter)
+    });
     append_field_with_sync(a_blob, BoardBaseFieldId::BoardRandSeed as u32, |c| {
         let mut raw = board.m_board_rand_seed as i32;
         c.sync_i32(&mut raw);
         board.m_board_rand_seed = raw as u32;
     });
-    append_field_with_sync(a_blob, BoardBaseFieldId::PoolSparklyParticleId as u32, |c| c.sync_u32(&mut board.m_pool_sparkly_particle_id));
+    append_field_with_sync(
+        a_blob,
+        BoardBaseFieldId::PoolSparklyParticleId as u32,
+        |c| c.sync_u32(&mut board.m_pool_sparkly_particle_id),
+    );
     append_field_with_sync(a_blob, BoardBaseFieldId::FwooshId as u32, |c| {
         for row in 0..MAX_GRID_SIZE_Y {
             for slot in 0..12 {
@@ -1130,45 +1270,137 @@ fn append_board_base_fields(a_blob: &mut Vec<u8>, board: &mut Board) {
             }
         }
     });
-    append_field_with_sync(a_blob, BoardBaseFieldId::FwooshCountdown as u32, |c| c.sync_i32(&mut board.m_fwoosh_count_down));
-    append_field_with_sync(a_blob, BoardBaseFieldId::TimeStopCounter as u32, |c| c.sync_i32(&mut board.m_time_stop_counter));
-    append_field_with_sync(a_blob, BoardBaseFieldId::DroppedFirstCoin as u32, |c| c.sync_bool(&mut board.m_dropped_first_coin));
-    append_field_with_sync(a_blob, BoardBaseFieldId::FinalWaveSoundCounter as u32, |c| c.sync_i32(&mut board.m_final_wave_sound_counter));
-    append_field_with_sync(a_blob, BoardBaseFieldId::CobCannonCursorDelayCounter as u32, |c| c.sync_i32(&mut board.m_cob_cannon_cursor_delay_counter));
-    append_field_with_sync(a_blob, BoardBaseFieldId::CobCannonMouseX as u32, |c| c.sync_i32(&mut board.m_cob_cannon_mouse_x));
-    append_field_with_sync(a_blob, BoardBaseFieldId::CobCannonMouseY as u32, |c| c.sync_i32(&mut board.m_cob_cannon_mouse_y));
-    append_field_with_sync(a_blob, BoardBaseFieldId::KilledYeti as u32, |c| c.sync_bool(&mut board.m_killed_yeti));
-    append_field_with_sync(a_blob, BoardBaseFieldId::MustacheMode as u32, |c| c.sync_bool(&mut board.m_mustache_mode));
-    append_field_with_sync(a_blob, BoardBaseFieldId::SuperMowerMode as u32, |c| c.sync_bool(&mut board.m_super_mower_mode));
-    append_field_with_sync(a_blob, BoardBaseFieldId::FutureMode as u32, |c| c.sync_bool(&mut board.m_future_mode));
-    append_field_with_sync(a_blob, BoardBaseFieldId::PinataMode as u32, |c| c.sync_bool(&mut board.m_pinata_mode));
-    append_field_with_sync(a_blob, BoardBaseFieldId::DanceMode as u32, |c| c.sync_bool(&mut board.m_dance_mode));
-    append_field_with_sync(a_blob, BoardBaseFieldId::DaisyMode as u32, |c| c.sync_bool(&mut board.m_daisy_mode));
-    append_field_with_sync(a_blob, BoardBaseFieldId::SukhbirMode as u32, |c| c.sync_bool(&mut board.m_sukhbir_mode));
-    append_field_with_sync(a_blob, BoardBaseFieldId::PrevBoardResult as u32, |c| c.sync_enum(&mut board.m_prev_board_result));
-    append_field_with_sync(a_blob, BoardBaseFieldId::TriggeredLawnMowers as u32, |c| c.sync_i32(&mut board.m_triggered_lawn_mowers));
-    append_field_with_sync(a_blob, BoardBaseFieldId::PlayTimeActiveLevel as u32, |c| c.sync_u32(&mut board.m_play_time_active_level));
-    append_field_with_sync(a_blob, BoardBaseFieldId::PlayTimeInactiveLevel as u32, |c| c.sync_u32(&mut board.m_play_time_inactive_level));
-    append_field_with_sync(a_blob, BoardBaseFieldId::MaxSunPlants as u32, |c| c.sync_i32(&mut board.m_max_sun_plants));
-    append_field_with_sync(a_blob, BoardBaseFieldId::StartDrawTime as u32, |c| c.sync_i64(&mut board.m_start_draw_time));
-    append_field_with_sync(a_blob, BoardBaseFieldId::IntervalDrawTime as u32, |c| c.sync_i64(&mut board.m_interval_draw_time));
-    append_field_with_sync(a_blob, BoardBaseFieldId::IntervalDrawCountStart as u32, |c| c.sync_u32(&mut board.m_interval_draw_count_start));
-    append_field_with_sync(a_blob, BoardBaseFieldId::MinFps as u32, |c| c.sync_f32(&mut board.m_min_fps));
-    append_field_with_sync(a_blob, BoardBaseFieldId::PreloadTime as u32, |c| c.sync_i32(&mut board.m_preload_time));
-    append_field_with_sync(a_blob, BoardBaseFieldId::GameId as u32, |c| c.sync_i64(&mut board.m_game_id));
-    append_field_with_sync(a_blob, BoardBaseFieldId::GravesCleared as u32, |c| c.sync_u32(&mut board.m_graves_cleared));
-    append_field_with_sync(a_blob, BoardBaseFieldId::PlantsEaten as u32, |c| c.sync_u32(&mut board.m_plants_eaten));
-    append_field_with_sync(a_blob, BoardBaseFieldId::PlantsShoveled as u32, |c| c.sync_u32(&mut board.m_plants_shoveled));
-    append_field_with_sync(a_blob, BoardBaseFieldId::PeaShooterUsed as u32, |c| c.sync_bool(&mut board.m_pea_shooter_used));
-    append_field_with_sync(a_blob, BoardBaseFieldId::CatapultPlantsUsed as u32, |c| c.sync_bool(&mut board.m_catapult_plants_used));
-    append_field_with_sync(a_blob, BoardBaseFieldId::MushroomAndCoffeeBeansOnly as u32, |c| c.sync_bool(&mut board.m_mushroom_and_coffee_beans_only));
-    append_field_with_sync(a_blob, BoardBaseFieldId::MushroomsUsed as u32, |c| c.sync_bool(&mut board.m_mushrooms_used));
-    append_field_with_sync(a_blob, BoardBaseFieldId::LevelCoinsCollected as u32, |c| c.sync_i32(&mut board.m_level_coins_collected));
-    append_field_with_sync(a_blob, BoardBaseFieldId::GargantuarsKillsByCornCob as u32, |c| c.sync_u32(&mut board.m_gargantuars_kills_by_corn_cob));
-    append_field_with_sync(a_blob, BoardBaseFieldId::CoinsCollected as u32, |c| c.sync_i32(&mut board.m_coins_collected));
-    append_field_with_sync(a_blob, BoardBaseFieldId::DiamondsCollected as u32, |c| c.sync_i32(&mut board.m_diamonds_collected));
-    append_field_with_sync(a_blob, BoardBaseFieldId::PottedPlantsCollected as u32, |c| c.sync_i32(&mut board.m_potted_plants_collected));
-    append_field_with_sync(a_blob, BoardBaseFieldId::ChocolateCollected as u32, |c| c.sync_i32(&mut board.m_chocolate_collected));
+    append_field_with_sync(a_blob, BoardBaseFieldId::FwooshCountdown as u32, |c| {
+        c.sync_i32(&mut board.m_fwoosh_count_down)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::TimeStopCounter as u32, |c| {
+        c.sync_i32(&mut board.m_time_stop_counter)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::DroppedFirstCoin as u32, |c| {
+        c.sync_bool(&mut board.m_dropped_first_coin)
+    });
+    append_field_with_sync(
+        a_blob,
+        BoardBaseFieldId::FinalWaveSoundCounter as u32,
+        |c| c.sync_i32(&mut board.m_final_wave_sound_counter),
+    );
+    append_field_with_sync(
+        a_blob,
+        BoardBaseFieldId::CobCannonCursorDelayCounter as u32,
+        |c| c.sync_i32(&mut board.m_cob_cannon_cursor_delay_counter),
+    );
+    append_field_with_sync(a_blob, BoardBaseFieldId::CobCannonMouseX as u32, |c| {
+        c.sync_i32(&mut board.m_cob_cannon_mouse_x)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::CobCannonMouseY as u32, |c| {
+        c.sync_i32(&mut board.m_cob_cannon_mouse_y)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::KilledYeti as u32, |c| {
+        c.sync_bool(&mut board.m_killed_yeti)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::MustacheMode as u32, |c| {
+        c.sync_bool(&mut board.m_mustache_mode)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::SuperMowerMode as u32, |c| {
+        c.sync_bool(&mut board.m_super_mower_mode)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::FutureMode as u32, |c| {
+        c.sync_bool(&mut board.m_future_mode)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::PinataMode as u32, |c| {
+        c.sync_bool(&mut board.m_pinata_mode)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::DanceMode as u32, |c| {
+        c.sync_bool(&mut board.m_dance_mode)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::DaisyMode as u32, |c| {
+        c.sync_bool(&mut board.m_daisy_mode)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::SukhbirMode as u32, |c| {
+        c.sync_bool(&mut board.m_sukhbir_mode)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::PrevBoardResult as u32, |c| {
+        c.sync_enum(&mut board.m_prev_board_result)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::TriggeredLawnMowers as u32, |c| {
+        c.sync_i32(&mut board.m_triggered_lawn_mowers)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::PlayTimeActiveLevel as u32, |c| {
+        c.sync_u32(&mut board.m_play_time_active_level)
+    });
+    append_field_with_sync(
+        a_blob,
+        BoardBaseFieldId::PlayTimeInactiveLevel as u32,
+        |c| c.sync_u32(&mut board.m_play_time_inactive_level),
+    );
+    append_field_with_sync(a_blob, BoardBaseFieldId::MaxSunPlants as u32, |c| {
+        c.sync_i32(&mut board.m_max_sun_plants)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::StartDrawTime as u32, |c| {
+        c.sync_i64(&mut board.m_start_draw_time)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::IntervalDrawTime as u32, |c| {
+        c.sync_i64(&mut board.m_interval_draw_time)
+    });
+    append_field_with_sync(
+        a_blob,
+        BoardBaseFieldId::IntervalDrawCountStart as u32,
+        |c| c.sync_u32(&mut board.m_interval_draw_count_start),
+    );
+    append_field_with_sync(a_blob, BoardBaseFieldId::MinFps as u32, |c| {
+        c.sync_f32(&mut board.m_min_fps)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::PreloadTime as u32, |c| {
+        c.sync_i32(&mut board.m_preload_time)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::GameId as u32, |c| {
+        c.sync_i64(&mut board.m_game_id)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::GravesCleared as u32, |c| {
+        c.sync_u32(&mut board.m_graves_cleared)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::PlantsEaten as u32, |c| {
+        c.sync_u32(&mut board.m_plants_eaten)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::PlantsShoveled as u32, |c| {
+        c.sync_u32(&mut board.m_plants_shoveled)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::PeaShooterUsed as u32, |c| {
+        c.sync_bool(&mut board.m_pea_shooter_used)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::CatapultPlantsUsed as u32, |c| {
+        c.sync_bool(&mut board.m_catapult_plants_used)
+    });
+    append_field_with_sync(
+        a_blob,
+        BoardBaseFieldId::MushroomAndCoffeeBeansOnly as u32,
+        |c| c.sync_bool(&mut board.m_mushroom_and_coffee_beans_only),
+    );
+    append_field_with_sync(a_blob, BoardBaseFieldId::MushroomsUsed as u32, |c| {
+        c.sync_bool(&mut board.m_mushrooms_used)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::LevelCoinsCollected as u32, |c| {
+        c.sync_i32(&mut board.m_level_coins_collected)
+    });
+    append_field_with_sync(
+        a_blob,
+        BoardBaseFieldId::GargantuarsKillsByCornCob as u32,
+        |c| c.sync_u32(&mut board.m_gargantuars_kills_by_corn_cob),
+    );
+    append_field_with_sync(a_blob, BoardBaseFieldId::CoinsCollected as u32, |c| {
+        c.sync_i32(&mut board.m_coins_collected)
+    });
+    append_field_with_sync(a_blob, BoardBaseFieldId::DiamondsCollected as u32, |c| {
+        c.sync_i32(&mut board.m_diamonds_collected)
+    });
+    append_field_with_sync(
+        a_blob,
+        BoardBaseFieldId::PottedPlantsCollected as u32,
+        |c| c.sync_i32(&mut board.m_potted_plants_collected),
+    );
+    append_field_with_sync(a_blob, BoardBaseFieldId::ChocolateCollected as u32, |c| {
+        c.sync_i32(&mut board.m_chocolate_collected)
+    });
 }
 
 /// 应用一个 BoardBase 字段（读取侧，对应 C++ SyncBoardBasePortable 读取分支的 switch case）
@@ -1187,135 +1419,393 @@ fn apply_board_base_field(field_id: u32, data: &[u8], board: &mut Board) {
         None => return, // C++ default break
     };
     match field {
-        BoardBaseFieldId::Paused => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_paused)); }
+        BoardBaseFieldId::Paused => {
+            apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_paused));
+        }
         BoardBaseFieldId::GridSquareType => {
-            apply_field_with_sync(data, |c| for row in 0..MAX_GRID_SIZE_Y { for col in 0..MAX_GRID_SIZE_X { c.sync_enum(&mut board.grid_square_type[row][col]); } });
-        }
-        BoardBaseFieldId::GridCelLook => {
-            apply_field_with_sync(data, |c| for row in 0..MAX_GRID_SIZE_Y { for col in 0..MAX_GRID_SIZE_X { c.sync_i32(&mut board.grid_cel_look[row][col]); } });
-        }
-        BoardBaseFieldId::GridCelOffset => {
-            apply_field_with_sync(data, |c| for row in 0..MAX_GRID_SIZE_Y { for col in 0..MAX_GRID_SIZE_X { for sub in 0..2 { c.sync_i32(&mut board.grid_cel_offset[row][col][sub]); } } });
-        }
-        BoardBaseFieldId::GridCelFog => {
-            apply_field_with_sync(data, |c| for col in 0..MAX_GRID_SIZE_X { for row in 0..(MAX_GRID_SIZE_Y + 1) { c.sync_i32(&mut board.grid_cel_fog[col][row]); } });
-        }
-        BoardBaseFieldId::EnableGravestones => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_enable_grave_stones)); }
-        BoardBaseFieldId::SpecialGravestoneX => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_special_grave_stone_x)); }
-        BoardBaseFieldId::SpecialGravestoneY => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_special_grave_stone_y)); }
-        BoardBaseFieldId::FogOffset => { apply_field_with_sync(data, |c| c.sync_f32(&mut board.m_fog_offset)); }
-        BoardBaseFieldId::FogBlownCountdown => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_fog_blown_count_down)); }
-        BoardBaseFieldId::PlantRow => {
-            apply_field_with_sync(data, |c| for row in 0..MAX_GRID_SIZE_Y { c.sync_enum(&mut board.m_plant_row[row]); });
-        }
-        BoardBaseFieldId::WaveRowGotLawnMowered => { apply_field_with_sync(data, |c| sync_i32_array(c, &mut board.m_wave_row_got_lawn_mowered)); }
-        BoardBaseFieldId::BonusLawnMowersRemaining => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_bonus_lawn_mowers_remaining)); }
-        BoardBaseFieldId::IceMinX => { apply_field_with_sync(data, |c| sync_i32_array(c, &mut board.m_ice_min_x)); }
-        BoardBaseFieldId::IceTimer => { apply_field_with_sync(data, |c| sync_i32_array(c, &mut board.m_ice_timer)); }
-        BoardBaseFieldId::IceParticleId => { apply_field_with_sync(data, |c| for row in 0..MAX_GRID_SIZE_Y { c.sync_u32(&mut board.m_ice_particle_id[row]); }); }
-        BoardBaseFieldId::RowPickingArray => { apply_field_with_sync(data, |c| sync_pvzp_smooth_array_list(c, &mut board.m_row_picking_array)); }
-        BoardBaseFieldId::ZombiesInWave => {
-            apply_field_with_sync(data, |c| for wave in 0..MAX_ZOMBIE_WAVES { for slot in 0..MAX_ZOMBIES_IN_WAVE { c.sync_enum(&mut board.m_zombies_in_wave[wave][slot]); } });
-        }
-        BoardBaseFieldId::ZombieAllowed => {
-            apply_field_with_sync(data, |c| for i in 0..ZOMBIE_ALLOWED_COUNT {
-                let mut v = if i < board.m_zombie_allowed.len() { board.m_zombie_allowed[i] } else { false };
-                c.sync_bool(&mut v);
-                if i < board.m_zombie_allowed.len() { board.m_zombie_allowed[i] = v; }
+            apply_field_with_sync(data, |c| {
+                for row in 0..MAX_GRID_SIZE_Y {
+                    for col in 0..MAX_GRID_SIZE_X {
+                        c.sync_enum(&mut board.grid_square_type[row][col]);
+                    }
+                }
             });
         }
-        BoardBaseFieldId::SunCountdown => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_sun_countdown)); }
-        BoardBaseFieldId::NumSunsFallen => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_num_suns_fallen)); }
-        BoardBaseFieldId::ShakeCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_shake_counter)); }
-        BoardBaseFieldId::ShakeAmountX => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_shake_amount_x)); }
-        BoardBaseFieldId::ShakeAmountY => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_shake_amount_y)); }
-        BoardBaseFieldId::BackgroundType => { apply_field_with_sync(data, |c| c.sync_enum(&mut board.m_background_type)); }
-        BoardBaseFieldId::Level => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.level)); }
-        BoardBaseFieldId::SodPosition => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_sod_position)); }
-        BoardBaseFieldId::PrevMouseX => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_prev_mouse_x)); }
-        BoardBaseFieldId::PrevMouseY => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_prev_mouse_y)); }
-        BoardBaseFieldId::SunMoney => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_sun_money)); }
-        BoardBaseFieldId::NumWaves => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_num_waves)); }
-        BoardBaseFieldId::MainCounter => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_main_counter)); }
-        BoardBaseFieldId::EffectCounter => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_effect_counter)); }
-        BoardBaseFieldId::DrawCount => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_draw_count)); }
-        BoardBaseFieldId::RiseFromGraveCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_rise_from_grave_counter)); }
-        BoardBaseFieldId::OutOfMoneyCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_out_of_money_counter)); }
-        BoardBaseFieldId::CurrentWave => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_current_wave)); }
-        BoardBaseFieldId::TotalSpawnedWaves => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_total_spawned_waves)); }
-        BoardBaseFieldId::TutorialState => { apply_field_with_sync(data, |c| c.sync_enum(&mut board.m_tutorial_state)); }
-        BoardBaseFieldId::TutorialParticleId => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_tutorial_particle_id)); }
-        BoardBaseFieldId::TutorialTimer => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_tutorial_timer)); }
-        BoardBaseFieldId::LastBungeeWave => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_last_bungee_wave)); }
-        BoardBaseFieldId::ZombieHealthToNextWave => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_zombie_health_to_next_wave)); }
-        BoardBaseFieldId::ZombieHealthWaveStart => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_zombie_health_wave_start)); }
-        BoardBaseFieldId::ZombieCountdown => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_zombie_count_down)); }
-        BoardBaseFieldId::ZombieCountdownStart => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_zombie_count_down_start)); }
-        BoardBaseFieldId::HugeWaveCountdown => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_huge_wave_count_down)); }
+        BoardBaseFieldId::GridCelLook => {
+            apply_field_with_sync(data, |c| {
+                for row in 0..MAX_GRID_SIZE_Y {
+                    for col in 0..MAX_GRID_SIZE_X {
+                        c.sync_i32(&mut board.grid_cel_look[row][col]);
+                    }
+                }
+            });
+        }
+        BoardBaseFieldId::GridCelOffset => {
+            apply_field_with_sync(data, |c| {
+                for row in 0..MAX_GRID_SIZE_Y {
+                    for col in 0..MAX_GRID_SIZE_X {
+                        for sub in 0..2 {
+                            c.sync_i32(&mut board.grid_cel_offset[row][col][sub]);
+                        }
+                    }
+                }
+            });
+        }
+        BoardBaseFieldId::GridCelFog => {
+            apply_field_with_sync(data, |c| {
+                for col in 0..MAX_GRID_SIZE_X {
+                    for row in 0..(MAX_GRID_SIZE_Y + 1) {
+                        c.sync_i32(&mut board.grid_cel_fog[col][row]);
+                    }
+                }
+            });
+        }
+        BoardBaseFieldId::EnableGravestones => {
+            apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_enable_grave_stones));
+        }
+        BoardBaseFieldId::SpecialGravestoneX => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_special_grave_stone_x));
+        }
+        BoardBaseFieldId::SpecialGravestoneY => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_special_grave_stone_y));
+        }
+        BoardBaseFieldId::FogOffset => {
+            apply_field_with_sync(data, |c| c.sync_f32(&mut board.m_fog_offset));
+        }
+        BoardBaseFieldId::FogBlownCountdown => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_fog_blown_count_down));
+        }
+        BoardBaseFieldId::PlantRow => {
+            apply_field_with_sync(data, |c| {
+                for row in 0..MAX_GRID_SIZE_Y {
+                    c.sync_enum(&mut board.m_plant_row[row]);
+                }
+            });
+        }
+        BoardBaseFieldId::WaveRowGotLawnMowered => {
+            apply_field_with_sync(data, |c| {
+                sync_i32_array(c, &mut board.m_wave_row_got_lawn_mowered)
+            });
+        }
+        BoardBaseFieldId::BonusLawnMowersRemaining => {
+            apply_field_with_sync(data, |c| {
+                c.sync_i32(&mut board.m_bonus_lawn_mowers_remaining)
+            });
+        }
+        BoardBaseFieldId::IceMinX => {
+            apply_field_with_sync(data, |c| sync_i32_array(c, &mut board.m_ice_min_x));
+        }
+        BoardBaseFieldId::IceTimer => {
+            apply_field_with_sync(data, |c| sync_i32_array(c, &mut board.m_ice_timer));
+        }
+        BoardBaseFieldId::IceParticleId => {
+            apply_field_with_sync(data, |c| {
+                for row in 0..MAX_GRID_SIZE_Y {
+                    c.sync_u32(&mut board.m_ice_particle_id[row]);
+                }
+            });
+        }
+        BoardBaseFieldId::RowPickingArray => {
+            apply_field_with_sync(data, |c| {
+                sync_pvzp_smooth_array_list(c, &mut board.m_row_picking_array)
+            });
+        }
+        BoardBaseFieldId::ZombiesInWave => {
+            apply_field_with_sync(data, |c| {
+                for wave in 0..MAX_ZOMBIE_WAVES {
+                    for slot in 0..MAX_ZOMBIES_IN_WAVE {
+                        c.sync_enum(&mut board.m_zombies_in_wave[wave][slot]);
+                    }
+                }
+            });
+        }
+        BoardBaseFieldId::ZombieAllowed => {
+            apply_field_with_sync(data, |c| {
+                for i in 0..ZOMBIE_ALLOWED_COUNT {
+                    let mut v = if i < board.m_zombie_allowed.len() {
+                        board.m_zombie_allowed[i]
+                    } else {
+                        false
+                    };
+                    c.sync_bool(&mut v);
+                    if i < board.m_zombie_allowed.len() {
+                        board.m_zombie_allowed[i] = v;
+                    }
+                }
+            });
+        }
+        BoardBaseFieldId::SunCountdown => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_sun_countdown));
+        }
+        BoardBaseFieldId::NumSunsFallen => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_num_suns_fallen));
+        }
+        BoardBaseFieldId::ShakeCounter => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_shake_counter));
+        }
+        BoardBaseFieldId::ShakeAmountX => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_shake_amount_x));
+        }
+        BoardBaseFieldId::ShakeAmountY => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_shake_amount_y));
+        }
+        BoardBaseFieldId::BackgroundType => {
+            apply_field_with_sync(data, |c| c.sync_enum(&mut board.m_background_type));
+        }
+        BoardBaseFieldId::Level => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.level));
+        }
+        BoardBaseFieldId::SodPosition => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_sod_position));
+        }
+        BoardBaseFieldId::PrevMouseX => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_prev_mouse_x));
+        }
+        BoardBaseFieldId::PrevMouseY => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_prev_mouse_y));
+        }
+        BoardBaseFieldId::SunMoney => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_sun_money));
+        }
+        BoardBaseFieldId::NumWaves => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_num_waves));
+        }
+        BoardBaseFieldId::MainCounter => {
+            apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_main_counter));
+        }
+        BoardBaseFieldId::EffectCounter => {
+            apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_effect_counter));
+        }
+        BoardBaseFieldId::DrawCount => {
+            apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_draw_count));
+        }
+        BoardBaseFieldId::RiseFromGraveCounter => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_rise_from_grave_counter));
+        }
+        BoardBaseFieldId::OutOfMoneyCounter => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_out_of_money_counter));
+        }
+        BoardBaseFieldId::CurrentWave => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_current_wave));
+        }
+        BoardBaseFieldId::TotalSpawnedWaves => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_total_spawned_waves));
+        }
+        BoardBaseFieldId::TutorialState => {
+            apply_field_with_sync(data, |c| c.sync_enum(&mut board.m_tutorial_state));
+        }
+        BoardBaseFieldId::TutorialParticleId => {
+            apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_tutorial_particle_id));
+        }
+        BoardBaseFieldId::TutorialTimer => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_tutorial_timer));
+        }
+        BoardBaseFieldId::LastBungeeWave => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_last_bungee_wave));
+        }
+        BoardBaseFieldId::ZombieHealthToNextWave => {
+            apply_field_with_sync(data, |c| {
+                c.sync_i32(&mut board.m_zombie_health_to_next_wave)
+            });
+        }
+        BoardBaseFieldId::ZombieHealthWaveStart => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_zombie_health_wave_start));
+        }
+        BoardBaseFieldId::ZombieCountdown => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_zombie_count_down));
+        }
+        BoardBaseFieldId::ZombieCountdownStart => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_zombie_count_down_start));
+        }
+        BoardBaseFieldId::HugeWaveCountdown => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_huge_wave_count_down));
+        }
         BoardBaseFieldId::HelpDisplayed => {
             apply_field_with_sync(data, |c| sync_bool_array(c, &mut board.m_help_displayed));
         }
-        BoardBaseFieldId::HelpIndex => { apply_field_with_sync(data, |c| c.sync_enum(&mut board.m_advice)); }
-        BoardBaseFieldId::FinalBossKilled => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_final_boss_killed)); }
-        BoardBaseFieldId::ShowShovel => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_show_shovel)); }
-        BoardBaseFieldId::CoinBankFadeCount => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_coin_bank_fade_count)); }
-        BoardBaseFieldId::DebugTextMode => { apply_field_with_sync(data, |c| c.sync_enum(&mut board.m_debug_text_mode)); }
-        BoardBaseFieldId::LevelComplete => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_level_complete)); }
-        BoardBaseFieldId::BoardFadeOutCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_board_fade_out_counter)); }
-        BoardBaseFieldId::NextSurvivalStageCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_next_survival_stage_counter)); }
-        BoardBaseFieldId::ScoreNextMowerCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_score_next_mower_counter)); }
-        BoardBaseFieldId::LevelAwardSpawned => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_level_award_spawned)); }
-        BoardBaseFieldId::ProgressMeterWidth => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_progress_meter_width)); }
-        BoardBaseFieldId::FlagRaiseCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_flag_raise_counter)); }
-        BoardBaseFieldId::IceTrapCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_ice_trap_counter)); }
-        BoardBaseFieldId::BoardRandSeed => { apply_field_with_sync(data, |c| {
-            let mut raw = board.m_board_rand_seed as i32;
-            c.sync_i32(&mut raw);
-            board.m_board_rand_seed = raw as u32;
-        }); }
-        BoardBaseFieldId::PoolSparklyParticleId => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_pool_sparkly_particle_id)); }
-        BoardBaseFieldId::FwooshId => {
-            apply_field_with_sync(data, |c| for row in 0..MAX_GRID_SIZE_Y { for slot in 0..12 { c.sync_u32(&mut board.m_fwoosh_id[row][slot]); } });
+        BoardBaseFieldId::HelpIndex => {
+            apply_field_with_sync(data, |c| c.sync_enum(&mut board.m_advice));
         }
-        BoardBaseFieldId::FwooshCountdown => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_fwoosh_count_down)); }
-        BoardBaseFieldId::TimeStopCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_time_stop_counter)); }
-        BoardBaseFieldId::DroppedFirstCoin => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_dropped_first_coin)); }
-        BoardBaseFieldId::FinalWaveSoundCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_final_wave_sound_counter)); }
-        BoardBaseFieldId::CobCannonCursorDelayCounter => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_cob_cannon_cursor_delay_counter)); }
-        BoardBaseFieldId::CobCannonMouseX => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_cob_cannon_mouse_x)); }
-        BoardBaseFieldId::CobCannonMouseY => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_cob_cannon_mouse_y)); }
-        BoardBaseFieldId::KilledYeti => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_killed_yeti)); }
-        BoardBaseFieldId::MustacheMode => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_mustache_mode)); }
-        BoardBaseFieldId::SuperMowerMode => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_super_mower_mode)); }
-        BoardBaseFieldId::FutureMode => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_future_mode)); }
-        BoardBaseFieldId::PinataMode => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_pinata_mode)); }
-        BoardBaseFieldId::DanceMode => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_dance_mode)); }
-        BoardBaseFieldId::DaisyMode => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_daisy_mode)); }
-        BoardBaseFieldId::SukhbirMode => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_sukhbir_mode)); }
-        BoardBaseFieldId::PrevBoardResult => { apply_field_with_sync(data, |c| c.sync_enum(&mut board.m_prev_board_result)); }
-        BoardBaseFieldId::TriggeredLawnMowers => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_triggered_lawn_mowers)); }
-        BoardBaseFieldId::PlayTimeActiveLevel => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_play_time_active_level)); }
-        BoardBaseFieldId::PlayTimeInactiveLevel => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_play_time_inactive_level)); }
-        BoardBaseFieldId::MaxSunPlants => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_max_sun_plants)); }
-        BoardBaseFieldId::StartDrawTime => { apply_field_with_sync(data, |c| c.sync_i64(&mut board.m_start_draw_time)); }
-        BoardBaseFieldId::IntervalDrawTime => { apply_field_with_sync(data, |c| c.sync_i64(&mut board.m_interval_draw_time)); }
-        BoardBaseFieldId::IntervalDrawCountStart => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_interval_draw_count_start)); }
-        BoardBaseFieldId::MinFps => { apply_field_with_sync(data, |c| c.sync_f32(&mut board.m_min_fps)); }
-        BoardBaseFieldId::PreloadTime => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_preload_time)); }
-        BoardBaseFieldId::GameId => { apply_field_with_sync(data, |c| c.sync_i64(&mut board.m_game_id)); }
-        BoardBaseFieldId::GravesCleared => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_graves_cleared)); }
-        BoardBaseFieldId::PlantsEaten => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_plants_eaten)); }
-        BoardBaseFieldId::PlantsShoveled => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_plants_shoveled)); }
-        BoardBaseFieldId::PeaShooterUsed => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_pea_shooter_used)); }
-        BoardBaseFieldId::CatapultPlantsUsed => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_catapult_plants_used)); }
-        BoardBaseFieldId::MushroomAndCoffeeBeansOnly => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_mushroom_and_coffee_beans_only)); }
-        BoardBaseFieldId::MushroomsUsed => { apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_mushrooms_used)); }
-        BoardBaseFieldId::LevelCoinsCollected => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_level_coins_collected)); }
-        BoardBaseFieldId::GargantuarsKillsByCornCob => { apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_gargantuars_kills_by_corn_cob)); }
-        BoardBaseFieldId::CoinsCollected => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_coins_collected)); }
-        BoardBaseFieldId::DiamondsCollected => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_diamonds_collected)); }
-        BoardBaseFieldId::PottedPlantsCollected => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_potted_plants_collected)); }
-        BoardBaseFieldId::ChocolateCollected => { apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_chocolate_collected)); }
+        BoardBaseFieldId::FinalBossKilled => {
+            apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_final_boss_killed));
+        }
+        BoardBaseFieldId::ShowShovel => {
+            apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_show_shovel));
+        }
+        BoardBaseFieldId::CoinBankFadeCount => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_coin_bank_fade_count));
+        }
+        BoardBaseFieldId::DebugTextMode => {
+            apply_field_with_sync(data, |c| c.sync_enum(&mut board.m_debug_text_mode));
+        }
+        BoardBaseFieldId::LevelComplete => {
+            apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_level_complete));
+        }
+        BoardBaseFieldId::BoardFadeOutCounter => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_board_fade_out_counter));
+        }
+        BoardBaseFieldId::NextSurvivalStageCounter => {
+            apply_field_with_sync(data, |c| {
+                c.sync_i32(&mut board.m_next_survival_stage_counter)
+            });
+        }
+        BoardBaseFieldId::ScoreNextMowerCounter => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_score_next_mower_counter));
+        }
+        BoardBaseFieldId::LevelAwardSpawned => {
+            apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_level_award_spawned));
+        }
+        BoardBaseFieldId::ProgressMeterWidth => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_progress_meter_width));
+        }
+        BoardBaseFieldId::FlagRaiseCounter => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_flag_raise_counter));
+        }
+        BoardBaseFieldId::IceTrapCounter => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_ice_trap_counter));
+        }
+        BoardBaseFieldId::BoardRandSeed => {
+            apply_field_with_sync(data, |c| {
+                let mut raw = board.m_board_rand_seed as i32;
+                c.sync_i32(&mut raw);
+                board.m_board_rand_seed = raw as u32;
+            });
+        }
+        BoardBaseFieldId::PoolSparklyParticleId => {
+            apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_pool_sparkly_particle_id));
+        }
+        BoardBaseFieldId::FwooshId => {
+            apply_field_with_sync(data, |c| {
+                for row in 0..MAX_GRID_SIZE_Y {
+                    for slot in 0..12 {
+                        c.sync_u32(&mut board.m_fwoosh_id[row][slot]);
+                    }
+                }
+            });
+        }
+        BoardBaseFieldId::FwooshCountdown => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_fwoosh_count_down));
+        }
+        BoardBaseFieldId::TimeStopCounter => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_time_stop_counter));
+        }
+        BoardBaseFieldId::DroppedFirstCoin => {
+            apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_dropped_first_coin));
+        }
+        BoardBaseFieldId::FinalWaveSoundCounter => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_final_wave_sound_counter));
+        }
+        BoardBaseFieldId::CobCannonCursorDelayCounter => {
+            apply_field_with_sync(data, |c| {
+                c.sync_i32(&mut board.m_cob_cannon_cursor_delay_counter)
+            });
+        }
+        BoardBaseFieldId::CobCannonMouseX => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_cob_cannon_mouse_x));
+        }
+        BoardBaseFieldId::CobCannonMouseY => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_cob_cannon_mouse_y));
+        }
+        BoardBaseFieldId::KilledYeti => {
+            apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_killed_yeti));
+        }
+        BoardBaseFieldId::MustacheMode => {
+            apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_mustache_mode));
+        }
+        BoardBaseFieldId::SuperMowerMode => {
+            apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_super_mower_mode));
+        }
+        BoardBaseFieldId::FutureMode => {
+            apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_future_mode));
+        }
+        BoardBaseFieldId::PinataMode => {
+            apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_pinata_mode));
+        }
+        BoardBaseFieldId::DanceMode => {
+            apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_dance_mode));
+        }
+        BoardBaseFieldId::DaisyMode => {
+            apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_daisy_mode));
+        }
+        BoardBaseFieldId::SukhbirMode => {
+            apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_sukhbir_mode));
+        }
+        BoardBaseFieldId::PrevBoardResult => {
+            apply_field_with_sync(data, |c| c.sync_enum(&mut board.m_prev_board_result));
+        }
+        BoardBaseFieldId::TriggeredLawnMowers => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_triggered_lawn_mowers));
+        }
+        BoardBaseFieldId::PlayTimeActiveLevel => {
+            apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_play_time_active_level));
+        }
+        BoardBaseFieldId::PlayTimeInactiveLevel => {
+            apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_play_time_inactive_level));
+        }
+        BoardBaseFieldId::MaxSunPlants => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_max_sun_plants));
+        }
+        BoardBaseFieldId::StartDrawTime => {
+            apply_field_with_sync(data, |c| c.sync_i64(&mut board.m_start_draw_time));
+        }
+        BoardBaseFieldId::IntervalDrawTime => {
+            apply_field_with_sync(data, |c| c.sync_i64(&mut board.m_interval_draw_time));
+        }
+        BoardBaseFieldId::IntervalDrawCountStart => {
+            apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_interval_draw_count_start));
+        }
+        BoardBaseFieldId::MinFps => {
+            apply_field_with_sync(data, |c| c.sync_f32(&mut board.m_min_fps));
+        }
+        BoardBaseFieldId::PreloadTime => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_preload_time));
+        }
+        BoardBaseFieldId::GameId => {
+            apply_field_with_sync(data, |c| c.sync_i64(&mut board.m_game_id));
+        }
+        BoardBaseFieldId::GravesCleared => {
+            apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_graves_cleared));
+        }
+        BoardBaseFieldId::PlantsEaten => {
+            apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_plants_eaten));
+        }
+        BoardBaseFieldId::PlantsShoveled => {
+            apply_field_with_sync(data, |c| c.sync_u32(&mut board.m_plants_shoveled));
+        }
+        BoardBaseFieldId::PeaShooterUsed => {
+            apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_pea_shooter_used));
+        }
+        BoardBaseFieldId::CatapultPlantsUsed => {
+            apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_catapult_plants_used));
+        }
+        BoardBaseFieldId::MushroomAndCoffeeBeansOnly => {
+            apply_field_with_sync(data, |c| {
+                c.sync_bool(&mut board.m_mushroom_and_coffee_beans_only)
+            });
+        }
+        BoardBaseFieldId::MushroomsUsed => {
+            apply_field_with_sync(data, |c| c.sync_bool(&mut board.m_mushrooms_used));
+        }
+        BoardBaseFieldId::LevelCoinsCollected => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_level_coins_collected));
+        }
+        BoardBaseFieldId::GargantuarsKillsByCornCob => {
+            apply_field_with_sync(data, |c| {
+                c.sync_u32(&mut board.m_gargantuars_kills_by_corn_cob)
+            });
+        }
+        BoardBaseFieldId::CoinsCollected => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_coins_collected));
+        }
+        BoardBaseFieldId::DiamondsCollected => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_diamonds_collected));
+        }
+        BoardBaseFieldId::PottedPlantsCollected => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_potted_plants_collected));
+        }
+        BoardBaseFieldId::ChocolateCollected => {
+            apply_field_with_sync(data, |c| c.sync_i32(&mut board.m_chocolate_collected));
+        }
         _ => { /* C++: default break */ }
     }
 }
@@ -1405,7 +1895,9 @@ fn write_chunk_v4(payload: &mut Vec<u8>, chunk_type: u32, board: &mut Board) -> 
             SaveChunkTypeV4::Music => sync_music_portable(&mut field_ctx, board),
             SaveChunkTypeV4::ParticleEmitters => sync_particle_emitters_portable(&mut field_ctx),
             SaveChunkTypeV4::ParticleParticles => sync_particles_portable(&mut field_ctx),
-            SaveChunkTypeV4::ParticleSystems => sync_particle_systems_portable(&mut field_ctx, board),
+            SaveChunkTypeV4::ParticleSystems => {
+                sync_particle_systems_portable(&mut field_ctx, board)
+            }
             SaveChunkTypeV4::Reanimations => sync_reanimations_portable(&mut field_ctx, board),
             SaveChunkTypeV4::Trails => sync_trails_portable(&mut field_ctx, board),
             SaveChunkTypeV4::Attachments => sync_attachments_portable(&mut field_ctx, board),
@@ -1623,7 +2115,9 @@ fn sync_coins_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
         &mut board.coins,
         |out, coin| {
             write_game_object_field(out, 1, &mut coin.base);
-            append_field_with_sync(out, PORTABLE_FIELD_TAIL, |c| sync_coin_tail_portable(c, coin));
+            append_field_with_sync(out, PORTABLE_FIELD_TAIL, |c| {
+                sync_coin_tail_portable(c, coin)
+            });
         },
         |field_id, data, coin| match field_id {
             1 => {
@@ -1648,7 +2142,9 @@ fn sync_mowers_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
         &mut board.lawn_mowers,
         |out, mower| {
             write_game_object_field(out, 1, &mut mower.base);
-            append_field_with_sync(out, PORTABLE_FIELD_TAIL, |c| sync_lawn_mower_tail_portable(c, mower));
+            append_field_with_sync(out, PORTABLE_FIELD_TAIL, |c| {
+                sync_lawn_mower_tail_portable(c, mower)
+            });
         },
         |field_id, data, mower| match field_id {
             1 => {
@@ -1663,7 +2159,10 @@ fn sync_mowers_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
 }
 
 /// 同步运动轨迹帧（对应 C++ SyncMotionTrailFramePortable，SaveGame.cpp:637）
-fn sync_motion_trail_frame_portable(ctx: &mut PortableSaveContext, frame: &mut crate::lawn::grid_item::MotionTrailFrame) {
+fn sync_motion_trail_frame_portable(
+    ctx: &mut PortableSaveContext,
+    frame: &mut crate::lawn::grid_item::MotionTrailFrame,
+) {
     ctx.sync_f32(&mut frame.pos_x);
     ctx.sync_f32(&mut frame.pos_y);
     ctx.sync_f32(&mut frame.anim_time);
@@ -1704,7 +2203,9 @@ fn sync_grid_items_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
         ctx,
         &mut board.grid_items,
         |out, item| {
-            append_field_with_sync(out, PORTABLE_FIELD_TAIL, |c| sync_grid_item_tail_portable(c, item));
+            append_field_with_sync(out, PORTABLE_FIELD_TAIL, |c| {
+                sync_grid_item_tail_portable(c, item)
+            });
         },
         |field_id, data, item| match field_id {
             // C++: 1U 为旧版字段（legacy）
@@ -1723,7 +2224,10 @@ fn sync_grid_items_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
 /// [TRANSLATION_NOTE]: 原注释称"C++ 仅同步 4 个 f32（mItemType 不入档）"是**错的** ——
 /// C++ 第 650 行还有 `SyncEnum32(theContext, theItem.mItemType);`。此前 Rust 漏同步该字段，
 /// 导致读档后磁力菇吸附物的类型被默认化（报告 §8.7）。现按 C++ 补上第 5 个字段。
-fn sync_magnet_item_portable(ctx: &mut PortableSaveContext, item: &mut crate::lawn::plant::MagnetItem) {
+fn sync_magnet_item_portable(
+    ctx: &mut PortableSaveContext,
+    item: &mut crate::lawn::plant::MagnetItem,
+) {
     ctx.sync_f32(&mut item.pos_x);
     ctx.sync_f32(&mut item.pos_y);
     ctx.sync_f32(&mut item.dest_offset_x);
@@ -1793,7 +2297,9 @@ fn sync_plants_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
         &mut board.plants,
         |out, plant| {
             write_game_object_field(out, 1, &mut plant.base);
-            append_field_with_sync(out, PORTABLE_FIELD_TAIL, |c| sync_plant_tail_portable(c, plant));
+            append_field_with_sync(out, PORTABLE_FIELD_TAIL, |c| {
+                sync_plant_tail_portable(c, plant)
+            });
         },
         |field_id, data, plant| match field_id {
             1 => {
@@ -1902,7 +2408,9 @@ fn sync_zombies_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
         &mut board.zombies,
         |out, zombie| {
             write_game_object_field(out, 1, &mut zombie.base);
-            append_field_with_sync(out, PORTABLE_FIELD_TAIL, |c| sync_zombie_tail_portable(c, zombie));
+            append_field_with_sync(out, PORTABLE_FIELD_TAIL, |c| {
+                sync_zombie_tail_portable(c, zombie)
+            });
         },
         |field_id, data, zombie| match field_id {
             1 => {
@@ -2085,7 +2593,9 @@ fn sync_cursor_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
                     let _ = field_data;
                 }
                 PORTABLE_FIELD_TAIL => {
-                    apply_field_with_sync(field_data, |c| sync_cursor_object_tail_portable(c, &mut board.cursor_object));
+                    apply_field_with_sync(field_data, |c| {
+                        sync_cursor_object_tail_portable(c, &mut board.cursor_object)
+                    });
                 }
                 _ => {}
             }
@@ -2100,7 +2610,9 @@ fn sync_cursor_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
         tmp_base.height = board.cursor_object.height;
         tmp_base.visible = board.cursor_object.visible;
         write_game_object_field(&mut a_blob, 1, &mut tmp_base);
-        append_field_with_sync(&mut a_blob, PORTABLE_FIELD_TAIL, |c| sync_cursor_object_tail_portable(c, &mut board.cursor_object));
+        append_field_with_sync(&mut a_blob, PORTABLE_FIELD_TAIL, |c| {
+            sync_cursor_object_tail_portable(c, &mut board.cursor_object)
+        });
         write_tlv_blob(ctx, &a_blob);
     }
 }
@@ -2137,7 +2649,9 @@ fn sync_cursor_preview_portable(ctx: &mut PortableSaveContext) {
                     let _ = field_data;
                 }
                 PORTABLE_FIELD_TAIL => {
-                    apply_field_with_sync(field_data, |c| sync_cursor_preview_tail_portable(c, &mut tmp_preview));
+                    apply_field_with_sync(field_data, |c| {
+                        sync_cursor_preview_tail_portable(c, &mut tmp_preview)
+                    });
                 }
                 _ => {}
             }
@@ -2145,7 +2659,9 @@ fn sync_cursor_preview_portable(ctx: &mut PortableSaveContext) {
     } else {
         let mut a_blob: Vec<u8> = Vec::new();
         write_game_object_field(&mut a_blob, 1, &mut tmp_preview.base);
-        append_field_with_sync(&mut a_blob, PORTABLE_FIELD_TAIL, |c| sync_cursor_preview_tail_portable(c, &mut tmp_preview));
+        append_field_with_sync(&mut a_blob, PORTABLE_FIELD_TAIL, |c| {
+            sync_cursor_preview_tail_portable(c, &mut tmp_preview)
+        });
         write_tlv_blob(ctx, &a_blob);
     }
 }
@@ -2177,14 +2693,18 @@ fn sync_advice_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
                     let _ = field_data;
                 }
                 PORTABLE_FIELD_TAIL => {
-                    apply_field_with_sync(field_data, |c| sync_message_widget_tail_portable(c, &mut board.m_advice_widget));
+                    apply_field_with_sync(field_data, |c| {
+                        sync_message_widget_tail_portable(c, &mut board.m_advice_widget)
+                    });
                 }
                 _ => {}
             }
         }
     } else {
         let mut a_blob: Vec<u8> = Vec::new();
-        append_field_with_sync(&mut a_blob, PORTABLE_FIELD_TAIL, |c| sync_message_widget_tail_portable(c, &mut board.m_advice_widget));
+        append_field_with_sync(&mut a_blob, PORTABLE_FIELD_TAIL, |c| {
+            sync_message_widget_tail_portable(c, &mut board.m_advice_widget)
+        });
         write_tlv_blob(ctx, &a_blob);
     }
 }
@@ -2230,7 +2750,9 @@ fn sync_seed_bank_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
     } else {
         let mut a_blob: Vec<u8> = Vec::new();
         write_game_object_field(&mut a_blob, 1, &mut tmp_base);
-        append_field_with_sync(&mut a_blob, PORTABLE_FIELD_TAIL, |c| sync_seed_bank_tail_portable(c, board));
+        append_field_with_sync(&mut a_blob, PORTABLE_FIELD_TAIL, |c| {
+            sync_seed_bank_tail_portable(c, board)
+        });
         write_tlv_blob(ctx, &a_blob);
     }
 }
@@ -2279,7 +2801,9 @@ fn sync_seed_packets_portable(ctx: &mut PortableSaveContext, board: &mut Board) 
                         let _ = field_data;
                     }
                     PORTABLE_FIELD_TAIL => {
-                        apply_field_with_sync(field_data, |c| sync_seed_packet_tail_portable(c, &mut packet));
+                        apply_field_with_sync(field_data, |c| {
+                            sync_seed_packet_tail_portable(c, &mut packet)
+                        });
                     }
                     _ => {}
                 }
@@ -2294,7 +2818,9 @@ fn sync_seed_packets_portable(ctx: &mut PortableSaveContext, board: &mut Board) 
                 let packet = &mut board.seed_bank[i];
                 let mut tmp_base = GameObject::new();
                 write_game_object_field(&mut item_data, 1, &mut tmp_base);
-                append_field_with_sync(&mut item_data, PORTABLE_FIELD_TAIL, |c| sync_seed_packet_tail_portable(c, packet));
+                append_field_with_sync(&mut item_data, PORTABLE_FIELD_TAIL, |c| {
+                    sync_seed_packet_tail_portable(c, packet)
+                });
             }
             let mut item_size = item_data.len() as u32;
             ctx.sync_u32(&mut item_size);
@@ -2336,14 +2862,18 @@ fn sync_challenge_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
                     let _ = field_data;
                 }
                 PORTABLE_FIELD_TAIL => {
-                    apply_field_with_sync(field_data, |c| sync_challenge_tail_portable(c, challenge));
+                    apply_field_with_sync(field_data, |c| {
+                        sync_challenge_tail_portable(c, challenge)
+                    });
                 }
                 _ => {}
             }
         }
     } else {
         let mut a_blob: Vec<u8> = Vec::new();
-        append_field_with_sync(&mut a_blob, PORTABLE_FIELD_TAIL, |c| sync_challenge_tail_portable(c, challenge));
+        append_field_with_sync(&mut a_blob, PORTABLE_FIELD_TAIL, |c| {
+            sync_challenge_tail_portable(c, challenge)
+        });
         write_tlv_blob(ctx, &a_blob);
     }
 }
@@ -2392,13 +2922,18 @@ fn sync_music_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
         }
     } else {
         let mut a_blob: Vec<u8> = Vec::new();
-        append_field_with_sync(&mut a_blob, PORTABLE_FIELD_TAIL, |c| sync_music_tail_portable(c, music));
+        append_field_with_sync(&mut a_blob, PORTABLE_FIELD_TAIL, |c| {
+            sync_music_tail_portable(c, music)
+        });
         write_tlv_blob(ctx, &a_blob);
     }
 }
 
 /// 同步动画变换（对应 C++ SyncReanimTransformPortable，SaveGame.cpp:1104）
-fn sync_reanim_transform_portable(ctx: &mut PortableSaveContext, transform: &mut ReanimatorTransform) {
+fn sync_reanim_transform_portable(
+    ctx: &mut PortableSaveContext,
+    transform: &mut ReanimatorTransform,
+) {
     // C++ 顺序：mTransX/mTransY/mSkewX/mSkewY/mScaleX/mScaleY/mFrame/mAlpha（mFrame 在 mAlpha 前）
     ctx.sync_f32(&mut transform.m_trans_x);
     ctx.sync_f32(&mut transform.m_trans_y);
@@ -2440,7 +2975,10 @@ fn image_from_resource_id(id: u32) -> *mut crate::framework::graphics::image::Im
 
 /// 同步动画轨道实例（对应 C++ SyncReanimTrackInstancePortable，SaveGame.cpp:1122）
 /// [TRANSLATION_NOTE]: Rust m_blend_count 为 f32（C++ mBlendCounter 为 int32），以 i32 中转保位。
-fn sync_reanim_track_instance_portable(ctx: &mut PortableSaveContext, track: &mut ReanimatorTrackInstance) {
+fn sync_reanim_track_instance_portable(
+    ctx: &mut PortableSaveContext,
+    track: &mut ReanimatorTrackInstance,
+) {
     let mut blend_counter = track.m_blend_count as i32;
     ctx.sync_i32(&mut blend_counter);
     if ctx.reading {
@@ -2553,7 +3091,10 @@ fn sync_reanimation_portable(ctx: &mut PortableSaveContext, reanimation: &mut Re
 }
 
 /// 同步附着效果（对应 C++ SyncAttachEffectPortable，SaveGame.cpp:653）
-fn sync_attach_effect_portable(ctx: &mut PortableSaveContext, effect: &mut crate::todlib::attachment::AttachEffect) {
+fn sync_attach_effect_portable(
+    ctx: &mut PortableSaveContext,
+    effect: &mut crate::todlib::attachment::AttachEffect,
+) {
     ctx.sync_u32(&mut effect.effect_id);
     ctx.sync_enum(&mut effect.effect_type);
     sync_matrix_portable(ctx, &mut effect.offset);
@@ -2609,7 +3150,9 @@ fn sync_attachments_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
         ctx,
         &mut effect_system.attachments,
         |out, attachment| {
-            append_field_with_sync(out, PORTABLE_FIELD_TAIL, |c| sync_attachment_tail_portable(c, attachment));
+            append_field_with_sync(out, PORTABLE_FIELD_TAIL, |c| {
+                sync_attachment_tail_portable(c, attachment)
+            });
         },
         |field_id, data, attachment| match field_id {
             // C++: 1U 为旧版字段（legacy mEffectArray）
@@ -2826,7 +3369,9 @@ fn sync_projectiles_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
         &mut board.projectiles,
         |out, projectile| {
             write_game_object_field(out, 1, &mut projectile.base);
-            append_field_with_sync(out, PORTABLE_FIELD_TAIL, |c| sync_projectile_tail_portable(c, projectile));
+            append_field_with_sync(out, PORTABLE_FIELD_TAIL, |c| {
+                sync_projectile_tail_portable(c, projectile)
+            });
         },
         |field_id, data, projectile| match field_id {
             1 => {

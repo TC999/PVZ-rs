@@ -102,7 +102,9 @@ impl MTRand {
         for i in 1..MTRAND_N {
             // 注意：Rust 中乘法可能溢出，需要 wrapping 行为
             let prev = self.mt[i - 1];
-            self.mt[i] = 1812433253u32.wrapping_mul(prev ^ (prev >> 30)).wrapping_add(i as u32);
+            self.mt[i] = 1812433253u32
+                .wrapping_mul(prev ^ (prev >> 30))
+                .wrapping_add(i as u32);
             self.mt[i] &= 0xffffffff;
         }
         self.mti = MTRAND_N; // 设为 N 以在首次 Next 时触发重新生成
@@ -125,7 +127,8 @@ impl MTRand {
             }
             for kk in (MTRAND_N - MTRAND_M)..(MTRAND_N - 1) {
                 let y = (self.mt[kk] & UPPER_MASK) | (self.mt[kk + 1] & LOWER_MASK);
-                self.mt[kk] = self.mt[kk - (MTRAND_N - MTRAND_M)] ^ (y >> 1) ^ mag01[(y & 0x1) as usize];
+                self.mt[kk] =
+                    self.mt[kk - (MTRAND_N - MTRAND_M)] ^ (y >> 1) ^ mag01[(y & 0x1) as usize];
             }
             let y = (self.mt[MTRAND_N - 1] & UPPER_MASK) | (self.mt[0] & LOWER_MASK);
             self.mt[MTRAND_N - 1] = self.mt[MTRAND_M - 1] ^ (y >> 1) ^ mag01[(y & 0x1) as usize];

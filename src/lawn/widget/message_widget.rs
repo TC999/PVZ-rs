@@ -1,11 +1,11 @@
 // PvZ Portable Rust 翻译 — MessageWidget（消息/提示文字控件）
 // 对应 C++ src/Lawn/MessageWidget.h / MessageWidget.cpp
 
-use crate::lawn::game_enums::*;
+use crate::framework::color::Color;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
-use crate::framework::color::Color;
 use crate::framework::rect::Rect;
+use crate::lawn::game_enums::*;
 
 /// 最大消息长度（对应 C++ #define MAX_MESSAGE_LENGTH 128）
 pub const MAX_MESSAGE_LENGTH: usize = 128;
@@ -74,8 +74,10 @@ impl MessageWidget {
         // 根据消息样式设置持续时间
         self.duration = match the_message_style {
             MessageStyle::HintLong | MessageStyle::HintTallLong => 1500,
-            MessageStyle::HintFast | MessageStyle::HintTallFast
-            | MessageStyle::TutorialLevel1 | MessageStyle::TutorialLevel2
+            MessageStyle::HintFast
+            | MessageStyle::HintTallFast
+            | MessageStyle::TutorialLevel1
+            | MessageStyle::TutorialLevel2
             | MessageStyle::TutorialLater => 500,
             MessageStyle::HintStay | MessageStyle::TutorialLevel1Stay => 10000,
             MessageStyle::HouseName => 250,
@@ -121,8 +123,18 @@ impl MessageWidget {
         let mut a_text_offset_y = 0;
         let mut a_rect_height = 0;
         let mut a_min_alpha = 255;
-        let mut a_color = crate::framework::color::Color { r: 250, g: 250, b: 0, a: 255 };
-        let mut a_outline_color = crate::framework::color::Color { r: 0, g: 0, b: 0, a: 255 };
+        let mut a_color = crate::framework::color::Color {
+            r: 250,
+            g: 250,
+            b: 0,
+            a: 255,
+        };
+        let mut a_outline_color = crate::framework::color::Color {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        };
         let mut a_fade_out = false;
 
         // 对应 C++: switch (mMessageStyle)
@@ -131,40 +143,73 @@ impl MessageWidget {
                 a_pos_y = 400;
                 a_rect_height = 110;
                 a_text_offset_y = -4;
-                a_color = crate::framework::color::Color { r: 253, g: 245, b: 173, a: 255 };
+                a_color = crate::framework::color::Color {
+                    r: 253,
+                    g: 245,
+                    b: 173,
+                    a: 255,
+                };
                 a_min_alpha = 192;
             }
-            MessageStyle::TutorialLevel2 | MessageStyle::TutorialLater
-            | MessageStyle::TutorialLaterStay | MessageStyle::HintTallFast
-            | MessageStyle::HintTallUnlockMessage | MessageStyle::HintTallLong
+            MessageStyle::TutorialLevel2
+            | MessageStyle::TutorialLater
+            | MessageStyle::TutorialLaterStay
+            | MessageStyle::HintTallFast
+            | MessageStyle::HintTallUnlockMessage
+            | MessageStyle::HintTallLong
             | MessageStyle::Achievement => {
                 a_pos_y = 476;
                 a_rect_height = 100;
                 a_text_offset_y = -4;
-                a_color = crate::framework::color::Color { r: 253, g: 245, b: 173, a: 255 };
+                a_color = crate::framework::color::Color {
+                    r: 253,
+                    g: 245,
+                    b: 173,
+                    a: 255,
+                };
                 a_min_alpha = 192;
             }
             MessageStyle::HintLong | MessageStyle::HintFast | MessageStyle::HintStay => {
                 a_pos_y = 527;
                 a_rect_height = 55;
                 a_text_offset_y = -4;
-                a_color = crate::framework::color::Color { r: 253, g: 245, b: 173, a: 255 };
+                a_color = crate::framework::color::Color {
+                    r: 253,
+                    g: 245,
+                    b: 173,
+                    a: 255,
+                };
                 a_min_alpha = 192;
             }
             MessageStyle::BigMiddle | MessageStyle::BigMiddleFast => {
                 a_pos_y = 300;
                 a_rect_height = 110;
-                a_color = crate::framework::color::Color { r: 253, g: 245, b: 173, a: 255 };
+                a_color = crate::framework::color::Color {
+                    r: 253,
+                    g: 245,
+                    b: 173,
+                    a: 255,
+                };
                 a_min_alpha = 192;
             }
             MessageStyle::HouseName => {
                 a_pos_y = 550;
-                a_color = crate::framework::color::Color { r: 255, g: 255, b: 255, a: 255 };
+                a_color = crate::framework::color::Color {
+                    r: 255,
+                    g: 255,
+                    b: 255,
+                    a: 255,
+                };
                 a_fade_out = true;
             }
             MessageStyle::HugeWave => {
                 a_pos_y = 330;
-                a_color = crate::framework::color::Color { r: 255, g: 0, b: 0, a: 255 };
+                a_color = crate::framework::color::Color {
+                    r: 255,
+                    g: 0,
+                    b: 0,
+                    a: 255,
+                };
             }
             MessageStyle::SlotMachine => {
                 a_pos_y = 93;
@@ -175,7 +220,12 @@ impl MessageWidget {
                 a_pos_y = 514;
                 a_rect_height = 55;
                 a_text_offset_y = -4;
-                a_color = crate::framework::color::Color { r: 253, g: 245, b: 173, a: 255 };
+                a_color = crate::framework::color::Color {
+                    r: 253,
+                    g: 245,
+                    b: 173,
+                    a: 255,
+                };
                 a_min_alpha = 192;
             }
             _ => {}
@@ -192,7 +242,11 @@ impl MessageWidget {
                     .map_or(0i32, |b| unsafe { (*b).m_main_counter as i32 });
                 // 对应 C++: CURVE_BOUNCE_SLOW_MIDDLE（Rust TodCurves::BounceSlowMiddle，此前误用 Bounce）
                 let a_alpha = crate::todlib::tod_common::tod_animate_curve(
-                    75, 0, a_board_counter % 75, a_min_alpha, 255,
+                    75,
+                    0,
+                    a_board_counter % 75,
+                    a_min_alpha,
+                    255,
                     crate::lawn::game_enums::TodCurves::BounceSlowMiddle,
                 );
                 a_color.a = a_alpha as u8;
@@ -207,7 +261,12 @@ impl MessageWidget {
             // 对应 C++: 半透明黑矩形容器 + 居中包装文字
             let a_label_str = message_label_to_str(&self.label);
             if a_rect_height > 0 {
-                a_outline_color = crate::framework::color::Color { r: 0, g: 0, b: 0, a: 128 };
+                a_outline_color = crate::framework::color::Color {
+                    r: 0,
+                    g: 0,
+                    b: 0,
+                    a: 128,
+                };
                 g.set_color(&a_outline_color);
                 g.fill_rect_xywh(0, a_pos_y, board_width, a_rect_height);
 
@@ -253,7 +312,11 @@ impl MessageWidget {
     /// 布局重动画文字（对应 C++ LayoutReanimText）
     /// 逐行统计宽度、逐字符（UTF-8 code point）创建文字 reanim，记录每个字符的 reanim id 与字节偏移
     pub fn layout_reanim_text(&mut self) {
-        let label_len = self.label.iter().position(|&c| c == 0).unwrap_or(self.label.len());
+        let label_len = self
+            .label
+            .iter()
+            .position(|&c| c == 0)
+            .unwrap_or(self.label.len());
         self.slide_off_time = label_len as i32 + 100;
 
         // 统计每行宽度（C++ 用 aFont->StringWidth(aLine)）
@@ -333,7 +396,11 @@ impl MessageWidget {
     /// 绘制重动画文字（对应 C++ DrawReanimatedText）
     /// 逐字符 reanim 取 transform、按 alpha 截断、以字节偏移切出字母并矩阵绘制
     pub fn draw_reanimated_text(&self, _g: &mut Graphics, _the_color: Color, _the_pos_y: f32) {
-        let label_len = self.label.iter().position(|&c| c == 0).unwrap_or(self.label.len());
+        let label_len = self
+            .label
+            .iter()
+            .position(|&c| c == 0)
+            .unwrap_or(self.label.len());
         for a_char_idx in 0..self.text_reanim_count as usize {
             if a_char_idx >= MAX_MESSAGE_LENGTH {
                 break;

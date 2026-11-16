@@ -1,25 +1,25 @@
 // PvZ Portable Rust 翻译 — LawnCommon（草地公用工具）
 // 对应 C++ src/Lawn/LawnCommon.h / LawnCommon.cpp
 
-use crate::lawn::game_enums::*;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
-use crate::framework::widget::edit_widget::EditWidget;
-use crate::framework::widget::dialog::Dialog;
-use crate::framework::widget::checkbox::{Checkbox, CheckboxListener};
-use crate::framework::widget::edit_widget::EditListener;
 use crate::framework::key_codes::KEYCODE_ESCAPE;
 use crate::framework::rect::Rect;
+use crate::framework::widget::checkbox::{Checkbox, CheckboxListener};
+use crate::framework::widget::dialog::Dialog;
+use crate::framework::widget::edit_widget::EditListener;
+use crate::framework::widget::edit_widget::EditWidget;
+use crate::lawn::game_enums::*;
 
 // ====================================================================================================
 // ★ 编辑框控件颜色表（对应 C++ gLawnEditWidgetColors）
 // ====================================================================================================
 pub const LAWN_EDIT_WIDGET_COLORS: [[u8; 4]; 5] = [
-    [0,   0,   0,   0],
-    [0,   0,   0,   0],
+    [0, 0, 0, 0],
+    [0, 0, 0, 0],
     [240, 240, 255, 255],
     [255, 255, 255, 255],
-    [0,   0,   0,   255],
+    [0, 0, 0, 255],
 ];
 
 // ====================================================================================================
@@ -38,8 +38,18 @@ pub fn mod_in_range(the_number: i32, the_mod: i32, the_range: i32) -> bool {
 }
 
 /// 判断点 (x1, y1) 是否位于点 (x2, y2) 周围的 (theRangeX, theRangeY) 范围内
-pub fn grid_in_range(x1: i32, y1: i32, x2: i32, y2: i32, the_range_x: i32, the_range_y: i32) -> bool {
-    x1 >= x2 - the_range_x && x1 <= x2 + the_range_x && y1 >= y2 - the_range_y && y1 <= y2 + the_range_y
+pub fn grid_in_range(
+    x1: i32,
+    y1: i32,
+    x2: i32,
+    y2: i32,
+    the_range_x: i32,
+    the_range_y: i32,
+) -> bool {
+    x1 >= x2 - the_range_x
+        && x1 <= x2 + the_range_x
+        && y1 >= y2 - the_range_y
+        && y1 <= y2 + the_range_y
 }
 
 // ====================================================================================================
@@ -47,7 +57,13 @@ pub fn grid_in_range(x1: i32, y1: i32, x2: i32, y2: i32, the_range_x: i32, the_r
 // ====================================================================================================
 
 /// 水平平铺图片（每次绘制图像的一部分，直到填满指定宽度）
-pub fn tile_image_horizontally(g: &mut Graphics, the_image: &Image, the_x: i32, the_y: i32, the_width: i32) {
+pub fn tile_image_horizontally(
+    g: &mut Graphics,
+    the_image: &Image,
+    the_x: i32,
+    the_y: i32,
+    the_width: i32,
+) {
     let mut x = the_x;
     let mut width = the_width;
     while width > 0 {
@@ -60,7 +76,13 @@ pub fn tile_image_horizontally(g: &mut Graphics, the_image: &Image, the_x: i32, 
 }
 
 /// 垂直平铺图片（每次绘制图像的一部分，直到填满指定高度）
-pub fn tile_image_vertically(g: &mut Graphics, the_image: &Image, the_x: i32, the_y: i32, the_height: i32) {
+pub fn tile_image_vertically(
+    g: &mut Graphics,
+    the_image: &Image,
+    the_x: i32,
+    the_y: i32,
+    the_height: i32,
+) {
     let mut y = the_y;
     let mut height = the_height;
     while height > 0 {
@@ -83,7 +105,11 @@ pub struct LawnEditWidget {
 }
 
 impl LawnEditWidget {
-    pub fn new(_the_id: i32, _the_listener: Option<&mut dyn EditListener>, the_dialog: Option<*mut Dialog>) -> Self {
+    pub fn new(
+        _the_id: i32,
+        _the_listener: Option<&mut dyn EditListener>,
+        the_dialog: Option<*mut Dialog>,
+    ) -> Self {
         LawnEditWidget {
             dialog: the_dialog,
             auto_cap_first_letter: true,
@@ -132,7 +158,11 @@ impl LawnEditWidget {
 // ====================================================================================================
 
 /// 创建编辑框控件（对应 C++ CreateEditWidget）
-pub fn create_edit_widget(_the_id: i32, _the_listener: Option<&mut dyn EditListener>, _the_dialog: Option<*mut Dialog>) -> LawnEditWidget {
+pub fn create_edit_widget(
+    _the_id: i32,
+    _the_listener: Option<&mut dyn EditListener>,
+    _the_dialog: Option<*mut Dialog>,
+) -> LawnEditWidget {
     let widget = LawnEditWidget::new(_the_id, _the_listener, _the_dialog);
     // TODO: 颜色设置 SetColors(gLawnEditWidgetColors, NUM_COLORS)
     // TODO: 设置字体 SetFont(FONT_BRIANNETOD16)
@@ -152,14 +182,13 @@ pub fn draw_edit_box(_g: &mut Graphics, the_widget: &EditWidget) {
 }
 
 /// 创建新复选框（对应 C++ MakeNewCheckbox）
-pub fn make_new_checkbox(the_id: i32, _the_listener: Option<Box<dyn CheckboxListener>>, the_default: bool) -> Checkbox {
+pub fn make_new_checkbox(
+    the_id: i32,
+    _the_listener: Option<Box<dyn CheckboxListener>>,
+    the_default: bool,
+) -> Checkbox {
     // 构造时传入空指针图像，实际图像资源在运行时设置
-    let mut checkbox = Checkbox::new(
-        std::ptr::null_mut(),
-        std::ptr::null_mut(),
-        the_id,
-        None,
-    );
+    let mut checkbox = Checkbox::new(std::ptr::null_mut(), std::ptr::null_mut(), the_id, None);
     checkbox.checked = the_default;
     checkbox.has_alpha = true;
     checkbox.has_transparencies = true;
@@ -172,12 +201,18 @@ pub fn make_new_checkbox(the_id: i32, _the_listener: Option<Box<dyn CheckboxList
 
 /// 获取当前存档文件名（对应 C++ GetSavedGameName）
 pub fn get_saved_game_name(the_game_mode: GameMode, the_profile_id: i32) -> String {
-    format!("userdata/game{}_{}.v4", the_profile_id, the_game_mode as i32)
+    format!(
+        "userdata/game{}_{}.v4",
+        the_profile_id, the_game_mode as i32
+    )
 }
 
 /// 获取旧版存档文件名（对应 C++ GetLegacySavedGameName）
 pub fn get_legacy_saved_game_name(the_game_mode: GameMode, the_profile_id: i32) -> String {
-    format!("userdata/game{}_{}.dat", the_profile_id, the_game_mode as i32)
+    format!(
+        "userdata/game{}_{}.dat",
+        the_profile_id, the_game_mode as i32
+    )
 }
 
 /// 获取当前日期距离 2000 年 1 月 1 日的天数（对应 C++ GetCurrentDaysSince2000）

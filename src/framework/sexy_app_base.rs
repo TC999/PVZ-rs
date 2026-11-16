@@ -12,21 +12,22 @@ use sdl2::keyboard::Keycode;
 use sdl2::mouse::MouseButton;
 use sdl2::video::{GLContext, GLProfile, Window};
 
+use crate::framework::buffer::Buffer;
 use crate::framework::color::Color;
 use crate::framework::common;
-use crate::framework::rect::Rect;
-use crate::framework::key_codes::*;
 use crate::framework::graphics::gl_image::GLImage;
-use crate::framework::graphics::memory_image::MemoryImage;
-use crate::framework::graphics::image::Image;
 use crate::framework::graphics::gl_interface::GLInterface;
-use crate::framework::widget::widget_manager::WidgetManager;
-use crate::framework::widget::dialog::Dialog;
-use crate::framework::sound::sound_manager::SoundManager;
-use crate::framework::sound::music_interface::MusicInterface;
+use crate::framework::graphics::image::Image;
+use crate::framework::graphics::memory_image::MemoryImage;
+use crate::framework::key_codes::*;
+use crate::framework::paklib::{init_pak_interface, set_resource_folder, with_pak_interface_mut};
+use crate::framework::rect::Rect;
 use crate::framework::resource_manager::ResourceManager;
-use crate::framework::paklib::{init_pak_interface, with_pak_interface_mut, set_resource_folder};
-use crate::framework::buffer::Buffer;
+use crate::framework::sound::music_interface::MusicInterface;
+use crate::framework::sound::sound_manager::SoundManager;
+use crate::framework::widget::dialog::Dialog;
+use crate::framework::widget::widget::Widget;
+use crate::framework::widget::widget_manager::WidgetManager;
 
 /// 对应 C++ `DEMO_FILE_ID`（SexyAppBase.cpp:83）
 pub const DEMO_FILE_ID: u32 = 0x42BEEF78;
@@ -67,6 +68,80 @@ pub static mut G_SEXY_APP: Option<*mut SexyAppBase> = None;
 /// 全局 SexyApp 实例指针（对应 C++ gSexyApp）
 pub fn get_sexy_app() -> Option<&'static mut SexyAppBase> {
     unsafe { G_SEXY_APP.and_then(|p| p.as_mut()) }
+}
+
+/// 安全删除列表元素（对应 C++ WidgetSafeDeleteInfo，SexyAppBase.h:66-71）
+///
+/// [TRANSLATION_NOTE]: C++ 元素只含 mUpdateAppDepth + Widget*，由 delete 的
+/// 多态析构统一释放；Rust 组合模型无统一基类析构，故额外携带 delete_fn
+/// 以按静态类型重建 Box 并释放。
+pub struct WidgetSafeDeleteInfo {
+    /// 入队时的 UpdateApp 深度（对应 C++ mUpdateAppDepth）
+    pub update_app_depth: i32,
+    /// 待释放指针（对应 C++ mWidget）
+    pub widget: *mut std::ffi::c_void,
+    /// 析构函数：以原始指针重建 Box 并释放（RUST-ONLY）
+    pub delete_fn: unsafe fn(*mut std::ffi::c_void),
+}
+
+/// Box<Widget> 的析构函数（由安全删除列表调用）
+///
+/// # Safety
+/// 仅在 process_safe_delete_list 中调用；指针必须经 safe_delete_widget 入队
+/// （拥有权已转移至列表，且已从 WidgetManager 摘除，不再被访问）。
+unsafe fn delete_boxed_widget(ptr: *mut std::ffi::c_void) {
+    let _ = Box::from_raw(ptr as *mut Widget);
+}
+
+/// Box<T> 的析构函数（由安全删除列表调用；T 为完整拥有类型）
+///
+/// # Safety
+/// 仅在 process_safe_delete_list 中调用；指针必须经 safe_delete_ptr 入队
+/// （拥有权已转移至列表，且不再被任何容器/字段持有）。
+unsafe fn delete_boxed<T>(ptr: *mut std::ffi::c_void) {
+    let _ = Box::from_raw(ptr as *mut T);
+}
+
+/// 入队一个延迟删除项（RUST-ONLY：safe_delete_widget / safe_delete_ptr 的共享主体）
+fn enqueue_safe_delete(
+    list: &mut Vec<WidgetSafeDeleteInfo>,
+    update_app_depth: i32,
+    ptr: *mut std::ffi::c_void,
+    delete_fn: unsafe fn(*mut std::ffi::c_void),
+) {
+    list.push(WidgetSafeDeleteInfo {
+        update_app_depth,
+        widget: ptr,
+        delete_fn,
+    });
+}
+
+/// 处理安全删除列表的核心逻辑（RUST-ONLY：process_safe_delete_list 的共享主体）
+///
+/// C++ 语义（SexyAppBase.cpp:2541-2553）：mUpdateAppDepth <= 入队深度时 delete 并移除。
+/// `modal_wait_depth > 0` 时跳过（模态等待循环内可能已入队正在被等待的对话框，
+/// 立即释放会使等待循环的 result 读取悬空；删除延后到循环结束后）。
+fn process_safe_delete_core(
+    list: &mut Vec<WidgetSafeDeleteInfo>,
+    update_app_depth: i32,
+    modal_wait_depth: i32,
+) {
+    if modal_wait_depth > 0 {
+        return;
+    }
+    // 对应 C++ 的 MTAutoDisallowRand（SexyAppBase.cpp:2543）：删除期间禁止消耗 RNG
+    let _disallow_rand = crate::framework::mt_rand::MTAutoDisallowRand::new();
+    // SAFETY: delete_fn 以原始指针重建 Box 并释放。指针拥有权在入队时已转移至
+    // 本列表（enqueue_safe_delete 的调用点保证其已从 WidgetManager 与所有者字段
+    // 摘除）；深度比较与模态等待门控保证不在该对象自身的方法栈内释放。
+    list.retain(|info| {
+        if update_app_depth <= info.update_app_depth {
+            unsafe { (info.delete_fn)(info.widget) }
+            false
+        } else {
+            true
+        }
+    });
 }
 
 pub struct SexyAppBase {
@@ -143,8 +218,13 @@ pub struct SexyAppBase {
     // 以驱动 Board::Update / MusicUpdate / CheckForGameEnd（C++ 中这些由 LawnApp::UpdateFrames 完成）。
     pub(crate) lawn_frame_hook: Option<fn()>,
 
-    // 安全删除列表（对应 C++ mSafeDeleteList）
-    pub safe_delete_list: Vec<*mut std::ffi::c_void>,
+    // 安全删除列表（对应 C++ mSafeDeleteList / WidgetSafeDeleteList，SexyAppBase.h:263）
+    pub safe_delete_list: Vec<WidgetSafeDeleteInfo>,
+
+    // RUST-ONLY：模态等待循环（Dialog::wait_for_result）嵌套深度。>0 期间暂停
+    // process_safe_delete_list 的排空，防止在模态循环栈内释放正被等待的对话框
+    // （C++ 对应场景是读取已释放内存的侥幸 UB，见 process_safe_delete_list 说明）。
+    pub m_modal_wait_depth: i32,
 
     // ---- 属性系统（对应 C++ mStringProperties/mBoolProperties/mIntProperties/mDoubleProperties） ----
     pub m_string_properties: std::collections::HashMap<String, String>,
@@ -269,18 +349,18 @@ fn sdl_keycode_to_keycode(sdl_key: i32) -> KeyCode {
         return sdl_key as KeyCode;
     }
     match sdl_key {
-        8   => KEYCODE_BACKSPACE,      // SDLK_BACKSPACE
-        9   => KEYCODE_TAB,            // SDLK_TAB
-        13  => KEYCODE_RETURN,         // SDLK_RETURN
-        27  => KEYCODE_ESCAPE,         // SDLK_ESCAPE
-        32  => KEYCODE_SPACE,          // SDLK_SPACE
-        127 => KEYCODE_DELETE,         // SDLK_DELETE (ASCII DEL → VK_DELETE 46...)
+        8 => KEYCODE_BACKSPACE, // SDLK_BACKSPACE
+        9 => KEYCODE_TAB,       // SDLK_TAB
+        13 => KEYCODE_RETURN,   // SDLK_RETURN
+        27 => KEYCODE_ESCAPE,   // SDLK_ESCAPE
+        32 => KEYCODE_SPACE,    // SDLK_SPACE
+        127 => KEYCODE_DELETE,  // SDLK_DELETE (ASCII DEL → VK_DELETE 46...)
         // 这里 SDLK_DELETE=127 映射到 46，但 Rust 版 KEYCODE_DELETE=46
         // 直接用 SDL 原始值可能会错，所以特殊处理
-        46  => KEYCODE_DELETE,         // 有些系统用 46
+        46 => KEYCODE_DELETE, // 有些系统用 46
 
         // 方向键
-        1073741903 | 273 => KEYCODE_UP,       // SDLK_UP / 某些平台
+        1073741903 | 273 => KEYCODE_UP, // SDLK_UP / 某些平台
         1073741904 | 274 => KEYCODE_DOWN,
         1073741902 | 276 => KEYCODE_LEFT,
         1073741905 | 275 => KEYCODE_RIGHT,
@@ -307,9 +387,9 @@ fn sdl_keycode_to_keycode(sdl_key: i32) -> KeyCode {
         1073741900 => KEYCODE_PAGE_DOWN, // SDLK_PAGEDOWN
 
         // 修饰键
-        1073742049 | 1073742053 => KEYCODE_SHIFT,   // LSHIFT / RSHIFT
+        1073742049 | 1073742053 => KEYCODE_SHIFT, // LSHIFT / RSHIFT
         1073742048 | 1073742052 => KEYCODE_CONTROL, // LCTRL / RCTRL
-        1073742050 | 1073742054 => KEYCODE_ALT,     // LALT / RALT
+        1073742050 | 1073742054 => KEYCODE_ALT,   // LALT / RALT
 
         _ => sdl_key as KeyCode,
     }
@@ -391,28 +471,154 @@ fn sdl_synthesize_ascii_char_from_key_down(
         SDLK_KP_DIVIDE => b'/',
         SDLK_KP_PERIOD => b'.',
         SDLK_KP_EQUALS => b'=',
-        49 => if a_has_shift { b'!' } else { b'1' },  // SDLK_1
-        50 => if a_has_shift { b'@' } else { b'2' },  // SDLK_2
-        51 => if a_has_shift { b'#' } else { b'3' },  // SDLK_3
-        52 => if a_has_shift { b'$' } else { b'4' },  // SDLK_4
-        53 => if a_has_shift { b'%' } else { b'5' },  // SDLK_5
-        54 => if a_has_shift { b'^' } else { b'6' },  // SDLK_6
-        55 => if a_has_shift { b'&' } else { b'7' },  // SDLK_7
-        56 => if a_has_shift { b'*' } else { b'8' },  // SDLK_8
-        57 => if a_has_shift { b'(' } else { b'9' },  // SDLK_9
-        48 => if a_has_shift { b')' } else { b'0' },  // SDLK_0
-        45 => if a_has_shift { b'_' } else { b'-' },  // SDLK_MINUS
-        61 => if a_has_shift { b'+' } else { b'=' },  // SDLK_EQUALS
-        91 => if a_has_shift { b'{' } else { b'[' },  // SDLK_LEFTBRACKET
-        93 => if a_has_shift { b'}' } else { b']' },  // SDLK_RIGHTBRACKET
-        92 => if a_has_shift { b'|' } else { b'\\' }, // SDLK_BACKSLASH
-        59 => if a_has_shift { b':' } else { b';' },  // SDLK_SEMICOLON
-        39 => if a_has_shift { b'"' } else { b'\'' }, // SDLK_QUOTE
-        44 => if a_has_shift { b'<' } else { b',' },  // SDLK_COMMA
-        46 => if a_has_shift { b'>' } else { b'.' },  // SDLK_PERIOD
-        47 => if a_has_shift { b'?' } else { b'/' },  // SDLK_SLASH
-        96 => if a_has_shift { b'~' } else { b'`' },  // SDLK_BACKQUOTE
-        32 => b' ',                                   // SDLK_SPACE
+        49 => {
+            if a_has_shift {
+                b'!'
+            } else {
+                b'1'
+            }
+        } // SDLK_1
+        50 => {
+            if a_has_shift {
+                b'@'
+            } else {
+                b'2'
+            }
+        } // SDLK_2
+        51 => {
+            if a_has_shift {
+                b'#'
+            } else {
+                b'3'
+            }
+        } // SDLK_3
+        52 => {
+            if a_has_shift {
+                b'$'
+            } else {
+                b'4'
+            }
+        } // SDLK_4
+        53 => {
+            if a_has_shift {
+                b'%'
+            } else {
+                b'5'
+            }
+        } // SDLK_5
+        54 => {
+            if a_has_shift {
+                b'^'
+            } else {
+                b'6'
+            }
+        } // SDLK_6
+        55 => {
+            if a_has_shift {
+                b'&'
+            } else {
+                b'7'
+            }
+        } // SDLK_7
+        56 => {
+            if a_has_shift {
+                b'*'
+            } else {
+                b'8'
+            }
+        } // SDLK_8
+        57 => {
+            if a_has_shift {
+                b'('
+            } else {
+                b'9'
+            }
+        } // SDLK_9
+        48 => {
+            if a_has_shift {
+                b')'
+            } else {
+                b'0'
+            }
+        } // SDLK_0
+        45 => {
+            if a_has_shift {
+                b'_'
+            } else {
+                b'-'
+            }
+        } // SDLK_MINUS
+        61 => {
+            if a_has_shift {
+                b'+'
+            } else {
+                b'='
+            }
+        } // SDLK_EQUALS
+        91 => {
+            if a_has_shift {
+                b'{'
+            } else {
+                b'['
+            }
+        } // SDLK_LEFTBRACKET
+        93 => {
+            if a_has_shift {
+                b'}'
+            } else {
+                b']'
+            }
+        } // SDLK_RIGHTBRACKET
+        92 => {
+            if a_has_shift {
+                b'|'
+            } else {
+                b'\\'
+            }
+        } // SDLK_BACKSLASH
+        59 => {
+            if a_has_shift {
+                b':'
+            } else {
+                b';'
+            }
+        } // SDLK_SEMICOLON
+        39 => {
+            if a_has_shift {
+                b'"'
+            } else {
+                b'\''
+            }
+        } // SDLK_QUOTE
+        44 => {
+            if a_has_shift {
+                b'<'
+            } else {
+                b','
+            }
+        } // SDLK_COMMA
+        46 => {
+            if a_has_shift {
+                b'>'
+            } else {
+                b'.'
+            }
+        } // SDLK_PERIOD
+        47 => {
+            if a_has_shift {
+                b'?'
+            } else {
+                b'/'
+            }
+        } // SDLK_SLASH
+        96 => {
+            if a_has_shift {
+                b'~'
+            } else {
+                b'`'
+            }
+        } // SDLK_BACKQUOTE
+        32 => b' ', // SDLK_SPACE
         _ => return None,
     };
 
@@ -515,6 +721,7 @@ impl SexyAppBase {
             memory_image_set: Vec::new(),
             update_app_state: 0,
             update_app_depth: 0,
+            m_modal_wait_depth: 0,
             update_multiplier: 1.0,
             paused: false,
             lawn_frame_hook: None,
@@ -572,7 +779,10 @@ impl SexyAppBase {
         // WidgetManager resize（对应 C++ Init 中的 mWidgetManager->Resize）
         if let Some(wm) = self.widget_manager {
             unsafe {
-                (*wm).resize(Rect::new(0, 0, self.width, self.height), Rect::new(0, 0, self.width, self.height));
+                (*wm).resize(
+                    Rect::new(0, 0, self.width, self.height),
+                    Rect::new(0, 0, self.width, self.height),
+                );
             }
         }
 
@@ -708,12 +918,28 @@ impl SexyAppBase {
             self.update_app();
         }
 
+        // 对应 C++ DoMainLoop 返回后的 ProcessSafeDeleteList()（SexyAppBase.cpp:3009）
+        self.process_safe_delete_list();
+
         self.running = false;
     }
 
     /// 主循环单步（对应 C++ UpdateApp 的简化版本）
     /// 包含: 回放 demo → 事件处理 → 更新游戏逻辑 → 绘制
+    ///
+    /// RUST-ONLY 包装：对应 C++ UpdateAppStep 的 mUpdateAppDepth++/--（SexyAppBase.cpp:2906/2951）
+    /// 与末尾的 ProcessSafeDeleteList（SexyAppBase.cpp:2851）。深度递增期间 SafeDeleteWidget
+    /// 入队的删除不会在本调用栈内发生，单步结束、深度归位后统一排空（ADR-010 延迟释放）。
     pub fn update_app(&mut self) -> bool {
+        self.update_app_depth += 1;
+        let a_result = self.update_app_step_inner();
+        self.update_app_depth -= 1;
+        self.process_safe_delete_list();
+        a_result
+    }
+
+    /// 主循环单步的实际执行体（RUST-ONLY：由 update_app 包装调用）
+    fn update_app_step_inner(&mut self) -> bool {
         // 0. 回放 demo 命令流
         // 对应 C++ UpdateApp 中 UPDATESTATE_MESSAGES 阶段的 ProcessDemo()（SexyAppBase.cpp:2912），
         // 位置在 ProcessDeferredMessages 之前
@@ -755,7 +981,8 @@ impl SexyAppBase {
 
             // 排队中的命令要等游戏逻辑认领；放行 tick 以便认领或判定为回放跑偏
             if (self.m_loaded == self.m_demo_loading_complete)
-                && ((self.m_update_count != self.m_last_demo_update_cnt) || self.m_demo_command_queued)
+                && ((self.m_update_count != self.m_last_demo_update_cnt)
+                    || self.m_demo_command_queued)
             {
                 self.update_frames_internal();
                 return true;
@@ -814,10 +1041,32 @@ impl SexyAppBase {
         // ===== 软件渲染：WidgetManager 绘制到 screen_image =====
         if let Some(wm) = self.widget_manager {
             unsafe {
-                let screen_ptr = self.screen_image
+                let screen_ptr = self
+                    .screen_image
                     .map(|p| p as *mut crate::framework::graphics::image::Image)
                     .unwrap_or(std::ptr::null_mut());
-                let mut g = crate::framework::graphics::graphics::Graphics::new_with_image(screen_ptr);
+                // 对应 C++ DrawDirtyStuff 的 GL Swap 后 glClear（GLInterface.cpp:1247-1250）：
+                // 软件渲染模型下 screen_image 是持久的，不清屏会残留上一帧内容
+                // （GameSelector 的 reanim 背景带透明区域，旧行为会把标题屏残影透出）
+                if !screen_ptr.is_null() {
+                    (*screen_ptr).pixels.fill(0);
+                }
+                // [TRANSLATION_NOTE] 诊断（勿提交启用）
+                self.m_draw_count += 1;
+                if self.m_draw_count % 300 == 0 {
+                    let widgets = self
+                        .widget_manager
+                        .map(|wm| unsafe { (*wm).widget_list.len() })
+                        .unwrap_or(0);
+                    eprintln!(
+                        "[DRAW] frame={} widgets={} screen_pixels_zero={}",
+                        self.m_draw_count,
+                        widgets,
+                        screen_ptr.is_null() || (*screen_ptr).pixels.iter().all(|&b| b == 0)
+                    );
+                }
+                let mut g =
+                    crate::framework::graphics::graphics::Graphics::new_with_image(screen_ptr);
                 (*wm).draw(&mut g);
             }
         }
@@ -863,8 +1112,14 @@ impl SexyAppBase {
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE as GLint);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE as GLint);
                 glTexImage2D(
-                    GL_TEXTURE_2D, 0, GL_RGBA as GLint, w, h, 0,
-                    GL_RGBA, GL_UNSIGNED_BYTE,
+                    GL_TEXTURE_2D,
+                    0,
+                    GL_RGBA as GLint,
+                    w,
+                    h,
+                    0,
+                    GL_RGBA,
+                    GL_UNSIGNED_BYTE,
                     mem.base.pixels.as_ptr() as *const std::ffi::c_void,
                 );
 
@@ -873,19 +1128,30 @@ impl SexyAppBase {
 
                 // 设置正交投影矩阵（对应 C++ MakeOrthoMatrix，Y 轴与 OpenGL 屏幕坐标对齐）
                 let ortho: [f32; 16] = [
-                    2.0 / w as f32, 0.0, 0.0, 0.0,
-                    0.0, -2.0 / h as f32, 0.0, 0.0,
-                    0.0, 0.0, -2.0 / 20.0, 0.0,
-                    -1.0, 1.0, -10.0 / 20.0, 1.0,
+                    2.0 / w as f32,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    -2.0 / h as f32,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    -2.0 / 20.0,
+                    0.0,
+                    -1.0,
+                    1.0,
+                    -10.0 / 20.0,
+                    1.0,
                 ];
                 glUniformMatrix4fv(
                     crate::framework::graphics::gl_interface::G_UF_VIEW_PROJ_MTX,
-                    1, GL_FALSE, ortho.as_ptr(),
+                    1,
+                    GL_FALSE,
+                    ortho.as_ptr(),
                 );
-                glUniform1i(
-                    crate::framework::graphics::gl_interface::G_UF_TEXTURE,
-                    0,
-                );
+                glUniform1i(crate::framework::graphics::gl_interface::G_UF_TEXTURE, 0);
                 glUniform1i(
                     crate::framework::graphics::gl_interface::G_UF_USE_TEXTURE,
                     1,
@@ -902,17 +1168,46 @@ impl SexyAppBase {
 
                 // 渲染全屏四边形（两个三角形组成 Triangle Strip）
                 let verts: [GLVertex; 4] = [
-                    GLVertex { sx: 0.0, sy: 0.0, sz: 0.0, color: 0xFFFFFFFF, tu: 0.0, tv: 0.0 },
-                    GLVertex { sx: w as f32, sy: 0.0, sz: 0.0, color: 0xFFFFFFFF, tu: 1.0, tv: 0.0 },
-                    GLVertex { sx: 0.0, sy: h as f32, sz: 0.0, color: 0xFFFFFFFF, tu: 0.0, tv: 1.0 },
-                    GLVertex { sx: w as f32, sy: h as f32, sz: 0.0, color: 0xFFFFFFFF, tu: 1.0, tv: 1.0 },
+                    GLVertex {
+                        sx: 0.0,
+                        sy: 0.0,
+                        sz: 0.0,
+                        color: 0xFFFFFFFF,
+                        tu: 0.0,
+                        tv: 0.0,
+                    },
+                    GLVertex {
+                        sx: w as f32,
+                        sy: 0.0,
+                        sz: 0.0,
+                        color: 0xFFFFFFFF,
+                        tu: 1.0,
+                        tv: 0.0,
+                    },
+                    GLVertex {
+                        sx: 0.0,
+                        sy: h as f32,
+                        sz: 0.0,
+                        color: 0xFFFFFFFF,
+                        tu: 0.0,
+                        tv: 1.0,
+                    },
+                    GLVertex {
+                        sx: w as f32,
+                        sy: h as f32,
+                        sz: 0.0,
+                        color: 0xFFFFFFFF,
+                        tu: 1.0,
+                        tv: 1.0,
+                    },
                 ];
 
                 // 使用已有 VBO 和顶点属性配置
                 let vbo = crate::framework::graphics::gl_interface::G_VBO;
                 glBindBuffer(GL_ARRAY_BUFFER, vbo);
                 glBufferSubData(
-                    GL_ARRAY_BUFFER, 0,
+                    GL_ARRAY_BUFFER,
+                    0,
                     (size_of::<GLVertex>() * 4) as GLsizeiptr,
                     verts.as_ptr() as *const std::ffi::c_void,
                 );
@@ -920,19 +1215,31 @@ impl SexyAppBase {
                 // Position (3 floats, offset 0)
                 glEnableVertexAttribArray(0);
                 glVertexAttribPointer(
-                    0, 3, GL_FLOAT, GL_FALSE, size_of::<GLVertex>() as GLsizei,
+                    0,
+                    3,
+                    GL_FLOAT,
+                    GL_FALSE,
+                    size_of::<GLVertex>() as GLsizei,
                     ptr::null(),
                 );
                 // Color (4 ubytes normalized, offset 12 = 3*4)
                 glEnableVertexAttribArray(1);
                 glVertexAttribPointer(
-                    1, 4, GL_UNSIGNED_BYTE, GL_TRUE, size_of::<GLVertex>() as GLsizei,
+                    1,
+                    4,
+                    GL_UNSIGNED_BYTE,
+                    GL_TRUE,
+                    size_of::<GLVertex>() as GLsizei,
                     (size_of::<f32>() * 3) as *const std::ffi::c_void,
                 );
                 // UV (2 floats, offset 16 = 3*4 + 4)
                 glEnableVertexAttribArray(2);
                 glVertexAttribPointer(
-                    2, 2, GL_FLOAT, GL_FALSE, size_of::<GLVertex>() as GLsizei,
+                    2,
+                    2,
+                    GL_FLOAT,
+                    GL_FALSE,
+                    size_of::<GLVertex>() as GLsizei,
                     (size_of::<f32>() * 3 + size_of::<u32>()) as *const std::ffi::c_void,
                 );
 
@@ -946,15 +1253,49 @@ impl SexyAppBase {
 
     // ==================== 安全删除 ====================
 
-    /// 处理安全删除列表（对应 C++ ProcessSafeDeleteList）
-    /// 仅在 update_app_depth 不增加时删除挂起的 widget
+    /// 入队延迟释放 Widget（对应 C++ SexyAppBase::SafeDeleteWidget，SexyAppBase.cpp:1971-1977）
+    ///
+    /// 不在此处释放：记录当前 UpdateApp 深度，等 process_safe_delete_list 在
+    /// 当前深度不大于入队深度时统一释放（ADR-010，等价 C++ SafeDeleteWidget）。
+    pub fn safe_delete_widget(&mut self, the_widget: *mut Widget) {
+        enqueue_safe_delete(
+            &mut self.safe_delete_list,
+            self.update_app_depth,
+            the_widget as *mut std::ffi::c_void,
+            delete_boxed_widget,
+        );
+    }
+
+    /// 入队延迟释放任意 Box<T>（RUST-ONLY 一般形式）
+    ///
+    /// [TRANSLATION_NOTE]: C++ 的 SafeDeleteWidget 只收 Widget*；Rust 侧 Board、
+    /// UserDialog 等并非 Widget 子类（组合模型），但其 C++ 对应物走同一
+    /// SafeDeleteWidget 路径（LawnApp.cpp:360/1781/1795 等），故提供
+    /// "指针 + 析构函数"的一般形式以覆盖各静态类型的 delete。
+    pub fn safe_delete_ptr<T>(&mut self, the_ptr: *mut T) {
+        enqueue_safe_delete(
+            &mut self.safe_delete_list,
+            self.update_app_depth,
+            the_ptr as *mut std::ffi::c_void,
+            delete_boxed::<T>,
+        );
+    }
+
+    /// 处理安全删除列表（对应 C++ ProcessSafeDeleteList，SexyAppBase.cpp:2541-2553）
+    ///
+    /// C++ 语义：mUpdateAppDepth <= 入队时的 mUpdateAppDepth 时 delete 并移除。
+    /// 深度比较保证"在 widget 自身的 update / 事件回调期间入队的删除"至少要到
+    /// 这些回调所在的 UpdateAppStep 结束后才发生（ADR-010 延迟释放）。
+    ///
+    /// 模态等待循环（m_modal_wait_depth > 0）期间跳过：等待中的对话框可能在
+    /// 循环内经 KillDialog 入队删除自身，立即释放会使循环内的 result 读取悬空
+    /// （C++ 对应场景是读取已释放内存的侥幸 UB）；删除统一延后到循环结束后。
     pub fn process_safe_delete_list(&mut self) {
-        let depth = self.update_app_depth;
-        self.safe_delete_list.retain(|&ptr| {
-            // 在 C++ 中这里 delete 了 widget
-            // Rust 中由调用方管理生命周期，此处仅清除列表
-            false // 始终移除（简化实现）
-        });
+        process_safe_delete_core(
+            &mut self.safe_delete_list,
+            self.update_app_depth,
+            self.m_modal_wait_depth,
+        );
     }
 
     // ==================== 事件处理 ====================
@@ -1020,60 +1361,56 @@ impl SexyAppBase {
                     return false;
                 }
 
-                Event::Window { win_event, .. } => {
-                    match win_event {
-                        WindowEvent::Close => {
-                            self.m_shutdown_flag = true;
-                            return false;
-                        }
-                        WindowEvent::Resized(w, h) | WindowEvent::SizeChanged(w, h) => {
-                            self.width = w;
-                            self.height = h;
-                            if let Some(gl) = self.gl_interface.as_mut() {
-                                unsafe {
-                                    (**gl).width = self.width;
-                                    (**gl).height = self.height;
-                                    (**gl).update_viewport();
-                                }
-                            }
-                            if let Some(wm) = self.widget_manager {
-                                unsafe {
-                                    (*wm).resize(
-                                        Rect::new(0, 0, self.width, self.height),
-                                        Rect::new(0, 0, self.width, self.height),
-                                    );
-                                }
-                            }
-                        }
-                        WindowEvent::FocusGained => {
-                            self.has_focus = true;
-                            self.active = true;
-                        }
-                        WindowEvent::FocusLost => {
-                            self.has_focus = false;
-                            self.active = false;
-                        }
-                        WindowEvent::Minimized => {
-                            self.minimized = true;
-                        }
-                        WindowEvent::Restored => {
-                            self.minimized = false;
-                        }
-                        _ => {}
+                Event::Window { win_event, .. } => match win_event {
+                    WindowEvent::Close => {
+                        self.m_shutdown_flag = true;
+                        return false;
                     }
-                }
+                    WindowEvent::Resized(w, h) | WindowEvent::SizeChanged(w, h) => {
+                        self.width = w;
+                        self.height = h;
+                        if let Some(gl) = self.gl_interface.as_mut() {
+                            unsafe {
+                                (**gl).width = self.width;
+                                (**gl).height = self.height;
+                                (**gl).update_viewport();
+                            }
+                        }
+                        if let Some(wm) = self.widget_manager {
+                            unsafe {
+                                (*wm).resize(
+                                    Rect::new(0, 0, self.width, self.height),
+                                    Rect::new(0, 0, self.width, self.height),
+                                );
+                            }
+                        }
+                    }
+                    WindowEvent::FocusGained => {
+                        self.has_focus = true;
+                        self.active = true;
+                    }
+                    WindowEvent::FocusLost => {
+                        self.has_focus = false;
+                        self.active = false;
+                    }
+                    WindowEvent::Minimized => {
+                        self.minimized = true;
+                    }
+                    WindowEvent::Restored => {
+                        self.minimized = false;
+                    }
+                    _ => {}
+                },
 
                 Event::KeyDown {
                     keycode: Some(kc),
                     keymod,
                     ..
                 } => {
-                    self.ctrl_down = keymod.intersects(
-                        sdl2::keyboard::Mod::LCTRLMOD | sdl2::keyboard::Mod::RCTRLMOD,
-                    );
-                    self.alt_down = keymod.intersects(
-                        sdl2::keyboard::Mod::LALTMOD | sdl2::keyboard::Mod::RALTMOD,
-                    );
+                    self.ctrl_down = keymod
+                        .intersects(sdl2::keyboard::Mod::LCTRLMOD | sdl2::keyboard::Mod::RCTRLMOD);
+                    self.alt_down = keymod
+                        .intersects(sdl2::keyboard::Mod::LALTMOD | sdl2::keyboard::Mod::RALTMOD);
                     let key: i32 = (*kc).into();
                     self.key_down(sdl_keycode_to_keycode(key));
                 }
@@ -1090,13 +1427,17 @@ impl SexyAppBase {
                 Event::KeyUp { .. } => {} // no keycode
 
                 Event::MouseButtonDown {
-                    mouse_btn, x, y, clicks, ..
+                    mouse_btn,
+                    x,
+                    y,
+                    clicks,
+                    ..
                 } => {
                     // C++ 编码：左键=1/2, 右键=-1/-2, 中键=3
                     let btn = match mouse_btn {
-                        MouseButton::Left => clicks as i32,       // 单击=1, 双击=2
-                        MouseButton::Right => -(clicks as i32),   // 单击=-1, 双击=-2
-                        MouseButton::Middle => 3,                 // 中键=3
+                        MouseButton::Left => clicks as i32,     // 单击=1, 双击=2
+                        MouseButton::Right => -(clicks as i32), // 单击=-1, 双击=-2
+                        MouseButton::Middle => 3,               // 中键=3
                         _ => clicks as i32,
                     };
                     self.mouse_down(x, y, btn, clicks as i32);
@@ -1142,7 +1483,9 @@ impl SexyAppBase {
 
         // 清理屏幕图像
         if let Some(si) = self.screen_image.take() {
-            unsafe { let _ = Box::from_raw(si); }
+            unsafe {
+                let _ = Box::from_raw(si);
+            }
         }
 
         // 清理 WidgetManager
@@ -1203,8 +1546,8 @@ impl SexyAppBase {
     /// SDL2_mixer 通过 sdl2-sys 编译时链接（Windows 由 build.rs 提供 .lib，Linux 通过系统库），
     /// libopenmpt 仍然通过运行时 DLL 加载（外置依赖）。
     pub fn init_sound_system(&mut self) {
-        use crate::ffi::sdl_mixer;
         use crate::ffi::libopenmpt;
+        use crate::ffi::sdl_mixer;
 
         // 加载 libopenmpt.dll（运行时，编译时不需要，Windows 用户自备 DLL）
         if libopenmpt::load_library() {
@@ -1224,12 +1567,15 @@ impl SexyAppBase {
         if self.sound_manager.is_none() {
             use crate::framework::sound::sdl_sound_manager::SDLSoundManager;
             let sm = Box::new(SDLSoundManager::new());
-            self.sound_manager = Some(Box::into_raw(sm) as *mut dyn crate::framework::sound::sound_manager::SoundManager);
+            self.sound_manager = Some(
+                Box::into_raw(sm) as *mut dyn crate::framework::sound::sound_manager::SoundManager
+            );
         }
         if self.music_interface.is_none() {
             use crate::framework::sound::sdl_music_interface::SDLMusicInterface;
             let mi = Box::new(SDLMusicInterface::new());
-            self.music_interface = Some(Box::into_raw(mi) as *mut dyn crate::framework::sound::music_interface::MusicInterface);
+            self.music_interface = Some(Box::into_raw(mi)
+                as *mut dyn crate::framework::sound::music_interface::MusicInterface);
         }
         self.set_sfx_volume(self.sfx_volume);
         self.set_music_volume(self.music_volume);
@@ -1256,10 +1602,27 @@ impl SexyAppBase {
 
     /// 对话框管理
     pub fn kill_dialog(&mut self, dialog_id: i32) -> bool {
-        if let Some(d) = self.dialog_map.remove(&dialog_id) {
-            // 对应 C++ KillDialog（SexyAppBase.cpp:857-859）：从 mDialogList 移除该对话框
-            self.m_dialog_list.retain(|x| *x != d);
+        // 对应 C++（SexyAppBase.cpp:846-848）：从 mDialogMap 查找并移除
+        let Some(a_dialog) = self.dialog_map.remove(&dialog_id) else {
+            return false;
+        };
+        unsafe {
+            // 对应 C++（SexyAppBase.cpp:854-855）：结果仍为"等待中"时归零，
+            // 让等待循环得知对话框已不在
+            if (*a_dialog).result == 0x7FFFFFFF {
+                (*a_dialog).result = 0;
+            }
         }
+        // 对应 C++（SexyAppBase.cpp:857-859）：从 mDialogList 移除该对话框
+        self.m_dialog_list.retain(|x| *x != a_dialog);
+        // [TRANSLATION_NOTE]: C++（SexyAppBase.cpp:863-872）此处调用
+        // mWidgetManager->RemoveWidget(aDialog)，模态时另调 ModalClose() +
+        // RemoveBaseModal(aDialog)；Rust 侧 framework Dialog 从未注册进
+        // WidgetManager（do_dialog 未 AddWidget），对其指针调用 remove_widget
+        // 会按错误布局解引用，故省略；模态覆写行为由 LawnApp::kill_dialog /
+        // LawnApp::modal_close 在调用点补偿。
+        // 对应 C++（SexyAppBase.cpp:874-877）：SafeDeleteWidget 延迟释放
+        self.safe_delete_ptr(a_dialog);
         true
     }
 
@@ -1277,14 +1640,18 @@ impl SexyAppBase {
     /// 按键按下（转发到 WidgetManager）
     pub fn key_down(&mut self, key: i32) {
         if let Some(wm) = self.widget_manager {
-            unsafe { (*wm).key_down(key as KeyCode); }
+            unsafe {
+                (*wm).key_down(key as KeyCode);
+            }
         }
     }
 
     /// 按键释放（转发到 WidgetManager）
     pub fn key_up(&mut self, key: i32) {
         if let Some(wm) = self.widget_manager {
-            unsafe { (*wm).key_up(key as KeyCode); }
+            unsafe {
+                (*wm).key_up(key as KeyCode);
+            }
         }
     }
 
@@ -1311,14 +1678,18 @@ impl SexyAppBase {
     /// 鼠标移动（转发到 WidgetManager）
     pub fn mouse_move(&mut self, x: i32, y: i32) {
         if let Some(wm) = self.widget_manager {
-            unsafe { (*wm).mouse_move(x, y); }
+            unsafe {
+                (*wm).mouse_move(x, y);
+            }
         }
     }
 
     /// 鼠标滚轮（转发到 WidgetManager）
     pub fn mouse_wheel(&mut self, delta: i32) {
         if let Some(wm) = self.widget_manager {
-            unsafe { (*wm).mouse_wheel(delta); }
+            unsafe {
+                (*wm).mouse_wheel(delta);
+            }
         }
     }
 
@@ -1341,7 +1712,9 @@ impl SexyAppBase {
     pub fn copy_to_clipboard(&self, _text: &str) {}
 
     /// 获取剪贴板内容（对应 C++ GetClipboard）
-    pub fn get_clipboard(&self) -> String { String::new() }
+    pub fn get_clipboard(&self) -> String {
+        String::new()
+    }
 
     /// 设置光标类型（对应 C++ SetCursor 的完整版本）
     pub fn set_cursor_type(&mut self, _cursor_type: i32) {}
@@ -1353,13 +1726,17 @@ impl SexyAppBase {
     /// 因此需要键入文本的场合（如 UserDialog 的存档名）无法获得系统输入法。
     /// 其余 Input.cpp 职责（事件分发、`SDLKeyToKeyCode`、demo 录制、窗口创建）均已在本文件实现，
     /// 见 `process_deferred_messages` / `sdl_keycode_to_keycode` / `record_demo_event`。
-    pub fn start_text_input(&mut self, _initial_text: &str) -> bool { false }
+    pub fn start_text_input(&mut self, _initial_text: &str) -> bool {
+        false
+    }
 
     /// 停止文本输入（对应 C++ StopTextInput，platform/default/Input.cpp:504）—— 同上的桩
     pub fn stop_text_input(&mut self) {}
 
     /// 检查是否已关闭
-    pub fn is_shutdown(&self) -> bool { self.m_shutdown_flag }
+    pub fn is_shutdown(&self) -> bool {
+        self.m_shutdown_flag
+    }
 
     // ==================== 命令行参数（对应 C++ SexyAppBase::DoParseCmdLine / HandleCmdLineParam） ====================
 
@@ -1497,7 +1874,10 @@ impl SexyAppBase {
     }
 
     pub fn get_boolean_default(&self, the_id: &str, the_default: bool) -> bool {
-        self.m_bool_properties.get(the_id).copied().unwrap_or(the_default)
+        self.m_bool_properties
+            .get(the_id)
+            .copied()
+            .unwrap_or(the_default)
     }
 
     pub fn get_integer(&self, the_id: &str) -> i32 {
@@ -1505,7 +1885,10 @@ impl SexyAppBase {
     }
 
     pub fn get_integer_default(&self, the_id: &str, the_default: i32) -> i32 {
-        self.m_int_properties.get(the_id).copied().unwrap_or(the_default)
+        self.m_int_properties
+            .get(the_id)
+            .copied()
+            .unwrap_or(the_default)
     }
 
     pub fn get_double(&self, the_id: &str) -> f64 {
@@ -1513,19 +1896,31 @@ impl SexyAppBase {
     }
 
     pub fn get_double_default(&self, the_id: &str, the_default: f64) -> f64 {
-        self.m_double_properties.get(the_id).copied().unwrap_or(the_default)
+        self.m_double_properties
+            .get(the_id)
+            .copied()
+            .unwrap_or(the_default)
     }
 
     pub fn get_string(&self, the_id: &str) -> String {
-        self.m_string_properties.get(the_id).cloned().unwrap_or_default()
+        self.m_string_properties
+            .get(the_id)
+            .cloned()
+            .unwrap_or_default()
     }
 
     pub fn get_string_default(&self, the_id: &str, the_default: &str) -> String {
-        self.m_string_properties.get(the_id).cloned().unwrap_or_else(|| the_default.to_string())
+        self.m_string_properties
+            .get(the_id)
+            .cloned()
+            .unwrap_or_else(|| the_default.to_string())
     }
 
     pub fn get_string_vector(&self, the_id: &str) -> Vec<String> {
-        self.m_string_vector_properties.get(the_id).cloned().unwrap_or_default()
+        self.m_string_vector_properties
+            .get(the_id)
+            .cloned()
+            .unwrap_or_default()
     }
 
     // ---- 属性写入（对应 C++ SetBoolean/SetInteger/SetDouble/SetString，SexyAppBase.cpp:3208） ----
@@ -1539,16 +1934,19 @@ impl SexyAppBase {
     }
 
     pub fn set_double(&mut self, the_id: &str, the_value: f64) {
-        self.m_double_properties.insert(the_id.to_string(), the_value);
+        self.m_double_properties
+            .insert(the_id.to_string(), the_value);
     }
 
     pub fn set_string(&mut self, the_id: &str, the_value: &str) {
-        self.m_string_properties.insert(the_id.to_string(), the_value.to_string());
+        self.m_string_properties
+            .insert(the_id.to_string(), the_value.to_string());
     }
 
     /// 设置字符串数组属性（对应 C++ mStringVectorProperties 写入）
     pub fn set_string_vector(&mut self, the_id: &str, the_value: Vec<String>) {
-        self.m_string_vector_properties.insert(the_id.to_string(), the_value);
+        self.m_string_vector_properties
+            .insert(the_id.to_string(), the_value);
     }
 
     /// 终止前钩子（对应 C++ SexyApp::PreTerminate）
@@ -1703,7 +2101,8 @@ impl SexyAppBase {
         } else if self.m_recording_demo_buffer {
             self.write_demo_timing_block();
             self.m_demo_buffer.write_num_bits(0, 1);
-            self.m_demo_buffer.write_num_bits(DEMO_ASSERT_STRING_EQUAL, 5);
+            self.m_demo_buffer
+                .write_num_bits(DEMO_ASSERT_STRING_EQUAL, 5);
             self.m_demo_buffer.write_string(the_string);
         }
     }
@@ -1819,7 +2218,11 @@ impl SexyAppBase {
                     self.m_demo_buffer.write_num_bits(0, 1);
                     self.m_demo_buffer.write_num_bits(DEMO_ACTIVATE_APP, 5);
                     self.m_demo_buffer.write_num_bits(
-                        if matches!(win_event, WindowEvent::FocusGained) { 1 } else { 0 },
+                        if matches!(win_event, WindowEvent::FocusGained) {
+                            1
+                        } else {
+                            0
+                        },
                         1,
                     );
                 }
@@ -1832,7 +2235,13 @@ impl SexyAppBase {
                 self.record_demo_mouse_enter_if_needed();
             }
 
-            Event::MouseButtonDown { mouse_btn, x, y, clicks, .. } => {
+            Event::MouseButtonDown {
+                mouse_btn,
+                x,
+                y,
+                clicks,
+                ..
+            } => {
                 let (a_x, a_y) = self.remap_demo_mouse_point(*x, *y);
                 self.record_demo_mouse_position(a_x, a_y);
 
@@ -1858,7 +2267,9 @@ impl SexyAppBase {
                 self.record_demo_mouse_enter_if_needed();
             }
 
-            Event::MouseButtonUp { mouse_btn, x, y, .. } => {
+            Event::MouseButtonUp {
+                mouse_btn, x, y, ..
+            } => {
                 let (a_x, a_y) = self.remap_demo_mouse_point(*x, *y);
                 self.record_demo_mouse_position(a_x, a_y);
 
@@ -1884,7 +2295,12 @@ impl SexyAppBase {
                 self.m_demo_buffer.write_num_bits((*y).clamp(-128, 127), 8);
             }
 
-            Event::KeyDown { keycode, keymod, repeat, .. } => {
+            Event::KeyDown {
+                keycode,
+                keymod,
+                repeat,
+                ..
+            } => {
                 let Some(kc) = keycode else { return };
 
                 let a_key_sym: i32 = (*kc).into();
@@ -1896,7 +2312,8 @@ impl SexyAppBase {
                 if self.m_allow_alt_enter
                     && !*repeat
                     && (a_key_sym == SDLK_RETURN || a_key_sym == SDLK_KP_ENTER)
-                    && keymod.intersects(sdl2::keyboard::Mod::LALTMOD | sdl2::keyboard::Mod::RALTMOD)
+                    && keymod
+                        .intersects(sdl2::keyboard::Mod::LALTMOD | sdl2::keyboard::Mod::RALTMOD)
                 {
                     // 屏幕模式切换，不发给 widget manager，也不记录
                     return;
@@ -1909,8 +2326,7 @@ impl SexyAppBase {
                     .write_num_bits(sdl_keycode_to_keycode(a_key_sym), 8);
 
                 // 对应 C++ `SDL_IsTextInputActive()`（返回 SDL_bool 枚举，非整数）
-                let a_text_input_active =
-                    unsafe { sdl2::sys::SDL_IsTextInputActive() as i32 != 0 };
+                let a_text_input_active = unsafe { sdl2::sys::SDL_IsTextInputActive() as i32 != 0 };
                 if let Some(a_char) =
                     sdl_synthesize_ascii_char_from_key_down(a_key_sym, *keymod, a_text_input_active)
                 {
@@ -1991,8 +2407,7 @@ impl SexyAppBase {
 
         // 记录的程序版本（旧文件为空）；未知或不匹配仅告警
         let a_str_len = u16::from_le_bytes(take!(2).try_into().unwrap()) as usize;
-        let a_recorded_version =
-            String::from_utf8_lossy(take!(a_str_len)).to_string();
+        let a_recorded_version = String::from_utf8_lossy(take!(a_str_len)).to_string();
         if a_recorded_version.is_empty() {
             eprintln!("Demo has no program version tag; replay may diverge.");
         } else if self.product_version != a_recorded_version {
@@ -2154,7 +2569,9 @@ impl SexyAppBase {
                 }
 
                 if let Some(wm) = self.widget_manager {
-                    unsafe { (*wm).got_focus(); }
+                    unsafe {
+                        (*wm).got_focus();
+                    }
                 }
                 // C++: GotFocus(); —— SexyAppBase 的虚函数，Rust 侧无覆写者
             } else {
@@ -2221,7 +2638,10 @@ impl SexyAppBase {
 
                             if let Some(wm) = self.widget_manager {
                                 unsafe {
-                                    (*wm).mouse_move(self.m_last_demo_mouse_x, self.m_last_demo_mouse_y);
+                                    (*wm).mouse_move(
+                                        self.m_last_demo_mouse_x,
+                                        self.m_last_demo_mouse_y,
+                                    );
                                 }
                             }
                         }
@@ -2233,9 +2653,17 @@ impl SexyAppBase {
                             if let Some(wm) = self.widget_manager {
                                 unsafe {
                                     if down {
-                                        (*wm).mouse_down(self.m_last_demo_mouse_x, self.m_last_demo_mouse_y, a_btn_count);
+                                        (*wm).mouse_down(
+                                            self.m_last_demo_mouse_x,
+                                            self.m_last_demo_mouse_y,
+                                            a_btn_count,
+                                        );
                                     } else {
-                                        (*wm).mouse_up(self.m_last_demo_mouse_x, self.m_last_demo_mouse_y, a_btn_count);
+                                        (*wm).mouse_up(
+                                            self.m_last_demo_mouse_x,
+                                            self.m_last_demo_mouse_y,
+                                            a_btn_count,
+                                        );
                                     }
                                 }
                             }
@@ -2250,7 +2678,10 @@ impl SexyAppBase {
 
                             if let Some(wm) = self.widget_manager {
                                 unsafe {
-                                    (*wm).mouse_move(self.m_last_demo_mouse_x, self.m_last_demo_mouse_y);
+                                    (*wm).mouse_move(
+                                        self.m_last_demo_mouse_x,
+                                        self.m_last_demo_mouse_y,
+                                    );
                                 }
                             }
                         }
@@ -2261,7 +2692,9 @@ impl SexyAppBase {
 
                             if self.active && !self.is_windowed {
                                 if let Some(wm) = self.widget_manager {
-                                    unsafe { (*wm).mark_all_dirty(); }
+                                    unsafe {
+                                        (*wm).mark_all_dirty();
+                                    }
                                 }
                             }
 
@@ -2282,7 +2715,9 @@ impl SexyAppBase {
                                 } else {
                                     self.unmute(true);
                                     if let Some(wm) = self.widget_manager {
-                                        unsafe { (*wm).mark_all_dirty(); }
+                                        unsafe {
+                                            (*wm).mark_all_dirty();
+                                        }
                                     }
                                 }
                             }
@@ -2292,34 +2727,45 @@ impl SexyAppBase {
                         DEMO_MOUSE_WHEEL => {
                             let a_scroll = self.m_demo_buffer.read_num_bits(8, true);
                             if let Some(wm) = self.widget_manager {
-                                unsafe { (*wm).mouse_wheel(a_scroll); }
+                                unsafe {
+                                    (*wm).mouse_wheel(a_scroll);
+                                }
                             }
                         }
                         DEMO_KEY_DOWN => {
                             let a_key_code = self.m_demo_buffer.read_num_bits(8, false);
                             if let Some(wm) = self.widget_manager {
-                                unsafe { (*wm).key_down(a_key_code); }
+                                unsafe {
+                                    (*wm).key_down(a_key_code);
+                                }
                             }
                         }
                         DEMO_KEY_UP => {
                             let a_key_code = self.m_demo_buffer.read_num_bits(8, false);
                             if let Some(wm) = self.widget_manager {
-                                unsafe { (*wm).key_up(a_key_code); }
+                                unsafe {
+                                    (*wm).key_up(a_key_code);
+                                }
                             }
                         }
                         DEMO_KEY_CHAR => {
                             // 1 表示单字节，2 表示双字节
                             let size_mult = self.m_demo_buffer.read_num_bits(1, false) + 1;
-                            let a_char = self.m_demo_buffer.read_num_bits(8 * size_mult, false) as u8;
+                            let a_char =
+                                self.m_demo_buffer.read_num_bits(8 * size_mult, false) as u8;
                             if let Some(wm) = self.widget_manager {
-                                unsafe { (*wm).key_char(a_char); }
+                                unsafe {
+                                    (*wm).key_char(a_char);
+                                }
                             }
                         }
                         DEMO_KEY_TEXT => {
                             let a_text = self.m_demo_buffer.read_string();
                             if !a_text.is_empty() {
                                 if let Some(wm) = self.widget_manager {
-                                    unsafe { (*wm).key_text(&a_text); }
+                                    unsafe {
+                                        (*wm).key_text(&a_text);
+                                    }
                                 }
                             }
                         }
@@ -2333,7 +2779,10 @@ impl SexyAppBase {
                         DEMO_MOUSE_EXIT => {
                             if let Some(wm) = self.widget_manager {
                                 unsafe {
-                                    (*wm).mouse_exit(self.m_last_demo_mouse_x, self.m_last_demo_mouse_y);
+                                    (*wm).mouse_exit(
+                                        self.m_last_demo_mouse_x,
+                                        self.m_last_demo_mouse_y,
+                                    );
                                 }
                             }
                             self.m_mouse_in = false;
@@ -2358,7 +2807,9 @@ impl SexyAppBase {
                         | DEMO_ASSERT_STRING_EQUAL
                         | DEMO_ASSERT_INT_EQUAL => {
                             // 跨 tick 仍未被游戏逻辑认领 ⇒ 回放已经跑偏
-                            if self.m_demo_command_queued && self.m_update_count != self.m_demo_queued_since {
+                            if self.m_demo_command_queued
+                                && self.m_update_count != self.m_demo_queued_since
+                            {
                                 self.shutdown();
                                 return;
                             }
@@ -2387,9 +2838,7 @@ fn is_stamped_demo_file_name(the_demo_prefix: &str, the_name: &str) -> bool {
     let a_name = the_name.as_bytes();
     let a_stamp_len = a_prefix.len() + 16; // "-YYYYMMDD-HHMMSS"
 
-    if a_name.len() < a_stamp_len + 4
-        || !a_name.starts_with(a_prefix)
-        || !a_name.ends_with(b".dmo")
+    if a_name.len() < a_stamp_len + 4 || !a_name.starts_with(a_prefix) || !a_name.ends_with(b".dmo")
     {
         return false;
     }
@@ -2397,7 +2846,11 @@ fn is_stamped_demo_file_name(the_demo_prefix: &str, the_name: &str) -> bool {
     let a_digits = |s: &[u8]| !s.is_empty() && s.iter().all(|c| c.is_ascii_digit());
 
     let a_stamp = &a_name[a_prefix.len()..a_prefix.len() + 16];
-    if a_stamp[0] != b'-' || a_stamp[9] != b'-' || !a_digits(&a_stamp[1..9]) || !a_digits(&a_stamp[10..16]) {
+    if a_stamp[0] != b'-'
+        || a_stamp[9] != b'-'
+        || !a_digits(&a_stamp[1..9])
+        || !a_digits(&a_stamp[10..16])
+    {
         return false;
     }
 
@@ -2450,7 +2903,9 @@ fn find_demo_files(the_demo_prefix: &str, the_stamped_only: bool) -> Vec<String>
 
 /// 对应 C++ `ParamTakesValue()`（SexyAppBase.cpp:3250-3256）
 fn param_takes_value(the_param_name: &str) -> bool {
-    const K_VALUE_PARAMS: [&str; 6] = ["-play", "-playnum", "-record", "-recnum", "-resdir", "-savedir"];
+    const K_VALUE_PARAMS: [&str; 6] = [
+        "-play", "-playnum", "-record", "-recnum", "-resdir", "-savedir",
+    ];
     K_VALUE_PARAMS.contains(&the_param_name)
 }
 
@@ -2549,4 +3004,120 @@ impl ButtonListenerImpl for SexyAppBase {
     fn button_mouse_enter(&mut self, _the_id: i32) {}
     fn button_mouse_leave(&mut self, _the_id: i32) {}
     fn button_mouse_move(&mut self, _the_id: i32, _x: i32, _y: i32) {}
+}
+
+#[cfg(test)]
+mod safe_delete_tests {
+    use super::*;
+
+    /// 复现 07 §C 的 use-after-free 场景（ADR-010 回归测试）：
+    /// 处理时深度大于入队深度 → 必须保留；深度 <= 入队深度 → 释放并清空。
+    /// 直接测核心函数（SexyAppBase::new() 内的 SDL2 初始化不能在测试中重复执行）。
+    #[test]
+    fn test_safe_delete_deferred_while_depth_bigger() {
+        let mut list: Vec<WidgetSafeDeleteInfo> = Vec::new();
+        let w = Box::into_raw(Box::new(Widget::new()));
+        // 模拟在 UpdateAppStep（深度 1）内入队删除
+        enqueue_safe_delete(
+            &mut list,
+            1,
+            w as *mut std::ffi::c_void,
+            delete_boxed_widget,
+        );
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].update_app_depth, 1);
+
+        // 嵌套场景：处理时深度 2（如 UpdateApp 内再入 UpdateAppStep）→ 保留
+        process_safe_delete_core(&mut list, 2, 0);
+        assert_eq!(list.len(), 1, "depth 2 > recorded 1: 必须保留");
+
+        // 深度回落到记录值 → 释放
+        process_safe_delete_core(&mut list, 1, 0);
+        assert!(list.is_empty(), "depth <= recorded: 必须释放并清空");
+        // SAFETY: w 此刻已被 process_safe_delete_core 释放，仅校验指针值本身
+        assert!(!w.is_null());
+    }
+
+    /// 模态等待期间（modal_wait_depth > 0）不得排空；归零后恢复排空。
+    #[test]
+    fn test_safe_delete_paused_during_modal_wait() {
+        let mut list: Vec<WidgetSafeDeleteInfo> = Vec::new();
+        let w = Box::into_raw(Box::new(Widget::new()));
+        enqueue_safe_delete(
+            &mut list,
+            0,
+            w as *mut std::ffi::c_void,
+            delete_boxed_widget,
+        );
+
+        process_safe_delete_core(&mut list, 0, 1);
+        assert_eq!(list.len(), 1, "模态等待期间不得释放");
+
+        process_safe_delete_core(&mut list, 0, 0);
+        assert!(list.is_empty(), "模态结束后必须释放");
+    }
+
+    /// C++ 条件 mUpdateAppDepth <= theInfo.mUpdateAppDepth 的方向：
+    /// 处理深度 <= 入队深度时删除；处理深度 > 入队深度时保留（嵌套场景）。
+    #[test]
+    fn test_safe_delete_deletes_at_equal_depth() {
+        let mut list: Vec<WidgetSafeDeleteInfo> = Vec::new();
+        let a = Box::into_raw(Box::new(Widget::new()));
+        let b = Box::into_raw(Box::new(Widget::new()));
+        // a 在深度 0 入队，b 在深度 1 入队
+        enqueue_safe_delete(
+            &mut list,
+            0,
+            a as *mut std::ffi::c_void,
+            delete_boxed_widget,
+        );
+        enqueue_safe_delete(
+            &mut list,
+            1,
+            b as *mut std::ffi::c_void,
+            delete_boxed_widget,
+        );
+
+        // 处理深度 2 > 两个记录值 → 全保留
+        process_safe_delete_core(&mut list, 2, 0);
+        assert_eq!(list.len(), 2, "depth 2 > recorded: 全部保留");
+        assert_eq!(list[0].widget, a as *mut std::ffi::c_void);
+        assert_eq!(list[1].widget, b as *mut std::ffi::c_void);
+
+        // 处理深度 1：对 a（入队 0）1 > 0 保留；对 b（入队 1）1 <= 1 删除
+        process_safe_delete_core(&mut list, 1, 0);
+        assert_eq!(list.len(), 1, "仅处理深度 > 入队深度的 a 保留");
+        assert_eq!(list[0].widget, a as *mut std::ffi::c_void);
+
+        // 处理深度 0：0 <= 0 → 删除 a
+        process_safe_delete_core(&mut list, 0, 0);
+        assert!(list.is_empty(), "depth 0 <= recorded 0: 释放 a");
+    }
+
+    /// kill_dialog：从 dialog_map/m_dialog_list 移除并入队延迟删除（C++ 844-883）。
+    /// 该路径经 SexyAppBase（kill_dialog 本身不触发 SDL 初始化以外的副作用），
+    /// 但 new() 仍会 init SDL——故用最小桩：手工构造字段所需的空实例不可行，
+    /// 退而在单个测试内仅验证一次（首个 SDL init 在测试进程内成功）。
+    #[test]
+    fn test_kill_dialog_removes_and_defers() {
+        let mut app = SexyAppBase::new();
+        let d = Box::into_raw(Box::new(Dialog::new(
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            7,
+            true,
+            "h",
+            "l",
+            "f",
+            0,
+        )));
+        app.add_dialog(7, d);
+        assert!(app.kill_dialog(7));
+        assert!(app.dialog_map.get(&7).is_none());
+        assert!(app.m_dialog_list.is_empty());
+        assert_eq!(app.safe_delete_list.len(), 1, "对话框必须入队延迟释放");
+        assert!(!app.kill_dialog(7), "已移除的 id 再 kill 必须返回 false");
+        app.process_safe_delete_list();
+        assert!(app.safe_delete_list.is_empty());
+    }
 }
