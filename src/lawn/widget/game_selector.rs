@@ -5,20 +5,20 @@
 
 #![allow(dead_code)]
 
-use std::ptr;
-use crate::framework::graphics::graphics::Graphics;
-use crate::framework::graphics::font::Font;
-use crate::framework::graphics::image::Image;
 use crate::framework::color::Color;
-use crate::framework::widget::widget::{Widget, WidgetImpl};
-use crate::framework::widget::widget_manager::WidgetManager;
+use crate::framework::graphics::font::Font;
+use crate::framework::graphics::graphics::Graphics;
+use crate::framework::graphics::image::Image;
 use crate::framework::key_codes::{KeyCode, KEYCODE_C};
 use crate::framework::widget::dialog::BUTTONS_FOOTER;
+use crate::framework::widget::widget::{Widget, WidgetImpl};
+use crate::framework::widget::widget_manager::WidgetManager;
+use crate::lawn::game_enums::*;
 use crate::lawn::lawn_app::LawnApp;
 use crate::lawn::system::music::MusicTune;
-use crate::lawn::game_enums::*;
-use crate::todlib::tod_common::*;
 use crate::lawn::tool_tip_widget::ToolTipWidget;
+use crate::todlib::tod_common::*;
+use std::ptr;
 
 // ============================================================
 // 按钮 ID（对应 C++ GameSelector 内部 enum）
@@ -54,11 +54,7 @@ pub enum SelectorAnimState {
 // ============================================================
 // 花朵中心位置（对应 C++ gFlowerCenter）
 // ============================================================
-const FLOWER_CENTER: [(f32, f32); 3] = [
-    (765.0, 483.0),
-    (663.0, 455.0),
-    (701.0, 439.0),
-];
+const FLOWER_CENTER: [(f32, f32); 3] = [(765.0, 483.0), (663.0, 455.0), (701.0, 439.0)];
 
 // ============================================================
 // 按钮数据结构（替代 NewLawnButton）
@@ -76,6 +72,11 @@ pub struct GameBtnData {
     btn_no_draw: bool,
     button_offset_x: i32,
     button_offset_y: i32,
+    /// 对应 C++ TrackButton 绑定的动画轨道名（None = 不跟踪）
+    track_name: Option<&'static str>,
+    /// TrackButton 的位置偏移（对应 C++ theOffsetX/Y）
+    track_offset_x: f32,
+    track_offset_y: f32,
     /// 正常状态图片名
     button_image_name: &'static str,
     /// 高亮图片名
@@ -90,15 +91,34 @@ pub struct GameBtnData {
 
 impl GameBtnData {
     fn new(
-        id: i32, x: i32, y: i32, w: i32, h: i32,
-        btn_img: &'static str, over_img: &'static str, down_img: &'static str,
+        id: i32,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        btn_img: &'static str,
+        over_img: &'static str,
+        down_img: &'static str,
     ) -> Self {
         GameBtnData {
-            id, x, y, width: w, height: h,
-            is_over: false, is_down: false, disabled: false, visible: true,
+            id,
+            x,
+            y,
+            width: w,
+            height: h,
+            is_over: false,
+            is_down: false,
+            disabled: false,
+            visible: true,
             btn_no_draw: false,
-            button_offset_x: 0, button_offset_y: 0,
-            button_image_name: btn_img, over_image_name: over_img, down_image_name: down_img,
+            button_offset_x: 0,
+            button_offset_y: 0,
+            track_name: None,
+            track_offset_x: 0.0,
+            track_offset_y: 0.0,
+            button_image_name: btn_img,
+            over_image_name: over_img,
+            down_image_name: down_img,
             cached_button_img: ptr::null_mut(),
             cached_over_img: ptr::null_mut(),
             cached_down_img: ptr::null_mut(),
@@ -106,8 +126,7 @@ impl GameBtnData {
     }
 
     fn contains(&self, px: i32, py: i32) -> bool {
-        px >= self.x && px < self.x + self.width
-            && py >= self.y && py < self.y + self.height
+        px >= self.x && px < self.x + self.width && py >= self.y && py < self.y + self.height
     }
 
     fn resolve_images(&mut self, app: &LawnApp) {
@@ -186,8 +205,18 @@ pub struct GameSelectorImpl {
 
     // ---- 动画状态 ----
     pub selector_state: SelectorAnimState,
-    /// 对应 C++ mSelectorReanimID（选择器动画）
+    /// 对应 C++ mSelectorReanimID（选择器动画；哨兵用 REANIMATIONID_NONE，见 game_enums 说明）
     pub selector_reanim_id: ReanimationID,
+    /// 对应 C++ mCloudReanimID[6]（GameSelector.h:75，飘动的云×6）
+    pub cloud_reanim_id: [ReanimationID; 6],
+    /// 对应 C++ mFlowerReanimID[3]（花×3，附着于背景轨道）
+    pub flower_reanim_id: [ReanimationID; 3],
+    /// 对应 C++ mLeafReanimID（草叶摆动）
+    pub leaf_reanim_id: ReanimationID,
+    /// 对应 C++ mCloudCounter[6]（云下次飘出的帧计数）
+    pub cloud_counter: [i32; 6],
+    /// 对应 C++ mLeafCounter（草叶摆动计数）
+    pub leaf_counter: i32,
     /// 对应 C++ GameSelector::mTrophyParticleID（奖杯闪光粒子）
     pub m_trophy_particle_id: crate::lawn::game_enums::ParticleSystemID,
 
@@ -216,6 +245,31 @@ pub struct GameSelectorImpl {
 
     // ---- 是否已初始化 ----
     pub synced: bool,
+
+    /// 对应 C++ mHandReanimID（ClickedAdventure 创建的僵尸手动画，GameSelector.h:97）
+    pub hand_reanim_id: ReanimationID,
+}
+
+/// 对应 C++ GameSelector::TrackButton（GameSelector.cpp:945-954）：
+/// 按动画轨道当前变换设置按钮位置（Rust 侧作用于 GameBtnData）
+fn track_button_position(
+    app: *mut LawnApp,
+    selector_reanim_id: ReanimationID,
+    btn: &mut GameBtnData,
+    the_track_name: &str,
+    the_offset_x: f32,
+    the_offset_y: f32,
+) {
+    unsafe {
+        if let Some(a_reanim) = (*app).reanimation_get(selector_reanim_id) {
+            let a_track_index = a_reanim.find_track_index(the_track_name);
+            let mut a_transform = crate::todlib::definition::ReanimatorTransform::default();
+            if a_reanim.get_current_transform(a_track_index, &mut a_transform) {
+                btn.x = (a_transform.m_trans_x + the_offset_x) as i32;
+                btn.y = (a_transform.m_trans_y + the_offset_y) as i32;
+            }
+        }
+    }
 }
 
 impl GameSelectorImpl {
@@ -239,96 +293,372 @@ impl GameSelectorImpl {
             selector_state: SelectorAnimState::Open,
             tool_tip: ToolTipWidget::new(),
             slide_counter: 0,
-            start_x: 0, start_y: 0, dest_x: 0, dest_y: 0,
-            offset_x: 0, offset_y: 0,
+            start_x: 0,
+            start_y: 0,
+            dest_x: 0,
+            dest_y: 0,
+            offset_x: 0,
+            offset_y: 0,
             fonts_init: false,
             briannetod16: None,
-            mouse_x: 0, mouse_y: 0,
+            mouse_x: 0,
+            mouse_y: 0,
             overlay_widget: None,
             synced: false,
-            selector_reanim_id: REANIMATIONID_NULL,
+            selector_reanim_id: crate::lawn::game_enums::REANIMATIONID_NONE,
+            cloud_reanim_id: [crate::lawn::game_enums::REANIMATIONID_NONE; 6],
+            flower_reanim_id: [crate::lawn::game_enums::REANIMATIONID_NONE; 3],
+            leaf_reanim_id: crate::lawn::game_enums::REANIMATIONID_NONE,
+            cloud_counter: [0; 6],
+            leaf_counter: 50,
             m_trophy_particle_id: crate::lawn::game_enums::PARTICLESYSTEMID_NULL,
+            hand_reanim_id: crate::lawn::game_enums::REANIMATIONID_NONE,
         };
 
-        // 创建按钮（位置为近似值，实际坐标由 update_button_positions 修正）
+        // 创建按钮。C++ 中按钮位置由构造时的 Resize 设定、首帧 Update 的 TrackButton 修正；
+        // 各按钮的 mBtnNoDraw/mMouseVisible/mButtonOffset 初始态对应 C++ GameSelector.cpp:77-281。
+        // C++ MakeNewButton（GameButton.cpp:403-420）默认 mButtonOffsetX/Y=0、COLOR_BKG=White。
         sel.buttons.push(GameBtnData::new(
-            GS_ADVENTURE, 0, 0, 330, 125,
+            GS_ADVENTURE,
+            0,
+            0,
+            330,
+            125,
             "IMAGE_REANIM_SELECTORSCREEN_ADVENTURE_BUTTON",
             "IMAGE_REANIM_SELECTORSCREEN_ADVENTURE_HIGHLIGHT",
             "IMAGE_REANIM_SELECTORSCREEN_ADVENTURE_HIGHLIGHT",
         ));
+        // C++ GameSelector.cpp:89-90: mBtnNoDraw = true; mMouseVisible = false（动画期间由 reanim 轨道绘制）
+        sel.buttons.last_mut().unwrap().btn_no_draw = true;
         sel.buttons.push(GameBtnData::new(
-            GS_MINIGAME, 0, 125, 320, 130,
+            GS_MINIGAME,
+            0,
+            125,
+            320,
+            130,
             "IMAGE_REANIM_SELECTORSCREEN_SURVIVAL_BUTTON",
             "IMAGE_REANIM_SELECTORSCREEN_SURVIVAL_HIGHLIGHT",
             "IMAGE_REANIM_SELECTORSCREEN_SURVIVAL_HIGHLIGHT",
         ));
+        // C++ GameSelector.cpp:108-109
+        sel.buttons.last_mut().unwrap().btn_no_draw = true;
         sel.buttons.push(GameBtnData::new(
-            GS_PUZZLE, 0, 255, 290, 121,
+            GS_PUZZLE,
+            0,
+            255,
+            290,
+            121,
             "IMAGE_REANIM_SELECTORSCREEN_CHALLENGES_BUTTON",
             "IMAGE_REANIM_SELECTORSCREEN_CHALLENGES_HIGHLIGHT",
             "IMAGE_REANIM_SELECTORSCREEN_CHALLENGES_HIGHLIGHT",
         ));
+        // C++ GameSelector.cpp:127-128
+        sel.buttons.last_mut().unwrap().btn_no_draw = true;
         sel.buttons.push(GameBtnData::new(
-            GS_SURVIVAL, 0, 376, 275, 124,
+            GS_SURVIVAL,
+            0,
+            376,
+            275,
+            124,
             "IMAGE_REANIM_SELECTORSCREEN_VASEBREAKER_BUTTON",
             "IMAGE_REANIM_SELECTORSCREEN_VASEBREAKER_HIGHLIGHT",
             "IMAGE_REANIM_SELECTORSCREEN_VASEBREAKER_HIGHLIGHT",
         ));
+        // C++ GameSelector.cpp:146-147
+        sel.buttons.last_mut().unwrap().btn_no_draw = true;
         sel.buttons.push(GameBtnData::new(
-            GS_OPTIONS, 0, 0, 100, 100,
-            "IMAGE_SELECTORSCREEN_OPTIONS1",
-            "IMAGE_SELECTORSCREEN_OPTIONS2",
-            "IMAGE_SELECTORSCREEN_OPTIONS2",
+            GS_ZOMBATAR,
+            0,
+            0,
+            100,
+            60,
+            "IMAGE_BLANK",
+            "IMAGE_BLANK",
+            "IMAGE_BLANK",
         ));
+        // C++ GameSelector.cpp:165-166
+        sel.buttons.last_mut().unwrap().btn_no_draw = true;
         sel.buttons.push(GameBtnData::new(
-            GS_HELP, 0, 100, 100, 120,
-            "IMAGE_SELECTORSCREEN_HELP1",
-            "IMAGE_SELECTORSCREEN_HELP2",
-            "IMAGE_SELECTORSCREEN_HELP2",
-        ));
-        sel.buttons.push(GameBtnData::new(
-            GS_QUIT, 0, 220, 100, 100,
-            "IMAGE_SELECTORSCREEN_QUIT1",
-            "IMAGE_SELECTORSCREEN_QUIT2",
-            "IMAGE_SELECTORSCREEN_QUIT2",
-        ));
-        sel.buttons.push(GameBtnData::new(
-            GS_STORE, 405, 484, 80, 80,
-            "IMAGE_SELECTORSCREEN_STORE",
-            "IMAGE_SELECTORSCREEN_STOREHIGHLIGHT",
-            "IMAGE_SELECTORSCREEN_STOREHIGHLIGHT",
-        ));
-        sel.buttons.push(GameBtnData::new(
-            GS_ALMANAC, 327, 428, 80, 80,
-            "IMAGE_SELECTORSCREEN_ALMANAC",
-            "IMAGE_SELECTORSCREEN_ALMANACHIGHLIGHT",
-            "IMAGE_SELECTORSCREEN_ALMANACHIGHLIGHT",
-        ));
-        sel.buttons.push(GameBtnData::new(
-            GS_ZEN_GARDEN, 0, 500, 130, 130,
-            "IMAGE_SELECTORSCREEN_ZENGARDEN",
-            "IMAGE_SELECTORSCREEN_ZENGARDENHIGHLIGHT",
-            "IMAGE_SELECTORSCREEN_ZENGARDENHIGHLIGHT",
-        ));
-        sel.buttons.push(GameBtnData::new(
-            GS_ACHIEVEMENTS, 20, h - 100, 100, 65,
+            GS_ACHIEVEMENTS,
+            20,
+            h - 100,
+            100,
+            65,
             "IMAGE_SELECTORSCREEN_ACHIEVEMENTS_PEDESTAL",
             "IMAGE_SELECTORSCREEN_ACHIEVEMENTS_PEDESTAL_PRESS",
             "IMAGE_SELECTORSCREEN_ACHIEVEMENTS_PEDESTAL_PRESS",
         ));
+        // C++ GameSelector.cpp:179: mBtnNoDraw = mHasTrophy（构造时 mHasTrophy=false）
         sel.buttons.push(GameBtnData::new(
-            GS_QUICK_PLAY, 650, 455, 100, 50,
-            "", "", "",
+            GS_ZEN_GARDEN,
+            0,
+            500,
+            130,
+            130,
+            "IMAGE_SELECTORSCREEN_ZENGARDEN",
+            "IMAGE_SELECTORSCREEN_ZENGARDENHIGHLIGHT",
+            "IMAGE_SELECTORSCREEN_ZENGARDENHIGHLIGHT",
         ));
+        // C++ GameSelector.cpp:192-193: 仅 mMouseVisible=false + mClip=false
         sel.buttons.push(GameBtnData::new(
-            GS_ZOMBATAR, 0, 0, 100, 60,
-            "IMAGE_BLANK", "IMAGE_BLANK", "IMAGE_BLANK",
+            GS_OPTIONS,
+            0,
+            0,
+            100,
+            100,
+            "IMAGE_SELECTORSCREEN_OPTIONS1",
+            "IMAGE_SELECTORSCREEN_OPTIONS2",
+            "IMAGE_SELECTORSCREEN_OPTIONS2",
         ));
+        // C++ GameSelector.cpp:204-208: Resize(0,0,imgW,imgH+23); mBtnNoDraw=true; mButtonOffsetY=15
+        {
+            let btn = sel.buttons.last_mut().unwrap();
+            btn.btn_no_draw = true;
+            btn.height += 23;
+            btn.button_offset_y = 15;
+        }
         sel.buttons.push(GameBtnData::new(
-            GS_CHANGE_USER, 20, h - 30, 250, 30,
-            "IMAGE_BLANK", "IMAGE_BLANK", "IMAGE_BLANK",
+            GS_HELP,
+            0,
+            100,
+            100,
+            120,
+            "IMAGE_SELECTORSCREEN_HELP1",
+            "IMAGE_SELECTORSCREEN_HELP2",
+            "IMAGE_SELECTORSCREEN_HELP2",
         ));
+        // C++ GameSelector.cpp:219-223: Resize(0,0,imgW,imgH+33); mBtnNoDraw=true; mButtonOffsetY=30
+        {
+            let btn = sel.buttons.last_mut().unwrap();
+            btn.btn_no_draw = true;
+            btn.height += 33;
+            btn.button_offset_y = 30;
+        }
+        sel.buttons.push(GameBtnData::new(
+            GS_QUIT,
+            0,
+            220,
+            100,
+            100,
+            "IMAGE_SELECTORSCREEN_QUIT1",
+            "IMAGE_SELECTORSCREEN_QUIT2",
+            "IMAGE_SELECTORSCREEN_QUIT2",
+        ));
+        // C++ GameSelector.cpp:234-239: Resize(0,0,imgW+10,imgH+10); mBtnNoDraw=true;
+        // mButtonOffsetX=5; mButtonOffsetY=5
+        {
+            let btn = sel.buttons.last_mut().unwrap();
+            btn.btn_no_draw = true;
+            btn.width += 10;
+            btn.height += 10;
+            btn.button_offset_x = 5;
+            btn.button_offset_y = 5;
+        }
+        sel.buttons.push(GameBtnData::new(
+            GS_CHANGE_USER,
+            20,
+            h - 30,
+            250,
+            30,
+            "IMAGE_BLANK",
+            "IMAGE_BLANK",
+            "IMAGE_BLANK",
+        ));
+        // C++ GameSelector.cpp:251-252: mBtnNoDraw = true; mMouseVisible = false
+        sel.buttons.last_mut().unwrap().btn_no_draw = true;
+        sel.buttons.push(GameBtnData::new(
+            GS_STORE,
+            405,
+            484,
+            80,
+            80,
+            "IMAGE_SELECTORSCREEN_STORE",
+            "IMAGE_SELECTORSCREEN_STOREHIGHLIGHT",
+            "IMAGE_SELECTORSCREEN_STOREHIGHLIGHT",
+        ));
+        // C++ GameSelector.cpp:268: mMouseVisible = false（无 mBtnNoDraw）
+        sel.buttons.push(GameBtnData::new(
+            GS_ALMANAC,
+            327,
+            428,
+            80,
+            80,
+            "IMAGE_SELECTORSCREEN_ALMANAC",
+            "IMAGE_SELECTORSCREEN_ALMANACHIGHLIGHT",
+            "IMAGE_SELECTORSCREEN_ALMANACHIGHLIGHT",
+        ));
+        // C++ GameSelector.cpp:281: mMouseVisible = false（无 mBtnNoDraw）
+        sel.buttons.push(GameBtnData::new(
+            GS_QUICK_PLAY,
+            650,
+            455,
+            100,
+            50,
+            "",
+            "",
+            "",
+        ));
+
+        // 对应 C++ GameSelector::GameSelector 的 reanim 初始化（GameSelector.cpp:294-337）：
+        // SelectorScreen reanim 播放 anim_open，隐藏 flower/leaf 轨，背景轨道单独赋渲染组；
+        // 云×6 与花×3 附着于背景轨道，草叶循环播放。
+        unsafe {
+            if let Some(a_selector_reanim) = (*app).add_reanimation(
+                0.5,
+                0.5,
+                0,
+                crate::lawn::game_enums::ReanimationType::SelectorScreen as i32,
+            ) {
+                let a_reanim = &mut *a_selector_reanim;
+                a_reanim.play_reanim(
+                    "anim_open",
+                    crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,
+                    0,
+                    30.0,
+                );
+                a_reanim.assign_render_group_to_prefix(
+                    "flower",
+                    crate::todlib::reanimator::RENDER_GROUP_HIDDEN,
+                );
+                a_reanim.assign_render_group_to_prefix(
+                    "leaf",
+                    crate::todlib::reanimator::RENDER_GROUP_HIDDEN,
+                );
+                a_reanim.assign_render_group_to_track("SelectorScreen_BG", 1);
+                sel.selector_reanim_id = (*app).reanimation_get_id(a_selector_reanim);
+            }
+            // 对应 C++ GameSelector.cpp:305-320：云×6（i>1 时用 anim_cloud(i+2)）
+            for i in 0..6i32 {
+                let a_anim_name = if i > 1 {
+                    format!("anim_cloud{}", i + 2)
+                } else {
+                    format!("anim_cloud{}", i + 1)
+                };
+                if let Some(a_cloud) = (*app).add_reanimation(
+                    0.5,
+                    0.5,
+                    0,
+                    crate::lawn::game_enums::ReanimationType::SelectorScreen as i32,
+                ) {
+                    let a_cloud_ref = &mut *a_cloud;
+                    a_cloud_ref.play_reanim(
+                        &a_anim_name,
+                        crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,
+                        0,
+                        0.0,
+                    );
+                    sel.cloud_reanim_id[i as usize] = (*app).reanimation_get_id(a_cloud);
+                    sel.cloud_counter[i as usize] =
+                        crate::framework::common::rand_range_int(-6000, 2000);
+                    if sel.cloud_counter[i as usize] < 0 {
+                        a_cloud_ref.m_anim_time = -sel.cloud_counter[i as usize] as f32 / 6000.0;
+                        a_cloud_ref.m_anim_rate = 0.5;
+                        sel.cloud_counter[i as usize] = 0;
+                    } else {
+                        a_cloud_ref.m_anim_rate = 0.0;
+                    }
+                }
+            }
+            // 对应 C++ GameSelector.cpp:322-331：花×3，附着于背景轨道右侧
+            for i in 0..3i32 {
+                let a_anim_name = format!("anim_flower{}", i + 1);
+                if let Some(a_flower) = (*app).add_reanimation(
+                    0.5,
+                    0.5,
+                    0,
+                    crate::lawn::game_enums::ReanimationType::SelectorScreen as i32,
+                ) {
+                    let a_flower_ref = &mut *a_flower;
+                    a_flower_ref.play_reanim(
+                        &a_anim_name,
+                        crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,
+                        0,
+                        0.0,
+                    );
+                    a_flower_ref.m_anim_rate = 0.0;
+                    if sel.selector_reanim_id != crate::lawn::game_enums::REANIMATIONID_NONE {
+                        if let Some(a_attach) = (*app).reanimation_get_mut(sel.selector_reanim_id) {
+                            a_flower_ref
+                                .attach_to_another_reanimation(a_attach, "SelectorScreen_BG_Right");
+                        }
+                    }
+                    a_flower_ref.m_is_attachment = false;
+                    sel.flower_reanim_id[i as usize] = (*app).reanimation_get_id(a_flower);
+                }
+            }
+            // 对应 C++ GameSelector.cpp:333-337：草叶摆动（停帧待 update 触发）
+            if let Some(a_leaf) = (*app).add_reanimation(
+                0.5,
+                0.5,
+                0,
+                crate::lawn::game_enums::ReanimationType::SelectorScreen as i32,
+            ) {
+                let a_leaf_ref = &mut *a_leaf;
+                a_leaf_ref.play_reanim(
+                    "anim_grass",
+                    crate::todlib::reanimator::ReanimLoopType::Loop,
+                    0,
+                    6.0,
+                );
+                a_leaf_ref.m_anim_rate = 0.0;
+                sel.leaf_reanim_id = (*app).reanimation_get_id(a_leaf);
+            }
+        }
+
+        // 对应 C++ GameSelector.cpp:928-940：按钮绑定动画轨道（TrackButton）
+        // mShowStartButton=false 时 Adventure 按钮绑定 Adventure_button 轨
+        for btn in sel.buttons.iter_mut() {
+            btn.track_name = match btn.id {
+                GS_ADVENTURE => Some(if sel.show_start_button {
+                    "SelectorScreen_StartAdventure_button"
+                } else {
+                    "SelectorScreen_Adventure_button"
+                }),
+                GS_MINIGAME => Some("SelectorScreen_Survival_button"),
+                GS_PUZZLE => Some("SelectorScreen_Challenges_button"),
+                GS_SURVIVAL => Some("SelectorScreen_ZenGarden_button"),
+                GS_ZEN_GARDEN => Some("SelectorScreen_BG_Right"),
+                GS_OPTIONS => Some("SelectorScreen_BG_Right"),
+                GS_HELP => Some("SelectorScreen_BG_Right"),
+                GS_QUIT => Some("SelectorScreen_BG_Right"),
+                GS_ALMANAC => Some("SelectorScreen_BG_Right"),
+                GS_STORE => Some("SelectorScreen_BG_Right"),
+                GS_CHANGE_USER => Some("woodsign2"),
+                GS_ZOMBATAR => Some("woodsign3"),
+                GS_ACHIEVEMENTS => Some("SelectorScreen_BG_Left"),
+                _ => None,
+            };
+            // 对应 C++ 928-940 各调用的 offset 参数
+            let (ox, oy) = match btn.id {
+                GS_ZEN_GARDEN => (100.0f32, 360.0f32),
+                GS_OPTIONS => (494.0, 434.0),
+                GS_HELP => (576.0, 458.0),
+                GS_QUIT => (644.0, 469.0),
+                GS_ALMANAC => (256.0, 387.0),
+                GS_STORE => (334.0, 441.0),
+                GS_CHANGE_USER => (24.0, 10.0),
+                GS_ACHIEVEMENTS => (20.0, 480.0),
+                _ => (0.0, 0.0),
+            };
+            btn.track_offset_x = ox;
+            btn.track_offset_y = oy;
+        }
+        // 对应 C++ 构造尾部的 TrackButton 逐按钮初始定位（此时动画在首帧）
+        unsafe {
+            let a_app = app;
+            for btn in sel.buttons.iter_mut() {
+                if let Some(a_track) = btn.track_name {
+                    track_button_position(
+                        a_app,
+                        sel.selector_reanim_id,
+                        btn,
+                        a_track,
+                        btn.track_offset_x,
+                        btn.track_offset_y,
+                    );
+                }
+            }
+        }
 
         sel
     }
@@ -344,96 +674,18 @@ impl GameSelectorImpl {
     }
 
     fn img_width(img: *mut Image) -> i32 {
-        if img.is_null() { 0 } else { unsafe { (*img).get_width() } }
+        if img.is_null() {
+            0
+        } else {
+            unsafe { (*img).get_width() }
+        }
     }
 
     fn img_height(img: *mut Image) -> i32 {
-        if img.is_null() { 0 } else { unsafe { (*img).get_height() } }
-    }
-
-    /// 更新按钮位置（基于偏移量）
-    fn update_button_positions(&mut self, widget: &Widget) {
-        let app = unsafe { &*self.app };
-        for btn in self.buttons.iter_mut() {
-            btn.resolve_images(app);
-            match btn.id {
-                GS_OPTIONS => {
-                    let w = Self::img_width(btn.cached_button_img);
-                    let h = Self::img_height(btn.cached_button_img);
-                    btn.x = widget.width - w - 10 + self.offset_x;
-                    btn.y = 15 + self.offset_y;
-                    btn.width = w;
-                    btn.height = h + 23;
-                    btn.button_offset_y = 15;
-                }
-                GS_HELP => {
-                    let w = Self::img_width(btn.cached_button_img);
-                    let h = Self::img_height(btn.cached_button_img);
-                    btn.x = widget.width - w - 10 + self.offset_x;
-                    btn.y = 100 + self.offset_y;
-                    btn.width = w;
-                    btn.height = h + 33;
-                    btn.button_offset_y = 30;
-                }
-                GS_QUIT => {
-                    let w = Self::img_width(btn.cached_button_img);
-                    let h = Self::img_height(btn.cached_button_img);
-                    btn.x = widget.width - w - 10 + self.offset_x;
-                    btn.y = 220 + self.offset_y;
-                    btn.width = w + 10;
-                    btn.height = h + 10;
-                    btn.button_offset_x = 5;
-                    btn.button_offset_y = 5;
-                }
-                GS_STORE => {
-                    btn.x = 405 + self.offset_x;
-                    btn.y = 484 + self.offset_y;
-                }
-                GS_ALMANAC => {
-                    btn.x = 327 + self.offset_x;
-                    btn.y = 428 + self.offset_y;
-                }
-                GS_ZEN_GARDEN => {
-                    btn.x = 0 + self.offset_x;
-                    btn.y = 500 + self.offset_y;
-                }
-                GS_ACHIEVEMENTS => {
-                    let h = Self::img_height(btn.cached_button_img);
-                    btn.x = 20 + self.offset_x;
-                    btn.y = widget.height - h - 35 + self.offset_y;
-                    btn.width = Self::img_width(btn.cached_button_img);
-                    btn.height = h;
-                }
-                GS_QUICK_PLAY => {
-                    btn.x = widget.width - 150 + self.offset_x;
-                    btn.y = 455 + self.offset_y;
-                }
-                GS_ADVENTURE => {
-                    btn.x = self.offset_x;
-                    btn.y = self.offset_y;
-                }
-                GS_MINIGAME => {
-                    btn.x = self.offset_x;
-                    btn.y = 125 + self.offset_y;
-                }
-                GS_PUZZLE => {
-                    btn.x = self.offset_x;
-                    btn.y = 255 + self.offset_y;
-                }
-                GS_SURVIVAL => {
-                    btn.x = self.offset_x;
-                    btn.y = 376 + self.offset_y;
-                }
-                GS_ZOMBATAR => {
-                    btn.x = self.offset_x;
-                    btn.y = 500 + self.offset_y;
-                }
-                GS_CHANGE_USER => {
-                    btn.x = 20 + self.offset_x;
-                    btn.y = widget.height - 30 + self.offset_y;
-                }
-                _ => {}
-            }
+        if img.is_null() {
+            0
+        } else {
+            unsafe { (*img).get_height() }
         }
     }
 
@@ -553,10 +805,72 @@ impl GameSelectorImpl {
     // ============================================================
     // ClickedAdventure — 点击冒险模式
     // ============================================================
+    /// 对应 C++ GameSelector::ClickedAdventure（GameSelector.cpp:1136-1179）
     fn clicked_adventure(&mut self) {
-        self.starting_game = true;
-        for btn in self.buttons.iter_mut() {
-            btn.disabled = true;
+        let app = unsafe { &mut *self.app };
+        unsafe {
+            // C++ 1138-1153：试用版通关后重玩确认，拒绝则返回
+            if app.is_trial_stage_locked() && (self.level >= 25 || app.has_finished_adventure()) {
+                let a_result = app.lawn_message_box(
+                    Dialogs::Message,
+                    "[REPLAY_LEVEL_HEADER]",
+                    "[REPLAY_LEVEL_BODY]",
+                    "[DIALOG_BUTTON_YES]",
+                    "[DIALOG_BUTTON_NO]",
+                    crate::framework::widget::dialog::BUTTONS_YES_NO,
+                );
+                if a_result == crate::framework::widget::dialog::ID_NO {
+                    return;
+                }
+
+                if let Some(ref mut pi) = app.player_info {
+                    pi.m_level = 24;
+                    pi.m_finished_adventure = 0;
+                }
+                // C++ 1151-1152：删除冒险存档
+                let a_profile_id = app.player_info.as_ref().map_or(0, |p| p.m_id) as i32;
+                let a_file_name = crate::lawn::lawn_common::get_saved_game_name(
+                    GameMode::Adventure,
+                    a_profile_id,
+                );
+                let _ = std::fs::remove_file(&a_file_name);
+                let a_legacy_name = crate::lawn::lawn_common::get_legacy_saved_game_name(
+                    GameMode::Adventure,
+                    a_profile_id,
+                );
+                let _ = std::fs::remove_file(&a_legacy_name);
+            }
+
+            // C++ 1155-1156：停音乐 + 播失败曲
+            if let Some(a_music) = app.music.as_mut() {
+                a_music.stop_all_music();
+            }
+            app.play_sample(crate::framework::resources::ResourceId::SoundLosemusic as i32);
+            self.starting_game = true;
+            // C++ 1158-1170：全部按钮禁用
+            for btn in self.buttons.iter_mut() {
+                btn.disabled = true;
+            }
+
+            // C++ 1172-1178：僵尸手动画（PLAY_ONCE_AND_HOLD），rock 轨道忽略裁剪
+            if let Some(a_hand) =
+                app.add_reanimation(-70.0, 10.0, 0, ReanimationType::ZombieHand as i32)
+            {
+                let a_hand_ref = &mut *a_hand;
+                a_hand_ref.m_loop_type = crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold;
+                self.hand_reanim_id = app.reanimation_get_id(a_hand);
+                // C++ 1176-1178：名字以 "rock" 开头的轨道 mIgnoreClipRect = true
+                if let Some(def_ptr) = a_hand_ref.m_definition {
+                    for (a_i, a_track_def) in (*def_ptr).m_tracks.iter().enumerate() {
+                        if a_track_def.m_name.to_lowercase().starts_with("rock") {
+                            if let Some(a_ti) = a_hand_ref.m_track_instances.get_mut(a_i) {
+                                a_ti.m_ignore_clip_rect = true;
+                            }
+                        }
+                    }
+                }
+            }
+            app.play_foley(crate::todlib::tod_foley::FoleyType::DirtRise as i32);
         }
     }
 
@@ -564,15 +878,25 @@ impl GameSelectorImpl {
     pub fn update_tooltip(&mut self) {
         unsafe {
             if !(*self.app).has_finished_adventure()
-                || (*self.app).base.dialog_map.contains_key(&(Dialogs::Message as i32))
+                || (*self.app)
+                    .base
+                    .dialog_map
+                    .contains_key(&(Dialogs::Message as i32))
             {
                 return;
             }
 
             if self.has_trophy {
-                if self.mouse_x >= 50 && self.mouse_x < 135 && self.mouse_y >= 275 && self.mouse_y < 500 {
+                if self.mouse_x >= 50
+                    && self.mouse_x < 135
+                    && self.mouse_y >= 275
+                    && self.mouse_y < 500
+                {
                     if (*self.app).earned_gold_trophy() {
-                        let finished = (*self.app).player_info.as_ref().map_or(0, |p| p.m_finished_adventure);
+                        let finished = (*self.app)
+                            .player_info
+                            .as_ref()
+                            .map_or(0, |p| p.m_finished_adventure);
                         let label = crate::lawn::lawn_app::LawnApp::pluralize(
                             finished,
                             "[GOLD_SUNFLOWER_TOOLTIP]",
@@ -599,7 +923,13 @@ impl GameSelectorImpl {
 
     /// 跟踪按钮位置（对应 C++ TrackButton）
     /// 根据动画轨道位置设置按钮位置
-    pub fn track_button(&self, button: *mut crate::framework::widget::dialog_button::DialogButton, track_name: &str, offset_x: f32, offset_y: f32) {
+    pub fn track_button(
+        &self,
+        button: *mut crate::framework::widget::dialog_button::DialogButton,
+        track_name: &str,
+        offset_x: f32,
+        offset_y: f32,
+    ) {
         // 对应 C++ TrackButton：按选择器动画轨道位置设置按钮位置
         unsafe {
             if let Some(reanim) = (*self.app).reanimation_get(self.selector_reanim_id) {
@@ -619,7 +949,9 @@ impl GameSelectorImpl {
     pub fn add_preview_profiles(&mut self) {
         // 对应 C++ AddPreviewProfiles：创建 5 个内置预览存档
         unsafe {
-            let Some(mgr) = (*self.app).profile_mgr.as_mut() else { return };
+            let Some(mgr) = (*self.app).profile_mgr.as_mut() else {
+                return;
+            };
 
             if let Some(p) = mgr.add_profile("2 Night") {
                 p.m_level = 11;
@@ -628,14 +960,20 @@ impl GameSelectorImpl {
                 p.m_level = 21;
                 p.m_has_unlocked_minigames = true;
                 p.m_coins = 400;
-                if let Some(v) = p.m_purchases.get_mut(StoreItem::PacketUpgrade as usize) { *v = 1; }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::PacketUpgrade as usize) {
+                    *v = 1;
+                }
             }
             if let Some(p) = mgr.add_profile("4 Fog") {
                 p.m_level = 31;
                 p.m_has_unlocked_minigames = true;
                 p.m_has_unlocked_survival_mode = true;
-                if let Some(v) = p.m_purchases.get_mut(StoreItem::PacketUpgrade as usize) { *v = 2; }
-                if let Some(v) = p.m_purchases.get_mut(StoreItem::PoolCleaner as usize) { *v = 1; }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::PacketUpgrade as usize) {
+                    *v = 2;
+                }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::PoolCleaner as usize) {
+                    *v = 1;
+                }
                 p.m_coins = 400;
             }
             if let Some(p) = mgr.add_profile("5 Roof") {
@@ -643,8 +981,12 @@ impl GameSelectorImpl {
                 p.m_has_unlocked_minigames = true;
                 p.m_has_unlocked_puzzle_mode = true;
                 p.m_has_unlocked_survival_mode = true;
-                if let Some(v) = p.m_purchases.get_mut(StoreItem::PacketUpgrade as usize) { *v = 2; }
-                if let Some(v) = p.m_purchases.get_mut(StoreItem::PoolCleaner as usize) { *v = 1; }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::PacketUpgrade as usize) {
+                    *v = 2;
+                }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::PoolCleaner as usize) {
+                    *v = 1;
+                }
                 p.m_coins = 500;
             }
             if let Some(p) = mgr.add_profile("Complete") {
@@ -653,35 +995,71 @@ impl GameSelectorImpl {
                 p.m_has_unlocked_minigames = true;
                 p.m_has_unlocked_puzzle_mode = true;
                 p.m_has_unlocked_survival_mode = true;
-                if let Some(v) = p.m_purchases.get_mut(StoreItem::PacketUpgrade as usize) { *v = 2; }
-                if let Some(v) = p.m_purchases.get_mut(StoreItem::PoolCleaner as usize) { *v = 1; }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::PacketUpgrade as usize) {
+                    *v = 2;
+                }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::PoolCleaner as usize) {
+                    *v = 1;
+                }
                 p.m_coins = 1000;
             }
             if let Some(p) = mgr.add_profile("Full Unlock") {
                 p.m_level = 1;
                 p.m_finished_adventure = 2;
                 p.add_coins(50000);
-                if let Some(v) = p.m_purchases.get_mut(StoreItem::Fertilizer as usize) { *v = 1000 + 5; }
-                if let Some(v) = p.m_purchases.get_mut(StoreItem::BugSpray as usize) { *v = 1000 + 5; }
-                if let Some(v) = p.m_purchases.get_mut(StoreItem::Chocolate as usize) { *v = 1000 + 5; }
-                if let Some(v) = p.m_purchases.get_mut(StoreItem::TreeOfWisdom as usize) { *v = 1000 + 5; }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::Fertilizer as usize) {
+                    *v = 1000 + 5;
+                }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::BugSpray as usize) {
+                    *v = 1000 + 5;
+                }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::Chocolate as usize) {
+                    *v = 1000 + 5;
+                }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::TreeOfWisdom as usize) {
+                    *v = 1000 + 5;
+                }
                 p.m_has_unlocked_minigames = true;
                 p.m_has_unlocked_puzzle_mode = true;
-                for item in [StoreItem::PlantGatlingpea, StoreItem::PlantTwinsunflower,
-                    StoreItem::PlantGloomshroom, StoreItem::PlantCattail,
-                    StoreItem::PlantWintermelon, StoreItem::PlantGoldMagnet,
-                    StoreItem::PlantSpikerock, StoreItem::PlantCobcannon, StoreItem::PlantImitater]
-                {
-                    if let Some(v) = p.m_purchases.get_mut(item as usize) { *v = 1; }
+                for item in [
+                    StoreItem::PlantGatlingpea,
+                    StoreItem::PlantTwinsunflower,
+                    StoreItem::PlantGloomshroom,
+                    StoreItem::PlantCattail,
+                    StoreItem::PlantWintermelon,
+                    StoreItem::PlantGoldMagnet,
+                    StoreItem::PlantSpikerock,
+                    StoreItem::PlantCobcannon,
+                    StoreItem::PlantImitater,
+                ] {
+                    if let Some(v) = p.m_purchases.get_mut(item as usize) {
+                        *v = 1;
+                    }
                 }
-                if let Some(v) = p.m_purchases.get_mut(StoreItem::PacketUpgrade as usize) { *v = 3; }
-                if let Some(v) = p.m_purchases.get_mut(StoreItem::PoolCleaner as usize) { *v = 1; }
-                if let Some(v) = p.m_purchases.get_mut(StoreItem::Phonograph as usize) { *v = 1; }
-                if let Some(v) = p.m_purchases.get_mut(StoreItem::GardeningGlove as usize) { *v = 1; }
-                if let Some(v) = p.m_purchases.get_mut(StoreItem::MushroomGarden as usize) { *v = 1; }
-                if let Some(v) = p.m_purchases.get_mut(StoreItem::WheelBarrow as usize) { *v = 1; }
-                if let Some(v) = p.m_purchases.get_mut(StoreItem::AquariumGarden as usize) { *v = 1; }
-                if let Some(v) = p.m_purchases.get_mut(StoreItem::TreeOfWisdom as usize) { *v = 1; }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::PacketUpgrade as usize) {
+                    *v = 3;
+                }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::PoolCleaner as usize) {
+                    *v = 1;
+                }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::Phonograph as usize) {
+                    *v = 1;
+                }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::GardeningGlove as usize) {
+                    *v = 1;
+                }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::MushroomGarden as usize) {
+                    *v = 1;
+                }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::WheelBarrow as usize) {
+                    *v = 1;
+                }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::AquariumGarden as usize) {
+                    *v = 1;
+                }
+                if let Some(v) = p.m_purchases.get_mut(StoreItem::TreeOfWisdom as usize) {
+                    *v = 1;
+                }
                 // [TRANSLATION_NOTE]: C++ 中 mChallengeRecords 挑战记录设定与 SaveDetails()；
                 // Rust 侧挑战记录索引与持久化未完全对齐，暂略
             }
@@ -691,6 +1069,7 @@ impl GameSelectorImpl {
 
 impl GameSelectorImpl {
     /// 提取的覆盖绘制逻辑（供 draw_overlay 和 GameSelectorOverlayImpl 共享）
+    /// 对应 C++ GameSelector::DrawOverlay（GameSelector.cpp:606-709）
     pub fn draw_overlay_internal(&mut self, g: &mut Graphics) {
         let app = unsafe { &*self.app };
         g.set_linear_blend(true);
@@ -699,59 +1078,208 @@ impl GameSelectorImpl {
             return;
         }
 
-        // 绘制关卡编号
+        // ---- 关卡数字（C++ 612-671） ----
         if !app.is_ice_demo() && !self.show_start_button {
-            let stage = clamp_int((self.level - 1) / 10 + 1, 1, 6);
-            let sub = self.level - (stage - 1) * 10;
-            let tx = self.offset_x as f32;
-            let ty = self.offset_y as f32;
+            // 按下偏移（C++ 614-624：mIsDown && mIsOver 时 +1）
+            let (a_offset_x, a_offset_y) = self
+                .buttons
+                .iter()
+                .find(|b| b.id == GS_ADVENTURE)
+                .map_or((0.0f32, 0.0f32), |b| {
+                    if b.is_down && b.is_over {
+                        (1.0, 1.0)
+                    } else {
+                        (0.0, 0.0)
+                    }
+                });
+
+            // C++ 626-631: 从 SelectorScreen_BG_Right 轨道取基准坐标
+            let (a_trans_area_x, a_trans_area_y) = unsafe {
+                (*app)
+                    .reanimation_get(self.selector_reanim_id)
+                    .and_then(|a_selector| {
+                        let a_right_idx = a_selector.find_track_index("SelectorScreen_BG_Right");
+                        if a_right_idx >= 0 {
+                            let mut a_transform =
+                                crate::todlib::definition::ReanimatorTransform::default();
+                            if a_selector.get_current_transform(a_right_idx, &mut a_transform) {
+                                return Some((a_transform.m_trans_x, a_transform.m_trans_y));
+                            }
+                        }
+                        None
+                    })
+                    .unwrap_or((0.0, 0.0))
+            };
+            let a_trans_area_x = a_trans_area_x + a_offset_x;
+            let a_trans_area_y = a_trans_area_y + a_offset_y;
+            let mut a_trans_area_x_f = a_trans_area_x;
+            let mut a_trans_area_y_f = a_trans_area_y;
+            let mut a_trans_sub_x = a_trans_area_x;
+            let a_trans_sub_y = a_trans_area_y;
+
+            let mut a_stage = clamp_int((self.level - 1) / 10 + 1, 1, 6);
+            let mut a_sub = self.level - (a_stage - 1) * 10;
+            if app.is_trial_stage_locked() && (self.level >= 25 || app.has_finished_adventure()) {
+                // C++ 637-641：试用版锁定 → 显示 3-4
+                a_stage = 3;
+                a_sub = 4;
+            } else {
+                // C++ 643-656：关卡阶段微调
+                if a_stage == 1 {
+                    a_trans_area_y_f += 1.0;
+                } else if a_stage == 4 {
+                    a_trans_area_x_f -= 1.0;
+                }
+                if a_sub == 3 {
+                    a_trans_sub_x -= 1.0;
+                }
+            }
 
             let level_img = get_image(app, "IMAGE_SELECTORSCREEN_LEVELNUMBERS");
             if !level_img.is_null() {
                 g.set_colorize_images(true);
-                g.set_color(&Color::WHITE);
+                // C++ 659: g->SetColor(mAdventureButton->mColors[COLOR_BKG])，默认 White
+                let a_bkg = self
+                    .buttons
+                    .iter()
+                    .find(|b| b.id == GS_ADVENTURE)
+                    .map_or(Color::WHITE, |_| Color::WHITE);
+                g.set_color(&a_bkg);
                 unsafe {
-                    g.draw_image_cel_rc(&*level_img,
-                        (tx + 486.0) as i32, (ty + 47.0) as i32,
-                        stage - 1, 0);
-                    if sub < 10 {
-                        g.draw_image_cel_rc(&*level_img,
-                            (tx + 509.0) as i32, (ty + 50.0) as i32,
-                            sub - 1, 0);
+                    // C++ 660: PvzpDrawImageCelF(..., aStage, 0) — theCelCol=aStage（0 基列号）
+                    g.draw_image_cel_rc(
+                        &*level_img,
+                        (a_trans_area_x_f + 486.0) as i32,
+                        (a_trans_area_y_f + 47.0) as i32,
+                        a_stage,
+                        0,
+                    );
+                    if a_sub < 10 {
+                        // C++ 663: theCelCol=aSub
+                        g.draw_image_cel_rc(
+                            &*level_img,
+                            (a_trans_sub_x + 509.0) as i32,
+                            (a_trans_sub_y + 50.0) as i32,
+                            a_sub,
+                            0,
+                        );
+                    } else if a_sub == 10 {
+                        // C++ 665-669: "10" 由 "1"+"0" 两 cel 拼成
+                        g.draw_image_cel_rc(
+                            &*level_img,
+                            (a_trans_sub_x + 509.0) as i32,
+                            (a_trans_sub_y + 50.0) as i32,
+                            1,
+                            0,
+                        );
+                        g.draw_image_cel_rc(
+                            &*level_img,
+                            (a_trans_sub_x + 518.0) as i32,
+                            (a_trans_sub_y + 51.0) as i32,
+                            0,
+                            0,
+                        );
                     }
                 }
                 g.set_colorize_images(false);
             }
         }
 
-        // 绘制其他按钮（Store、Almanac、ZenGarden、Achievements）
-        for btn in &self.buttons {
-            match btn.id {
-                GS_STORE | GS_ALMANAC | GS_ZEN_GARDEN | GS_ACHIEVEMENTS => {
-                    self.draw_button_at(g, btn, 0.0, 0.0);
+        // ---- 浇水提醒气泡（C++ 673-677） ----
+        unsafe {
+            let a_zen_visible = self
+                .buttons
+                .iter()
+                .find(|b| b.id == GS_ZEN_GARDEN)
+                .map_or(false, |b| b.visible);
+            if a_zen_visible {
+                let a_need_water = app.zen_garden.map_or(false, |zg| (*zg).plants_need_water());
+                if a_need_water {
+                    if let Some(a_btn) = self.buttons.iter().find(|b| b.id == GS_ZEN_GARDEN) {
+                        let bubble_img = get_image(app, "IMAGE_PLANTSPEECHBUBBLE");
+                        let drop_img = get_image(app, "IMAGE_WATERDROP");
+                        if !bubble_img.is_null() {
+                            g.draw_image_xy(&*bubble_img, a_btn.x + 106, a_btn.y + 36);
+                        }
+                        if !drop_img.is_null() {
+                            g.draw_image_xy(&*drop_img, a_btn.x + 123, a_btn.y + 45);
+                        }
+                    }
                 }
-                _ => {}
             }
         }
 
-        // 绘制奖杯
-        if self.has_trophy {
-            let trophy_img = get_image(app, "IMAGE_SUNFLOWER_TROPHY");
-            if !trophy_img.is_null() {
-                let cel = if app.earned_gold_trophy() { 1 } else { 0 };
-                unsafe {
-                    g.draw_image_cel(&*trophy_img,
-                        self.offset_x + 12, self.offset_y + 345, cel);
+        // ---- 僵尸手（C++ 679-685：裁剪到 BOARD 区域，底部留 40px） ----
+        unsafe {
+            if self.hand_reanim_id != crate::lawn::game_enums::REANIMATIONID_NONE {
+                if let Some(a_hand) = (*app).reanimation_get(self.hand_reanim_id) {
+                    g.set_clip_rect_xywh(
+                        0,
+                        0,
+                        crate::lawn::game_enums::BOARD_WIDTH,
+                        crate::lawn::game_enums::BOARD_HEIGHT - 40,
+                    );
+                    a_hand.draw(g);
+                    g.clear_clip_rect();
                 }
             }
-
-            // 对应 C++ GameSelector.cpp:703-705: 绘制奖杯闪光粒子
-            if let Some(a_trophy_particle) =
-                unsafe { (*self.app).particle_try_to_get(self.m_trophy_particle_id) }
-            {
-                a_trophy_particle.draw(g);
+            // ---- 草叶（C++ 686） ----
+            if self.leaf_reanim_id != crate::lawn::game_enums::REANIMATIONID_NONE {
+                if let Some(a_leaf) = (*app).reanimation_get(self.leaf_reanim_id) {
+                    a_leaf.draw(g);
+                }
+            }
+            // ---- 花×3（C++ 687-688） ----
+            for i in 0..3usize {
+                if self.flower_reanim_id[i] != crate::lawn::game_enums::REANIMATIONID_NONE {
+                    if let Some(a_flower) = (*app).reanimation_get(self.flower_reanim_id[i]) {
+                        a_flower.draw(g);
+                    }
+                }
             }
         }
+
+        // ---- 奖杯（C++ 690-706：位置取自 SelectorScreen_BG_Left 轨道） ----
+        unsafe {
+            let (a_left_x, a_left_y) = (*app)
+                .reanimation_get(self.selector_reanim_id)
+                .and_then(|a_selector| {
+                    let a_left_idx = a_selector.find_track_index("SelectorScreen_BG_Left");
+                    if a_left_idx >= 0 {
+                        let mut a_transform =
+                            crate::todlib::definition::ReanimatorTransform::default();
+                        if a_selector.get_current_transform(a_left_idx, &mut a_transform) {
+                            return Some((a_transform.m_trans_x, a_transform.m_trans_y));
+                        }
+                    }
+                    None
+                })
+                .unwrap_or((0.0, 0.0));
+            if self.has_trophy {
+                let trophy_img = get_image(app, "IMAGE_SUNFLOWER_TROPHY");
+                if !trophy_img.is_null() {
+                    let cel = if app.earned_gold_trophy() { 1 } else { 0 };
+                    // C++ 699-701: PvzpDrawImageCelF(..., aTransformLeft.mTransX + 12, +345, cel, 0)
+                    g.draw_image_cel_rc(
+                        &*trophy_img,
+                        (a_left_x + 12.0) as i32,
+                        (a_left_y + 345.0) as i32,
+                        cel,
+                        0,
+                    );
+                }
+
+                // C++ 703-705: 奖杯闪光粒子
+                if let Some(a_trophy_particle) =
+                    (*self.app).particle_try_to_get(self.m_trophy_particle_id)
+                {
+                    a_trophy_particle.draw(g);
+                }
+            }
+        }
+
+        // ---- 工具提示（C++ 708） ----
+        self.tool_tip.draw(g);
     }
 }
 
@@ -759,49 +1287,38 @@ impl GameSelectorImpl {
 // WidgetImpl — 实现
 // ============================================================
 impl WidgetImpl for GameSelectorImpl {
-    fn draw(&mut self, widget: &Widget, g: &mut Graphics) {
+    fn draw(&mut self, _widget: &Widget, g: &mut Graphics) {
         let app = unsafe { &*self.app };
         g.set_linear_blend(true);
 
-        // 绘制背景
-        let bg_img = get_image(app, "IMAGE_REANIM_SELECTORSCREEN_BG");
-        if !bg_img.is_null() {
-            unsafe { g.draw_image_xy(&*bg_img, 0, 0); }
-        } else {
-            let fallback = get_image(app, "titlescreen");
-            if !fallback.is_null() {
-                unsafe { g.draw_image_xy(&*fallback, 0, 0); }
-            }
-        }
-
-        // 更新按钮位置
-        self.update_button_positions(widget);
-
-        // 绘制左侧主按钮
-        let tx = self.offset_x as f32;
-        let ty = self.offset_y as f32;
-        for btn in &self.buttons {
-            match btn.id {
-                GS_ADVENTURE | GS_MINIGAME | GS_PUZZLE | GS_SURVIVAL => {
-                    self.draw_button_at(g, btn, tx, ty);
+        // 对应 C++ GameSelector::Draw（GameSelector.cpp:553-563）：
+        // 先画 BG 渲染组（背景轨道），再画云×6，再画 NORMAL 组（含木牌按钮轨道）
+        unsafe {
+            if self.selector_reanim_id != crate::lawn::game_enums::REANIMATIONID_NONE {
+                if let Some(a_reanim) = (*app).reanimation_get(self.selector_reanim_id) {
+                    a_reanim.draw_render_group(g, 1); // "SelectorScreen_BG"
                 }
-                _ => {}
-            }
-        }
-
-        // 绘制 Options / Help / Quit（仅 SELECTOR_OPEN 状态）
-        if self.selector_state == SelectorAnimState::Open {
-            for btn in &self.buttons {
-                match btn.id {
-                    GS_OPTIONS | GS_HELP | GS_QUIT => {
-                        self.draw_button_at(g, btn, 0.0, 0.0);
+                for i in 0..6 {
+                    if self.cloud_reanim_id[i] != REANIMATIONID_NULL {
+                        if let Some(a_cloud) = (*app).reanimation_get(self.cloud_reanim_id[i]) {
+                            a_cloud.draw(g);
+                        }
                     }
-                    _ => {}
+                }
+                if let Some(a_reanim) = (*app).reanimation_get(self.selector_reanim_id) {
+                    a_reanim.draw_render_group(g, 0); // RENDER_GROUP_NORMAL
                 }
             }
         }
 
-        // 绘制欢迎文字
+        // 绘制按钮（C++ 中 NewLawnButton 为子控件由 WidgetManager 绘制；此处内化）。
+        // 位置已由 Update 末尾的 TrackButton 按 reanim 轨道维护（对应 C++ 928-940 每帧调用），
+        // mBtnNoDraw=true 的按钮（开门动画期间）不画，由 reanim 的按钮轨道图承担。
+        for btn in &self.buttons {
+            self.draw_button_at(g, btn, self.offset_x as f32, self.offset_y as f32);
+        }
+
+        // 绘制欢迎文字（C++ GameSelector.cpp:589-603，含滑动偏移 mX/mY）
         if let Some(ref player_info) = app.player_info {
             if !player_info.name.is_empty()
                 && self.selector_state != SelectorAnimState::Open
@@ -835,62 +1352,106 @@ impl WidgetImpl for GameSelectorImpl {
             self.sync_profile(false);
         }
 
-        // 滑动动画
+        // 滑动动画（C++ GameSelector.cpp:751-760：Move(aNewX, aNewY) 即 mX/mY；
+        // Rust 侧 GameSelector 的 mX/mY 由 offset_x/offset_y 承担，按钮/绘制均按其平移）
         if self.slide_counter > 0 {
             let new_x = tod_animate_curve(
-                75, 0, self.slide_counter,
-                self.start_x, self.dest_x, TodCurves::EaseInOut,
+                75,
+                0,
+                self.slide_counter,
+                self.start_x,
+                self.dest_x,
+                TodCurves::EaseInOut,
             );
             let new_y = tod_animate_curve(
-                75, 0, self.slide_counter,
-                self.start_y, self.dest_y, TodCurves::EaseInOut,
+                75,
+                0,
+                self.slide_counter,
+                self.start_y,
+                self.dest_y,
+                TodCurves::EaseInOut,
             );
             self.offset_x = new_x;
             self.offset_y = new_y;
+            // C++: mZombatarWidget->Move(aNewX + BOARD_WIDTH, aNewY);
+            //      mAchievementsWidget->mY = aNewY + mApp->mHeight;
+            // [TRANSLATION_NOTE]: zombatar/achievements widget 未接入（见 added_to_manager 占位），移动省略
             self.slide_counter -= 1;
         }
+
+        // 更新工具提示（C++ GameSelector.cpp:749 UpdateTooltip）
+        self.update_tooltip();
 
         // 更新按钮悬停
         for btn in self.buttons.iter_mut() {
             btn.is_over = btn.visible && !btn.disabled && btn.contains(self.mouse_x, self.mouse_y);
         }
 
-        // 游戏开始倒计时
+        // 游戏开始倒计时（C++ GameSelector.cpp:768-806）
         if self.starting_game {
             self.starting_game_counter += 1;
             if self.starting_game_counter > 450 {
                 let app = unsafe { &mut *self.app };
 
-                // 闪烁 Adventure 按钮
-                for btn in self.buttons.iter_mut() {
-                    if btn.id == GS_ADVENTURE {
-                        btn.disabled = self.starting_game_counter % 20 >= 10;
-                    }
-                }
-
-                // 从 WidgetManager 移除
-                if let Some(wm) = app.base.widget_manager {
-                    unsafe {
-                        (*wm).remove_widget(widget as *mut Widget);
-                    }
-                }
+                // C++: mApp->KillGameSelector()
+                app.kill_game_selector();
 
                 if app.is_ice_demo() {
                     app.pre_new_game(GameMode::ChallengeIceLevel, false);
                     return;
                 }
-                if app.is_first_time_adventure_mode() && self.level == 1 && !app.save_file_exists() {
+                if app.is_first_time_adventure_mode() && self.level == 1 && !app.save_file_exists()
+                {
+                    app.pre_new_game(GameMode::Intro, false);
+                    return;
+                }
+                // C++: mNeedsMagicTacoReward && mLevel == 35 → 商店开场后进冒险
+                if app
+                    .player_info
+                    .as_ref()
+                    .map_or(false, |pi| pi.m_needs_magic_taco_reward)
+                    && self.level == 35
+                {
+                    let a_store = crate::lawn::lawn_app::LawnApp::show_store_screen(Some(
+                        app as *mut LawnApp,
+                    ));
+                    if let Some(a_store_ptr) = a_store {
+                        unsafe {
+                            let a_store =
+                                a_store_ptr as *mut crate::lawn::widget::store_screen::StoreScreen;
+                            (*a_store).setup_for_intro(601);
+                            // C++: aStore->WaitForResult(true)
+                            // [TRANSLATION_NOTE]: StoreScreen 无 WaitForResult；SetupForIntro 已驱动开场，等待省略
+                        }
+                    }
                     app.pre_new_game(GameMode::Adventure, false);
+                    return;
+                }
+                if self.should_do_zen_tuturial_before_adventure() {
+                    app.pre_new_game(GameMode::ChallengeZenGarden, false);
+                    if let Some(zg) = app.zen_garden {
+                        unsafe {
+                            (*zg).setup_for_zen_tutorial();
+                        }
+                    }
                     return;
                 }
                 app.pre_new_game(GameMode::Adventure, true);
                 return;
             }
 
+            // C++: mAdventureButton->SetColor(COLOR_BKG, counter%20<10 ? (80,80,80) : White)
+            // Rust 侧以 disabled 标记灰显（draw_button_at 对 disabled 做颜色化），语义等价
             for btn in self.buttons.iter_mut() {
                 if btn.id == GS_ADVENTURE {
                     btn.disabled = self.starting_game_counter % 20 >= 10;
                 }
+            }
+            // C++: if (mStartingGameCounter == 125) mApp->PlaySample(SOUND_EVILLAUGH);
+            if self.starting_game_counter == 125 {
+                let app = unsafe { &mut *self.app };
+                // [TRANSLATION_NOTE]: SOUND_EVILLAUGH 资源未注册，以 LoseMusic 近似（见 Foley 表）
+                app.play_sample(crate::framework::resources::ResourceId::SoundLosemusic as i32);
             }
         }
 
@@ -899,6 +1460,266 @@ impl WidgetImpl for GameSelectorImpl {
             unsafe { (*self.app).particle_try_to_get(self.m_trophy_particle_id) }
         {
             a_trophy_particle.update();
+        }
+
+        // ---- 选择器状态机（对应 C++ GameSelector.cpp:808-890） ----
+        {
+            let app = unsafe { &mut *self.app };
+            unsafe {
+                if self.selector_reanim_id != crate::lawn::game_enums::REANIMATIONID_NONE {
+                    let a_reanim_loop_count = (*app)
+                        .reanimation_get(self.selector_reanim_id)
+                        .map_or(0, |r| r.m_loop_count);
+                    match self.selector_state {
+                        SelectorAnimState::Open => {
+                            // C++: if (mWidgetManager) mWidgetManager->RehupMouse();
+                            if let Some(wm) = app.base.widget_manager {
+                                (*wm).rehup_mouse();
+                            }
+                            if a_reanim_loop_count > 0 {
+                                // C++ 816-820：动画播完后隐藏 reanim 按钮轨道
+                                if let Some(a_selector) =
+                                    (*app).reanimation_get_mut(self.selector_reanim_id)
+                                {
+                                    for a_track in [
+                                        "SelectorScreen_Adventure_button",
+                                        "SelectorScreen_StartAdventure_button",
+                                        "SelectorScreen_Survival_button",
+                                        "SelectorScreen_Challenges_button",
+                                        "SelectorScreen_ZenGarden_button",
+                                    ] {
+                                        a_selector.assign_render_group_to_track(
+                                            a_track,
+                                            crate::todlib::reanimator::RENDER_GROUP_HIDDEN,
+                                        );
+                                    }
+                                }
+                                // C++ 821-830：按钮转为 widget 绘制
+                                for btn in self.buttons.iter_mut() {
+                                    if matches!(
+                                        btn.id,
+                                        GS_ADVENTURE
+                                            | GS_MINIGAME
+                                            | GS_PUZZLE
+                                            | GS_SURVIVAL
+                                            | GS_ZEN_GARDEN
+                                            | GS_HELP
+                                            | GS_OPTIONS
+                                            | GS_QUIT
+                                            | GS_ZOMBATAR
+                                            | GS_ACHIEVEMENTS
+                                            | GS_CHANGE_USER
+                                    ) {
+                                        btn.btn_no_draw = false;
+                                    }
+                                }
+                                // C++ 845-852：无玩家档案时弹建用户对话框
+                                if app.player_info.is_none() {
+                                    app.do_create_user_dialog();
+                                    // C++: if (gIsPartnerBuild) AddPreviewProfiles();
+                                    // [TRANSLATION_NOTE]: gIsPartnerBuild 标识未定义，Partner 分支不进入
+                                    self.selector_state = SelectorAnimState::NewUser;
+                                } else {
+                                    // C++ 855-856：播放木牌动画并进入 IDLE
+                                    if let Some(a_selector) =
+                                        (*app).reanimation_get_mut(self.selector_reanim_id)
+                                    {
+                                        a_selector.play_reanim(
+                                            "anim_sign",
+                                            crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,
+                                            0,
+                                            30.0,
+                                        );
+                                    }
+                                    self.selector_state = SelectorAnimState::Idle;
+                                }
+
+                                // C++ 859-860: if (mHasTrophy) AddTrophySparkle();
+                                if self.has_trophy {
+                                    self.add_trophy_sparkle();
+                                }
+
+                                // C++ 862-874：完成冒险提示弹窗
+                                if let Some(ref mut pi) = app.player_info {
+                                    if pi.m_needs_message_on_game_selector != 0 {
+                                        pi.m_needs_message_on_game_selector = 0;
+                                        app.write_current_user_config();
+                                        app.lawn_message_box(
+                                            Dialogs::Message,
+                                            "[ADVENTURE_COMPLETE_HEADER]",
+                                            "[ADVENTURE_COMPLETE_BODY]",
+                                            "[DIALOG_BUTTON_OK]",
+                                            "",
+                                            BUTTONS_FOOTER,
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        SelectorAnimState::NewUser => {
+                            // C++ 877-883：建用户对话框关闭后播 anim_sign
+                            if !app
+                                .base
+                                .dialog_map
+                                .contains_key(&(Dialogs::CreateUser as i32))
+                            {
+                                if let Some(a_selector) =
+                                    (*app).reanimation_get_mut(self.selector_reanim_id)
+                                {
+                                    a_selector.play_reanim(
+                                        "anim_sign",
+                                        crate::todlib::reanimator::ReanimLoopType::PlayOnceAndHold,
+                                        0,
+                                        30.0,
+                                    );
+                                }
+                                self.selector_state = SelectorAnimState::ShowSign;
+                            }
+                        }
+                        SelectorAnimState::ShowSign => {
+                            // C++ 884-887：木牌动画播完 → IDLE
+                            if a_reanim_loop_count > 0 {
+                                self.selector_state = SelectorAnimState::Idle;
+                            }
+                        }
+                        SelectorAnimState::Idle => {}
+                    }
+                }
+            }
+        }
+
+        // 对应 C++ GameSelector.cpp:892-919：云循环、草叶摆动、选择器动画推进
+        // （C++ 侧 GameSelector 界面无 EffectSystem::Update 驱动，reanim 由本函数显式推进）
+        let app = unsafe { &mut *self.app };
+        unsafe {
+            for i in 0..6usize {
+                let a_cloud = (*app).reanimation_get_mut(self.cloud_reanim_id[i]);
+                let Some(a_cloud) = a_cloud else { continue };
+                if self.cloud_counter[i] > 0 {
+                    self.cloud_counter[i] -= 1;
+                    if self.cloud_counter[i] == 0 {
+                        a_cloud.m_loop_count = 0;
+                        a_cloud.m_anim_time = 0.0;
+                        a_cloud.m_anim_rate = 0.5;
+                    }
+                } else if a_cloud.m_loop_count > 0 {
+                    self.cloud_counter[i] = crate::framework::common::rand_range_int(2000, 4000);
+                }
+            }
+            // 对应 C++ 922-923: for (int i = 0; i < 6; i++) ReanimationGet(mCloudReanimID[i])->Update();
+            for i in 0..6usize {
+                if let Some(a_cloud) = (*app).reanimation_get_mut(self.cloud_reanim_id[i]) {
+                    a_cloud.update();
+                }
+            }
+            if self.selector_reanim_id != crate::lawn::game_enums::REANIMATIONID_NONE {
+                if let Some(a_selector) = (*app).reanimation_get_mut(self.selector_reanim_id) {
+                    a_selector.update();
+                }
+            }
+            // 对应 C++ 924-926: 僵尸手动画更新（ClickedAdventure 创建）
+            if self.hand_reanim_id != crate::lawn::game_enums::REANIMATIONID_NONE {
+                if let Some(a_hand) = (*app).reanimation_get_mut(self.hand_reanim_id) {
+                    a_hand.update();
+                }
+            }
+            if self.leaf_reanim_id != crate::lawn::game_enums::REANIMATIONID_NONE {
+                // 对应 C++ 911-914：先取草叶应贴的背景轨道位置（不可变借用）
+                let a_leaf_pos = if self.selector_reanim_id
+                    != crate::lawn::game_enums::REANIMATIONID_NONE
+                {
+                    (*app)
+                        .reanimation_get(self.selector_reanim_id)
+                        .and_then(|a_selector| {
+                            let a_leaf_track =
+                                a_selector.find_track_index("SelectorScreen_BG_Right");
+                            if a_leaf_track >= 0 {
+                                let mut a_transform =
+                                    crate::todlib::definition::ReanimatorTransform::default();
+                                if a_selector.get_current_transform(a_leaf_track, &mut a_transform)
+                                {
+                                    return Some((
+                                        a_transform.m_trans_x - 71.0,
+                                        a_transform.m_trans_y - 41.0,
+                                    ));
+                                }
+                            }
+                            None
+                        })
+                } else {
+                    None
+                };
+                if let Some(a_leaf) = (*app).reanimation_get_mut(self.leaf_reanim_id) {
+                    a_leaf.update();
+                    if let Some((px, py)) = a_leaf_pos {
+                        a_leaf.set_position(px, py);
+                    }
+                    self.leaf_counter -= 1;
+                    if self.leaf_counter == 0 {
+                        let a_rate = crate::framework::common::rand_range_float(3.0, 12.0);
+                        a_leaf.play_reanim(
+                            "anim_grass",
+                            crate::todlib::reanimator::ReanimLoopType::Loop,
+                            20,
+                            a_rate,
+                        );
+                        self.leaf_counter = crate::framework::common::rand_range_int(200, 400);
+                    }
+                }
+            }
+
+            // ---- 每帧 TrackButton（对应 C++ GameSelector.cpp:928-940） ----
+            // 按钮位置每帧从 reanim 轨道取，保证跟随开门动画与滑动偏移
+            {
+                let a_app = app as *mut LawnApp;
+                let a_sel_ptr = self as *mut GameSelectorImpl;
+                // 以只读方式取轨道变换（避免与上面可变借用冲突，已无借用存续）
+                for a_btn in (*a_sel_ptr).buttons.iter_mut() {
+                    if let Some(a_track) = a_btn.track_name {
+                        track_button_position(
+                            a_app,
+                            (*a_sel_ptr).selector_reanim_id,
+                            a_btn,
+                            a_track,
+                            a_btn.track_offset_x,
+                            a_btn.track_offset_y,
+                        );
+                    }
+                }
+            }
+            // 对应 C++ 941-942：woodsign2/3 悬停/按下时替换按下图
+            if self.selector_reanim_id != crate::lawn::game_enums::REANIMATIONID_NONE {
+                let a_change_user_over = self
+                    .buttons
+                    .iter()
+                    .find(|b| b.id == GS_CHANGE_USER)
+                    .map_or(false, |b| b.is_over || b.is_down);
+                let a_zombatar_over = self
+                    .buttons
+                    .iter()
+                    .find(|b| b.id == GS_ZOMBATAR)
+                    .map_or(false, |b| b.is_over || b.is_down);
+                let a_press2 = get_image(app, "IMAGE_REANIM_SELECTORSCREEN_WOODSIGN2_PRESS");
+                let a_press3 = get_image(app, "IMAGE_REANIM_SELECTORSCREEN_WOODSIGN3_PRESS");
+                if let Some(a_selector) = (*app).reanimation_get_mut(self.selector_reanim_id) {
+                    a_selector.set_image_override(
+                        "woodsign2",
+                        if a_change_user_over {
+                            a_press2
+                        } else {
+                            std::ptr::null_mut()
+                        },
+                    );
+                    a_selector.set_image_override(
+                        "woodsign3",
+                        if a_zombatar_over {
+                            a_press3
+                        } else {
+                            std::ptr::null_mut()
+                        },
+                    );
+                }
+            }
         }
     }
 
@@ -969,7 +1790,9 @@ impl WidgetImpl for GameSelectorImpl {
 
     fn mouse_up_btn(&mut self, _widget: &mut Widget, _x: i32, _y: i32, _btn: i32, _click: i32) {
         if self.slide_counter > 0 {
-            for b in self.buttons.iter_mut() { b.is_down = false; }
+            for b in self.buttons.iter_mut() {
+                b.is_down = false;
+            }
             return;
         }
 
@@ -1023,27 +1846,59 @@ impl WidgetImpl for GameSelectorImpl {
                 app.show_challenge_screen(ChallengePage::Survival as i32);
             }
             GS_QUIT => {
-                app.m_close_request = true;
+                // C++ 1224-1226: mApp->ConfirmQuit()
+                app.confirm_quit();
             }
             GS_HELP => {
+                // C++ 1227-1230
                 app.kill_game_selector();
                 app.show_award_screen(AwardType::HelpZombieNote as i32, false);
             }
             GS_OPTIONS => {
-                eprintln!("[GameSelector] Options — 等待 NewOptionsDialog");
+                // C++ 1231-1233: mApp->DoNewOptions(true)
+                app.do_new_options(true);
             }
             GS_CHANGE_USER => {
-                eprintln!("[GameSelector] ChangeUser — 等待 UserDialog");
+                // C++ 1234-1236: mApp->DoUserDialog()
+                app.do_user_dialog();
             }
             GS_STORE => {
-                eprintln!("[GameSelector] Store — 等待 StoreScreen");
+                // C++ 1237-1250：开商店，等待返回后按 mGoToTreeNow 决定是否进智慧树
+                let a_store =
+                    crate::lawn::lawn_app::LawnApp::show_store_screen(Some(app as *mut LawnApp));
+                if let Some(a_store_ptr) = a_store {
+                    unsafe {
+                        let a_store =
+                            a_store_ptr as *mut crate::lawn::widget::store_screen::StoreScreen;
+                        // C++: aStore->WaitForResult(true)
+                        // [TRANSLATION_NOTE]: StoreScreen 无 WaitForResult 循环；mGoToTreeNow 分支按状态读取
+                        if (*a_store).go_to_tree_now {
+                            app.kill_game_selector();
+                            app.pre_new_game(GameMode::ChallengeTreeOfWisdom, false);
+                        } else if let Some(a_music) = app.music.as_mut() {
+                            a_music.make_sure_music_is_playing(MusicTune::TitleCrazyDaveMainTheme);
+                        }
+                    }
+                }
             }
             GS_ALMANAC => {
-                eprintln!("[GameSelector] Almanac — 等待 AlmanacDialog");
+                // C++ 1251-1254：打开图鉴后恢复标题音乐
+                app.do_almanac_dialog(SeedType::None, ZombieType::Invalid);
+                if let Some(a_music) = app.music.as_mut() {
+                    a_music.make_sure_music_is_playing(MusicTune::TitleCrazyDaveMainTheme);
+                }
             }
             GS_ZEN_GARDEN => {
+                // C++ 1255-1260：进禅境花园，必要时先做禅教程
                 app.kill_game_selector();
                 app.pre_new_game(GameMode::ChallengeZenGarden, false);
+                if self.should_do_zen_tuturial_before_adventure() {
+                    if let Some(zg) = app.zen_garden {
+                        unsafe {
+                            (*zg).setup_for_zen_tutorial();
+                        }
+                    }
+                }
             }
             GS_ZOMBATAR => {
                 eprintln!("[GameSelector] Zombatar — 未实现");
@@ -1072,10 +1927,9 @@ impl WidgetImpl for GameSelectorImpl {
 }
 
 impl GameSelectorImpl {
-    fn draw_button_at(
-        &self, g: &mut Graphics, btn: &GameBtnData,
-        _offset_x: f32, _offset_y: f32,
-    ) {
+    /// 对应 C++ NewLawnButton::Draw（GameButton.cpp:328-393）：
+    /// COLOR_BKG 颜色化 + 按下时 mTranslateX/Y(1,1) 偏移。
+    fn draw_button_at(&self, g: &mut Graphics, btn: &GameBtnData, offset_x: f32, offset_y: f32) {
         if btn.btn_no_draw || !btn.visible {
             return;
         }
@@ -1084,19 +1938,34 @@ impl GameSelectorImpl {
             return;
         }
 
-        let draw_x = btn.x + btn.button_offset_x;
-        let draw_y = btn.y + btn.button_offset_y;
+        // C++ 中按钮为子控件，位置含容器 mX/mY 平移（滑动时按钮随容器移动）
+        let draw_x = btn.x + btn.button_offset_x + offset_x as i32;
+        let draw_y = btn.y + btn.button_offset_y + offset_y as i32;
 
-        if btn.disabled {
-            g.set_colorize_images(true);
-            g.set_color(&Color::new(128, 128, 128, 200));
-            unsafe { g.draw_image_xy(&*img, draw_x, draw_y); }
-            g.set_colorize_images(false);
-        } else if btn.is_down && btn.is_over {
-            unsafe { g.draw_image_xy(&*img, draw_x + 1, draw_y + 1); }
+        // 对应 DrawButtonImage 的 mTranslateX/Y(1,1)：按下时右下偏移 1px
+        let tx = if btn.is_down && btn.is_over && !btn.disabled {
+            1
         } else {
-            unsafe { g.draw_image_xy(&*img, draw_x, draw_y); }
+            0
+        };
+        let ty = if btn.is_down && btn.is_over && !btn.disabled {
+            1
+        } else {
+            0
+        };
+
+        g.set_colorize_images(true);
+        if btn.disabled {
+            // SyncButtons 对锁定按钮 SetColor(COLOR_BKG, Color(128,128,128))
+            g.set_color(&Color::new(128, 128, 128, 255));
+        } else {
+            // NewLawnButton 构造默认 SetColor(COLOR_BKG, Color::White)
+            g.set_color(&Color::WHITE);
         }
+        unsafe {
+            g.draw_image_xy(&*img, draw_x + tx, draw_y + ty);
+        }
+        g.set_colorize_images(false);
     }
 
     /// [TRANSLATION_NOTE]: C++ GameSelector::AddedToManager
@@ -1117,7 +1986,7 @@ impl GameSelectorImpl {
             || the_id == 101                 // GameSelector_Minigame
             || the_id == 102                 // GameSelector_Puzzle
             || the_id == 110                 // GameSelector_Survival
-            || the_id == 111;                // GameSelector_Zombatar
+            || the_id == 111; // GameSelector_Zombatar
         if let Some(app) = unsafe { self.app.as_mut() } {
             unsafe {
                 let a_sound = if a_is_stone_button {
@@ -1171,7 +2040,12 @@ impl GameSelectorImpl {
         //      else mZombatarWidget->Open();
         // [TRANSLATION_NOTE]: Rust 侧 zombatar widget / ShowZombatarTOS 未接入，读取状态后占位
         let _a_accepted = if let Some(app) = unsafe { self.app.as_mut() } {
-            unsafe { (*app).player_info.as_ref().map_or(true, |pi| pi.m_zombatar_accepted != 0) }
+            unsafe {
+                (*app)
+                    .player_info
+                    .as_ref()
+                    .map_or(true, |pi| pi.m_zombatar_accepted != 0)
+            }
         } else {
             true
         };
@@ -1240,7 +2114,14 @@ impl GameSelectorImpl {
         if let Some(a_msg) = a_locked_message {
             if let Some(app) = unsafe { self.app.as_mut() } {
                 unsafe {
-                    let a_dialog = (*app).do_dialog(48, true, "[MODE_LOCKED]", a_msg, "[DIALOG_BUTTON_OK]", BUTTONS_FOOTER);
+                    let a_dialog = (*app).do_dialog(
+                        48,
+                        true,
+                        "[MODE_LOCKED]",
+                        a_msg,
+                        "[DIALOG_BUTTON_OK]",
+                        BUTTONS_FOOTER,
+                    );
                     if let Some(d) = a_dialog {
                         let _ = (&mut *d).wait_for_result(true);
                     }
@@ -1250,10 +2131,12 @@ impl GameSelectorImpl {
         }
 
         match the_id {
-            100 => { // GameSelector_Adventure
+            100 => {
+                // GameSelector_Adventure
                 self.clicked_adventure();
             }
-            101 | 102 | 110 => { // Minigame / Puzzle / Survival → 挑战选择页
+            101 | 102 | 110 => {
+                // Minigame / Puzzle / Survival → 挑战选择页
                 if let Some(app) = unsafe { self.app.as_mut() } {
                     unsafe {
                         (*app).kill_game_selector();
@@ -1268,14 +2151,16 @@ impl GameSelectorImpl {
                     }
                 }
             }
-            105 => { // GameSelector_Quit
+            105 => {
+                // GameSelector_Quit
                 if let Some(app) = unsafe { self.app.as_mut() } {
                     unsafe {
                         (*app).confirm_quit();
                     }
                 }
             }
-            104 => { // GameSelector_Help
+            104 => {
+                // GameSelector_Help
                 if let Some(app) = unsafe { self.app.as_mut() } {
                     unsafe {
                         (*app).kill_game_selector();
@@ -1283,25 +2168,29 @@ impl GameSelectorImpl {
                     }
                 }
             }
-            103 => { // GameSelector_Options
+            103 => {
+                // GameSelector_Options
                 // C++: mApp->DoNewOptions(true)
                 if let Some(app) = unsafe { self.app.as_mut() } {
                     (*app).do_new_options(true);
                 }
             }
-            106 => { // GameSelector_ChangeUser
+            106 => {
+                // GameSelector_ChangeUser
                 // C++: mApp->DoUserDialog()
                 if let Some(app) = unsafe { self.app.as_mut() } {
                     (*app).do_user_dialog();
                 }
             }
-            107 => { // GameSelector_Store
+            107 => {
+                // GameSelector_Store
                 if let Some(app) = unsafe { self.app.as_mut() } {
                     unsafe {
                         let a_store = LawnApp::show_store_screen(Some(app as *const _ as *mut _));
                         // [TRANSLATION_NOTE]: C++ WaitForResult(true) 模态等待；Rust 商店为非模态 widget 驱动
                         let a_go_to_tree = a_store.map_or(false, |s| {
-                            (*(s as *mut crate::lawn::widget::store_screen::StoreScreen)).go_to_tree_now
+                            (*(s as *mut crate::lawn::widget::store_screen::StoreScreen))
+                                .go_to_tree_now
                         });
                         if a_go_to_tree {
                             (*app).kill_game_selector();
@@ -1312,7 +2201,8 @@ impl GameSelectorImpl {
                     }
                 }
             }
-            108 => { // GameSelector_Almanac
+            108 => {
+                // GameSelector_Almanac
                 if let Some(app) = unsafe { self.app.as_mut() } {
                     unsafe {
                         // C++: DoAlmanacDialog()->WaitForResult(true)；Rust 版返回 ()
@@ -1323,7 +2213,8 @@ impl GameSelectorImpl {
                     }
                 }
             }
-            109 => { // GameSelector_ZenGarden
+            109 => {
+                // GameSelector_ZenGarden
                 if let Some(app) = unsafe { self.app.as_mut() } {
                     unsafe {
                         (*app).kill_game_selector();
@@ -1336,10 +2227,12 @@ impl GameSelectorImpl {
                     }
                 }
             }
-            111 => { // GameSelector_Zombatar
+            111 => {
+                // GameSelector_Zombatar
                 self.show_zombatar_screen();
             }
-            112 => { // GameSelector_Achievements
+            112 => {
+                // GameSelector_Achievements
                 self.show_achievements_screen();
             }
             _ => {}

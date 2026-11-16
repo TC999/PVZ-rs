@@ -9,21 +9,19 @@
 // - 声音沿用既有 Foley 近似（Beep 对应 SOUND_BUTTONCLICK，Plant/Groan 对应
 //   SOUND_LOADINGBAR_FLOWER/ZOMBIE）；图像访问带 get_image 缺省守卫。
 
-use crate::framework::graphics::graphics::Graphics;
+use crate::framework::color::Color;
 use crate::framework::graphics::font::Font;
+use crate::framework::graphics::graphics::Graphics;
+use crate::framework::key_codes::{
+    KeyCode, KEYCODE_C, KEYCODE_I, KEYCODE_M, KEYCODE_P, KEYCODE_R, KEYCODE_S, KEYCODE_T,
+    KEYCODE_U, KEYCODE_UNKNOWN,
+};
 use crate::framework::widget::widget::{Widget, WidgetImpl};
 use crate::framework::widget::widget_manager::WidgetManager;
-use crate::framework::key_codes::{
-    KeyCode, KEYCODE_UNKNOWN,
-    KEYCODE_M, KEYCODE_S, KEYCODE_C, KEYCODE_U, KEYCODE_I, KEYCODE_P, KEYCODE_R, KEYCODE_T,
-};
-use crate::framework::color::Color;
+use crate::lawn::game_enums::{ChallengePage, GameMode, ReanimationType, TodCurves};
 use crate::lawn::lawn_app::LawnApp;
-use crate::lawn::game_enums::{TodCurves, GameMode, ChallengePage, ReanimationType};
 use crate::todlib::reanimator::ReanimLoopType;
-use crate::todlib::tod_common::{
-    tod_animate_curve, tod_animate_curve_float_time, clamp_float,
-};
+use crate::todlib::tod_common::{clamp_float, tod_animate_curve, tod_animate_curve_float_time};
 use crate::todlib::tod_foley::FoleyType;
 
 /// C++ KeyCodes.h: KEYCODE_ASCIIEND = 0x5A (90)。注意不是导航键 End(35)，
@@ -81,6 +79,8 @@ pub struct TitleScreenImpl {
     pub start_button_disabled: bool,
     pub start_button_x: i32,
     pub start_button_y: i32,
+    /// 鼠标悬停在启动按钮上（对应 C++ HyperlinkWidget mIsOver，用于 mOverColor 变色）
+    pub start_button_over: bool,
 
     // ---- 快速加载键 ----
     pub quick_load_key: KeyCode,
@@ -117,6 +117,7 @@ impl TitleScreenImpl {
             start_button_disabled: true,
             start_button_x: 0,
             start_button_y: 0,
+            start_button_over: false,
             quick_load_key: KEYCODE_UNKNOWN,
         }
     }
@@ -211,13 +212,22 @@ impl TitleScreenImpl {
             if self.title_state_counter < self.title_state_duration - 50 {
                 if !self.display_partner_logo {
                     an_alpha = tod_animate_curve(
-                        50, 0, self.title_state_counter, 255, 0, TodCurves::Linear,
+                        50,
+                        0,
+                        self.title_state_counter,
+                        255,
+                        0,
+                        TodCurves::Linear,
                     );
                 }
             } else {
                 an_alpha = tod_animate_curve(
-                    self.title_state_duration, self.title_state_duration - 50,
-                    self.title_state_counter, 0, 255, TodCurves::Linear,
+                    self.title_state_duration,
+                    self.title_state_duration - 50,
+                    self.title_state_counter,
+                    0,
+                    255,
+                    TodCurves::Linear,
                 );
             }
 
@@ -249,8 +259,12 @@ impl TitleScreenImpl {
             let mut an_alpha: i32 = 255;
             if self.title_state_counter >= self.title_state_duration - 35 {
                 an_alpha = tod_animate_curve(
-                    self.title_state_duration, self.title_state_duration - 35,
-                    self.title_state_counter, 0, 255, TodCurves::Linear,
+                    self.title_state_duration,
+                    self.title_state_duration - 35,
+                    self.title_state_counter,
+                    0,
+                    255,
+                    TodCurves::Linear,
                 );
                 // 淡出期间的 PopCap logo（255 - anAlpha）
                 g.set_color(&Color::new(255, 255, 255, 255 - an_alpha as u8));
@@ -268,9 +282,8 @@ impl TitleScreenImpl {
                     }
                 }
             } else {
-                an_alpha = tod_animate_curve(
-                    35, 0, self.title_state_counter, 255, 0, TodCurves::Linear,
-                );
+                an_alpha =
+                    tod_animate_curve(35, 0, self.title_state_counter, 255, 0, TodCurves::Linear);
             }
             g.set_color(&Color::new(255, 255, 255, an_alpha as u8));
             if let Some(rm_ptr) = app.base.resource_manager {
@@ -316,7 +329,14 @@ impl TitleScreenImpl {
 
         // PvZ Logo：C++ aLogoY 两条曲线
         let a_logo_y = if self.title_state_counter > 60 {
-            tod_animate_curve(100, 60, self.title_state_counter, -150, 10, TodCurves::EaseIn)
+            tod_animate_curve(
+                100,
+                60,
+                self.title_state_counter,
+                -150,
+                10,
+                TodCurves::EaseIn,
+            )
         } else {
             tod_animate_curve(60, 50, self.title_state_counter, 10, 15, TodCurves::Bounce)
         };
@@ -383,7 +403,12 @@ impl TitleScreenImpl {
             let a_roll_len = self.cur_bar_width * 0.94;
             let a_rotation = -a_roll_len / 180.0 * std::f32::consts::PI * 2.0;
             let a_scale = tod_animate_curve_float_time(
-                0.0, self.total_bar_width, self.cur_bar_width, 1.0, 0.5, TodCurves::Linear,
+                0.0,
+                self.total_bar_width,
+                self.cur_bar_width,
+                1.0,
+                0.5,
+                TodCurves::Linear,
             );
             let cap_x = a_grass_x as f32 + 11.0 + a_roll_len;
             let cap_y = a_grass_y as f32 - 3.0 - 35.0 * a_scale + 35.0;
@@ -394,7 +419,11 @@ impl TitleScreenImpl {
                     let img_ptr = shared_ref.as_image_ptr();
                     if !img_ptr.is_null() {
                         g.draw_image_rotated_f_simple(
-                            &*img_ptr, cap_x, cap_y, a_rotation as f64, None,
+                            &*img_ptr,
+                            cap_x,
+                            cap_y,
+                            a_rotation as f64,
+                            None,
                         );
                     }
                 }
@@ -412,8 +441,11 @@ impl TitleScreenImpl {
         self.draw_start_button_text(widget, g);
     }
 
-    /// 启动按钮文字绘制（C++ FONT_BRIANNETOD16 + mColor(218,184,33)）
+    /// 启动按钮文字绘制
+    /// 对应 C++ HyperlinkWidget::Draw（HyperlinkWidget.cpp:43-64）：文字水平居中于按钮宽度内，
+    /// aFontY = (mHeight + GetAscent())/2 - 1；mColor(218,184,33)，悬停 mOverColor(250,90,15)。
     fn draw_start_button_text(&mut self, widget: &Widget, g: &mut Graphics) {
+        let _ = widget;
         if self.start_button_label.is_empty() || !self.start_button_visible {
             return;
         }
@@ -425,9 +457,15 @@ impl TitleScreenImpl {
         }
         if let Some(ref font) = self.start_button_font {
             let text_width = font.string_width(&self.start_button_label);
-            let text_x = widget.width / 2 - text_width / 2;
+            // C++: aFontX = (mWidth - StringWidth)/2，按钮宽 = mTotalBarWidth，按钮 x = start_button_x
+            let text_x = self.start_button_x + (self.total_bar_width as i32 - text_width) / 2;
             let text_y = self.start_button_y + (50 + font.get_ascent()) / 2 - 1;
-            g.set_color(&Color::new(218, 184, 33, 255));
+            // C++: if (mIsOver) mOverColor(250,90,15) else mColor(218,184,33)
+            if self.start_button_over {
+                g.set_color(&Color::new(250, 90, 15, 255));
+            } else {
+                g.set_color(&Color::new(218, 184, 33, 255));
+            }
             let fptr = &**font as *const Font as *mut Font;
             g.set_font(fptr);
             g.draw_string(&self.start_button_label, text_x, text_y);
@@ -533,8 +571,22 @@ impl WidgetImpl for TitleScreenImpl {
             // C++: mStartButton->mLabel = PvzpStringTranslate("[LOADING]"); SetFont(FONT_BRIANNETOD16);
             self.start_button_label = "[LOADING]".to_string();
             self.start_button_font = None;
-            // C++: Resize((mWidth - IMAGE_LOADBAR_DIRT->mWidth)/2, 650, mTotalBarWidth, 50)
-            self.start_button_x = (widget.width - self.total_bar_width as i32) / 2;
+            // C++ 307: Resize((mWidth - IMAGE_LOADBAR_DIRT->mWidth)/2, 650, mTotalBarWidth, 50)
+            let a_dirt_width = if let Some(rm_ptr) = app.base.resource_manager {
+                unsafe {
+                    let rm = &*rm_ptr;
+                    let shared_ref = rm.get_image("loadbar_dirt");
+                    let img_ptr = shared_ref.as_image_ptr();
+                    if !img_ptr.is_null() {
+                        (*img_ptr).get_width()
+                    } else {
+                        self.total_bar_width as i32
+                    }
+                }
+            } else {
+                self.total_bar_width as i32
+            };
+            self.start_button_x = (widget.width - a_dirt_width) / 2;
             self.start_button_y = 650;
             self.start_button_visible = true;
 
@@ -551,12 +603,19 @@ impl WidgetImpl for TitleScreenImpl {
         }
 
         // C++: float aLoadingPercent = (aCurrentProgress - mBarStartProgress) / (1 - mBarStartProgress);
-        let a_loading_percent = (a_current_progress - self.bar_start_progress)
-            / (1.0 - self.bar_start_progress);
+        let a_loading_percent =
+            (a_current_progress - self.bar_start_progress) / (1.0 - self.bar_start_progress);
 
         // C++: aButtonY 两条曲线；mStartButton->Resize(mStartButton->mX, aButtonY, ...)
         let a_button_y = if self.title_state_counter > 10 {
-            tod_animate_curve(60, 10, self.title_state_counter, 650, 534, TodCurves::EaseIn)
+            tod_animate_curve(
+                60,
+                10,
+                self.title_state_counter,
+                650,
+                534,
+                TodCurves::EaseIn,
+            )
         } else {
             tod_animate_curve(10, 0, self.title_state_counter, 534, 529, TodCurves::Bounce)
         };
@@ -591,11 +650,21 @@ impl WidgetImpl for TitleScreenImpl {
         // if (aLoadingPercent > mPrevLoadingPercent + 0.01f || mLoadingThreadComplete)
         if a_loading_percent > self.prev_loading_percent + 0.01 || self.loading_thread_complete {
             let a_bar_width = tod_animate_curve_float_time(
-                0.0, 1.0, a_loading_percent, 0.0, self.total_bar_width, TodCurves::EaseIn,
+                0.0,
+                1.0,
+                a_loading_percent,
+                0.0,
+                self.total_bar_width,
+                TodCurves::EaseIn,
             );
             let a_diff = a_bar_width - self.cur_bar_width;
             let mut a_acceleration = tod_animate_curve_float_time(
-                0.0, 1.0, a_loading_percent, 0.0001, 0.00001, TodCurves::Linear,
+                0.0,
+                1.0,
+                a_loading_percent,
+                0.0001,
+                0.00001,
+                TodCurves::Linear,
             );
             if self.loading_thread_complete {
                 a_acceleration = 0.0001;
@@ -604,7 +673,12 @@ impl WidgetImpl for TitleScreenImpl {
 
             // C++: 最小/最大速度（mCheatKeys 时放宽）
             let mut a_min_velocity = tod_animate_curve_float_time(
-                0.0, 1.0, a_loading_percent, 0.2, 0.01, TodCurves::Linear,
+                0.0,
+                1.0,
+                a_loading_percent,
+                0.2,
+                0.01,
+                TodCurves::Linear,
             );
             let mut a_max_velocity = 2.0;
             if app.m_tod_cheat_keys {
@@ -662,7 +736,10 @@ impl WidgetImpl for TitleScreenImpl {
                 app.loading_completed();
                 app.kill_game_selector();
                 app.show_credit_screen();
-            } else if app.m_tod_cheat_keys && app.player_info.is_some() && self.quick_load_key == KEYCODE_T {
+            } else if app.m_tod_cheat_keys
+                && app.player_info.is_some()
+                && self.quick_load_key == KEYCODE_T
+            {
                 // C++: FastLoad(GAMEMODE_ADVENTURE)
                 app.fast_load(GameMode::Adventure);
             } else {
@@ -692,7 +769,9 @@ impl WidgetImpl for TitleScreenImpl {
                 let a_pos_x = a_trigger + 225.0;
                 let a_pos_y = 511.0;
                 // C++: mApp->AddReanimation(aPosX, aPosY, 0, aReanimType)
-                if let Some(a_sprout) = app.add_reanimation(a_pos_x, a_pos_y, 0, a_reanim_type as i32) {
+                if let Some(a_sprout) =
+                    app.add_reanimation(a_pos_x, a_pos_y, 0, a_reanim_type as i32)
+                {
                     unsafe {
                         // C++: aSproutReanim->mAnimRate = 18.0f; mLoopType = REANIM_PLAY_ONCE_AND_HOLD;
                         (*a_sprout).m_anim_rate = 18.0;
@@ -700,7 +779,9 @@ impl WidgetImpl for TitleScreenImpl {
                     }
                     if i == 1 || i == 3 {
                         // C++: OverrideScale(-1.0f, 1.0f)
-                        unsafe { (*a_sprout).override_scale(-1.0, 1.0); }
+                        unsafe {
+                            (*a_sprout).override_scale(-1.0, 1.0);
+                        }
                     } else if i == 2 {
                         // C++: SetPosition + OverrideScale(1.1f, 1.3f)
                         unsafe {
@@ -709,7 +790,9 @@ impl WidgetImpl for TitleScreenImpl {
                         }
                     } else if i == 4 {
                         // C++: SetPosition(aPosX - 20.0f, aPosY)
-                        unsafe { (*a_sprout).set_position(a_pos_x - 20.0, a_pos_y); }
+                        unsafe {
+                            (*a_sprout).set_position(a_pos_x - 20.0, a_pos_y);
+                        }
                     }
 
                     if i == 4 {
@@ -726,6 +809,15 @@ impl WidgetImpl for TitleScreenImpl {
     }
 
     /// 对应 C++ TitleScreen::MouseDown — 加载完成后任意点击进入
+    fn mouse_move(&mut self, _widget: &mut Widget, x: i32, y: i32) {
+        // C++ HyperlinkWidget mIsOver：点在按钮矩形（x..x+314, y..y+50）内时悬停
+        self.start_button_over = self.start_button_visible
+            && x >= self.start_button_x
+            && x < self.start_button_x + self.total_bar_width as i32
+            && y >= self.start_button_y
+            && y < self.start_button_y + 50;
+    }
+
     fn mouse_down_btn(&mut self, _widget: &mut Widget, _x: i32, _y: i32, _btn: i32, _click: i32) {
         // C++: (void)x; (void)y; (void)theClickCount;
         if self.loading_thread_complete {

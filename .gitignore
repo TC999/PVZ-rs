@@ -29,6 +29,9 @@ rustc-ice-*.txt
 *.exe
 properties
 
+# AI 会话临时草稿
+.tmp_*
+
 # SDL2
 SDL2*
 *.lib
