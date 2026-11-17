@@ -1612,10 +1612,8 @@ impl WidgetImpl for GameSelectorImpl {
                     a_cloud.update();
                 }
             }
-            if self.selector_reanim_id != crate::lawn::game_enums::REANIMATIONID_NONE {
-                if let Some(a_selector) = (*app).reanimation_get_mut(self.selector_reanim_id) {
-                    a_selector.update();
-                }
+            if let Some(a_selector) = (*app).reanimation_get_mut(self.selector_reanim_id) {
+                a_selector.update();
             }
             // 对应 C++ 924-926: 僵尸手动画更新（ClickedAdventure 创建）
             if self.hand_reanim_id != crate::lawn::game_enums::REANIMATIONID_NONE {

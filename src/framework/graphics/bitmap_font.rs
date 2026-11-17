@@ -467,6 +467,7 @@ pub fn load_bitmap_font(name: &str) -> Option<*mut BitmapFont> {
             }
         }
     }
+
     let desc = parse_font_desc(&desc_text);
 
     let mut glyphs = HashMap::new();
