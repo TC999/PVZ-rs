@@ -450,10 +450,21 @@ impl TitleScreenImpl {
             return;
         }
         if self.start_button_font.is_none() {
-            let mut f = Font::new("Briannetod", 16);
-            f.ascent = 13;
-            f.font_height = 16;
-            self.start_button_font = Some(Box::new(f));
+            // C++ 306: mStartButton->SetFont(FONT_BRIANNETOD16)
+            // Rust 侧取全局位图字体（main.pak 内 Briannetod16 描述+图集）
+            let a_font_ptr =
+                crate::framework::graphics::bitmap_font::font_global("FONT_BRIANNETOD16");
+
+            if !a_font_ptr.is_null() {
+                let a_font: Font = unsafe { std::ptr::read(a_font_ptr) };
+                self.start_button_font = Some(Box::new(a_font));
+            } else {
+                // [TRANSLATION_NOTE]: 字体资源不可用时退回占位渲染（无位图字形，画矩形块）
+                let mut f = Font::new("Briannetod", 16);
+                f.ascent = 13;
+                f.font_height = 16;
+                self.start_button_font = Some(Box::new(f));
+            }
         }
         if let Some(ref font) = self.start_button_font {
             let text_width = font.string_width(&self.start_button_label);

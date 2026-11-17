@@ -100,91 +100,95 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn next_token(&mut self) -> Option<Token> {
-        self.skip_ws();
-        let c = self.peek()?;
-        match c {
-            b'(' => {
-                self.pos += 1;
-                Some(Token::LParen)
-            }
-            b')' => {
-                self.pos += 1;
-                Some(Token::RParen)
-            }
-            b';' => {
-                self.pos += 1;
-                Some(Token::Semicolon)
-            }
-            b',' => {
-                self.pos += 1;
-                Some(Token::Comma)
-            }
-            b'\'' => {
-                self.pos += 1;
-                // 字符字面量，可能含转义
-                let mut ch = None;
-                if let Some(c1) = self.peek() {
+        loop {
+            self.skip_ws();
+            let c = self.peek()?;
+            match c {
+                b'(' => {
                     self.pos += 1;
-                    if c1 == b'\\' {
-                        // 转义
-                        if let Some(c2) = self.peek() {
-                            self.pos += 1;
-                            ch = Some(match c2 {
-                                b'\\' => '\\',
-                                b'\'' => '\'',
-                                b'"' => '"',
-                                b'n' => '\n',
-                                b't' => '\t',
-                                _ => c2 as char,
-                            });
+                    return Some(Token::LParen);
+                }
+                b')' => {
+                    self.pos += 1;
+                    return Some(Token::RParen);
+                }
+                b';' => {
+                    self.pos += 1;
+                    return Some(Token::Semicolon);
+                }
+                b',' => {
+                    self.pos += 1;
+                    return Some(Token::Comma);
+                }
+                b'\'' => {
+                    self.pos += 1;
+                    // 字符字面量，可能含转义
+                    let mut ch = None;
+                    if let Some(c1) = self.peek() {
+                        self.pos += 1;
+                        if c1 == b'\\' {
+                            // 转义
+                            if let Some(c2) = self.peek() {
+                                self.pos += 1;
+                                ch = Some(match c2 {
+                                    b'\\' => '\\',
+                                    b'\'' => '\'',
+                                    b'"' => '"',
+                                    b'n' => '\n',
+                                    b't' => '\t',
+                                    _ => c2 as char,
+                                });
+                            }
+                        } else {
+                            // 可能是 UTF-8 多字节字符
+                            ch = Some(self.decode_utf8(c1));
                         }
-                    } else {
-                        // 可能是 UTF-8 多字节字符
-                        ch = Some(self.decode_utf8(c1));
                     }
-                }
-                // 跳到结尾引号
-                while let Some(c2) = self.peek() {
-                    if c2 == b'\'' {
+                    // 跳到结尾引号
+                    while let Some(c2) = self.peek() {
+                        if c2 == b'\'' {
+                            self.pos += 1;
+                            break;
+                        }
                         self.pos += 1;
-                        break;
                     }
+                    return Some(Token::Char(ch.unwrap_or('\u{FFFD}')));
+                }
+                b'-' | b'0'..=b'9' => {
+                    let start = self.pos;
+                    if c == b'-' {
+                        self.pos += 1;
+                    }
+                    while let Some(d) = self.peek() {
+                        if d.is_ascii_digit() {
+                            self.pos += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    let txt = std::str::from_utf8(&self.bytes[start..self.pos]).unwrap_or("0");
+                    return txt.parse::<i32>().ok().map(Token::Int);
+                }
+                _ if c.is_ascii_alphabetic() || c == b'_' => {
+                    let start = self.pos;
+                    while let Some(a) = self.peek() {
+                        if a.is_ascii_alphanumeric() || a == b'_' {
+                            self.pos += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    return Some(Token::Word(
+                        String::from_utf8_lossy(&self.bytes[start..self.pos]).to_string(),
+                    ));
+                }
+                _ => {
+                    // 其它字节：跳过（如未知符号）后循环继续取 token
+                    // [TRANSLATION_NOTE]: 原实现递归 self.next_token()，72KB 描述文件中
+                    // 连续未知字节产生数万层递归导致栈溢出，改为循环（语义等价）
                     self.pos += 1;
+                    continue;
                 }
-                Some(Token::Char(ch.unwrap_or('\u{FFFD}')))
-            }
-            b'-' | b'0'..=b'9' => {
-                let start = self.pos;
-                if c == b'-' {
-                    self.pos += 1;
-                }
-                while let Some(d) = self.peek() {
-                    if d.is_ascii_digit() {
-                        self.pos += 1;
-                    } else {
-                        break;
-                    }
-                }
-                let txt = std::str::from_utf8(&self.bytes[start..self.pos]).unwrap_or("0");
-                txt.parse::<i32>().ok().map(Token::Int)
-            }
-            _ if c.is_ascii_alphabetic() || c == b'_' => {
-                let start = self.pos;
-                while let Some(a) = self.peek() {
-                    if a.is_ascii_alphanumeric() || a == b'_' {
-                        self.pos += 1;
-                    } else {
-                        break;
-                    }
-                }
-                Some(Token::Word(
-                    String::from_utf8_lossy(&self.bytes[start..self.pos]).to_string(),
-                ))
-            }
-            _ => {
-                // 其它字节：跳过（如未知符号）
-                self.pos += 1;
-                self.next_token()
             }
         }
     }
@@ -300,7 +304,8 @@ impl DescParser {
             }
         }
 
-        // 收集括号内顶层 token
+        // 收集括号内顶层 token。项边界除顶层 Comma 外，还包括顶层 RParen 之后
+        // （desc 文件中嵌套括号项换行处无逗号——C++ ImageFont 按括号对切分）
         let mut items: Vec<Vec<Token>> = Vec::new();
         let mut cur: Vec<Token> = Vec::new();
         let mut depth = 0;
@@ -317,11 +322,25 @@ impl DescParser {
                     }
                     depth -= 1;
                     cur.push(Token::RParen);
+                    // 嵌套括号闭合 = 一个 rect/offset 项结束，立即切分
+                    if depth == 0 && !cur.is_empty() {
+                        items.push(std::mem::take(&mut cur));
+                    }
                 }
                 Some(Token::Comma) if depth == 0 => {
                     if !cur.is_empty() {
                         items.push(std::mem::take(&mut cur));
                     }
+                }
+                // Char token（CharList 的项）与 depth==0 的裸 Int（WidthList 的项）
+                // 自身就是完整项，立即切分（desc 文件中项换行处无逗号）
+                Some(t @ Token::Char(_)) if depth == 0 => {
+                    cur.push(t);
+                    items.push(std::mem::take(&mut cur));
+                }
+                Some(t @ Token::Int(_)) if depth == 0 => {
+                    cur.push(t);
+                    items.push(std::mem::take(&mut cur));
                 }
                 Some(t) => cur.push(t),
             }
@@ -417,13 +436,37 @@ pub fn load_bitmap_font(name: &str) -> Option<*mut BitmapFont> {
         }
     }
 
-    let desc_path = format!("data/{}.txt", name);
+    // 对应 C++ 资源清单 <Font id="FONT_<X>" file="<X>.TXT">：资源 ID 带 FONT_ 前缀，
+    // 而 pak 内文件名无前缀（DATA/BRIANNETOD16.TXT / DATA/_BRIANNETOD16.PNG）。
+    // 故对 "FONT_<X>" 形式的请求剥前缀后按 pak 真实文件名加载。
+    // BLACK/OUTLINE 变体共享基础字形（粗细/描边差异由绘制参数处理，本加载器暂不区分）。
+    let a_file_stem = name
+        .strip_prefix("FONT_")
+        .unwrap_or(name)
+        .trim_end_matches("BLACK")
+        .trim_end_matches("OUTLINE");
+    let desc_path = format!("data/{}.txt", a_file_stem);
     let desc_text = crate::framework::paklib::with_pak_interface(|pak| pak.load_file(&desc_path))?;
     let desc_text = String::from_utf8_lossy(&desc_text).into_owned();
 
-    let atlas_path = format!("data/_{}.png", name);
-    let atlas = crate::todlib::reanim_loader::load_image_by_path(&atlas_path)?;
+    let atlas_path = format!("data/_{}.png", a_file_stem);
+    let atlas = crate::todlib::reanim_loader::load_image_by_path(&atlas_path);
 
+    // 对应 C++ 渲染观感：字体图集的黑底像素为不透明黑（Photoshop 导出），
+    // C++ 渲染管线中作为色键不显示；Rust 侧在加载时把纯黑像素转为透明。
+    if let Some(a_atlas) = atlas {
+        unsafe {
+            let a_img = &mut *a_atlas;
+            for a_i in (0..a_img.pixels.len()).step_by(4) {
+                if a_img.pixels[a_i] == 0
+                    && a_img.pixels[a_i + 1] == 0
+                    && a_img.pixels[a_i + 2] == 0
+                {
+                    a_img.pixels[a_i + 3] = 0;
+                }
+            }
+        }
+    }
     let desc = parse_font_desc(&desc_text);
 
     let mut glyphs = HashMap::new();
@@ -444,7 +487,7 @@ pub fn load_bitmap_font(name: &str) -> Option<*mut BitmapFont> {
 
     let font = BitmapFont {
         name: name.to_string(),
-        atlas,
+        atlas: atlas.unwrap_or_else(std::ptr::null_mut),
         ascent: desc.ascent,
         height: desc.height,
         point_size: desc.point_size,

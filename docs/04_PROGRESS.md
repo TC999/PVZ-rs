@@ -77,3 +77,22 @@
 | 2026-11-14 | **GameSelector 渲染链路修复（用户复验：三模式木牌出现）+ 本轮遗留补全**：①image_path_candidates 补 .jpg 双格式与"尾下划线"文件名变体（pak 内 SELECTORSCREEN_BG_CENTER_.PNG 命名，对应 RM 638-642 的变体语义）；②**atlas 编码冲突修复**：transform.m_image 的 atlas 编码句柄与名字表索引共用 0..1000 空间，解码误判 → 编码改 1001+index、解码只认 >=1001（对应 C++ 指针值 >1000 即真图的区分语义）；③draw_dirty_stuff 每帧清空 screen_image（对应 C++ GL Swap 后 glClear，GLInterface.cpp:1247-1250，否则 reanim 透明区透出旧帧）；④**网格数组维度错误修复**（board.rs:248-252/504-508：`[[T; 9]; 6]` 应为 `[[T; 6]; 9]`，C++ mGridSquareType[9][6] 外层为 x——此前进入棋盘即越界 panic）；⑤GameSelector 补 reanim 初始化（C++ GameSelector.cpp:294-337：selector/云×6/花×3/草叶）与 update 推进（C++ :892-919，GameSelector 界面无 EffectSystem::Update 驱动）、draw 改为 DrawRenderGroup(1)→云→(0)（C++ :559-563，移除静态 fallback）；⑥EffectSystem 在 init() 创建（对应 C++ Init 的 new EffectSystem，此前漏建致 AddReanimation 全部失效）。**新发现（未修，待指派）**：按键触发音效崩溃 tod_foley.rs:322 misaligned pointer dereference（sfx_id 指针未对齐）。诊断日志已全部移除；cargo check 0 error/750 warnings，cargo test 26+26 通过 | AI |
 | 2026-11-14 | **下一轮第一批**：①tod_foley.rs:322 sfx_id 解引用对齐修复（SOUND_* 为 i32 而 sfx_id 指针声明 *mut usize，按 i32 解引用消除 misaligned panic，TRANSLATION_NOTE 登记）；②GameSelector 补 C++ 928-940 的 TrackButton 轨道绑定（GameBtnData 加 track_name/offset 字段，构造尾按首帧动画定位按钮位置，新增 track_button_position）；③验证手段说明：PrintWindow 对 GL 窗口偶发抓到 swap 后 clear 的黑帧（同 exe 间歇出内容），黑截图≠黑画面。cargo check 0 error，cargo test 26+26 通过 | AI |
 | 2026-11-17 | **GameSelector/TitleScreen 选关界面修复（对照用户截图 3/4：左侧灰按钮+黑块+按钮错位+标题缺文字）**。①update 补 SELECTOR_OPEN→NEW_USER→SHOW_SIGN→IDLE 状态机（C++ GameSelector.cpp:808-890）：anim_open 播完隐藏 5 条 reanim 按钮轨道、按钮转 widget 绘制、播 anim_sign、无档案弹 DoCreateUserDialog、HasTrophy 补 AddTrophySparkle、mNeedsMessageOnGameSelector 弹完成提示；②构造补按钮初始态（C++ :77-281）：Adventure/Minigame/Puzzle/Survival/Options/Help/Quit/Zombatar/ChangeUser mBtnNoDraw=true + Options/Help/Quit 的 Resize 尺寸与 ButtonOffset 修正——修掉动画期间 widget 按钮提前画出（截图左侧灰按钮）；③update 末尾补每帧 TrackButton（C++ :928-942）+ woodsign2/3 悬停 image override + 云/手 reanim 更新；④draw 移除自创 update_button_positions（硬编码坐标是截图错位根因），按钮位置全部由 TrackButton 从 reanim 轨道取，滑动经 offset 平移（对应 C++ mX/mY）；⑤draw_overlay_internal 按 C++ DrawOverlay 606-709 重写：关卡数字坐标取自 SelectorScreen_BG_Right 轨道 + cel 索引修正（C++ theCelCol=stage/sub 0 基）+ sub==10 双 cel、浇水气泡、僵尸手（裁剪 BOARD_HEIGHT-40）、草叶、花×3、奖杯（坐标取自 BG_Left 轨道）、ToolTip 绘制；⑥clicked_adventure 补 C++ 1136-1179 全逻辑（试玩重玩确认/删存档/停音乐/僵尸手动画+rock 轨道忽略裁剪/FOLEY_DIRT_RISE）；⑦mouse_up_btn 分支对齐 C++ ButtonDepress 1224-1260（Quit→ConfirmQuit、Options→DoNewOptions(true)、ChangeUser→DoUserDialog、Store→ShowStoreScreen+GoToTreeNow、Almanac→DoAlmanacDialog+恢复音乐、ZenGarden→SetupForZenTutorial）；⑧starting_game 倒计时对齐 C++ 768-806（KillGameSelector/Intro 模式/MagicTaco 商店开场/禅教程/EVILLAUGH）；⑨TitleScreen：start_button_x 改按 IMAGE_LOADBAR_DIRT 宽定位（C++ 307）、按钮文字改居中于按钮宽度+悬停 mOverColor 变色（HyperlinkWidget.cpp:43-64）+mouse_move 悬停检测。[TRANSLATION_NOTE]: SOUND_EVILLAUGH 资源未注册以 SoundLosemusic 近似；StoreScreen 无 WaitForResult。cargo check 0 error，cargo fmt 通过，cargo test 26+26 通过。**未运行验证（无 main.pak 复验环境），待用户截图复验** | AI |
+
+## 2026-11-17 字体系统三项修复 + 选关界面主体修复（用户截图 3/4 反馈轮）
+
+**运行验证通过（金色 [CLICK_TO_START] 正常显示、选关木牌正常、灰按钮组消失）**
+
+### 字体系统修复（bitmap_font.rs，三 bug 均为截图 3 [CLICK_TO_START] 不显示的根因链）
+1. `next_token` 递归解析 72KB 描述文件栈溢出 → 改循环实现
+2. `parse_define` 项切分丢项：换行处无逗号导致 CharList/RectList/WidthList 只收到约 1/3 项 → 项边界不再依赖逗号
+3. 图集黑底不透明像素覆盖相邻字形 → 加载时对纯黑像素做色键透明
+
+### TitleScreen（title_screen.rs）
+- `draw_start_button_text` 接入全局位图字体 FONT_BRIANNETOD16（此前自建 Font 对象字形缺失）
+- start_button_x 按 dirt 图宽定位；悬停 mOverColor 变色
+
+### GameSelector（game_selector.rs，见 f6aa35f 提交）
+- 构造按钮初始态/SELECTOR_OPEN 状态机/每帧 TrackButton/DrawOverlay 重写/clicked_adventure/mouse_up_btn 分支
+
+### 遗留（下一轮）
+- 选关屏 BG_Left/BG_Right 轨道位置偏移出屏（右侧石碑区黑块）——reanim 定义加载层问题，与本次修复独立
