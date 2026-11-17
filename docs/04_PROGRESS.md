@@ -96,3 +96,22 @@
 
 ### 遗留（下一轮）
 - 选关屏 BG_Left/BG_Right 轨道位置偏移出屏（右侧石碑区黑块）——reanim 定义加载层问题，与本次修复独立
+
+## 2026-11-18 选关屏 BG_Left/BG_Right 黑块修复（遗留项）
+
+**运行验证通过：石碑、花瓶、房子、木牌全部正常显示，黑块消失**
+
+根因链（两项独立修复）：
+1. reanim_loader.rs load_reanim_image：pak 中部分 reanim 图为 JPG（无 alpha），
+   透明信息存于同名尾下划线 PNG 的蓝通道（如 SelectorScreen_BG_Right_）。
+   C++ ImageLib::GetImage 自动合成（ImageLib.cpp:1314-1346 ComposeAlpha），
+   Rust 缺此合成 → JPG 黑色背景区不透明 → BG 轨道整块发黑。修复：主图加载后
+   按命中路径查找 <stem>_.png，将 alpha 图蓝通道写入主图 alpha。
+2. reanimator.rs draw_render_group：Rust blt_matrix 是纹理四角正向映射，
+   把 pivot 居中矩阵的平移（+365,+280）当作真实位移 → BG_Right 画到 (436,321)
+   大部分出屏。C++ ReanimBltMatrix（Reanimator.cpp:609-612）在快速路径中把
+   pivot 平移减回（m02 - scale*srcW/2），图像左上对齐 transform 位置。
+   修复：无 skew、正 scale、color==White 时按 C++ 快速路径直绘
+   （DrawImage/DrawImage 拉伸），否则保留矩阵路径。
+
+注：石碑上 4 个模式按钮的显示（anim_open 完成后按钮轨道/木牌按钮态）待下轮核验。

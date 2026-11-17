@@ -427,6 +427,7 @@ impl Reanimation {
                 // 对应 C++ SexyMatrix3Translation(aMatrix, mShakeX + g->mTransX, mShakeY + g->mTransY)
                 a_matrix.m[0][2] += ti.m_shake_x + g.trans_x as f32;
                 a_matrix.m[1][2] += ti.m_shake_y + g.trans_y as f32;
+
                 // 应用 m_override_scale（对应 C++ OverrideScale 语义；m_overlay_matrix 已含或单独叠加）
                 let a_scale_x = self.m_override_scale_x;
                 let a_scale_y = self.m_override_scale_y;
@@ -521,13 +522,46 @@ impl Reanimation {
                         self.m_filter_effect,
                     );
                     g.set_color(&a_color);
-                    g.draw_image_matrix_src(
-                        unsafe { &*a_effect_image },
-                        &a_matrix,
-                        &a_src_rect,
-                        0.0,
-                        0.0,
-                    );
+                    // 对应 C++ ReanimBltMatrix（Reanimator.cpp:601-633）快速路径：
+                    // pivot 居中矩阵的平移在 blt 时被减回（m02 - scale*srcW/2），
+                    // 图像左上角对齐到 transform 位置。无 skew 且正 scale 时直绘，
+                    // 否则保留矩阵路径（PvzpBltMatrix）。
+                    let a_mtx = &a_matrix;
+                    let a_no_skew = a_mtx.m[0][1].abs() < 0.001 && a_mtx.m[1][0].abs() < 0.001;
+                    let a_pos_scale = a_mtx.m[0][0] > 0.0 && a_mtx.m[1][1] > 0.0;
+                    if a_no_skew && a_pos_scale && a_color == crate::framework::color::Color::WHITE
+                    {
+                        let a_scale_x = a_mtx.m[0][0];
+                        let a_scale_y = a_mtx.m[1][1];
+                        let a_pos_x = (a_mtx.m[0][2] - a_scale_x * a_src_rect.width as f32 * 0.5)
+                            .round() as i32;
+                        let a_pos_y = (a_mtx.m[1][2] - a_scale_y * a_src_rect.height as f32 * 0.5)
+                            .round() as i32;
+                        if (a_scale_x - 1.0).abs() < 0.001 && (a_scale_y - 1.0).abs() < 0.001 {
+                            g.draw_image_src(
+                                unsafe { &*a_effect_image },
+                                a_pos_x,
+                                a_pos_y,
+                                &a_src_rect,
+                            );
+                        } else {
+                            let a_dst = crate::framework::rect::Rect::new(
+                                a_pos_x,
+                                a_pos_y,
+                                (a_scale_x * a_src_rect.width as f32).round() as i32,
+                                (a_scale_y * a_src_rect.height as f32).round() as i32,
+                            );
+                            g.draw_image_stretch(unsafe { &*a_effect_image }, &a_dst, &a_src_rect);
+                        }
+                    } else {
+                        g.draw_image_matrix_src(
+                            unsafe { &*a_effect_image },
+                            &a_matrix,
+                            &a_src_rect,
+                            0.0,
+                            0.0,
+                        );
+                    }
                     if self.m_enable_extra_additive_draw && !ti.m_ignore_extra_additive_color {
                         let a_old_mode = g.get_draw_mode();
                         g.set_draw_mode(2); // DRAWMODE_ADDITIVE

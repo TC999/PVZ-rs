@@ -536,7 +536,31 @@ fn load_reanim_image(name: &str) -> Option<Box<Image>> {
             Some(b) => b,
             None => continue,
         };
-        if let Some(img) = decode_png_bytes(&bytes) {
+        if let Some(mut img) = decode_png_bytes(&bytes) {
+            // 对应 C++ ImageLib::GetImage 的 alpha 图合成（ImageLib.cpp:1314-1346）：
+            // pak 中部分 reanim 图为 JPG（无 alpha），其透明信息存于同名尾下划线 PNG
+            // 的蓝通道（如 SelectorScreen_BG_Right_）；ComposeAlpha 把该蓝通道写入主图
+            // 的 alpha。缺此合成时 JPG 的黑色背景区不透明 → 背景轨道整块发黑。
+            // alpha 路径基于主图命中路径（去扩展名 + "_"），扩展名只试 png。
+            let a_stem = match path.rfind('.') {
+                Some(d) => &path[..d],
+                None => path.as_str(),
+            };
+            let a_alpha_bytes =
+                with_pak_interface(|pak| pak.load_file(&format!("{}_.png", a_stem)));
+            if let Some(a_alpha) = a_alpha_bytes {
+                if let Ok(a_alpha_img) = image::load_from_memory(&a_alpha) {
+                    let a_alpha_rgba = a_alpha_img.to_rgba8();
+                    if a_alpha_rgba.width() == img.width as u32
+                        && a_alpha_rgba.height() == img.height as u32
+                    {
+                        let a_alpha_pixels = a_alpha_rgba.into_raw();
+                        for a_i in (0..img.pixels.len()).step_by(4) {
+                            img.pixels[a_i + 3] = a_alpha_pixels[a_i + 2]; // 蓝通道 → alpha
+                        }
+                    }
+                }
+            }
             return Some(img);
         }
     }
