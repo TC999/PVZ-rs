@@ -3609,6 +3609,8 @@ impl LawnApp {
             return;
         }
         self.m_loading_thread_started = true;
+        // C++ 2381: mYieldMainThread = true（加载期间主线程让步，限 CPU 占用）
+        self.base.m_yield_main_thread = true;
         eprintln!("[LawnApp] 开始加载资源（同步模式）");
 
         // 加载 LoaderBar 资源组（对应 C++ LoadingThreadProc 的 PvzpLoadResources("LoaderBar")，LawnApp.cpp:1699）

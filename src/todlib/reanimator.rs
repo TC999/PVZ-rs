@@ -1273,7 +1273,7 @@ impl Reanimation {
     /// 获取轨道速度（对应 C++ GetTrackVelocity，Reanimator.cpp:1229：
     /// 用 GetFrameTime 的 before/after 整数帧 x 位移 × SECONDS_PER_UPDATE × mAnimRate）
     pub fn get_track_velocity(&self, track_name: &str) -> f32 {
-        const SECONDS_PER_UPDATE: f32 = 0.02; // C++ SECONDS_PER_UPDATE
+        const SECONDS_PER_UPDATE: f32 = 0.01; // C++ SECONDS_PER_UPDATE（Reanimator.h:51）
         let track_index = self.find_track_index(track_name);
         if track_index < 0 {
             return 0.0;

@@ -62,6 +62,12 @@ pub const DEMO_VIDEO_DATA: i32 = 23;
 pub const DEMO_KEY_TEXT: i32 = 24;
 pub const DEMO_IDLE: i32 = 31;
 
+// ---- 对应 C++ SexyAppBase.h:138-144 的匿名枚举（UpdateApp 状态机）----
+pub const UPDATESTATE_MESSAGES: i32 = 0;
+pub const UPDATESTATE_PROCESS_1: i32 = 1;
+pub const UPDATESTATE_PROCESS_2: i32 = 2;
+pub const UPDATESTATE_PROCESS_DONE: i32 = 3;
+
 /// 应用基类
 pub static mut G_SEXY_APP: Option<*mut SexyAppBase> = None;
 
@@ -186,7 +192,20 @@ pub struct SexyAppBase {
     pub fps_count: i32,
     pub fps_time: i32,
     pub show_fps: bool,
+    /// 目标逻辑帧间隔 ms（对应 C++ mFrameTime，SexyAppBase.cpp:239 默认 10 → 逻辑 100 FPS）
     pub frame_time: i32,
+
+    // ---- 主循环节流（对应 C++ SexyAppBase.h:230-251） ----
+    /// 自上次绘制以来的逻辑更新数（对应 C++ mNonDrawCount；保证至少每 10 次更新重绘一次）
+    pub m_non_draw_count: i32,
+    /// 待推进逻辑帧的小数累积器（对应 C++ mPendingUpdatesAcc）
+    pub m_pending_updates_acc: f64,
+    /// 空闲睡眠次数统计（对应 C++ mSleepCount）
+    pub m_sleep_count: u32,
+    /// 上次绘制是否为空帧（对应 C++ mLastDrawWasEmpty）
+    pub m_last_draw_was_empty: bool,
+    /// 主线程让步标志（对应 C++ mYieldMainThread；Rust 为同步加载，仅在启动加载线程时置位）
+    pub m_yield_main_thread: bool,
 
     // 子系统（C++ 构造函数中创建这些对象）
     pub widget_manager: Option<*mut WidgetManager>,
@@ -663,6 +682,11 @@ impl SexyAppBase {
             fps_time: 0,
             show_fps: false,
             frame_time: 10,
+            m_non_draw_count: 0,
+            m_pending_updates_acc: 0.0,
+            m_sleep_count: 0,
+            m_last_draw_was_empty: false,
+            m_yield_main_thread: false,
             widget_manager: Some(Box::into_raw(Box::new(wm))),
             gl_interface: None,
             sound_manager: None,
@@ -939,33 +963,171 @@ impl SexyAppBase {
     }
 
     /// 主循环单步的实际执行体（RUST-ONLY：由 update_app 包装调用）
+    ///
+    /// 对应 C++ SexyAppBase::UpdateAppStep（SexyAppBase.cpp:2895-2954）的两阶段状态机：
+    /// MESSAGES 阶段（ProcessDemo + ProcessDeferredMessages）与 PROCESS 阶段（Process）。Rust
+    /// 侧 process_deferred_messages 一次性排空事件队列（C++ 每步一个事件、由 UpdateApp
+    /// 循环反复驱动直到队列空），合并等价——队列空后直接进入 PROCESS 阶段。
+    /// PROCESS 阶段的节流/睡眠在 process() 内实现。
     fn update_app_step_inner(&mut self) -> bool {
         // 0. 回放 demo 命令流
-        // 对应 C++ UpdateApp 中 UPDATESTATE_MESSAGES 阶段的 ProcessDemo()（SexyAppBase.cpp:2912），
-        // 位置在 ProcessDeferredMessages 之前
+        // 对应 C++ UpdateAppStep 中 UPDATESTATE_MESSAGES 阶段的 ProcessDemo()（SexyAppBase.cpp:2912）
         self.process_demo();
 
         if self.m_shutdown_flag {
             return false;
         }
 
-        // 1. 处理 SDL 事件（对应 C++ ProcessDeferredMessages）
-        if !self.process_deferred_messages(true) {
-            return false;
-        }
+        // 1. 处理 SDL 事件（对应 C++ ProcessDeferredMessages，Input.cpp:528-758；
+        //    返回值在 C++ 为"队列中是否还有事件"——Rust 已一次性排空，无需据此再循环）
+        let _has_more_events = self.process_deferred_messages(true);
 
         if self.m_shutdown_flag {
             return false;
         }
 
-        // 2. 更新帧（对应 C++ Process → DoUpdateFrames → UpdateFrames）
-        self.do_update_frames();
+        // 2. PROCESS 阶段（对应 C++ SexyAppBase::Process，SexyAppBase.cpp:2572-2837：
+        //    时间闸门决定是否推进逻辑帧 + 空闲睡眠；绘制在其中有挂起时经 DrawDirtyStuff →
+        //    Redraw → SwapBuffers 完成，故 Rust 的 swap_buffers 挂在 draw_dirty_stuff
+        //    成功路径尾部，避免每轮 swap 被 vsync 阻塞把逻辑帧率锁到刷新率）
+        let _did_update = self.process(true);
 
-        // 3. 绘制脏区域（对应 C++ DrawDirtyStuff）
-        self.draw_dirty_stuff();
+        true
+    }
 
-        // 4. 交换缓冲区（对应 C++ Redraw → GLInterface 的 SwapBuffers）
-        self.swap_buffers();
+    /// 累积帧时间（对应 C++ SexyAppBase::UpdateFTimeAcc，SexyAppBase.cpp:2555-2570）
+    /// 每轮把真实流逝时间累进 update_f_time_acc（上限 200ms，掉帧补跑的燃料上限）。
+    fn update_f_time_acc(&mut self) {
+        let a_cur_time = unsafe { sdl2::sys::SDL_GetTicks() };
+        if self.last_time_check != 0 {
+            let a_delta_time = a_cur_time.saturating_sub(self.last_time_check) as f64;
+            self.update_f_time_acc = (self.update_f_time_acc + a_delta_time).min(200.0);
+        }
+        self.last_time_check = a_cur_time;
+    }
+
+    /// PROCESS 阶段（对应 C++ SexyAppBase::Process(bool allowSleep)，
+    /// SexyAppBase.cpp:2572-2837）：按 mFrameTime 节流推进逻辑帧，空闲时睡眠。
+    ///
+    /// [TRANSLATION_NOTE]: C++ 的 mVSyncUpdates 默认 false（SexyAppBase.cpp:324），本实现
+    /// 不含 vsync 节流分支（Rust 侧交换间隔固定 1 仅为防撕裂，不参与节流）；demo 快进
+    /// 分支由 do_update_frames 的既有 demo 处理覆盖。mYieldMainThread 置位（启动加载
+    /// 线程时）的让步睡眠保留。
+    fn process(&mut self, allow_sleep: bool) -> bool {
+        if self.m_shutdown_flag {
+            return false;
+        }
+
+        // C++: aFrameFTime = mFrameTime / mUpdateMultiplier（非 vsync 分支，2589）
+        let a_frame_f_time = self.frame_time as f64 / self.update_multiplier;
+
+        // 状态机复位（对应 C++ UpdateAppStep:2903-2904 DONE→MESSAGES；Rust 事件阶段
+        // 已在本步开始时完成，此处进入 PROCESS_1）
+        if self.update_app_state == UPDATESTATE_PROCESS_DONE {
+            self.update_app_state = UPDATESTATE_PROCESS_1;
+        }
+
+        // C++ 2665: if ((!mPaused) && (mUpdateMultiplier > 0))
+        if self.paused && self.update_multiplier <= 0.0 {
+            return false;
+        }
+
+        let a_start_time = unsafe { sdl2::sys::SDL_GetTicks() };
+        let mut a_cum_sleep_time = 0u32;
+
+        // C++ 2673-2674: 非 vsync 时在 PROCESS 前累积帧时间
+        self.update_f_time_acc();
+
+        let mut did_update = false;
+
+        // C++ 2682-2732: UPDATESTATE_PROCESS_1 —— 时间闸门
+        if self.update_app_state == UPDATESTATE_PROCESS_1 {
+            // C++ 2684: mNonDrawCount < ceil(10 * mUpdateMultiplier) 才允许更新，
+            // 保证屏幕至少每 10 次逻辑更新重绘一次（"game time" 下 10 次/秒）
+            let a_max_non_draw = (10.0 * self.update_multiplier).ceil() as i32;
+            if self.m_non_draw_count < a_max_non_draw || !self.m_loaded {
+                // C++ 2693: 闸门 —— 累积时间不足一个帧间隔则不更新
+                if self.update_f_time_acc >= a_frame_f_time {
+                    // C++ 2702-2722 的 mVSyncBroken 检测：仅 vsync 节流分支需要，Rust 无
+                    // C++ 2724: DoUpdateFrames()
+                    let _had_real_update = self.do_update_frames();
+                    // C++ 2726-2728: hadRealUpdate → PROCESS_2 + mHasPendingDraw = true
+                    self.update_app_state = UPDATESTATE_PROCESS_2;
+                    self.has_pending_draw = true;
+                    did_update = true;
+                }
+            }
+        }
+
+        // C++ 2733-2775: UPDATESTATE_PROCESS_2 —— 补跑多余逻辑帧 + 扣减累积时间
+        if self.update_app_state == UPDATESTATE_PROCESS_2 {
+            self.update_app_state = UPDATESTATE_PROCESS_DONE;
+
+            // C++ 2737-2756（非 vsync 时 anUpdatesPerUpdateF = 1.0，2590）:
+            // mPendingUpdatesAcc += 1.0; -= 1.0 → 净零，循环体不执行
+            let an_updates_per_update_f = 1.0;
+            self.m_pending_updates_acc += an_updates_per_update_f;
+            self.m_pending_updates_acc -= 1.0;
+            self.process_safe_delete_list();
+            while self.m_pending_updates_acc >= 1.0 {
+                self.process_demo();
+                self.m_non_draw_count += 1;
+                let has_real_update = self.do_update_frames();
+                if !has_real_update {
+                    break;
+                }
+                self.process_safe_delete_list();
+                self.m_pending_updates_acc -= 1.0;
+            }
+
+            // C++ 2761-2769: 扣减一个帧间隔（额外减 0.2ms 的注释见 C++：
+            // 刷新率有截断小数，宁可多扣使时序趋向下次重绘之后）
+            self.update_f_time_acc = (self.update_f_time_acc - a_frame_f_time - 0.2).max(0.0);
+
+            did_update = true;
+        }
+
+        // C++ 2777-2809: 未更新 → 空闲；有挂起绘制则绘制，否则睡到下一帧
+        if !did_update {
+            self.update_app_state = UPDATESTATE_PROCESS_DONE;
+            self.m_non_draw_count = 0;
+
+            if self.has_pending_draw {
+                self.draw_dirty_stuff();
+                self.has_pending_draw = false;
+                self.m_last_draw_was_empty = false;
+            } else {
+                // C++ 2790-2807: 计算距下一帧的剩余时间并 nanosleep
+                let a_time_to_next_frame = (a_frame_f_time - self.update_f_time_acc) as i64;
+                if a_time_to_next_frame > 0 {
+                    if !allow_sleep {
+                        return false;
+                    }
+                    self.m_sleep_count += 1;
+                    std::thread::sleep(std::time::Duration::from_millis(
+                        a_time_to_next_frame as u64,
+                    ));
+                    a_cum_sleep_time += a_time_to_next_frame as u32;
+                }
+            }
+        }
+
+        // C++ 2811-2832: mYieldMainThread —— 加载期间主线程让步（限 CPU 占用 1/3）
+        if self.m_yield_main_thread {
+            let an_end_time = unsafe { sdl2::sys::SDL_GetTicks() };
+            let an_elapsed_time =
+                (an_end_time.saturating_sub(a_start_time)) as i64 - a_cum_sleep_time as i64;
+            let a_loading_yield_sleep_time =
+                ((an_elapsed_time * 2) - a_cum_sleep_time as i64).min(250);
+            if a_loading_yield_sleep_time >= 0 {
+                if !allow_sleep {
+                    return false;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(
+                    a_loading_yield_sleep_time as u64,
+                ));
+            }
+        }
 
         true
     }
@@ -993,7 +1155,8 @@ impl SexyAppBase {
 
         if self.m_loading_thread_completed && !self.m_loaded {
             self.m_loaded = true;
-            // C++: mYieldMainThread = false; LoadingThreadCompleted();
+            // C++ 1716: mYieldMainThread = false; LoadingThreadCompleted();
+            self.m_yield_main_thread = false;
 
             if self.m_recording_demo_buffer {
                 self.write_demo_timing_block();
@@ -1248,6 +1411,13 @@ impl SexyAppBase {
         }
 
         self.m_draw_count += 1;
+        // 对应 C++ DrawDirtyStuff 成功绘制后的标志维护（SexyAppBase.cpp:1889）：
+        // mHasPendingDraw = false（mLastDrawWasEmpty 保持 false）
+        self.has_pending_draw = false;
+        self.m_last_draw_was_empty = false;
+        // 对应 C++ DrawDirtyStuff → Redraw(nullptr)（SexyAppBase.cpp:1868）→
+        // GLInterface::SwapBuffers / SDL_GL_SwapWindow：仅在实际绘制后交换
+        self.swap_buffers();
         true
     }
 

@@ -153,3 +153,41 @@
 不绘制（mName 为空），非缺口。
 
 遗留：欢迎木牌玩家名需建档后复验；Zombatar/成就 widget 接入仍未完成（added_to_manager 占位）。
+
+## 2026-11-19 主循环节流修复：运行速度比原版慢的根因（用户反馈轮）
+
+**运行验证通过：启动→logo 淡出→「点击开始！」出现全程约 5 秒（修复前 logo 阶段停 40s 不推进）；
+CPU 占用从空转 ~100% 降至 13-18%（C++ 同款节流特征）；选关界面云动画持续推进**
+
+根因：主循环无时间闸门。C++ 的速度控制链是 Process()（SexyAppBase.cpp:2572-2837）：
+mFrameTime=10（:239，逻辑 100 FPS）→ UpdateFTimeAcc 累积真实耗时（:2555-2570，上限 200ms）→
+闸门 mUpdateFTimeAcc >= aFrameFTime 才 DoUpdateFrames（:2693）→ 扣减（:2769）→
+空闲 nanosleep 精确睡到下一帧（:2790-2807）→ mNonDrawCount 强制至少 10 次/秒重绘（:2684）。
+mVSyncUpdates 默认 false（:324），vsync 不参与节流。
+
+Rust 此前 update_app_step_inner 每轮固定推 1 个逻辑帧，唯一限速是 swap_buffers 的
+gl_set_swap_interval(1)（vsync）→ 逻辑帧率被锁到显示器刷新率（60Hz 时游戏整体慢 40%：
+全游戏逻辑按 SECONDS_PER_UPDATE=0.01 即 10ms/帧计速，1 秒只跑 0.6 秒游戏当量）；
+frame_time: 10 字段只初始化从未被读取。
+
+修复（sexy_app_base.rs，对齐 C++ Process 全部节流逻辑）：
+1. 补 UPDATESTATE_* 四常量（SexyAppBase.h:138-144）与 m_non_draw_count /
+   m_pending_updates_acc / m_sleep_count / m_last_draw_was_empty / m_yield_main_thread 字段
+   （SexyAppBase.h:230-251 缺失部分）
+2. update_app_step_inner 改为 C++ UpdateAppStep 两阶段等价结构：事件排空 → process(true)
+3. 新增 process()：UpdateFTimeAcc 累积 + 时间闸门 + PROCESS_2 补跑循环 + 扣减(含 -0.2ms) +
+   空闲 std::thread::sleep 到下一帧 + mYieldMainThread 让步睡眠
+4. swap_buffers 从每轮调用移到 draw_dirty_stuff 成功路径尾部（对应 C++ DrawDirtyStuff →
+   Redraw → SwapBuffers 仅真绘制时交换；每轮 swap 会把循环锁死在 vsync 刷新率）
+5. draw_dirty_stuff 尾部维护 has_pending_draw/m_last_draw_was_empty（C++ :1889-1899）
+6. start_loading_thread 置 m_yield_main_thread=true（C++ :2381），加载完成清除（:1716）
+
+附带修复：reanimator.rs get_track_velocity 的局部 SECONDS_PER_UPDATE 0.02 → 0.01
+（C++ Reanimator.h:51，此为对照截图轮遗留的独立翻译偏差）。
+
+验证：cargo check 0 error；cargo fmt 通过；cargo test 26+26 通过；clippy error 总数
+基线(e93efb1)=124 / 修复后=124，无新增。运行实测：启动到「点击开始！」约 5 秒、
+CPU 13-18%、选关界面云动画推进正常。
+
+遗留：无 vsync 节流分支与 mVSyncBroken 检测未翻译（C++ :2700-2722 仅 vsync 分支需要，
+mVSyncUpdates 默认 false 不会走到）；mStepMode 单步调试分支未翻译（仅 demo 调试用）。
