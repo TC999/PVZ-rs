@@ -665,10 +665,20 @@ impl GameSelectorImpl {
 
     fn ensure_fonts(&mut self) {
         if !self.fonts_init {
-            let mut f = Font::new("Briannetod", 16);
-            f.ascent = 13;
-            f.font_height = 16;
-            self.briannetod16 = Some(Box::new(f));
+            // C++ 601: PvzpDrawStringMatrix(g, Sexy::FONT_BRIANNETOD16, ...) —— 全局位图字体
+            // （pak 内 data/BrianneTod16.txt 含 CJK 字形，欢迎木牌玩家名可直接渲染中文）
+            let a_font_ptr =
+                crate::framework::graphics::bitmap_font::font_global("FONT_BRIANNETOD16");
+            if !a_font_ptr.is_null() {
+                let a_font: Font = unsafe { std::ptr::read(a_font_ptr) };
+                self.briannetod16 = Some(Box::new(a_font));
+            } else {
+                // [TRANSLATION_NOTE]: 字体资源不可用时退回占位渲染（无位图字形，画矩形块）
+                let mut f = Font::new("Briannetod", 16);
+                f.ascent = 13;
+                f.font_height = 16;
+                self.briannetod16 = Some(Box::new(f));
+            }
             self.fonts_init = true;
         }
     }
@@ -1290,6 +1300,14 @@ impl WidgetImpl for GameSelectorImpl {
     fn draw(&mut self, _widget: &Widget, g: &mut Graphics) {
         let app = unsafe { &*self.app };
         g.set_linear_blend(true);
+
+        // 对应 C++ NewLawnButton 构造（GameButton.cpp:403-420）后由 ResourceManager
+        // 已加载的图像指针直接赋给 mButtonImage/mOverImage/mDownImage；Rust 侧按钮图
+        // 按名惰性解析（GameBtnData::resolve_images），此处每帧确保缓存就绪
+        // （sync_buttons 切换 Adventure 图后缓存已清空，重解析命中新名字）。
+        for btn in self.buttons.iter_mut() {
+            btn.resolve_images(app);
+        }
 
         // 对应 C++ GameSelector::Draw（GameSelector.cpp:553-563）：
         // 先画 BG 渲染组（背景轨道），再画云×6，再画 NORMAL 组（含木牌按钮轨道）

@@ -580,7 +580,7 @@ impl WidgetImpl for TitleScreenImpl {
             self.need_to_init = false;
 
             // C++: mStartButton->mLabel = PvzpStringTranslate("[LOADING]"); SetFont(FONT_BRIANNETOD16);
-            self.start_button_label = "[LOADING]".to_string();
+            self.start_button_label = crate::todlib::tod_common::tod_string_translate("[LOADING]");
             self.start_button_font = None;
             // C++ 307: Resize((mWidth - IMAGE_LOADBAR_DIRT->mWidth)/2, 650, mTotalBarWidth, 50)
             let a_dirt_width = if let Some(rm_ptr) = app.base.resource_manager {
@@ -653,7 +653,8 @@ impl WidgetImpl for TitleScreenImpl {
             }
         } else if self.cur_bar_width > self.total_bar_width {
             // C++: mStartButton->mLabel = PvzpStringTranslate("[CLICK_TO_START]");
-            self.start_button_label = "[CLICK_TO_START]".to_string();
+            self.start_button_label =
+                crate::todlib::tod_common::tod_string_translate("[CLICK_TO_START]");
             self.cur_bar_width = self.total_bar_width;
         }
 

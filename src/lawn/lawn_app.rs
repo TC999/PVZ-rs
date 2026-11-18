@@ -3636,8 +3636,12 @@ impl LawnApp {
         self.m_loading_thread_tasks_total += 3500 * 2;
         eprintln!("[LawnApp] LoaderBar 资源加载完成，继续加载更多资源");
 
+        // 对应 C++ LoadingThreadProc（LawnApp.cpp:1702-1703）：
+        // PvzpStringListLoad("Properties/LawnStrings.txt") + PvzpStringListReadFile("Properties/ZombatarTOS.txt")
+        crate::todlib::tod_common::pvzp_string_list_load("properties/LawnStrings.txt");
+        crate::todlib::tod_common::pvzp_string_list_read_file("properties/ZombatarTOS.txt");
+
         // 对应 C++ LoadingThreadProc（LawnApp.cpp:1706-1707）：加载属性配置
-        // （C++ 中 PvzpStringListLoad/ReadFile 处理 LawnStrings/ZombatarTOS，Rust 字符串表未接入，跳过）
         self.load_properties("properties/default.xml", false, false);
         self.load_properties("properties/Layout.xml", false, false);
 

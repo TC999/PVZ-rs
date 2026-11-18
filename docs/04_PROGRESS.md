@@ -6,7 +6,7 @@
 
 ## 当前阶段与焦点
 
-- **阶段：** 引擎主体编译通过；L1–L6 部分验证通过（GameSelector 真实画面渲染成功——atlas 修复后 BG_Center/木牌/云全部可见，截图确认）。
+- **阶段：** 引擎主体编译通过；L1–L6 部分验证通过（标题屏「点击开始！」+ GameSelector 全部按钮/木牌/成就基座渲染成功，截图对照原版确认）。
 - **当前焦点：** ①GameSelector 布局缺口（部件位置/FrameBasePose/滑动动画，画面元素位置与原版有偏差）；②新发现崩溃：按键触发 foley 播放时 tod_foley.rs:322 指针未对齐（详见更新记录）。**未验证项：游戏内玩法回放一致性。**
 
 ## 优先级（建议）
@@ -115,3 +115,41 @@
    （DrawImage/DrawImage 拉伸），否则保留矩阵路径。
 
 注：石碑上 4 个模式按钮的显示（anim_open 完成后按钮轨道/木牌按钮态）待下轮核验。
+
+## 2026-11-19 标题屏翻译 + 选关界面按钮全量修复（对照用户截图 1/2 复验轮）
+
+**运行验证通过（cargo build + 运行截图）：标题屏金色「点击开始！」、选关界面「开始冒险模式/迷你游戏/益智模式/生存模式」四按钮、左下「成就」基座、右下「选项/帮助/退出」全部与原版一致**
+
+根因链（四项独立修复）：
+1. 字符串表未接入（对照截图 3 的 `[CLICK TO START]` 原始键显示）。C++ LoadingThreadProc
+   （LawnApp.cpp:1702-1703）调用 PvzpStringListLoad("Properties/LawnStrings.txt")，
+   Rust 此前明确跳过（lawn_app.rs 原 3640 注释）。修复：tod_common.rs 补
+   PvzpStringFile.cpp:66-159 全链（ReadName/ReadValue/ReadItems/ReadFile/Load，
+   含 Buffer::ToUTF8String 的 BOM 分流：UTF-8 剥离 / UTF-16LE|BE 转码 /
+   严格 UTF-8 校验 / Win-1252 兜底，WIN1252_TO_UNICODE 32 项表照抄）；
+   start_loading_thread 接线两文件装载；TitleScreen 两处 label 过 tod_string_translate
+   （[CLICK_TO_START]→点击开始！、[LOADING]→读取中…）。
+2. GameSelector 按钮图从未解析：GameBtnData::resolve_images 定义于 game_selector.rs:132
+   但**无任何调用点**（缓存恒 null → draw_button_at 直接 return）→ 全部按钮消失。
+   修复：draw 开头逐按钮 resolve_images（对应 C++ 构造时图像指针直接赋值的惰性版）。
+3. SetDefaults 解析断裂（reanim 组 4 个按钮图加载失败）：`<SetDefaults .../>` 是
+   自闭合标签 → TYPE_ELEMENT 主循环 → parse_resource **无 SetDefaults 分支**（id 缺失
+   直接 return）→ 其后 reanim 组条目（SELECTORSCREEN_ADVENTURE_BUTTON 等 116 项）
+   注册键/路径缺前缀。修复：parse_resource 头部补 SetDefaults 分支
+   （对应 C++ ParseSetDefaults，ResourceManager.cpp:450-462）。
+4. anim_open 轨道在本 pak 不存在（SelectorScreen.reanim 无该 track）：C++
+   FindTrackIndex 找不到时 PvzpTrace 后**返回 0**（Reanimator.cpp:950-958），
+   PlayReanim("anim_open") 实际取 track 0（anim_sign）帧区间并照常推进 loop_count →
+   OPEN 状态机正常转入 IDLE；Rust find_track_index 返回 -1 导致帧区间退化。
+   修复：get_frames_for_layer 按 C++ 行为回退 track 0（TRANSLATION_NOTE 登记）。
+
+附带：game_selector.rs ensure_fonts 改用 font_global("FONT_BRIANNETOD16") 全局位图字体
+（pak 内 data/BrianneTod16.txt 含 2822 个 CJK 字形，欢迎木牌玩家名可渲染中文）；
+此前为无字形占位 Font。
+
+验证：cargo check 0 error；cargo fmt 通过；cargo test 26+26 通过；clippy error 总数
+修改前后均为 124（全部为存量 not_unsafe_ptr_arg_deref 等，无新增）。运行截图对照
+用户截图 1/2：标题屏与选关界面元素齐全。欢迎木牌玩家名空缺为无玩家档案时 C++ 同样
+不绘制（mName 为空），非缺口。
+
+遗留：欢迎木牌玩家名需建档后复验；Zombatar/成就 widget 接入仍未完成（added_to_manager 占位）。

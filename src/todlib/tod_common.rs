@@ -262,6 +262,195 @@ pub fn tod_animate_curve(
     ) as i32
 }
 
+/// Win-1252 高位字节 → Unicode 码点表（对应 C++ WIN1252_TO_UNICODE，Buffer.cpp）
+const WIN1252_TO_UNICODE: [u32; 32] = [
+    0x20AC, 0x0081, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, 0x02C6, 0x2030, 0x0160, 0x2039,
+    0x0152, 0x008D, 0x017D, 0x008F, 0x0090, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014,
+    0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0x009D, 0x017E, 0x0178,
+];
+
+/// 非 ASCII 高位字节的 Win-1252 → UTF-8 转码（对应 C++ Win1252ToUTF8，Buffer.cpp）
+fn win1252_to_utf8(data: &[u8]) -> String {
+    let mut out = String::with_capacity(data.len());
+    for &a_byte in data {
+        let a_codepoint: u32 = if a_byte < 0x80 {
+            a_byte as u32
+        } else if a_byte <= 0x9F {
+            WIN1252_TO_UNICODE[(a_byte - 0x80) as usize]
+        } else {
+            a_byte as u32
+        };
+        if let Some(ch) = char::from_u32(a_codepoint) {
+            out.push(ch);
+        }
+    }
+    out
+}
+
+/// 严格 UTF-8 校验（对应 C++ IsValidUTF8，Buffer.cpp:158-180：
+/// 拒绝超长编码与代理区，首字节范围与续字节 0x80..0xBF 检查）
+fn is_valid_utf8(data: &[u8]) -> bool {
+    let mut p = 0usize;
+    while p < data.len() {
+        let a_first = data[p];
+        let a_seq_len: usize = if a_first < 0x80 {
+            p += 1;
+            continue;
+        } else if (a_first & 0xE0) == 0xC0 && a_first >= 0xC2 {
+            2
+        } else if (a_first & 0xF0) == 0xE0 {
+            3
+        } else if (a_first & 0xF8) == 0xF0 && a_first <= 0xF4 {
+            4
+        } else {
+            return false;
+        };
+        if p + a_seq_len > data.len() {
+            return false;
+        }
+        for i in 1..a_seq_len {
+            if data[p + i] & 0xC0 != 0x80 {
+                return false;
+            }
+        }
+        // 拒绝超长编码与代理区
+        if a_seq_len == 3 && a_first == 0xE0 && data[p + 1] < 0xA0 {
+            return false;
+        }
+        if a_seq_len == 3 && a_first == 0xED && data[p + 1] > 0x9F {
+            return false;
+        }
+        if a_seq_len == 4 && a_first == 0xF0 && data[p + 1] < 0x90 {
+            return false;
+        }
+        if a_seq_len == 4 && a_first == 0xF4 && data[p + 1] > 0x8F {
+            return false;
+        }
+        p += a_seq_len;
+    }
+    true
+}
+
+/// 读 pak 内文本文件并按 BOM/编码规则解码为字符串
+/// （对应 C++ SexyAppBase::ReadUTF8StringFromFile + Buffer::ToUTF8String，
+/// SexyAppBase.cpp:1503-1510 / Buffer.cpp:182-214：
+/// UTF-8 BOM 剥离；UTF-16 LE/BE BOM 转码；否则严格 UTF-8 校验，
+/// 失败按 Win-1252 转码。无 BOM 且非 UTF-8 时 C++ 直接失败，此处按
+/// Win-1252 兜底，行为差异登记为 TRANSLATION_NOTE。）
+fn read_string_file_decoded(the_file_name: &str) -> Option<String> {
+    use crate::framework::paklib::with_pak_interface;
+    let a_data = with_pak_interface(|pak| pak.load_file(the_file_name))?;
+    let a_len = a_data.len();
+    if a_len >= 3 && a_data[0..3] == [0xEF, 0xBB, 0xBF] {
+        // UTF-8 BOM：剥离
+        return Some(String::from_utf8_lossy(&a_data[3..]).into_owned());
+    }
+    if a_len >= 2 && a_data[0..2] == [0xFF, 0xFE] && (a_len - 2) % 2 == 0 {
+        // UTF-16 LE
+        let units: Vec<u16> = a_data[2..]
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| u16::from_le_bytes(*c))
+            .collect();
+        return Some(String::from_utf16_lossy(&units));
+    }
+    if a_len >= 2 && a_data[0..2] == [0xFE, 0xFF] && (a_len - 2) % 2 == 0 {
+        // UTF-16 BE
+        let units: Vec<u16> = a_data[2..]
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| u16::from_be_bytes(*c))
+            .collect();
+        return Some(String::from_utf16_lossy(&units));
+    }
+    if is_valid_utf8(&a_data) {
+        return Some(String::from_utf8_lossy(&a_data).into_owned());
+    }
+    // C++ 在既无 BOM 又非 UTF-8 时 ToUTF8String 返回 false（读取失败）；
+    // [TRANSLATION_NOTE]: 此处按 Win-1252 兜底解码以容忍旧编码资源文件。
+    Some(win1252_to_utf8(&a_data))
+}
+
+/// 字符串条目解析：读取 `[name]`（对应 C++ PvzpStringListReadName，PvzpStringFile.cpp:66-100）
+/// 返回 (名字, 剩余指针偏移)。无 `[` 且剩余全为空白时返回 ("", len) 表示读取完成。
+fn pvzp_string_list_read_name(a_ptr: &str) -> Option<(String, usize)> {
+    let bytes = a_ptr.as_bytes();
+    let a_name_start = match bytes.iter().position(|&b| b == b'[') {
+        Some(i) => i,
+        None => {
+            // 剩余文本不全为空白 → 解析失败
+            if !bytes
+                .iter()
+                .all(|&b| b == b' ' || b == b'\n' || b == b'\r' || b == b'\t')
+            {
+                return None;
+            }
+            return Some((String::new(), bytes.len()));
+        }
+    };
+    let rest = &a_ptr[a_name_start + 1..];
+    let a_name_end_rel = rest.find(']')?;
+    // C++ Sexy::Trim 按 Unicode 空白裁剪；此处用 trim()（覆盖 Unicode 空白），
+    // 与 IsUnicodeSpace 语义等价（ASCII 空白 + 常见 Unicode 空白）。
+    let a_name = rest[..a_name_end_rel].trim().to_string();
+    if a_name.is_empty() {
+        return None;
+    }
+    let advanced = a_name_start + 1 + a_name_end_rel + 1;
+    Some((a_name, advanced))
+}
+
+/// 字符串值解析：读到下一个 `[` 为止并裁剪（对应 C++ PvzpStringListReadValue，
+/// PvzpStringFile.cpp:113-121），回车符剔除
+fn pvzp_string_list_read_value(a_ptr: &str) -> (String, usize) {
+    let a_value_end = a_ptr.find('[').unwrap_or(a_ptr.len());
+    let mut a_value = a_ptr[..a_value_end].trim().to_string();
+    a_value.retain(|c| c != '\r');
+    (a_value, a_value_end)
+}
+
+/// 字符串表装载（对应 C++ PvzpStringListReadItems，PvzpStringFile.cpp:123-141）
+fn pvzp_string_list_read_items(the_file_text: &str) -> bool {
+    let mut a_ptr = the_file_text;
+    loop {
+        let (a_name, advanced) = match pvzp_string_list_read_name(a_ptr) {
+            Some(v) => v,
+            None => return false,
+        };
+        if a_name.is_empty() {
+            // 名字为空的成功读取 → 完成
+            return true;
+        }
+        a_ptr = &a_ptr[advanced..];
+        let (a_value, a_advanced) = pvzp_string_list_read_value(a_ptr);
+        a_ptr = &a_ptr[a_advanced..];
+        // C++: std::string aNameUpper = Sexy::StringToUpper(aName); SetString(aNameUpper, aValue)
+        let a_name_upper = crate::framework::common::string_to_upper(&a_name);
+        if let Some(app) = crate::lawn::lawn_app::LawnApp::instance() {
+            app.base.set_string(&a_name_upper, &a_value);
+        }
+    }
+}
+
+/// 字符串表文件读取（对应 C++ PvzpStringListReadFile，PvzpStringFile.cpp:143-153）
+pub fn pvzp_string_list_read_file(the_file_name: &str) -> bool {
+    let Some(a_content) = read_string_file_decoded(the_file_name) else {
+        return false;
+    };
+    pvzp_string_list_read_items(&a_content)
+}
+
+/// 字符串表装载入口（对应 C++ PvzpStringListLoad，PvzpStringFile.cpp:155-159）
+pub fn pvzp_string_list_load(the_file_name: &str) {
+    if !pvzp_string_list_read_file(the_file_name) {
+        // C++: PvzpErrorMessageBox(StrFormat("Failed to load string list file ..."))；
+        // Rust 侧无此弹窗基础设施，按 trace 输出（行为差异登记）。
+        eprintln!("Failed to load string list file '{}'", the_file_name);
+    }
+}
+
 /// 字符串列表查找（对应 C++ PvzpStringListFind，PvzpStringFile.cpp:162）
 /// 命中返回 mStringProperties 中的值，未命中返回 `<Missing 名称>`
 pub fn pvzp_string_list_find(the_name: &str) -> String {

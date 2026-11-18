@@ -240,6 +240,17 @@ impl ResourceManager {
 
     /// 解析自闭合资源元素（Image / Sound / Font 等）
     fn parse_resource(&mut self, element: &XMLElement) {
+        // <SetDefaults path=.. idprefix=.. /> 是自闭合标签，走 TYPE_ELEMENT 主循环进入本函数；
+        // 带 id 的资源才继续。对应 C++ ParseSetDefaults（ResourceManager.cpp:450-462）。
+        if element.section == "SetDefaults" {
+            if let Some(p) = element.attributes.get("path") {
+                self.default_path = format!("{}/", p.trim_end_matches('/'));
+            }
+            if let Some(p) = element.attributes.get("idprefix") {
+                self.default_id_prefix = p.clone();
+            }
+            return;
+        }
         let id: &String = match element.attributes.get("id") {
             Some(id) => id,
             None => return, // 没有 id 属性的元素跳过

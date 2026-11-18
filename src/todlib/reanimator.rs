@@ -815,7 +815,12 @@ impl Reanimation {
             let a_track_index = self.find_track_index(track_name);
             let mut a_frame_start = 0;
             let mut a_frame_count = 1;
-            if a_track_index >= 0 && (a_track_index as usize) < def_ref.m_tracks.len() {
+            // C++ FindTrackIndex 找不到轨道时 PvzpTrace 后返回 0（Reanimator.cpp:950-958），
+            // 故 PlayReanim 缺失轨道（如本 pak 无 anim_open）实际取 track 0 的帧区间。
+            // [TRANSLATION_NOTE]: Rust find_track_index 返回 -1 表示缺失（多数调用点以此判存在），
+            // 此处按 C++ 实际行为回退 track 0，仅影响帧区间计算。
+            let a_track_index = if a_track_index < 0 { 0 } else { a_track_index };
+            if (a_track_index as usize) < def_ref.m_tracks.len() {
                 let a_track = &def_ref.m_tracks[a_track_index as usize];
                 // 第一个非空白帧（mFrame >= 0）
                 for i in 0..a_track.m_transforms.len() {
