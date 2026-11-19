@@ -745,13 +745,21 @@ impl ResourceManager {
         } else {
             ""
         };
+        // res.base.path 可能自带目录前缀（如 "images/PvZ_Logo"），而 dir_prefix 已取自
+        // loaded_path 所在目录；此处仅取文件名部分，避免拼出 "images/images/..." 重复路径
+        // 导致遮罩永不命中（对应 C++ ImageLib::GetImage 的 alphaPath1/alphaPath2：
+        // 目录 + "_" + 文件名 / 文件名 + "_"，见 ImageLib.cpp:1316-1330）
+        let base_name_lower = match base_lower.rfind('/') {
+            Some(pos) => base_lower[pos + 1..].to_string(),
+            None => base_lower.clone(),
+        };
         let alpha_paths = [
-            format!("{}_{}", dir_prefix, base_lower),
-            format!("{}_{}.png", dir_prefix, base_lower),
-            format!("{}_{}.jpg", dir_prefix, base_lower),
-            format!("{}{}_", dir_prefix, base_lower),
-            format!("{}{}_.png", dir_prefix, base_lower),
-            format!("{}{}_.jpg", dir_prefix, base_lower),
+            format!("{}_{}", dir_prefix, base_name_lower),
+            format!("{}_{}.png", dir_prefix, base_name_lower),
+            format!("{}_{}.jpg", dir_prefix, base_name_lower),
+            format!("{}{}_", dir_prefix, base_name_lower),
+            format!("{}{}_.png", dir_prefix, base_name_lower),
+            format!("{}{}_.jpg", dir_prefix, base_name_lower),
         ];
         let mut alpha_data = None;
         for ap in &alpha_paths {
