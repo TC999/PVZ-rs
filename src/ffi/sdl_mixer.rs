@@ -123,6 +123,13 @@ extern "C" {
     // ── Mod 音乐 ──
     fn Mix_ModMusicSetChannelMute(channel: c_int, mute: c_int) -> c_int;
     fn Mix_ModMusicSetChannelVolume(channel: c_int, volume: c_int) -> c_int;
+    // ── Mod 音乐（按音乐流句柄，SDL-Mixer-X 扩展；C++ Music.cpp:165/315 使用）──
+    fn Mix_ModMusicStreamSetChannelVolume(
+        music: *mut c_void,
+        channel: c_int,
+        volume: c_int,
+    ) -> c_int;
+    fn Mix_ModMusicStreamGetOrder(music: *mut c_void, order: *mut c_int) -> c_int;
 
     // ── 轨道控制 ──
     fn Mix_StartTrack(music: *mut c_void, track: c_int) -> c_int;
@@ -221,6 +228,24 @@ pub fn mod_music_set_channel_mute(channel: c_int, mute: c_int) -> c_int {
 
 pub fn mod_music_set_channel_volume(channel: c_int, volume: c_int) -> c_int {
     unsafe { Mix_ModMusicSetChannelVolume(channel, volume) }
+}
+
+/// 按音乐流句柄设置 MOD 通道音量（对应 C++ Mix_ModMusicStreamSetChannelVolume，Music.cpp:165）
+pub fn mod_music_stream_set_channel_volume(
+    music: *mut c_void,
+    channel: c_int,
+    volume: c_int,
+) -> c_int {
+    unsafe { Mix_ModMusicStreamSetChannelVolume(music, channel, volume) }
+}
+
+/// 按音乐流句柄查询 MOD 当前播放 order（对应 C++ Mix_ModMusicStreamGetOrder，SDLMusicInterface.cpp:315）
+pub fn mod_music_stream_get_order(music: *mut c_void) -> c_int {
+    let mut a_order: c_int = -1;
+    unsafe {
+        Mix_ModMusicStreamGetOrder(music, &mut a_order);
+    }
+    a_order
 }
 
 pub fn start_track(music: *mut c_void, track: c_int) -> c_int {

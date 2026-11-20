@@ -75,6 +75,8 @@ pub struct SeedChooserScreen {
     pub seeds_in_bank: i32,
     pub tool_tip: Option<*mut crate::lawn::tool_tip_widget::ToolTipWidget>,
     pub tool_tip_seed: i32,
+    /// 对应 C++ Widget::mMouseVisible（ButtonDepress/SeedHitTest 使用）
+    pub mouse_visible: bool,
     /// 对应 C++ LawnApp 对话框系统中的 ImitaterDialog（Rust 对话框驱动持有）
     pub imitater_dialog: Option<*mut ImitaterDialog>,
     pub last_mouse_x: i32,
@@ -102,12 +104,290 @@ impl SeedChooserScreen {
             seeds_in_bank: 0,
             tool_tip: None,
             tool_tip_seed: 0,
+            mouse_visible: true,
             imitater_dialog: None,
             last_mouse_x: 0,
             last_mouse_y: 0,
             choose_state: SeedChooserState::Normal,
             view_lawn_time: 0,
         }
+    }
+
+    /// 构造期数据初始化（对应 C++ SeedChooserScreen::SeedChooserScreen 构造函数体，
+    /// SeedChooserScreen.cpp:45-205；Rust 侧因 Widget 基类缺失拆为 new() + init()）。
+    /// 必须在 app/board 赋值后调用。
+    pub unsafe fn init(&mut self) {
+        // C++ 45-59: 指针与标量（mClip/mSeedChooserAge 未清零语义由 new() 默认值承担）
+        let app_ptr = self.app.unwrap_or(std::ptr::null_mut());
+        if app_ptr.is_null() {
+            return;
+        }
+        let app = &mut *app_ptr;
+        let board_ptr = match self.board {
+            Some(b) => b,
+            None => return,
+        };
+        let board = &mut *board_ptr;
+
+        // C++ 57-59: mToolTip = new ToolTipWidget(); mMaxLinesWidth = GetInteger(...);
+        //             mToolTipSeed = -1;
+        let mut a_tool_tip = Box::new(crate::lawn::tool_tip_widget::ToolTipWidget::new());
+        a_tool_tip.m_max_lines_width =
+            app.get_integer("SEED_CHOOSER_SCREEN_TOOL_TIP_MAX_LINE_WIDTH", 0);
+        self.tool_tip = Some(Box::into_raw(a_tool_tip));
+        self.tool_tip_seed = -1;
+
+        // C++ 61-72: mStartButton
+        let mut a_start_button = Box::new(GameButton::new(100, None));
+        a_start_button.label = "[LETS_ROCK_BUTTON]".to_string(); // the localization key name is wrong
+        a_start_button.button_image =
+            crate::lawn::board::get_overlay_image(app, "IMAGE_SEEDCHOOSER_BUTTON");
+        a_start_button.over_image = std::ptr::null_mut();
+        a_start_button.down_image = std::ptr::null_mut();
+        a_start_button.disabled_image =
+            crate::lawn::board::get_overlay_image(app, "IMAGE_SEEDCHOOSER_BUTTON_DISABLED");
+        a_start_button.over_overlay_image =
+            crate::lawn::board::get_overlay_image(app, "IMAGE_SEEDCHOOSER_BUTTON_GLOW");
+        {
+            let mut a_font = crate::framework::graphics::font::Font::new("Dwarventodcraft", 18);
+            a_font.ascent = 13;
+            a_font.font_height = 18;
+            a_start_button.font = Some(Box::new(a_font));
+        }
+        a_start_button.colors[GameButton::COLOR_LABEL_HILITE] = Color::new(255, 255, 255, 255);
+        a_start_button.resize(154, 545, 156, 42);
+        a_start_button.text_offset_y = -1;
+        let a_start_ptr = Box::into_raw(a_start_button);
+        self.start_button = Some(a_start_ptr);
+        self.enable_start_button(false);
+
+        // C++ 74-77: mMenuButton
+        let mut a_menu_button = Box::new(GameButton::new(104, None));
+        a_menu_button.label = "[MENU_BUTTON]".to_string();
+        a_menu_button.resize(681, -10, 117, 46);
+        a_menu_button.draw_stone_button = true;
+        self.menu_button = Some(Box::into_raw(a_menu_button));
+
+        // C++ 79-92: mRandomButton（非作弊键时隐藏禁用）
+        let mut a_random_button = Box::new(GameButton::new(101, None));
+        a_random_button.label = "(Debug Play)".to_string();
+        a_random_button.button_image = crate::lawn::board::get_overlay_image(app, "IMAGE_BLANK");
+        a_random_button.over_image = crate::lawn::board::get_overlay_image(app, "IMAGE_BLANK");
+        a_random_button.down_image = crate::lawn::board::get_overlay_image(app, "IMAGE_BLANK");
+        {
+            let a_font = crate::framework::graphics::font::Font::new("Briannetod", 12);
+            a_random_button.font = Some(Box::new(a_font));
+        }
+        a_random_button.colors[0] = Color::new(255, 240, 0, 255);
+        a_random_button.colors[1] = Color::new(200, 200, 255, 255);
+        a_random_button.resize(332, 546, 100, 30);
+        if !app.m_cheat_keys_used {
+            a_random_button.btn_no_draw = true;
+            a_random_button.disabled = true;
+        }
+        self.random_button = Some(Box::into_raw(a_random_button));
+
+        // C++ 94-98: 按钮公共图与尺寸
+        let a_btn_image = crate::lawn::board::get_overlay_image(app, "IMAGE_SEEDCHOOSER_BUTTON2");
+        let a_over_image =
+            crate::lawn::board::get_overlay_image(app, "IMAGE_SEEDCHOOSER_BUTTON2_GLOW");
+        let a_btn_color = Color::new(42, 42, 90, 255);
+        let a_image_width = if a_btn_image.is_null() {
+            0
+        } else {
+            (*a_btn_image).width
+        };
+        let a_image_height = if a_over_image.is_null() {
+            0
+        } else {
+            (*a_over_image).height
+        };
+
+        // C++ 100-115: mViewLawnButton
+        let mut a_view_lawn_button = Box::new(GameButton::new(102, None));
+        a_view_lawn_button.label = "[VIEW_LAWN]".to_string();
+        a_view_lawn_button.button_image = a_btn_image;
+        a_view_lawn_button.over_image = a_over_image;
+        a_view_lawn_button.down_image = std::ptr::null_mut();
+        {
+            let a_font = crate::framework::graphics::font::Font::new("Briannetod", 12);
+            a_view_lawn_button.font = Some(Box::new(a_font));
+        }
+        a_view_lawn_button.colors[0] = a_btn_color;
+        a_view_lawn_button.colors[1] = a_btn_color;
+        a_view_lawn_button.resize(22, 561, a_image_width, a_image_height);
+        a_view_lawn_button.text_offset_y = 1;
+        if !(*board)
+            .m_cut_scene
+            .map_or(false, |cs| (*cs).is_survival_repick())
+        {
+            a_view_lawn_button.btn_no_draw = true;
+            a_view_lawn_button.disabled = true;
+        }
+        self.view_lawn_button = Some(Box::into_raw(a_view_lawn_button));
+
+        // C++ 117-127: mAlmanacButton
+        let mut a_almanac_button = Box::new(GameButton::new(103, None));
+        a_almanac_button.label = "[ALMANAC_BUTTON]".to_string();
+        a_almanac_button.button_image = a_btn_image;
+        a_almanac_button.over_image = a_over_image;
+        a_almanac_button.down_image = std::ptr::null_mut();
+        {
+            let a_font = crate::framework::graphics::font::Font::new("Briannetod", 12);
+            a_almanac_button.font = Some(Box::new(a_font));
+        }
+        a_almanac_button.colors[0] = a_btn_color;
+        a_almanac_button.colors[1] = a_btn_color;
+        a_almanac_button.resize(560, 572, a_image_width, a_image_height);
+        a_almanac_button.text_offset_y = 1;
+        self.almanac_button = Some(Box::into_raw(a_almanac_button));
+
+        // C++ 129-139: mStoreButton
+        let mut a_store_button = Box::new(GameButton::new(105, None));
+        a_store_button.label = "[SHOP_BUTTON]".to_string();
+        a_store_button.button_image = a_btn_image;
+        a_store_button.over_image = a_over_image;
+        a_store_button.down_image = std::ptr::null_mut();
+        {
+            let a_font = crate::framework::graphics::font::Font::new("Briannetod", 12);
+            a_store_button.font = Some(Box::new(a_font));
+        }
+        a_store_button.colors[0] = a_btn_color;
+        a_store_button.colors[1] = a_btn_color;
+        a_store_button.resize(680, 572, a_image_width, a_image_height);
+        a_store_button.text_offset_y = 1;
+        self.store_button = Some(Box::into_raw(a_store_button));
+
+        // C++ 141-147: mImitaterButton
+        let mut a_imitater_button = Box::new(GameButton::new(106, None));
+        a_imitater_button.button_image =
+            crate::lawn::board::get_overlay_image(app, "IMAGE_IMITATERSEED");
+        a_imitater_button.over_image =
+            crate::lawn::board::get_overlay_image(app, "IMAGE_IMITATERSEED");
+        a_imitater_button.down_image =
+            crate::lawn::board::get_overlay_image(app, "IMAGE_IMITATERSEED");
+        a_imitater_button.disabled_image =
+            crate::lawn::board::get_overlay_image(app, "IMAGE_IMITATERSEEDDISABLED");
+        {
+            let (a_w, a_h) = if a_imitater_button.button_image.is_null() {
+                (0, 0)
+            } else {
+                (
+                    (*a_imitater_button.button_image).width,
+                    (*a_imitater_button.button_image).height,
+                )
+            };
+            a_imitater_button.resize(464, 515, a_w, a_h);
+        }
+        self.imitater_button = Some(Box::into_raw(a_imitater_button));
+
+        // C++ 149-158: 图鉴/商店按钮可用性
+        if !app.can_show_almanac() {
+            if let Some(btn) = self.almanac_button {
+                (*btn).btn_no_draw = true;
+                (*btn).disabled = true;
+            }
+        }
+        if !app.can_show_store() {
+            if let Some(btn) = self.store_button {
+                (*btn).btn_no_draw = true;
+                (*btn).disabled = true;
+            }
+        }
+
+        // C++ 160-179: DBG_ASSERT(GetSeedsAvailable() < NUM_SEED_TYPES); memset; 填充 mChosenSeeds
+        // [TRANSLATION_NOTE]: C++ 用固定数组 mChosenSeeds[SeedType]（SEED_PEASHOOTER=0 起）；
+        // Rust chosen_seeds 按同一下标建满 NUM_SEEDS_IN_CHOOSER 项，空缺类型留默认值占位。
+        debug_assert!(
+            (app.get_seeds_available() as usize) < crate::lawn::game_enums::NUM_SEED_TYPES
+        );
+        for a_seed_type in 0..NUM_SEEDS_IN_CHOOSER {
+            let a_seed_enum: SeedType = std::mem::transmute::<i32, SeedType>(a_seed_type);
+            let mut a_chosen_seed = ChosenSeed::new();
+            a_chosen_seed.seed_type = a_seed_enum;
+            let (mut a_x, mut a_y) = (0, 0);
+            self.get_seed_position_in_chooser(a_seed_type, &mut a_x, &mut a_y);
+            a_chosen_seed.x = a_x;
+            a_chosen_seed.y = a_y;
+            a_chosen_seed.time_start_motion = 0;
+            a_chosen_seed.time_end_motion = 0;
+            a_chosen_seed.start_x = a_x;
+            a_chosen_seed.start_y = a_y;
+            a_chosen_seed.end_x = a_x;
+            a_chosen_seed.end_y = a_y;
+            a_chosen_seed.seed_state = if a_seed_enum == SeedType::Imitater {
+                ChosenSeedState::Hidden
+            } else {
+                ChosenSeedState::InChooser
+            };
+            a_chosen_seed.seed_index_in_bank = 0;
+            a_chosen_seed.refresh_counter = 0;
+            a_chosen_seed.refreshing = false;
+            a_chosen_seed.imitater_type = SeedType::None;
+            a_chosen_seed.crazy_dave_picked = false;
+            if a_seed_type as usize >= self.chosen_seeds.len() {
+                self.chosen_seeds.push(a_chosen_seed);
+            } else {
+                self.chosen_seeds[a_seed_type as usize] = a_chosen_seed;
+            }
+        }
+
+        // C++ 180-190: SurvivalRepick 时从卡槽回填刷新状态并清空 mNumPackets
+        if (*board)
+            .m_cut_scene
+            .map_or(false, |cs| (*cs).is_survival_repick())
+        {
+            // C++ 182-188: 读旧卡槽各槽的 mRefreshing/mRefreshCounter 到 mChosenSeeds
+            // [TRANSLATION_NOTE]: SeedPacket 无 mRefreshCounter 字段，冷却计数存于 countdown
+            //（与 CloseSeedChooser 回写 aSeedPacket.mRefreshCounter = countdown 同口径）
+            let a_old_num = (*board).get_num_seeds_in_bank();
+            for an_idx in 0..a_old_num {
+                let (a_seed_type, a_refreshing, a_countdown) = {
+                    let a_seed_packet = &(*board).seed_bank[an_idx as usize];
+                    (
+                        a_seed_packet.seed_type,
+                        a_seed_packet.refreshing,
+                        a_seed_packet.countdown,
+                    )
+                };
+                let a_chosen_seed = &mut self.chosen_seeds[a_seed_type as usize];
+                a_chosen_seed.refreshing = a_refreshing;
+                a_chosen_seed.refresh_counter = a_countdown;
+            }
+            // C++ 189: mNumPackets = 0；随后 Board::InitSurvivalStage（Board.cpp:1288-1295）
+            // UpdateWidth() 恢复格数并把全部槽 mPacketType 置 SEED_NONE。
+            // [TRANSLATION_NOTE]: Rust seed_bank 为 Vec（长度即槽数），重建为全空槽等价。
+            let mut a_new_bank: Vec<crate::lawn::seed_packet::SeedPacket> =
+                Vec::with_capacity(a_old_num as usize);
+            for i in 0..a_old_num {
+                let mut a_packet = crate::lawn::seed_packet::SeedPacket::new();
+                a_packet.x = (*board).get_seed_packet_position_x(i);
+                a_packet.y = 8;
+                a_new_bank.push(a_packet);
+            }
+            (*board).seed_bank = a_new_bank;
+        }
+
+        // C++ 191-201: SEEING_STARS 时星光果树苗直接入槽
+        if app.game_mode == GameMode::ChallengeSeeingStars {
+            let a_x = (*board).get_seed_packet_position_x(0);
+            let a_star_fruit = &mut self.chosen_seeds[SeedType::Starfruit as usize];
+            a_star_fruit.x = a_x;
+            a_star_fruit.y = 8;
+            a_star_fruit.start_x = a_x;
+            a_star_fruit.start_y = 8;
+            a_star_fruit.end_x = a_x;
+            a_star_fruit.end_y = 8;
+            a_star_fruit.seed_state = ChosenSeedState::InBank;
+            a_star_fruit.seed_index_in_bank = 0;
+            self.seeds_in_bank += 1;
+        }
+
+        // C++ 202-204: 非首周目冒险模式 CrazyDavePickSeeds(); UpdateImitaterButton()
+        if app.is_adventure_mode() && !app.is_first_time_adventure_mode() {
+            self.crazy_dave_pick_seeds();
+        }
+        self.update_imitater_button();
     }
 
     pub fn pick_from_weighted_array_using_special_rand_seed(
@@ -625,30 +905,277 @@ impl SeedChooserScreen {
         self.display_repick_warning_dialog(&a_warning)
     }
     pub fn on_start_button(&mut self) {
-        // OnStartButton — 简化版
-        self.close_seed_chooser();
+        // C++: SeedChooserScreen::OnStartButton（SeedChooserScreen.cpp:619-708）
+        let app_ptr = match self.app {
+            Some(a) => a,
+            None => return,
+        };
+        unsafe {
+            let app = &mut *app_ptr;
+            let board = match self.board {
+                Some(b) => &mut *b,
+                None => return,
+            };
+
+            // C++ 621-627: GAMEMODE_CHALLENGE_SEEING_STARS 且未选 SEED_STARFRUIT
+            if app.game_mode == GameMode::ChallengeSeeingStars
+                && !self.picked_plant_type(SeedType::Starfruit)
+            {
+                if !self.display_repick_warning_dialog("[SEED_CHOOSER_SEEING_STARS_WARNING]") {
+                    return;
+                }
+            }
+
+            // C++ 629-635: IsFirstTimeAdventureMode && mLevel == 11 且未选 SEED_PUFFSHROOM
+            if app.is_first_time_adventure_mode()
+                && board.level == 11
+                && !self.picked_plant_type(SeedType::Puffshroom)
+            {
+                if !self.display_repick_warning_dialog("[SEED_CHOOSER_PUFFSHROOM_WARNING]") {
+                    return;
+                }
+            }
+
+            // C++ 636-650: 未选任何产阳植物（非生存重选/坚守模式）
+            let a_survival_repick = (*board)
+                .m_cut_scene
+                .map_or(false, |cs| (*cs).is_survival_repick());
+            if !self.picked_plant_type(SeedType::Sunflower)
+                && !self.picked_plant_type(SeedType::Twinsunflower)
+                && !self.picked_plant_type(SeedType::Sunshroom)
+                && !a_survival_repick
+                && app.game_mode != GameMode::ChallengeLastStand
+            {
+                if app.is_first_time_adventure_mode() && board.level == 11 {
+                    if !self.display_repick_warning_dialog("[SEED_CHOOSER_NIGHT_SUN_WARNING]") {
+                        return;
+                    }
+                } else if !self.display_repick_warning_dialog("[SEED_CHOOSER_SUN_WARNING]") {
+                    return;
+                }
+            }
+
+            // C++ 651-664: 有水池且未选水生植物
+            if board.stage_has_pool()
+                && !self.picked_plant_type(SeedType::Lilypad)
+                && !self.picked_plant_type(SeedType::Seashroom)
+                && !self.picked_plant_type(SeedType::Tanglekelp)
+                && !a_survival_repick
+            {
+                if app.is_first_time_adventure_mode() && board.level == 21 {
+                    if !self.display_repick_warning_dialog("[SEED_CHOOSER_LILY_WARNING]") {
+                        return;
+                    }
+                } else if !self.display_repick_warning_dialog("[SEED_CHOOSER_POOL_WARNING]") {
+                    return;
+                }
+            }
+
+            // C++ 665-671: 屋顶且未选花盆（拥有该种子时）
+            if board.stage_has_roof()
+                && !self.picked_plant_type(SeedType::Flowerpot)
+                && app.has_seed_type(SeedType::Flowerpot)
+            {
+                if !self.display_repick_warning_dialog("[SEED_CHOOSER_ROOF_WARNING]") {
+                    return;
+                }
+            }
+
+            // C++ 673-679: ART_CHALLENGE_WALLNUT 未选坚果
+            if app.game_mode == GameMode::ChallengeArtChallengeWallnut
+                && !self.picked_plant_type(SeedType::Wallnut)
+            {
+                if !self.display_repick_warning_dialog("[SEED_CHOOSER_ART_WALLNUT_WARNING]") {
+                    return;
+                }
+            }
+
+            // C++ 680-687: ART_CHALLENGE_SUNFLOWER 未选齐三样
+            if app.game_mode == GameMode::ChallengeArtChallengeSunflower
+                && (!self.picked_plant_type(SeedType::Starfruit)
+                    || !self.picked_plant_type(SeedType::Umbrella)
+                    || !self.picked_plant_type(SeedType::Wallnut))
+            {
+                if !self.display_repick_warning_dialog("[SEED_CHOOSER_ART_2_WARNING]") {
+                    return;
+                }
+            }
+
+            // C++ 689-695: 有飞行僵尸且无防护手段
+            if self.flyers_are_coming()
+                && !self.fly_protection_currently_planted()
+                && !self.picked_plant_type(SeedType::Cattail)
+                && !self.picked_plant_type(SeedType::Cactus)
+                && !self.picked_plant_type(SeedType::Blover)
+            {
+                if !self.display_repick_warning_dialog("[SEED_CHOOSER_FLYER_WARNING]") {
+                    return;
+                }
+            }
+
+            // C++ 697-705: 升级前逐组警告（8 组）
+            if !self.check_seed_upgrade(SeedType::Gatlingpea, SeedType::Repeater)
+                || !self.check_seed_upgrade(SeedType::Wintermelon, SeedType::Melonpult)
+                || !self.check_seed_upgrade(SeedType::Twinsunflower, SeedType::Sunflower)
+                || !self.check_seed_upgrade(SeedType::Spikerock, SeedType::Spikeweed)
+                || !self.check_seed_upgrade(SeedType::Cobcannon, SeedType::Kernelpult)
+                || !self.check_seed_upgrade(SeedType::GoldMagnet, SeedType::Magnetshroom)
+                || !self.check_seed_upgrade(SeedType::Gloomshroom, SeedType::Fumeshroom)
+                || !self.check_seed_upgrade(SeedType::Cattail, SeedType::Lilypad)
+            {
+                return;
+            }
+
+            self.close_seed_chooser();
+        }
     }
     pub fn pick_random_seeds(&mut self) {
-        // PickRandomSeeds — 简化版
-        self.close_seed_chooser();
+        // C++: SeedChooserScreen::PickRandomSeeds（SeedChooserScreen.cpp:710-730）
+        let app_ptr = match self.app {
+            Some(a) => a,
+            None => return,
+        };
+        unsafe {
+            let app = &*app_ptr;
+            let board = match self.board {
+                Some(b) => &*b,
+                None => return,
+            };
+            // C++: mBoard->mSeedBank->mNumPackets
+            // [TRANSLATION_NOTE]: Rust Board.seed_bank 为 Vec，无 mNumPackets 字段；
+            // 按仓库既有惯例（draw/mouse_down 处）以 GetNumSeedsInBank() 等价替代。
+            let a_num_packets = (*board).get_num_seeds_in_bank();
+            let mut an_index = self.seeds_in_bank;
+            while an_index < a_num_packets {
+                // C++ 714-716: do aSeedType = Rand(GetSeedsAvailable())
+                //              while (!HasSeedType || IMITATER || 状态非 IN_CHOOSER)
+                let mut a_seed_type;
+                loop {
+                    a_seed_type = std::mem::transmute::<i32, SeedType>(
+                        crate::framework::common::RandRange(app.get_seeds_available()),
+                    );
+                    if app.has_seed_type(a_seed_type)
+                        && a_seed_type != SeedType::Imitater
+                        && self.chosen_seeds[a_seed_type as usize].seed_state
+                            == ChosenSeedState::InChooser
+                    {
+                        break;
+                    }
+                }
+                // C++ 722: GetSeedPositionInBank(anIndex, mEndX, mEndY)
+                let (mut a_end_x, mut a_end_y) = (0, 0);
+                self.get_seed_position_in_bank(an_index, &mut a_end_x, &mut a_end_y);
+                // C++ 717-725: 写 aChosenSeed 动画/状态字段
+                {
+                    let a_chosen_seed = &mut self.chosen_seeds[a_seed_type as usize];
+                    a_chosen_seed.time_start_motion = 0;
+                    a_chosen_seed.time_end_motion = 0;
+                    a_chosen_seed.start_x = a_chosen_seed.x;
+                    a_chosen_seed.start_y = a_chosen_seed.y;
+                    a_chosen_seed.end_x = a_end_x;
+                    a_chosen_seed.end_y = a_end_y;
+                    a_chosen_seed.seed_state = ChosenSeedState::InBank;
+                    a_chosen_seed.seed_index_in_bank = an_index;
+                }
+                self.seeds_in_bank += 1;
+                an_index += 1;
+            }
+            // C++ 727-728: for 每个种子 LandFlyingSeed(mChosenSeeds[aSeedFlying])
+            for a_seed_flying in 0..NUM_SEEDS_IN_CHOOSER {
+                if let Some(seed_ptr) = self.chosen_seeds.get_mut(a_seed_flying as usize) {
+                    let seed_ptr = seed_ptr as *mut ChosenSeed;
+                    self.land_flying_seed(&mut *seed_ptr);
+                }
+            }
+            self.close_seed_chooser();
+        }
     }
     pub fn button_depress(&mut self, id: i32) {
+        // C++: SeedChooserScreen::ButtonDepress（SeedChooserScreen.cpp:732-774）
+        // [TRANSLATION_NOTE]: C++ 还检查 !mMouseVisible；Rust Widget::mMouseVisible
+        // 未建模（默认 true），暂不检查。
         if self.seeds_in_flight > 0 || self.choose_state == SeedChooserState::ViewLawn {
             return;
         }
         if id == 102 {
             /* ViewLawn */
             self.choose_state = SeedChooserState::ViewLawn;
-        } else if id == 100 {
-            /* Start */
-            self.on_start_button();
-        } else if id == 101 {
-            /* Random */
-            self.pick_random_seeds();
-        } else if id == 103 { /* Almanac */
-        } else if id == 104 { /* Menu */
-        } else if id == 105 { /* Store */
-        } else if id == 106 { /* Imitater */
+            // C++ 740-741: mMenuButton->mDisabled = true; mViewLawnTime = 0;
+            if let Some(btn) = self.menu_button {
+                unsafe {
+                    (*btn).disabled = true;
+                }
+            }
+            self.view_lawn_time = 0;
+        } else if id == 103 {
+            /* Almanac */
+            // C++ 743-747: DoAlmanacDialog()->WaitForResult(true); MakeSureMusicIsPlaying
+            if let Some(app) = self.app {
+                unsafe {
+                    // [TRANSLATION_NOTE]: Rust DoAlmanacDialog 无 WaitForResult 模态返回
+                    (*app).do_almanac_dialog(SeedType::None, ZombieType::Invalid);
+                    if let Some(music) = (*app).music.as_mut() {
+                        music.make_sure_music_is_playing(MusicTune::ChooseYourSeeds);
+                    }
+                }
+            }
+        } else if id == 105 {
+            /* Store */
+            // C++ 748-759: ShowStoreScreen + 改背景按钮标签 + WaitForResult + GoToTreeNow
+            if let Some(app) = self.app {
+                unsafe {
+                    let a_store = crate::lawn::lawn_app::LawnApp::show_store_screen(Some(app));
+                    if let Some(s) = a_store {
+                        let a_store_ref =
+                            &mut *(s as *mut crate::lawn::widget::store_screen::StoreScreen);
+                        // C++ 751: aStore->mBackButton->SetLabel("[STORE_BACK_TO_GAME]")
+                        if let Some(btn) = a_store_ref.back_button {
+                            (*btn).set_label("[STORE_BACK_TO_GAME]");
+                        }
+                        // [TRANSLATION_NOTE]: StoreScreen 无 WaitForResult 模态等待
+                        // （同 game_selector.rs 既有处理），mGoToTreeNow 分支按当前状态读取
+                        if a_store_ref.go_to_tree_now {
+                            (*app).kill_board();
+                            (*app).pre_new_game(GameMode::ChallengeTreeOfWisdom, false);
+                        } else if let Some(music) = (*app).music.as_mut() {
+                            music.make_sure_music_is_playing(MusicTune::ChooseYourSeeds);
+                        }
+                    }
+                }
+            }
+        } else if id == 104 {
+            /* Menu */
+            // C++ 760-766: mMenuButton->mIsOver/mIsDown=false; UpdateCursor(); DoNewOptions(false)
+            if let Some(btn) = self.menu_button {
+                unsafe {
+                    (*btn).is_over = false;
+                    (*btn).is_down = false;
+                }
+            }
+            self.update_cursor();
+            if let Some(app) = self.app {
+                unsafe {
+                    (*app).do_new_options(false);
+                }
+            }
+        } else if self.app.map_or(false, |app| unsafe {
+            // C++ 767: else if (GetSeedsAvailable() >= mSeedBank->mNumPackets)
+            (*app).get_seeds_available()
+                >= self
+                    .board
+                    .map_or(0, |b| unsafe { (*b).get_num_seeds_in_bank() })
+        }) {
+            if id == 100 {
+                /* Start */
+                self.on_start_button();
+            } else if id == 101 {
+                /* Random */
+                self.pick_random_seeds();
+            } else if id == 106 {
+                /* Imitater */
+            }
+        } else if id == 106 {
+            /* Imitater */
         }
     }
     pub fn seed_hit_test(&self, x: i32, y: i32) -> SeedType {
@@ -987,20 +1514,88 @@ impl SeedChooserScreen {
         }
     }
     pub fn clicked_seed_in_bank(&mut self, seed: &mut ChosenSeed) {
-        // ClickedSeedInBank — 简化版
+        // C++: SeedChooserScreen::ClickedSeedInBank（SeedChooserScreen.cpp:810-840）
+        let a_num_packets = self
+            .board
+            .map_or(0, |b| unsafe { (*b).get_num_seeds_in_bank() });
+        let a_my_index = seed.seed_index_in_bank;
+        // C++ 812-827: 卡槽中该种子之后的每个种子左移一格（飞行动画）
+        for an_index in (a_my_index + 1)..a_num_packets {
+            let a_seed_type = self.find_seed_in_bank(an_index);
+            if a_seed_type != SeedType::None {
+                // C++ 822: GetSeedPositionInBank(anIndex - 1, mEndX, mEndY)
+                let (mut a_end_x, mut a_end_y) = (0, 0);
+                self.get_seed_position_in_bank(an_index - 1, &mut a_end_x, &mut a_end_y);
+                {
+                    let a_chosen_seed = &mut self.chosen_seeds[a_seed_type as usize];
+                    a_chosen_seed.time_start_motion = self.seed_chooser_age;
+                    a_chosen_seed.time_end_motion = self.seed_chooser_age + 15;
+                    a_chosen_seed.start_x = a_chosen_seed.x;
+                    a_chosen_seed.start_y = a_chosen_seed.y;
+                    a_chosen_seed.end_x = a_end_x;
+                    a_chosen_seed.end_y = a_end_y;
+                    a_chosen_seed.seed_state = ChosenSeedState::FlyingToBank;
+                    a_chosen_seed.seed_index_in_bank = an_index - 1;
+                }
+                self.seeds_in_flight += 1;
+            }
+        }
+        // C++ 828-836: 被点击的种子飞回选卡区
+        seed.time_start_motion = self.seed_chooser_age;
+        seed.time_end_motion = self.seed_chooser_age + 25;
+        seed.start_x = seed.x;
+        seed.start_y = seed.y;
+        let (mut a_end_x, mut a_end_y) = (0, 0);
+        self.get_seed_position_in_chooser(seed.seed_type as i32, &mut a_end_x, &mut a_end_y);
+        seed.end_x = a_end_x;
+        seed.end_y = a_end_y;
         seed.seed_state = ChosenSeedState::FlyingToChooser;
+        seed.seed_index_in_bank = 0;
+        self.seeds_in_bank -= 1;
         self.seeds_in_flight += 1;
+        // C++ 837-839: RemoveToolTip(); EnableStartButton(false); PlaySample(SOUND_TAP)
+        self.remove_tool_tip();
+        self.enable_start_button(false);
+        if let Some(app) = self.app {
+            unsafe {
+                (*app).play_sample(crate::framework::resources::ResourceId::SoundTap as i32);
+            }
+        }
     }
     pub fn clicked_seed_in_chooser(&mut self, seed: &mut ChosenSeed) {
-        // ClickedSeedInChooser — 简化版
-        if self.seeds_in_bank >= 10 {
+        // C++: SeedChooserScreen::ClickedSeedInChooser（SeedChooserScreen.cpp:842-861）
+        // C++ 844-845: if (mSeedsInBank == mSeedBank->mNumPackets) return;
+        let a_num_packets = self
+            .board
+            .map_or(0, |b| unsafe { (*b).get_num_seeds_in_bank() });
+        if self.seeds_in_bank == a_num_packets {
             return;
         }
+        // C++ 847-851: 起点为当前位置，终点为卡槽第 mSeedsInBank 格
+        seed.time_start_motion = self.seed_chooser_age;
+        seed.time_end_motion = self.seed_chooser_age + 25;
+        seed.start_x = seed.x;
+        seed.start_y = seed.y;
+        let (mut a_end_x, mut a_end_y) = (0, 0);
+        self.get_seed_position_in_bank(self.seeds_in_bank, &mut a_end_x, &mut a_end_y);
+        seed.end_x = a_end_x;
+        seed.end_y = a_end_y;
+        // C++ 852-855: SEED_FLYING_TO_BANK + mSeedIndexInBank = mSeedsInBank
         seed.seed_state = ChosenSeedState::FlyingToBank;
         seed.seed_index_in_bank = self.seeds_in_bank;
         self.seeds_in_flight += 1;
         self.seeds_in_bank += 1;
+        // C++ 857-858: RemoveToolTip(); PlaySample(SOUND_TAP)
         self.remove_tool_tip();
+        if let Some(app) = self.app {
+            unsafe {
+                (*app).play_sample(crate::framework::resources::ResourceId::SoundTap as i32);
+            }
+        }
+        // C++ 859-860: 满槽时点亮开始按钮
+        if self.seeds_in_bank == a_num_packets {
+            self.enable_start_button(true);
+        }
     }
     pub fn show_tool_tip(&mut self) {
         // 对应 C++ SeedChooserScreen::ShowToolTip L863-L948
@@ -1125,7 +1720,14 @@ impl SeedChooserScreen {
         }
     }
     pub fn remove_tool_tip(&mut self) {
-        self.tool_tip = None;
+        // C++: RemoveToolTip（SeedChooserScreen.cpp:950-954）—— 隐藏而非销毁；
+        // [TRANSLATION_NOTE]: 旧实现置 None 会丢失 mToolTip 对象（C++ 中常驻）。
+        if let Some(tip) = self.tool_tip {
+            unsafe {
+                (*tip).m_visible = false;
+            }
+        }
+        self.tool_tip_seed = 0;
     }
     /// 关闭选卡界面并把选中的种子写入卡槽（对应 C++ CloseSeedChooser，SeedChooserScreen.cpp:1099）
     pub fn close_seed_chooser(&mut self) {

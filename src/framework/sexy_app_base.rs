@@ -354,6 +354,13 @@ pub struct SexyAppBase {
     /// 对应 C++ mLastUserInputTick / mLastTimerTime
     pub m_last_user_input_tick: i32,
     pub m_last_timer_time: i32,
+    // ---- 注册表（对应 C++ mReadFromRegistry/mWaitForVSync/mLastShutdownWasGraceful）----
+    /// 对应 C++ mReadFromRegistry（ReadFromRegistry 已调用标志）
+    pub m_read_from_registry: bool,
+    /// 对应 C++ mWaitForVSync（垂直同步开关，注册表持久化）
+    pub m_wait_for_v_sync: bool,
+    /// 对应 C++ mLastShutdownWasGraceful（上次关闭是否正常，InProgress 值）
+    pub m_last_shutdown_was_graceful: bool,
 }
 
 /// 将 SDL2 Keycode（C 风格的 int）转换为框架 KeyCode（Windows VK 兼容）
@@ -741,6 +748,11 @@ impl SexyAppBase {
             m_loading_thread_completed: false,
             m_last_user_input_tick: 0,
             m_last_timer_time: 0,
+            // C++ 构造函数默认值（mReadFromRegistry=false，SexyAppBase.cpp:293；
+            // mWaitForVSync=true 默认见 SexyAppBase.h；mLastShutdownWasGraceful 默认 true）
+            m_read_from_registry: false,
+            m_wait_for_v_sync: true,
+            m_last_shutdown_was_graceful: true,
             cursor_num: 0,
             memory_image_set: Vec::new(),
             update_app_state: 0,
@@ -1878,12 +1890,38 @@ impl SexyAppBase {
         std::fs::read_to_string(path).ok()
     }
 
-    /// 复制到剪贴板（对应 C++ CopyToClipboard）
-    pub fn copy_to_clipboard(&self, _text: &str) {}
+    /// 复制到剪贴板（对应 C++ CopyToClipboard，SexyAppBase.cpp:3571-3577）
+    /// C++: if (mPlayingDemoBuffer) return; SDL_SetClipboardText(...)
+    pub fn copy_to_clipboard(&self, text: &str) {
+        if self.m_playing_demo_buffer {
+            return;
+        }
+        let a_c_string = match std::ffi::CString::new(text) {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        unsafe {
+            sdl2::sys::SDL_SetClipboardText(a_c_string.as_ptr());
+        }
+    }
 
-    /// 获取剪贴板内容（对应 C++ GetClipboard）
+    /// 获取剪贴板内容（对应 C++ GetClipboard，SexyAppBase.cpp:3579-3591）
+    /// C++: if (mPlayingDemoBuffer) return ""; text = SDL_GetClipboardText(); ...
     pub fn get_clipboard(&self) -> String {
-        String::new()
+        if self.m_playing_demo_buffer {
+            return String::new();
+        }
+        unsafe {
+            let a_text = sdl2::sys::SDL_GetClipboardText();
+            if a_text.is_null() {
+                return String::new();
+            }
+            let a_result = std::ffi::CStr::from_ptr(a_text)
+                .to_string_lossy()
+                .into_owned();
+            sdl2::sys::SDL_free(a_text as *mut std::os::raw::c_void);
+            a_result
+        }
     }
 
     /// 设置光标类型（对应 C++ SetCursor 的完整版本）
@@ -1897,11 +1935,251 @@ impl SexyAppBase {
     /// 其余 Input.cpp 职责（事件分发、`SDLKeyToKeyCode`、demo 录制、窗口创建）均已在本文件实现，
     /// 见 `process_deferred_messages` / `sdl_keycode_to_keycode` / `record_demo_event`。
     pub fn start_text_input(&mut self, _initial_text: &str) -> bool {
+        // 对应 C++ StartTextInput（platform/default/Input.cpp:492-502）：
+        // SDL_StartTextInput()（emscripten 软键盘分支为平台特有，略）
+        unsafe {
+            sdl2::sys::SDL_StartTextInput();
+        }
+        // C++ 恒返回 false（桌面端无软键盘）
         false
     }
 
-    /// 停止文本输入（对应 C++ StopTextInput，platform/default/Input.cpp:504）—— 同上的桩
-    pub fn stop_text_input(&mut self) {}
+    /// 停止文本输入（对应 C++ StopTextInput，platform/default/Input.cpp:504-511）
+    pub fn stop_text_input(&mut self) {
+        unsafe {
+            sdl2::sys::SDL_StopTextInput();
+        }
+    }
+
+    /// 设置输入法候选框区域（对应 C++ SetTextInputRect，platform/default/Input.cpp:513-526）
+    /// C++: 逻辑坐标经 MouseDestRect/MouseSourceRect 映射到窗口像素后 SDL_SetTextInputRect
+    pub fn set_text_input_rect(&mut self, the_rect: crate::framework::rect::Rect) {
+        // C++ 515-518: 取 mWidgetManager 的 MouseDestRect / MouseSourceRect，空矩形直接返回
+        let Some(a_wm) = self.widget_manager else {
+            return;
+        };
+        unsafe {
+            let a_wm_ref = &*a_wm;
+            let a_logical = &a_wm_ref.mouse_dest_rect;
+            let a_present = &a_wm_ref.mouse_src_rect;
+            if a_logical.width <= 0 || a_logical.height <= 0 {
+                return;
+            }
+            let mut a_rect = sdl2::sys::SDL_Rect {
+                x: (the_rect.x - a_logical.x) * a_present.width / a_logical.width + a_present.x,
+                y: (the_rect.y - a_logical.y) * a_present.height / a_logical.height + a_present.y,
+                w: the_rect.width * a_present.width / a_logical.width,
+                h: the_rect.height * a_present.height / a_logical.height,
+            };
+            sdl2::sys::SDL_SetTextInputRect(&mut a_rect);
+        }
+    }
+
+    // ==================== 注册表（对应 C++ SexyAppBase.cpp:1022-1375） ====================
+    // C++ 经 Windows API；PvZ-Portable 用 regemu 文件模拟（RegEmu.cpp）。
+    // [TRANSLATION_NOTE]: C++ 的 demo 录制/回放分支（DEMO_REGISTRY_*）未翻译——Rust demo
+    // 系统未覆盖注册表命令，按 C++ 非 demo 路径实现。
+
+    /// 值名拆分为（键名，值名）（对应 C++ RegistryWrite/ReadKey 内 1041-1053 的拆分逻辑）
+    fn registry_split_name(&self, the_value_name: &str) -> (String, String) {
+        // C++ 1041: RemoveTrailingSlash("SOFTWARE\" + mRegKey)
+        let mut a_key_name = format!("SOFTWARE\\{}", self.reg_key);
+        while a_key_name.ends_with('\\') {
+            a_key_name.pop();
+        }
+        // C++ 1044-1053: 值名中最后的 '\' 之前并入键名
+        if let Some(a_slash_pos) = the_value_name.rfind('\\') {
+            a_key_name.push_str("\\");
+            a_key_name.push_str(&the_value_name[..a_slash_pos]);
+            (a_key_name, the_value_name[a_slash_pos + 1..].to_string())
+        } else {
+            (a_key_name, the_value_name.to_string())
+        }
+    }
+
+    /// 写注册表原始值（对应 C++ RegistryWrite，SexyAppBase.cpp:1022-1077）
+    pub fn registry_write(
+        &mut self,
+        the_value_name: &str,
+        the_type: u32,
+        the_value: &[u8],
+        the_length: u32,
+    ) -> bool {
+        if self.reg_key.is_empty() {
+            return false;
+        }
+        let (a_key_name, a_value_name) = self.registry_split_name(the_value_name);
+        crate::framework::reg_emu::registry_write(
+            &a_key_name,
+            &a_value_name,
+            the_type,
+            the_value,
+            the_length,
+        )
+    }
+
+    /// 写字符串值（对应 C++ RegistryWriteString，SexyAppBase.cpp:1079-1082）
+    pub fn registry_write_string(&mut self, the_value_name: &str, the_string: &str) -> bool {
+        self.registry_write(
+            the_value_name,
+            crate::framework::reg_emu::REGEMU_SZ,
+            the_string.as_bytes(),
+            the_string.len() as u32,
+        )
+    }
+
+    /// 写整数值（对应 C++ RegistryWriteInteger，SexyAppBase.cpp:1084-1087）
+    pub fn registry_write_integer(&mut self, the_value_name: &str, the_value: i32) -> bool {
+        let a_bytes = the_value.to_le_bytes();
+        self.registry_write(
+            the_value_name,
+            crate::framework::reg_emu::REGEMU_DWORD,
+            &a_bytes,
+            4,
+        )
+    }
+
+    /// 写布尔值（对应 C++ RegistryWriteBoolean，SexyAppBase.cpp:1089-1093）
+    pub fn registry_write_boolean(&mut self, the_value_name: &str, the_value: bool) -> bool {
+        self.registry_write_integer(the_value_name, if the_value { 1 } else { 0 })
+    }
+
+    /// 读注册表原始值（对应 C++ RegistryRead/RegistryReadKey，SexyAppBase.cpp:1182-1279）
+    pub fn registry_read(
+        &mut self,
+        the_value_name: &str,
+        the_type: &mut u32,
+        the_value: &mut [u8],
+        the_length: &mut u32,
+    ) -> bool {
+        if self.reg_key.is_empty() {
+            return false;
+        }
+        let (a_key_name, a_value_name) = self.registry_split_name(the_value_name);
+        crate::framework::reg_emu::registry_read(
+            &a_key_name,
+            &a_value_name,
+            the_type,
+            the_value,
+            the_length,
+        )
+    }
+
+    /// 读字符串值（对应 C++ RegistryReadString，SexyAppBase.cpp:1282-1298）
+    pub fn registry_read_string(&mut self, the_key: &str) -> Option<String> {
+        let mut a_type: u32 = 0;
+        let mut a_buffer = [0u8; 1024];
+        let mut a_len: u32 = (a_buffer.len() - 1) as u32;
+        if !self.registry_read(the_key, &mut a_type, &mut a_buffer, &mut a_len) {
+            return None;
+        }
+        if a_type != crate::framework::reg_emu::REGEMU_SZ {
+            return None;
+        }
+        let a_len = (a_len as usize).min(a_buffer.len());
+        Some(String::from_utf8_lossy(&a_buffer[..a_len]).into_owned())
+    }
+
+    /// 读整数值（对应 C++ RegistryReadInteger，SexyAppBase.cpp:1300-1313）
+    pub fn registry_read_integer(&mut self, the_key: &str) -> Option<i32> {
+        let mut a_type: u32 = 0;
+        let mut a_long_bytes = [0u8; 4];
+        let mut a_len: u32 = 4;
+        if !self.registry_read(the_key, &mut a_type, &mut a_long_bytes, &mut a_len) {
+            return None;
+        }
+        if a_type != crate::framework::reg_emu::REGEMU_DWORD {
+            return None;
+        }
+        Some(i32::from_le_bytes(a_long_bytes))
+    }
+
+    /// 读布尔值（对应 C++ RegistryReadBoolean，SexyAppBase.cpp:1315-1323）
+    pub fn registry_read_boolean(&mut self, the_key: &str) -> Option<bool> {
+        self.registry_read_integer(the_key).map(|v| v != 0)
+    }
+
+    /// 删除键（对应 C++ RegistryEraseKey，SexyAppBase.cpp:1113-1157）
+    pub fn registry_erase_key(&mut self, the_key_name: &str) -> bool {
+        if self.reg_key.is_empty() {
+            return false;
+        }
+        let mut a_key_name = format!("SOFTWARE\\{}", self.reg_key);
+        while a_key_name.ends_with('\\') {
+            a_key_name.pop();
+        }
+        a_key_name.push_str("\\");
+        a_key_name.push_str(the_key_name);
+        crate::framework::reg_emu::registry_erase_key(&a_key_name)
+    }
+
+    /// 删除值（对应 C++ RegistryEraseValue，SexyAppBase.cpp:1159-1180）
+    pub fn registry_erase_value(&mut self, the_value_name: &str) {
+        if self.reg_key.is_empty() {
+            return;
+        }
+        let (a_key_name, a_value_name) = self.registry_split_name(the_value_name);
+        crate::framework::reg_emu::registry_erase_value(&a_key_name, &a_value_name);
+    }
+
+    /// 写入全局设置（对应 C++ WriteToRegistry，SexyAppBase.cpp:1100-1111）
+    pub fn write_to_registry(&mut self) {
+        self.registry_write_integer("MusicVolume", (self.music_volume * 100.0) as i32);
+        self.registry_write_integer("SfxVolume", (self.sfx_volume * 100.0) as i32);
+        self.registry_write_integer(
+            "Muted",
+            if self.m_mute_count - self.m_auto_mute_count > 0 {
+                1
+            } else {
+                0
+            },
+        );
+        self.registry_write_integer("ScreenMode", if self.is_windowed { 0 } else { 1 });
+        self.registry_write_integer("PreferredX", self.preferred_x);
+        self.registry_write_integer("PreferredY", self.preferred_y);
+        self.registry_write_integer("CustomCursors", 0); // EnableCustomCursors 平台特有，恒 0
+        self.registry_write_integer("InProgress", 0);
+        self.registry_write_boolean("WaitForVSync", self.m_wait_for_v_sync);
+    }
+
+    /// 读取全局设置（对应 C++ ReadFromRegistry，SexyAppBase.cpp:1337-1375）
+    pub fn read_from_registry(&mut self) {
+        self.m_read_from_registry = true;
+        // C++ 1340: mRegKey = GetString("RegistryKey", mRegKey)
+        self.reg_key = self.get_string_default("RegistryKey", &self.reg_key);
+
+        if self.reg_key.is_empty() {
+            return;
+        }
+
+        // C++ 1345: SetRegFile(GetAppDataPath("registry.regemu"))
+        // [TRANSLATION_NOTE]: Rust 无 gAppDataFolder 全局，用当前目录下同名文件
+        crate::framework::reg_emu::set_reg_file("registry.regemu");
+
+        if let Some(a_int) = self.registry_read_integer("MusicVolume") {
+            self.music_volume = a_int as f64 / 100.0;
+        }
+        if let Some(a_int) = self.registry_read_integer("SfxVolume") {
+            self.sfx_volume = a_int as f64 / 100.0;
+        }
+        if let Some(a_int) = self.registry_read_integer("Muted") {
+            self.m_mute_count = a_int;
+        }
+        if let Some(a_int) = self.registry_read_integer("ScreenMode") {
+            self.is_windowed = a_int == 0;
+        }
+        if let Some(a_int) = self.registry_read_integer("PreferredX") {
+            self.preferred_x = a_int;
+        }
+        if let Some(a_int) = self.registry_read_integer("PreferredY") {
+            self.preferred_y = a_int;
+        }
+        if let Some(a_int) = self.registry_read_integer("InProgress") {
+            self.m_last_shutdown_was_graceful = a_int == 0;
+        }
+        // C++ 1374: 未屏保时写 InProgress=1（Rust 无屏保模式）
+        self.registry_write_integer("InProgress", 1);
+    }
 
     /// 检查是否已关闭
     pub fn is_shutdown(&self) -> bool {

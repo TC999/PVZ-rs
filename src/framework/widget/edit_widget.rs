@@ -313,6 +313,47 @@ impl EditWidget {
         self.process_key(KEYCODE_UNKNOWN, the_char, is_ctrl, wm);
     }
 
+    /// 在光标处插入文本（对应 C++ EditWidget::InsertTextAtCursor，EditWidget.cpp:539-576）
+    /// C++: 过滤字体无法渲染的字符（>= 32 且 CharWidth != 0），
+    /// 有选区时替换选区，否则插入光标处；mCursorPos 前进 aInsert.size() 字节数。
+    pub fn insert_text_at_cursor(&mut self, the_text: &str) {
+        let Some(a_font) = self.font.as_ref() else {
+            return;
+        };
+
+        // C++ 545-558: 逐 UTF-8 码点过滤（非法字节跳过；aChar >= 32 且字体可渲染才保留）
+        let mut a_insert = String::new();
+        for a_char in the_text.chars() {
+            if (a_char as u32) >= 32 && a_font.char_width_kern(a_char, '\0') != 0 {
+                a_insert.push(a_char);
+            }
+        }
+
+        if a_insert.is_empty() {
+            return;
+        }
+
+        if self.hilite_pos != -1 && self.hilite_pos != self.cursor_pos {
+            // C++ 563-568: 用插入文本替换选区
+            let a_start = self.cursor_pos.min(self.hilite_pos) as usize;
+            let a_end = self.cursor_pos.max(self.hilite_pos) as usize;
+            let mut a_new_string = String::with_capacity(self.text.len() + a_insert.len());
+            a_new_string.push_str(&self.text[..a_start]);
+            a_new_string.push_str(&a_insert);
+            a_new_string.push_str(&self.text[a_end..]);
+            self.text = a_new_string;
+            self.cursor_pos = a_start as i32;
+        } else {
+            // C++ 569-572: 直接插入光标处
+            let a_pos = (self.cursor_pos as usize).min(self.text.len());
+            self.text.insert_str(a_pos, &a_insert);
+        }
+
+        // C++ 574-575: mCursorPos += aInsert.size(); mHilitePos = -1
+        self.cursor_pos += a_insert.len() as i32;
+        self.hilite_pos = -1;
+    }
+
     fn process_key(
         &mut self,
         the_key: KeyCode,
@@ -340,7 +381,7 @@ impl EditWidget {
         let old_cursor = self.cursor_pos;
         let old_hilite = self.hilite_pos;
 
-        // Ctrl+C / Ctrl+X (copy/cut)
+        // Ctrl+C / Ctrl+X (copy/cut)（C++ EditWidget.cpp:314-336）
         if the_char == 3 || the_char == 24 {
             if self.hilite_pos != -1 && self.hilite_pos != self.cursor_pos {
                 let (start, end) = if self.cursor_pos < self.hilite_pos {
@@ -348,9 +389,16 @@ impl EditWidget {
                 } else {
                     (self.hilite_pos, self.cursor_pos)
                 };
-                // copy handled outside
+                // C++ 322: CopyToClipboard(mString.substr(aSelStart, aSelLen))
+                if let Some(a_mgr) = self.widget.widget_manager {
+                    unsafe {
+                        if let Some(a_app) = (*a_mgr).app {
+                            (*a_app).copy_to_clipboard(&self.text[start as usize..end as usize]);
+                        }
+                    }
+                }
                 if the_char == 24 {
-                    // cut
+                    // cut（C++ 330-334）
                     let range = start as usize..end as usize;
                     self.text.replace_range(range, "");
                     self.cursor_pos = start;
@@ -361,24 +409,30 @@ impl EditWidget {
                 }
             }
         }
-        // Ctrl+V (paste)
+        // Ctrl+V (paste)（C++ EditWidget.cpp:337-354）
         else if the_char == 22 {
-            // paste simplified
-            if self.hilite_pos != -1 && self.hilite_pos != self.cursor_pos {
-                let (start, end) = if self.cursor_pos < self.hilite_pos {
-                    (self.cursor_pos, self.hilite_pos)
-                } else {
-                    (self.hilite_pos, self.cursor_pos)
-                };
-                let range = start as usize..end as usize;
-                self.text.replace_range(range, "");
-                self.cursor_pos = start;
-                self.hilite_pos = -1;
+            // C++ 341: GetClipboard()
+            let mut a_base_string =
+                self.widget
+                    .widget_manager
+                    .map_or(String::new(), |a_mgr| unsafe {
+                        (*a_mgr)
+                            .app
+                            .map_or(String::new(), |a_app| (*a_app).get_clipboard())
+                    });
+            if !a_base_string.is_empty() {
+                // C++ 345-347: take first line only (find_first_of newline)
+                if let Some(a_line_end) = a_base_string.find(['\r', '\n']) {
+                    a_base_string.truncate(a_line_end);
+                }
+                // C++ 349-352: InsertTextAtCursor(aBaseString)
+                self.insert_text_at_cursor(&a_base_string);
+                big_change = self.text != old_text
+                    || self.cursor_pos != old_cursor
+                    || self.hilite_pos != old_hilite;
             }
-            big_change = true;
-        }
         // Ctrl+Z (undo)
-        else if the_char == 26 {
+        } else if the_char == 26 {
             self.last_modify_idx = -1;
             let swap = (self.text.clone(), self.cursor_pos, self.hilite_pos);
             self.text = self.undo_string.clone();

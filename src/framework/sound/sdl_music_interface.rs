@@ -387,6 +387,40 @@ impl MusicInterface for SDLMusicInterface {
     }
 }
 
+impl SDLMusicInterface {
+    /// 取音乐流句柄（对应 C++ SDLMusicInterface 的 mMusicMap.find(theSongId)->second.mHMusic，
+    /// C++ Music::GetMusicHandle，Music.cpp:228-234）
+    pub fn get_music_handle(&self, song_id: i32) -> *mut std::ffi::c_void {
+        self.music_map
+            .get(&song_id)
+            .map(|info| info.handle)
+            .unwrap_or(std::ptr::null_mut())
+    }
+
+    /// 查询 MOD 当前播放 order（对应 C++ SDLMusicInterface::GetMusicOrder，
+    /// SDLMusicInterface.cpp:308-319：Mix_ModMusicStreamGetOrder）
+    pub fn get_music_order(&self, song_id: i32) -> i32 {
+        match self.music_map.get(&song_id) {
+            Some(info) if !info.handle.is_null() => {
+                sdl_mixer::mod_music_stream_get_order(info.handle)
+            }
+            _ => -1,
+        }
+    }
+
+    /// 按句柄设置 MOD 逐轨音量（对应 C++ Mix_ModMusicStreamSetChannelVolume，Music.cpp:165）
+    pub fn set_music_channel_volume(
+        &self,
+        music: *mut std::ffi::c_void,
+        channel: i32,
+        volume: i32,
+    ) {
+        if !music.is_null() {
+            sdl_mixer::mod_music_stream_set_channel_volume(music, channel, volume);
+        }
+    }
+}
+
 impl Default for SDLMusicInterface {
     fn default() -> Self {
         SDLMusicInterface::new()

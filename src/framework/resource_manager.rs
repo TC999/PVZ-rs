@@ -438,6 +438,54 @@ impl ResourceManager {
         -1
     }
 
+    /// 由图像指针反查资源路径（对应 C++ PvzpResourceManager::FindImagePath，PvzpCommon.cpp:1185-1198）
+    /// 遍历 image_map，命中 mImage == theImage 时把键名写入 thePath。
+    /// [TRANSLATION_NOTE]: C++ 的 *thePath = anItr->first 是资源表键（id 小写名），
+    /// 语义与 Rust image_map 键一致。
+    pub fn find_image_path(
+        &self,
+        image: *mut crate::framework::graphics::image::Image,
+    ) -> Option<String> {
+        if image.is_null() {
+            return None;
+        }
+        for (a_key, a_ptr) in self.image_map.iter() {
+            if a_ptr.is_null() {
+                continue;
+            }
+            unsafe {
+                let a_res = &*(*a_ptr as *const ImageRes);
+                if a_res.image.as_image_ptr() == image {
+                    return Some(a_key.clone());
+                }
+            }
+        }
+        None
+    }
+
+    /// 由字体指针反查资源路径（对应 C++ PvzpResourceManager::FindFontPath，PvzpCommon.cpp:1170-1183）
+    /// [TRANSLATION_NOTE]: Rust FontRes.font 为 Box<Font>（值语义），指针比较改为
+    /// Box 内部地址比较（as_ptr），与 C++ aFont == theFont 等价。
+    pub fn find_font_path(&self, font: *const Font) -> Option<String> {
+        if font.is_null() {
+            return None;
+        }
+        for (a_key, a_ptr) in self.font_map.iter() {
+            if a_ptr.is_null() {
+                continue;
+            }
+            unsafe {
+                let a_res = &*(*a_ptr as *const FontRes);
+                if let Some(a_font) = a_res.font.as_ref() {
+                    if (a_font.as_ref() as *const Font) == font {
+                        return Some(a_key.clone());
+                    }
+                }
+            }
+        }
+        None
+    }
+
     /// 解析带子元素的资源容器（如 <Font ...>...</Font>）
     fn parse_resource_container(&mut self, parser: &mut XMLParser, start_element: &XMLElement) {
         // 原子地处理当前容器内的所有子元素

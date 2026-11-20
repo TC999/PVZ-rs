@@ -55,23 +55,142 @@ impl AlmanacDialog {
     }
 
     pub fn clear_plants_and_zombies(&mut self) {
-        self.plant = None;
-        self.zombie = None;
+        // 对应 C++ AlmanacDialog::ClearPlantsAndZombies（AlmanacDialog.cpp:119-141）
+        // C++: mPlant->Die(); delete mPlant; mPlant = nullptr
+        if let Some(plant_ptr) = self.plant.take() {
+            unsafe {
+                let mut a_plant = Box::from_raw(plant_ptr);
+                a_plant.die();
+            }
+        }
+        // C++: mZombie->DieNoLoot(); delete mZombie; mZombie = nullptr
+        if let Some(zombie_ptr) = self.zombie.take() {
+            unsafe {
+                let mut a_zombie = Box::from_raw(zombie_ptr);
+                a_zombie.die_no_loot();
+            }
+        }
+        // [TRANSLATION_NOTE]: C++ 还有 mZombiePerfTest（性能测试僵尸数组），
+        // Rust 未建模该数组，无对应清理。
     }
     pub fn removed_from_manager(&mut self, _mgr: &mut WidgetManager) {
         self.clear_plants_and_zombies();
     }
     pub fn setup_plant(&mut self) {
+        // 对应 C++ AlmanacDialog::SetupPlant（AlmanacDialog.cpp:149-167）
         self.clear_plants_and_zombies();
-        self.plant = None;
+
+        let mut a_pos_x = ALMANAC_PLANT_POSITION_X;
+        let mut a_pos_y = ALMANAC_PLANT_POSITION_Y;
+        if self.selected_seed == SeedType::Tallnut {
+            a_pos_y += 18.0;
+        } else if self.selected_seed == SeedType::Cobcannon {
+            a_pos_x -= 40.0;
+        } else if self.selected_seed == SeedType::Flowerpot {
+            a_pos_y -= 20.0;
+        } else if self.selected_seed == SeedType::InstantCoffee {
+            a_pos_y += 20.0;
+        } else if self.selected_seed == SeedType::Gravebuster {
+            a_pos_y += 55.0;
+        }
+
+        let mut a_plant = Box::new(crate::lawn::plant::Plant::new());
+        a_plant.base.board = None;
+        a_plant.is_on_board = false;
+        a_plant.plant_initialize(0, 0, self.selected_seed, SeedType::None);
+        a_plant.base.x = a_pos_x as i32;
+        a_plant.base.y = a_pos_y as i32;
+        self.plant = Some(Box::into_raw(a_plant));
     }
     pub fn setup_zombie(&mut self) {
+        // 对应 C++ AlmanacDialog::SetupZombie（AlmanacDialog.cpp:169-178）
         self.clear_plants_and_zombies();
-        self.zombie = None;
+
+        let mut a_zombie = Box::new(crate::lawn::zombie::Zombie::new());
+        a_zombie.base.board = None;
+        a_zombie.base.app = self.app;
+        a_zombie.zombie_initialize(
+            0,
+            self.selected_zombie,
+            false,
+            None,
+            crate::lawn::zombie::Zombie::ZOMBIE_WAVE_UI,
+        );
+        a_zombie.pos_x = ALMANAC_ZOMBIE_POSITION_X;
+        a_zombie.pos_y = ALMANAC_ZOMBIE_POSITION_Y;
+        self.zombie = Some(Box::into_raw(a_zombie));
     }
     pub fn set_page(&mut self, page: AlmanacPage) {
+        // 对应 C++ AlmanacDialog::SetPage（AlmanacDialog.cpp:180-216）
         self.open_page = page;
         self.clear_plants_and_zombies();
+
+        if self.open_page == AlmanacPage::Index {
+            // C++ 187-198: 索引页预览用向日葵 + 普通僵尸
+            let mut a_plant = Box::new(crate::lawn::plant::Plant::new());
+            a_plant.base.board = None;
+            a_plant.is_on_board = false;
+            a_plant.plant_initialize(0, 0, SeedType::Sunflower, SeedType::None);
+            a_plant.base.x = ALMANAC_INDEXPLANT_POSITION_X;
+            a_plant.base.y = ALMANAC_INDEXPLANT_POSITION_Y;
+            self.plant = Some(Box::into_raw(a_plant));
+
+            let mut a_zombie = Box::new(crate::lawn::zombie::Zombie::new());
+            a_zombie.base.board = None;
+            a_zombie.base.app = self.app;
+            a_zombie.zombie_initialize(
+                0,
+                ZombieType::Normal,
+                false,
+                None,
+                crate::lawn::zombie::Zombie::ZOMBIE_WAVE_UI,
+            );
+            a_zombie.pos_x = ALMANAC_INDEXZOMBIE_POSITION_X as f32;
+            a_zombie.pos_y = ALMANAC_INDEXZOMBIE_POSITION_Y;
+            self.zombie = Some(Box::into_raw(a_zombie));
+
+            // C++ 200-202: 隐藏索引页按钮，显示植物/僵尸按钮
+            if let Some(btn) = self.index_button {
+                unsafe {
+                    (*btn).btn_no_draw = true;
+                }
+            }
+            if let Some(btn) = self.plant_button {
+                unsafe {
+                    (*btn).btn_no_draw = false;
+                }
+            }
+            if let Some(btn) = self.zombie_button {
+                unsafe {
+                    (*btn).btn_no_draw = false;
+                }
+            }
+        } else {
+            // C++ 206-209
+            if self.open_page == AlmanacPage::Plants {
+                self.setup_plant();
+            } else if self.open_page == AlmanacPage::Zombies {
+                self.setup_zombie();
+            } else {
+                return;
+            }
+            // C++ 212-214
+            if let Some(btn) = self.index_button {
+                unsafe {
+                    (*btn).btn_no_draw = false;
+                }
+            }
+            if let Some(btn) = self.plant_button {
+                unsafe {
+                    (*btn).btn_no_draw = true;
+                }
+            }
+            if let Some(btn) = self.zombie_button {
+                unsafe {
+                    (*btn).btn_no_draw = true;
+                }
+            }
+        }
     }
 
     /// 对应 C++ AlmanacDialog::KeyDown（AlmanacDialog.cpp）
@@ -92,13 +211,65 @@ impl AlmanacDialog {
         // C++: LawnDialog::KeyDown(theKey) —— 基类按键处理，Rust 侧无对应实现
     }
     pub fn update(&mut self) {
+        // 对应 C++ AlmanacDialog::Update（AlmanacDialog.cpp:230-260）
+        // C++ 232-235: 四个按钮 Update（is_over 由 WidgetManager 驱动的实现承担）
+        // C++ 236-237: mPlant/mZombie Update
+        if let Some(plant_ptr) = self.plant {
+            unsafe {
+                (*plant_ptr).update();
+            }
+        }
+        if let Some(zombie_ptr) = self.zombie {
+            unsafe {
+                (*zombie_ptr).update();
+            }
+        }
+        // [TRANSLATION_NOTE]: C++ 238-244 mZombiePerfTest 数组 Rust 未建模
+
+        // C++ 246-256: 鼠标命中时手型光标，否则指针
         if let Some(app) = self.app {
             unsafe {
-                let mx = 0;
-                let my = 0;
-                if self.seed_hit_test(mx, my) != SeedType::None
-                    || self.zombie_hit_test(mx, my) != ZombieType::Invalid
-                {}
+                let (a_mouse_x, a_mouse_y) = match (*app).base.widget_manager {
+                    Some(w) => ((*w).last_mouse_x, (*w).last_mouse_y),
+                    None => (0, 0),
+                };
+                // C++: 按钮悬停判定（GameButton::IsMouseOver 语义）
+                let a_button_over = [
+                    self.close_button,
+                    self.index_button,
+                    self.plant_button,
+                    self.zombie_button,
+                ]
+                .iter()
+                .any(|b| {
+                    b.map_or(false, |btn| {
+                        let btn_ref = &*btn;
+                        !btn_ref.disabled
+                            && !btn_ref.btn_no_draw
+                            && crate::framework::rect::Rect::new(
+                                btn_ref.x,
+                                btn_ref.y,
+                                btn_ref.width,
+                                btn_ref.height,
+                            )
+                            .contains(a_mouse_x, a_mouse_y)
+                    })
+                });
+                if self.seed_hit_test(a_mouse_x, a_mouse_y) != SeedType::None
+                    || self.zombie_hit_test(a_mouse_x, a_mouse_y) != ZombieType::Invalid
+                    || a_button_over
+                {
+                    // CURSOR_HAND（SexyAppBase.h:87）
+                    (*app).base.set_cursor(1);
+                } else {
+                    // CURSOR_POINTER（SexyAppBase.h:86）
+                    (*app).base.set_cursor(0);
+                }
+
+                // C++ 258: mApp->mPoolEffect->PoolEffectUpdate()
+                if let Some(pool_effect) = (*app).pool_effect.as_mut() {
+                    pool_effect.update();
+                }
             }
         }
     }

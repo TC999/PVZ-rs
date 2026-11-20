@@ -863,6 +863,52 @@ impl LawnApp {
         screen.app = Some(self as *mut LawnApp);
         screen.award_type = unsafe { std::mem::transmute::<i32, AwardType>(award) };
         screen.showing_achievements = show_achievements;
+        // 对应 C++ AwardScreen 构造体 theShowingAchievements 分支（AwardScreen.cpp:51-85）：
+        // 把新获得且未展示的成就登记进列表并写档
+        if show_achievements {
+            let mut a_achievement_items: Vec<(usize, i32, i32, i32, i32)> = Vec::new();
+            if let Some(player_info) = self.player_info.as_mut() {
+                for i in 0..crate::lawn::widget::achievements_screen::MAX_ACHIEVEMENTS {
+                    if player_info.m_earned_achievements[i] && !player_info.m_shown_achievements[i]
+                    {
+                        player_info.m_shown_achievements[i] = true;
+                        let a_start_anim_time = 100 * a_achievement_items.len() as i32 + 150;
+                        a_achievement_items.push((
+                            i,
+                            a_start_anim_time,
+                            a_start_anim_time + 100,
+                            750,
+                            750,
+                        ));
+                    }
+                }
+            }
+            if !a_achievement_items.is_empty() {
+                // C++ 73: aDestY = 284 - ((76 * size) / 2)，之后每项 +76
+                let mut a_dest_y = 284 - ((76 * a_achievement_items.len() as i32) / 2);
+                let a_item_count = a_achievement_items.len();
+                for (idx, item) in a_achievement_items.iter_mut().enumerate() {
+                    screen.achievement_items.push(
+                        crate::lawn::widget::award_screen::AchievementScreenItem {
+                            id: item.0 as i32,
+                            start_anim_time: item.1,
+                            end_anim_time: item.2,
+                            dest_y: if idx == a_item_count - 1 {
+                                a_dest_y
+                            } else {
+                                a_dest_y
+                            },
+                            start_y: item.3,
+                            y: item.4,
+                        },
+                    );
+                    a_dest_y += 76;
+                }
+            } else {
+                screen.showing_achievements = false;
+            }
+            self.write_current_user_config();
+        }
         let screen_ptr = Box::into_raw(screen);
         // 对应 C++ AwardScreen : Widget + AddWidget + BringToBack + SetFocus
         let mut widget = Box::new(Widget::new());
@@ -905,6 +951,12 @@ impl LawnApp {
         let mut screen =
             Box::new(crate::lawn::widget::seed_chooser_screen::SeedChooserScreen::new());
         screen.app = Some(self as *mut LawnApp);
+        // 对应 C++ 构造函数 mBoard = mApp->mBoard（SeedChooserScreen.cpp:48）
+        screen.board = self.board;
+        // 对应 C++ SeedChooserScreen() 构造函数体（SeedChooserScreen.cpp:45-205）
+        unsafe {
+            screen.init();
+        }
         let screen_ptr = Box::into_raw(screen);
         // 对应 C++ SeedChooserScreen : Widget + AddWidget + BringToBack + SetFocus
         let mut widget = Box::new(Widget::new());
@@ -3336,12 +3388,14 @@ impl LawnApp {
 
     pub fn write_to_registry(&mut self) {
         if let Some(player_info) = &mut self.player_info {
-            // C++: RegistryWriteString("CurUser", mPlayerInfo->mName) — 注册表写入未接入
+            // C++: RegistryWriteString("CurUser", mPlayerInfo->mName) — 用户名经 regemu 持久化
+            let a_name = player_info.name.clone();
+            self.base.registry_write_string("CurUser", &a_name);
             // C++: mPlayerInfo->SaveDetails() — 接入 PlayerInfo 存档 IO
             player_info.save_details();
         }
-        // C++ 中末尾调用 SexyAppBase::WriteToRegistry()
-        // [TRANSLATION_NOTE]: SexyAppBase::WriteToRegistry 未接入
+        // C++ 中末尾调用 SexyAppBase::WriteToRegistry()（音量/画面模式等全局设置）
+        self.base.write_to_registry();
     }
     /// 读取注册表（对应 C++ ReadFromRegistry）
     pub fn read_from_registry(&self, _key: &str, _default: &str) -> String {

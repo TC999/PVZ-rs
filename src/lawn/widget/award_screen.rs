@@ -680,20 +680,142 @@ impl AwardScreen {
         }
     }
 
-    pub fn mouse_up(&mut self, _x: i32, _y: i32, _click_count: i32) {
-        if let Some(app) = self.app {
-            unsafe {
-                (*app).kill_award_screen();
+    pub fn mouse_up(&mut self, _x: i32, _y: i32, click_count: i32) {
+        // 对应 C++ AwardScreen::MouseUp（AwardScreen.cpp:589-604）
+        if click_count == 1 {
+            // C++: mStartButton->IsMouseOver() → StartButtonPressed()
+            if self.start_button.map_or(false, |b| unsafe { (*b).is_over }) {
+                self.start_button_pressed();
+            }
+            // C++: mContinueButton->IsMouseOver() → AchievementsContinuePressed()
+            if self
+                .continue_button
+                .map_or(false, |b| unsafe { (*b).is_over })
+            {
+                self.achievements_continue_pressed();
+            }
+            // C++: mMenuButton->IsMouseOver() → KillAwardScreen + ShowGameSelector
+            if self.menu_button.map_or(false, |b| unsafe { (*b).is_over }) {
+                if let Some(app) = self.app {
+                    unsafe {
+                        (*app).kill_award_screen();
+                        (*app).show_game_selector();
+                    }
+                }
             }
         }
     }
 
-    pub fn draw_achievements(&self, _g: &mut Graphics) {
-        // 依赖图片资源，暂用占位
+    pub fn draw_achievements(&self, g: &mut Graphics) {
+        // 对应 C++ AwardScreen::DrawAchievements（AwardScreen.cpp:606-631）
+        // C++ 607-611: 白底色化矩形
+        g.set_colorize_images(true);
+        g.set_color(&crate::framework::color::Color::new(255, 255, 255, 255));
+        g.fill_rect_xywh(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
+        g.set_colorize_images(false);
+
+        // C++ 613: 背景图
+        let a_bg = self.get_resource_image("IMAGE_CHALLENGE_BACKGROUND");
+        if !a_bg.is_null() {
+            unsafe {
+                g.draw_image_xy(&*a_bg, 0, 0);
+            }
+        }
+
+        // C++ 615: PvzpDrawString(ACHIEVEMENTS_TITLE, BOARD_WIDTH/2, 58, FONT_HOUSEOFTERROR28, (220,220,220), DS_ALIGN_CENTER)
+        // [TRANSLATION_NOTE]: GetString 未接入，键名做原文；HouseOfTerror 字体简化
+        self.draw_text_centered(
+            g,
+            "[ACHIEVEMENTS]",
+            BOARD_WIDTH / 2,
+            58,
+            28,
+            &crate::framework::color::Color::new(220, 220, 220, 255),
+        );
+
+        // C++ 617-630: 逐项绘制成就图标（70×70 图集切片）与名称/描述
+        for a_item in &self.achievement_items {
+            let a_achievement =
+                &crate::lawn::widget::achievements_screen::G_ACHIEVEMENT_LIST[a_item.id as usize];
+            let mut a_achievement_name = a_achievement.name.to_string();
+            let a_achievement_desc = a_achievement.description.to_string();
+            a_achievement_name.push_str(" Earned!");
+
+            // C++ 622-626: aSrcRect 按 id 图集网格切片，aDestRect 固定 x=220
+            let a_src_rect = crate::framework::rect::Rect::new(
+                70 * (a_item.id % 7),
+                70 * (a_item.id / 7),
+                70,
+                70,
+            );
+            let a_dest_rect = crate::framework::rect::Rect::new(220, a_item.y + 10, 70, 70);
+            let a_icons = self.get_resource_image("IMAGE_ACHEESEMENTS_ICONS");
+            if !a_icons.is_null() {
+                unsafe {
+                    g.draw_image_stretch(&*a_icons, &a_dest_rect, &a_src_rect);
+                }
+            }
+
+            // C++ 628: 名称（FONT_DWARVENTODCRAFT15, (224,187,98), 居中 @450, y+25）
+            self.draw_text_centered(
+                g,
+                &a_achievement_name,
+                450,
+                a_item.y + 25,
+                15,
+                &crate::framework::color::Color::new(224, 187, 98, 255),
+            );
+            // C++ 629: 描述（PvzpDrawStringWrapped, FONT_DWARVENTODCRAFT12, 白, Rect(300, y+20, 300, 60) 垂直居中）
+            // [TRANSLATION_NOTE]: Rust Font 无 wrapped 绘制；以 12 号单行近似（300, y+25）
+            self.draw_text_centered(
+                g,
+                &a_achievement_desc,
+                450,
+                a_item.y + 45,
+                12,
+                &crate::framework::color::Color::new(255, 255, 255, 255),
+            );
+        }
     }
 
     pub fn achievements_continue_pressed(&mut self) {
-        self.showing_achievements = false;
+        // 对应 C++ AwardScreen::AchievementsContinuePressed（AwardScreen.cpp:633-662）
+        let Some(app) = self.app else { return };
+        unsafe {
+            if self.award_type == AwardType::AchievementOnly {
+                (*app).kill_award_screen();
+                if (*app).is_adventure_mode() {
+                    (*app).pre_new_game((*app).game_mode, false);
+                } else if (*app).is_survival_mode() {
+                    (*app).show_challenge_screen(ChallengePage::Survival as i32);
+                } else if (*app).is_puzzle_mode() {
+                    (*app).show_challenge_screen(ChallengePage::Puzzle as i32);
+                } else {
+                    (*app).show_challenge_screen(ChallengePage::Challenge as i32);
+                }
+            } else {
+                // C++ 650-656: 按继续后标志回显开始/菜单按钮，隐藏继续按钮
+                if let Some(btn) = self.start_button {
+                    (*btn).btn_no_draw = !self.show_start_button_after_achievements;
+                    (*btn).disabled = !self.show_start_button_after_achievements;
+                }
+                if let Some(btn) = self.menu_button {
+                    (*btn).btn_no_draw = !self.show_menu_button_after_achievements;
+                    (*btn).disabled = !self.show_menu_button_after_achievements;
+                }
+                if let Some(btn) = self.continue_button {
+                    (*btn).disabled = true;
+                    (*btn).btn_no_draw = true;
+                }
+                self.showing_achievements = false;
+                // C++ 657-661: 通关后首关奖励接僵尸便条
+                let a_level = (*app).player_info.as_ref().map_or(0, |p| p.get_level());
+                if (*app).is_adventure_mode() && a_level == 1 && (*app).has_finished_adventure() {
+                    (*app).kill_award_screen();
+                    (*app).show_award_screen(AwardType::CreditsZombieNote as i32, false);
+                }
+            }
+        }
     }
 }
 

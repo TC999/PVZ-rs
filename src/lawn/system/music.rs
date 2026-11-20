@@ -470,10 +470,13 @@ impl Music {
     }
 
     pub fn get_music_order(&self, file: MusicFile) -> u32 {
-        // 对应 C++ GetMusicOrder：依赖 SDL 后端 GetMusicOrder
-        // [TRANSLATION_NOTE]: Rust MusicInterface 无轨道顺序查询，返回 0
-        let _ = file;
-        0
+        // 对应 C++ Music::GetMusicOrder（Music.cpp:375-378）：
+        // ((SDLMusicInterface*)mApp->mMusicInterface)->GetMusicOrder((int)theMusicFile)
+        let Some(mi) = self.music_interface else {
+            return 0;
+        };
+        // trait 方法返回 -1 表示无 order（调用方判 > 0）
+        unsafe { (*mi).get_music_order(file as i32) as u32 }
     }
 
     pub fn setup_volume_for_tune(
@@ -482,17 +485,91 @@ impl Music {
         drums_volume: f32,
         hihats_volume: f32,
     ) {
-        // 对应 C++ SetupVolumeForTune：按曲目设置 30 轨音量（SDL ModMusic 通道）
-        // [TRANSLATION_NOTE]: 依赖 Mix_ModMusicStreamSetChannelVolume 逐轨设置，
-        // Rust 侧以主/鼓/镲三通道音量近似
-        let _ = (tune, drums_volume, hihats_volume);
+        // 对应 C++ Music::SetupVolumeForTune（Music.cpp:112-167）
+        const TRACK_COUNT: i32 = 30;
+        let mut a_main_end: i32 = 29;
+        let (mut a_drums_start, mut a_drums_end): (i32, i32) = (-1, -1);
+        let (mut a_hihats_start1, mut a_hihats_end1, mut a_hihats_start2, mut a_hihats_end2): (
+            i32,
+            i32,
+            i32,
+            i32,
+        ) = (-1, -1, -1, -1);
+
+        match tune {
+            MusicTune::DayGrasswalk => {
+                a_main_end = 23;
+                a_drums_start = 24;
+                a_drums_end = 26;
+                a_hihats_start1 = 27;
+                a_hihats_end1 = 27;
+            }
+            MusicTune::PoolWateryGraves => {
+                a_main_end = 17;
+                a_drums_start = 18;
+                a_drums_end = 28;
+                a_hihats_start1 = 18;
+                a_hihats_end1 = 24;
+                a_hihats_start2 = 29;
+                a_hihats_end2 = 29;
+            }
+            MusicTune::FogRigormormist => {
+                a_main_end = 15;
+                a_drums_start = 16;
+                a_drums_end = 22;
+                a_hihats_start1 = 23;
+                a_hihats_end1 = 23;
+            }
+            MusicTune::RoofGrazeTheRoof => {
+                a_main_end = 17;
+                a_drums_start = 18;
+                a_drums_end = 20;
+                a_hihats_start1 = 21;
+                a_hihats_end1 = 21;
+            }
+            _ => {}
+        }
+
+        // C++ 145: GetMusicHandle(MUSIC_FILE_MAIN_MUSIC)
+        let Some(a_h_music) = self.get_music_handle(MusicFile::MainMusic) else {
+            return;
+        };
+        let Some(mi) = self.music_interface else {
+            return;
+        };
+        for a_track in 0..TRACK_COUNT {
+            let a_volume: f32 = if a_track <= a_main_end {
+                1.0
+            } else {
+                let a_is_drums = a_track >= a_drums_start && a_track <= a_drums_end;
+                let a_is_hihats = (a_track >= a_hihats_start1 && a_track <= a_hihats_end1)
+                    || (a_track >= a_hihats_start2 && a_track <= a_hihats_end2);
+                if a_is_drums && a_is_hihats {
+                    drums_volume.max(hihats_volume)
+                } else if a_is_drums {
+                    drums_volume
+                } else if a_is_hihats {
+                    hihats_volume
+                } else {
+                    0.0
+                }
+            };
+            // C++ 165: Mix_ModMusicStreamSetChannelVolume(aHMusic, aTrack, (int)(aVolume * 128))
+            unsafe {
+                (*mi).set_music_channel_volume(a_h_music, a_track, (a_volume * 128.0) as i32);
+            }
+        }
     }
 
     pub fn get_music_handle(&self, file: MusicFile) -> Option<*mut std::ffi::c_void> {
-        // 对应 C++ GetMusicHandle：依赖 SDL 音乐映射表
-        // [TRANSLATION_NOTE]: Rust MusicInterface 无句柄查询，返回空
-        let _ = file;
-        None
+        // 对应 C++ Music::GetMusicHandle（Music.cpp:228-234）：mMusicMap.find(theMusicFile)->second.mHMusic
+        let mi = self.music_interface?;
+        let a_handle = unsafe { (*mi).get_music_handle(file as i32) };
+        if a_handle.is_null() {
+            None
+        } else {
+            Some(a_handle)
+        }
     }
 
     pub fn tod_load_music(&mut self, file: MusicFile, file_name: &str) -> bool {

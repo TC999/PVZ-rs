@@ -191,7 +191,8 @@ fn argb_to_rgb_bytes(bits: &[u32]) -> Vec<u8> {
     rgb
 }
 
-/// 写入 JPEG 图像（对应 C++ WriteJPEGImage）
+/// 写入 JPEG 图像（对应 C++ WriteJPEGImage，ImageLib.cpp:759-832）
+/// C++: jpeg_set_quality(&cinfo, 80, TRUE) + optimize_coding —— 质量固定 80
 pub fn write_jpeg_image(file_name: &str, image: &Image) -> bool {
     let w = image.width as u32;
     let h = image.height as u32;
@@ -199,7 +200,18 @@ pub fn write_jpeg_image(file_name: &str, image: &Image) -> bool {
         return false;
     }
     let rgb = argb_to_rgb_bytes(&image.bits);
-    image::save_buffer(file_name, &rgb, w, h, image::ColorType::Rgb8).is_ok()
+    let Some(img) = image::RgbImage::from_raw(w, h, rgb) else {
+        return false;
+    };
+    // 对应 C++ jpeg_set_quality(80)：显式指定质量 80
+    let file = match std::fs::File::create(file_name) {
+        Ok(f) => f,
+        Err(_) => return false,
+    };
+    let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(file, 80);
+    encoder
+        .encode(img.as_raw(), w, h, image::ExtendedColorType::Rgb8)
+        .is_ok()
 }
 
 /// 写入 PNG 图像（对应 C++ WritePNGImage）

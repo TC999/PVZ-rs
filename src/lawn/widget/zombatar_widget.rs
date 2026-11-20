@@ -229,6 +229,16 @@ pub struct ZombatarWidget {
     /// 懒加载字体缓存（对应 C++ FONT_BRIANNETOD12 等全局字体，图片字库未接线）
     /// [0]=Briannetod12 [1]=Dwarventodcraft12 [2]=Dwarventodcraft15 [3]=Houseofterror28 [4]=Continuumbold14
     pub fonts: [Option<Box<Font>>; 5],
+    /// 对应 C++ 9 个 NewLawnButton 成员（ZombatarWidget.h:80-88）
+    pub back_button: Option<*mut crate::lawn::widget::game_button::GameButton>,
+    pub view_button: Option<*mut crate::lawn::widget::game_button::GameButton>,
+    pub finished_button: Option<*mut crate::lawn::widget::game_button::GameButton>,
+    pub new_button: Option<*mut crate::lawn::widget::game_button::GameButton>,
+    pub confirm_back_button: Option<*mut crate::lawn::widget::game_button::GameButton>,
+    pub prev_portrait_button: Option<*mut crate::lawn::widget::game_button::GameButton>,
+    pub next_portrait_button: Option<*mut crate::lawn::widget::game_button::GameButton>,
+    pub prev_page_button: Option<*mut crate::lawn::widget::game_button::GameButton>,
+    pub next_page_button: Option<*mut crate::lawn::widget::game_button::GameButton>,
 }
 
 impl ZombatarWidget {
@@ -236,8 +246,107 @@ impl ZombatarWidget {
         app: Option<*mut crate::lawn::lawn_app::LawnApp>,
         game_selector: Option<*mut GameSelectorImpl>,
     ) -> Self {
-        // [TRANSLATION_NOTE]: C++ 构造函数创建 9 个 NewLawnButton（IMAGE_ZOMBATAR_* 皮肤图未接入，
-        // 按钮暂以字段占位），并置 mPreviewZombie=nullptr。
+        // 对应 C++ ZombatarWidget 构造（ZombatarWidget.cpp:273-334）
+        // [TRANSLATION_NOTE]: C++ 构造函数创建 9 个 NewLawnButton（MakeNewButton，GameButton.cpp:403），
+        // 皮肤图经 ResourceManager 查找（IMAGE_ZOMBATAR_*；未注册时为 null，按钮以空图占位），
+        // 并置 mPreviewZombie=nullptr。
+        let a_get_image = |key: &str| -> *mut crate::framework::graphics::image::Image {
+            app.map_or(std::ptr::null_mut(), |app_ptr| unsafe {
+                let a_app = &*app_ptr;
+                let Some(a_rm) = a_app.base.resource_manager else {
+                    return std::ptr::null_mut();
+                };
+                (*a_rm).get_image(key).as_image_ptr()
+            })
+        };
+        // C++ MakeNewButton：默认字体 BRIANNETOD12，宽高取 normal 图，mHasAlpha/mHasTransparencies，
+        // mTranslateX/Y = 1（Rust GameButton 无 translate 字段，略）
+        let mut a_back = Box::new(crate::lawn::widget::game_button::GameButton::new(
+            ZOMBATAR_BTN_BACK,
+            None,
+        ));
+        a_back.button_image = a_get_image("IMAGE_BLANK");
+        a_back.over_image = a_get_image("IMAGE_ZOMBATAR_MAINMENUBACK_HIGHLIGHT");
+        a_back.down_image = a_get_image("IMAGE_ZOMBATAR_MAINMENUBACK_HIGHLIGHT");
+        a_back.resize(
+            ZOMBATAR_BACK_X,
+            ZOMBATAR_BACK_Y,
+            if a_back.over_image.is_null() {
+                98
+            } else {
+                unsafe { (*a_back.over_image).get_width() }
+            },
+            if a_back.over_image.is_null() {
+                26
+            } else {
+                unsafe { (*a_back.over_image).get_height() }
+            },
+        );
+
+        let mut a_view = Box::new(crate::lawn::widget::game_button::GameButton::new(
+            ZOMBATAR_BTN_VIEW,
+            None,
+        ));
+        a_view.button_image = a_get_image("IMAGE_ZOMBATAR_VIEW_BUTTON");
+        a_view.over_image = a_get_image("IMAGE_ZOMBATAR_VIEW_BUTTON_HIGHLIGHT");
+        a_view.resize(ZOMBATAR_VIEW_X, ZOMBATAR_VIEW_Y, 115, 26);
+
+        let mut a_finished = Box::new(crate::lawn::widget::game_button::GameButton::new(
+            ZOMBATAR_BTN_FINISHED,
+            None,
+        ));
+        a_finished.button_image = a_get_image("IMAGE_ZOMBATAR_FINISHED_BUTTON");
+        a_finished.over_image = a_get_image("IMAGE_ZOMBATAR_FINISHED_BUTTON_HIGHLIGHT");
+        a_finished.resize(ZOMBATAR_FINISHED_X, ZOMBATAR_FINISHED_Y, 103, 26);
+
+        let mut a_new = Box::new(crate::lawn::widget::game_button::GameButton::new(
+            ZOMBATAR_BTN_NEW,
+            None,
+        ));
+        a_new.button_image = a_get_image("IMAGE_ZOMBATAR_NEWZOMBIE_BUTTON");
+        a_new.over_image = a_get_image("IMAGE_ZOMBATAR_NEWZOMBIE_BUTTON_HIGHLIGHT");
+        a_new.resize(ZOMBATAR_NEW_X, ZOMBATAR_NEW_Y, 234, 39);
+
+        let mut a_confirm_back = Box::new(crate::lawn::widget::game_button::GameButton::new(
+            ZOMBATAR_BTN_CONFIRM_BACK,
+            None,
+        ));
+        a_confirm_back.button_image = a_get_image("IMAGE_ZOMBATAR_BACK_BUTTON");
+        a_confirm_back.over_image = a_get_image("IMAGE_ZOMBATAR_BACK_BUTTON_HIGHLIGHT");
+        a_confirm_back.resize(ZOMBATAR_CONFIRM_BACK_X, ZOMBATAR_CONFIRM_BTN_Y, 98, 26);
+
+        let mut a_prev_portrait = Box::new(crate::lawn::widget::game_button::GameButton::new(
+            ZOMBATAR_BTN_PREV_PORTRAIT,
+            None,
+        ));
+        a_prev_portrait.button_image = a_get_image("IMAGE_ZOMBATAR_PREV_BUTTON");
+        a_prev_portrait.over_image = a_get_image("IMAGE_ZOMBATAR_PREV_BUTTON_HIGHLIGHT");
+        a_prev_portrait.resize(ZOMBATAR_PREV_PORTRAIT_X, ZOMBATAR_PORTRAIT_BTN_Y, 33, 38);
+
+        let mut a_next_portrait = Box::new(crate::lawn::widget::game_button::GameButton::new(
+            ZOMBATAR_BTN_NEXT_PORTRAIT,
+            None,
+        ));
+        a_next_portrait.button_image = a_get_image("IMAGE_ZOMBATAR_NEXT_BUTTON");
+        a_next_portrait.over_image = a_get_image("IMAGE_ZOMBATAR_NEXT_BUTTON_HIGHLIGHT");
+        a_next_portrait.resize(ZOMBATAR_NEXT_PORTRAIT_X, ZOMBATAR_PORTRAIT_BTN_Y, 33, 38);
+
+        let mut a_prev_page = Box::new(crate::lawn::widget::game_button::GameButton::new(
+            ZOMBATAR_BTN_PREV_PAGE,
+            None,
+        ));
+        a_prev_page.button_image = a_get_image("IMAGE_ZOMBATAR_PREV_BUTTON");
+        a_prev_page.over_image = a_get_image("IMAGE_ZOMBATAR_PREV_BUTTON_HIGHLIGHT");
+        a_prev_page.resize(ZOMBATAR_PREV_PAGE_X, ZOMBATAR_PAGE_BTN_Y, 33, 38);
+
+        let mut a_next_page = Box::new(crate::lawn::widget::game_button::GameButton::new(
+            ZOMBATAR_BTN_NEXT_PAGE,
+            None,
+        ));
+        a_next_page.button_image = a_get_image("IMAGE_ZOMBATAR_NEXT_BUTTON");
+        a_next_page.over_image = a_get_image("IMAGE_ZOMBATAR_NEXT_BUTTON_HIGHLIGHT");
+        a_next_page.resize(ZOMBATAR_NEXT_PAGE_X, ZOMBATAR_PAGE_BTN_Y, 33, 38);
+
         ZombatarWidget {
             app,
             game_selector,
@@ -257,6 +366,15 @@ impl ZombatarWidget {
             color: [ZOMBATAR_COLOR_NONE; 9],
             preview_zombie: None,
             fonts: [None, None, None, None, None],
+            back_button: Some(Box::into_raw(a_back)),
+            view_button: Some(Box::into_raw(a_view)),
+            finished_button: Some(Box::into_raw(a_finished)),
+            new_button: Some(Box::into_raw(a_new)),
+            confirm_back_button: Some(Box::into_raw(a_confirm_back)),
+            prev_portrait_button: Some(Box::into_raw(a_prev_portrait)),
+            next_portrait_button: Some(Box::into_raw(a_next_portrait)),
+            prev_page_button: Some(Box::into_raw(a_prev_page)),
+            next_page_button: Some(Box::into_raw(a_next_page)),
         }
     }
 
@@ -1076,8 +1194,8 @@ impl ZombatarWidget {
             } else {
                 ZOMBATAR_FINISHED_Y
             };
-            // C++: mFinishedButton->Resize(AnimateCurve, AnimateCurve, 103, 26)
-            let _curve_x = crate::todlib::tod_common::tod_animate_curve(
+            // C++ 404-409: mFinishedButton->Resize(AnimateCurve, AnimateCurve, aBtnW, aBtnH)
+            let a_curve_x = crate::todlib::tod_common::tod_animate_curve(
                 ZOMBATAR_TRANSITION_TICKS,
                 0,
                 self.transition_timer,
@@ -1085,7 +1203,7 @@ impl ZombatarWidget {
                 a_to_x,
                 TodCurves::Linear,
             );
-            let _curve_y = crate::todlib::tod_common::tod_animate_curve(
+            let a_curve_y = crate::todlib::tod_common::tod_animate_curve(
                 ZOMBATAR_TRANSITION_TICKS,
                 0,
                 self.transition_timer,
@@ -1093,7 +1211,14 @@ impl ZombatarWidget {
                 a_to_y,
                 TodCurves::Linear,
             );
-            let _ = (_curve_x, _curve_y);
+            // C++ 404-405: 尺寸取 IMAGE_ZOMBATAR_FINISHED_BUTTON，缺省 103×26
+            let a_btn_w = self.get_image_width("IMAGE_ZOMBATAR_FINISHED_BUTTON", 103);
+            let a_btn_h = self.get_image_height("IMAGE_ZOMBATAR_FINISHED_BUTTON", 26);
+            if let Some(btn) = self.finished_button {
+                unsafe {
+                    (*btn).resize(a_curve_x, a_curve_y, a_btn_w, a_btn_h);
+                }
+            }
             if self.transition_timer <= 0 {
                 self.transition_timer = 0;
                 self.change_state(if a_to_confirm {
@@ -1124,14 +1249,66 @@ impl ZombatarWidget {
         self.sub_page = self.sub_page.clamp(0, self.max_sub_pages);
         let _a_paged = a_create && self.max_sub_pages > 0;
 
-        // C++: 各按钮 SetVisible/SetDisabled —— 按钮未创建，状态判定保留
-        let _ = (a_list, a_create, a_confirm, a_transition, a_count, _a_paged);
-        let _ = (
-            ZOMBATAR_ACCEPT_X,
-            ZOMBATAR_CONFIRM_BTN_Y,
-            ZOMBATAR_FINISHED_X,
-            ZOMBATAR_FINISHED_Y,
-        );
+        // C++ 1270-1283: 各按钮 SetVisible / SetDisabled（Rust 用 btn_no_draw 表达 SetVisible(false)）
+        if let Some(btn) = self.back_button {
+            unsafe {
+                (*btn).btn_no_draw = !(a_create || a_list || a_confirm || a_transition);
+            }
+        }
+        if let Some(btn) = self.confirm_back_button {
+            unsafe {
+                (*btn).btn_no_draw = !a_confirm;
+            }
+        }
+        if let Some(btn) = self.view_button {
+            unsafe {
+                (*btn).btn_no_draw = !(a_create && a_count > 0);
+            }
+        }
+        if let Some(btn) = self.finished_button {
+            unsafe {
+                (*btn).btn_no_draw = !(a_create || a_confirm || a_transition);
+            }
+        }
+        if let Some(btn) = self.new_button {
+            unsafe {
+                (*btn).btn_no_draw = !a_list;
+                (*btn).disabled = !self.can_save_new_head();
+            }
+        }
+        if let Some(btn) = self.prev_portrait_button {
+            unsafe {
+                (*btn).btn_no_draw = !(a_list && a_count > 1 && self.current_index > 0);
+            }
+        }
+        if let Some(btn) = self.next_portrait_button {
+            unsafe {
+                (*btn).btn_no_draw = !(a_list && a_count > 1 && self.current_index + 1 < a_count);
+            }
+        }
+        if let Some(btn) = self.prev_page_button {
+            unsafe {
+                (*btn).btn_no_draw = !_a_paged;
+                (*btn).disabled = self.sub_page <= 0;
+            }
+        }
+        if let Some(btn) = self.next_page_button {
+            unsafe {
+                (*btn).btn_no_draw = !_a_paged;
+                (*btn).disabled = self.sub_page >= self.max_sub_pages;
+            }
+        }
+        if let Some(btn) = self.finished_button {
+            unsafe {
+                (*btn).disabled = a_create && !self.can_save_new_head();
+                // C++ 1285-1288: aConfirm 时移到 ACCEPT 位，否则移到 FINISHED 位
+                if a_confirm {
+                    (*btn).resize(ZOMBATAR_ACCEPT_X, ZOMBATAR_CONFIRM_BTN_Y, 103, 26);
+                } else if a_create {
+                    (*btn).resize(ZOMBATAR_FINISHED_X, ZOMBATAR_FINISHED_Y, 103, 26);
+                }
+            }
+        }
     }
 
     /// 对应 C++ ZombatarWidget::MouseMove（hover 追踪逻辑）
@@ -1200,6 +1377,40 @@ impl ZombatarWidget {
             .map_or(true, |app| unsafe { (*app).player_info.is_none() })
         {
             return;
+        }
+        // C++: 按钮 AddWidget 进 Widget 树，命中由 WidgetManager → ButtonListener::ButtonDepress 分派；
+        // Rust 无 Widget 树，先按钮命中测试（顺序同 AddedToManager），命中即 button_depress。
+        {
+            let a_buttons: [(
+                i32,
+                Option<*mut crate::lawn::widget::game_button::GameButton>,
+            ); 9] = [
+                (ZOMBATAR_BTN_BACK, self.back_button),
+                (ZOMBATAR_BTN_VIEW, self.view_button),
+                (ZOMBATAR_BTN_FINISHED, self.finished_button),
+                (ZOMBATAR_BTN_NEW, self.new_button),
+                (ZOMBATAR_BTN_CONFIRM_BACK, self.confirm_back_button),
+                (ZOMBATAR_BTN_PREV_PORTRAIT, self.prev_portrait_button),
+                (ZOMBATAR_BTN_NEXT_PORTRAIT, self.next_portrait_button),
+                (ZOMBATAR_BTN_PREV_PAGE, self.prev_page_button),
+                (ZOMBATAR_BTN_NEXT_PAGE, self.next_page_button),
+            ];
+            for (a_id, a_btn) in a_buttons {
+                if let Some(b) = a_btn {
+                    let a_hit = unsafe {
+                        !(*b).disabled
+                            && !(*b).btn_no_draw
+                            && x >= (*b).x
+                            && x < (*b).x + (*b).width
+                            && y >= (*b).y
+                            && y < (*b).y + (*b).height
+                    };
+                    if a_hit {
+                        self.button_depress(a_id);
+                        return;
+                    }
+                }
+            }
         }
         if self.state == ZombatarWidgetState::Create {
             for i in 0..9 {
@@ -1549,6 +1760,28 @@ impl ZombatarWidget {
         let a_window = self.get_resource_image("IMAGE_ZOMBATAR_DISPLAY_WINDOW");
         if !a_window.is_null() {
             g.draw_image_xy(unsafe { &*a_window }, 5, 0);
+        }
+
+        // C++ ZombatarWidget::Draw 末尾由 Widget::DrawAll 绘制子按钮；
+        // Rust 无 Widget 树，按 AddWidget 顺序直绘（AddedToManager，ZombatarWidget.cpp:353-361）
+        for btn in [
+            self.back_button,
+            self.view_button,
+            self.finished_button,
+            self.new_button,
+            self.confirm_back_button,
+            self.prev_portrait_button,
+            self.next_portrait_button,
+            self.prev_page_button,
+            self.next_page_button,
+        ] {
+            if let Some(b) = btn {
+                unsafe {
+                    if !(*b).btn_no_draw {
+                        (*b).draw(g);
+                    }
+                }
+            }
         }
     }
 
@@ -2223,6 +2456,17 @@ pub const ZOMBATAR_FINISHED_X: i32 = 445;
 pub const ZOMBATAR_FINISHED_Y: i32 = 472;
 pub const ZOMBATAR_ACCEPT_X: i32 = 155;
 pub const ZOMBATAR_CONFIRM_BTN_Y: i32 = 345;
+// C++ ZombatarWidget.cpp:91-104 的按钮定位常量
+pub const ZOMBATAR_BACK_X: i32 = 278;
+pub const ZOMBATAR_BACK_Y: i32 = 528;
+pub const ZOMBATAR_VIEW_X: i32 = 65;
+pub const ZOMBATAR_VIEW_Y: i32 = 472;
+pub const ZOMBATAR_NEW_X: i32 = 195;
+pub const ZOMBATAR_NEW_Y: i32 = 395;
+pub const ZOMBATAR_CONFIRM_BACK_X: i32 = 385;
+pub const ZOMBATAR_PREV_PORTRAIT_X: i32 = 120;
+pub const ZOMBATAR_NEXT_PORTRAIT_X: i32 = 467;
+pub const ZOMBATAR_PORTRAIT_BTN_Y: i32 = 398;
 
 /// 页面索引转枚举（对应 C++ (ZombatarPage)i 循环转换）
 pub fn page_for_index(the_index: usize) -> ZombatarPage {

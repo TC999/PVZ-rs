@@ -59,6 +59,30 @@
 | `tod_foley.rs:322` | 按键/事件触发 foley 播放时 `sfx_id` 裸指针未对齐 → misaligned pointer panic（主线程 abort） | ⚠️ 未修（已发现，待指派；复现：进入任意触发按键音效的界面后按键） |
 | `game_selector.rs` 布局 | reanim 部件（BG_Center/Left/Right、木牌）绘制位置与原版有偏差；缺 FrameBasePose/TrackButton 定位、滑动动画细节 | ✅ 2026-11-17 修复：SELECTOR_OPEN 状态机 + 每帧 TrackButton + 按钮初始态对齐 C++；`SOUND_EVILLAUGH` 资源未注册暂以 SoundLosemusic 近似 |
 
+### 2026-11-20 第二轮：ANALYSIS_REPORT §1-A 缺口台账 A1~A10 全量修复
+
+| 位置 | 差异 | 状态 |
+|---|---|---|
+| `seed_chooser_screen.rs` | OnStartButton/PickRandomSeeds/ClickedSeedInBank/ButtonDepress 桩 → 按 SeedChooserScreen.cpp:619-861 全量；**新增构造 init()（C++ 45-205：7 按钮 + ToolTipWidget + mChosenSeeds 49 项 + SurvivalRepick 回填 + SEEING_STARS + CrazyDavePickSeeds）**并在 show_seed_chooser_screen 接线；remove_tool_tip 改隐藏不销毁 | ✅ 修复（未运行验证） |
+| `almanac_dialog.rs` | setup_plant/setup_zombie/set_page/update 桩 → 按 AlmanacDialog.cpp:119-260（Plant/Zombie 离板创建 + 页面切换 + 光标 + PoolEffectUpdate） | ✅ 修复（未运行验证） |
+| `award_screen.rs` + `lawn_app.rs` | draw_achievements/achievements_continue_pressed/mouse_up 桩 → 按 AwardScreen.cpp:51-85,589-662；show_award_screen 补构造期成就项填充 | ✅ 修复（未运行验证） |
+| `zombatar_widget.rs` | 9 个 NewLawnButton 未创建 → 按 ZombatarWidget.cpp:273-377 创建/可见性/命中/绘制接线；update 过渡段 finished_button Resize 动画 | ✅ 修复（未运行验证） |
+| `edit_widget.rs` + `sexy_app_base.rs` | Ctrl+V 只删选区、剪贴板桩 → 按 EditWidget.cpp:314-354,539-576 + SexyAppBase.cpp:3571-3591（SDL 剪贴板实装） | ✅ 修复（未运行验证） |
+| `reg_emu.rs` + `sexy_app_base.rs` | 注册表全桩 → RegEmu.cpp 全文（REGEMU 二进制持久化）+ SexyAppBase.cpp:1022-1375 读写族/ReadFromRegistry/WriteToRegistry；lawn_app.write_to_registry 接线 | ✅ 修复（未运行验证） |
+| `music.rs` + `sdl_music_interface.rs` + `ffi/sdl_mixer.rs` | setup_volume_for_tune 桩 → 按 Music.cpp:112-167（四曲目 30 轨主/鼓/镲矩阵，Mix_ModMusicStreamSetChannelVolume 新 FFI）；get_music_order/get_music_handle 走 trait 分派 | ✅ 修复（未运行验证） |
+| `imagelib/mod.rs` | write_jpeg_image 补 C++ 质量 80（JpegEncoder::new_with_quality）；png/tga 复核已有真实编码 | ✅ 修复（未运行验证） |
+| `sexy_app_base.rs` | IME 桩 → start/stop_text_input 实装 SDL_Start/StopTextInput + 新增 set_text_input_rect（Input.cpp:492-527） | ✅ 修复（未运行验证） |
+| `resource_manager.rs` | FindImagePath/FindFontPath 无对应 → 新增 find_image_path/find_font_path（PvzpCommon.cpp:1170-1198） | ✅ 修复（未运行验证） |
+
+**验证**：cargo check 0 error；cargo fmt 通过；cargo test 26+26 通过；clippy 125 条 error 全部为存量（本轮触碰文件 0 条）。**未运行游戏**（无 main.pak 运行环境时需用户复验：选卡界面、图鉴交互、成就页、捏僵尸按钮、粘贴、注册表持久化）。
+
+## 未使用符号统计（2026-11-20）
+
+- 报告：`UNUSED_SYMBOLS.md`（人读，含分文件汇总与逐条清单）；机读：`target/unused_items.json`。
+- 复现：`python scripts/unused_symbols.py --collect`（重新编译采集诊断并重建报告）。
+- 口径：rustc 的 `dead_code`/`unused_variables`/`unused_assignments`/`unused_mut`/`unused_imports`，以 bin 目标 `pvz-portable` 为准并并入 lib 独有诊断。
+- 结论：函数/方法类 360 项未接线（33 自由函数 + 222 方法 + 105 关联函数），是 `04` P2「接线断裂」的机器证据；枚举变体 885 项中 868 项来自 `framework/resources.rs` 的 `ResourceId`（整类未被构造，游戏实际走字符串键查找）。
+
 ## 需要返工的文件
 
 | 文件 | 原因 |
@@ -69,6 +93,8 @@
 
 | 日期 | 变更 | 操作者 |
 |---|---|---|
+| 2026-11-20 | **未使用符号全量统计（只读，未改任何游戏代码）**：以 rustc 的 dead_code / unused_* 诊断为证据，产出 `UNUSED_SYMBOLS.md`（1573 条去重条目 / 72 个文件）与机读清单 `target/unused_items.json`，采集脚本 `scripts/unused_symbols.py`（`--collect` 可重跑）。分布：函数 33、方法 222、关联函数 105、常量 13、结构体 6、枚举 4、字段 51、枚举变体 885（其中 `resources.rs` 的 ResourceId 占 868，属整类未接线）、局部变量 188、未用导入 66。**未运行验证**（仅静态统计） |
+| 2026-11-20 | **第二轮台账修复**：ANALYSIS_REPORT §1-A 的 A1~A10 十项缺口按 cpp/ 权威源码全部补全（选卡界面全套+构造数据、图鉴交互、成就页链、捏僵尸 9 按钮、剪贴板粘贴、RegEmu 注册表持久化、Music 30 轨音量、JPEG 质量 80、SDL 文本输入、资源反查路径），触碰 14 个源文件。cargo check 0 error，cargo fmt 通过，cargo test 26+26 通过；clippy 125 error 均为存量。**未运行验证** | AI |
 | 2026-11-12 | 依据实际仓库重建台账 | |
 | 2026-11-13 | ADR-010 实装：`sexy_app_base.rs` 新增 `WidgetSafeDeleteInfo`/`safe_delete_widget`/`safe_delete_ptr`，`process_safe_delete_list` 按 C++ 语义实现并接入主循环与 `kill_dialog`；`lawn_app.rs` 14 处 `Box::from_raw` 调用点改为延迟释放；`dialog.rs` `wait_for_result` 包模态等待深度防循环内释放。cargo check 0 error/746 warnings，cargo test 21+21 通过。未运行验证 | AI |
 | 2026-11-13 | 运行验证（cargo run，main.pak 由 build.rs 自动复制）：资源加载全流程通过（`[LawnApp] 资源加载完成`），窗口持续响应（进程 Responding=True），未崩溃、未卡死；标题画面停留等待点击（截图确认 GUI 交互在托管桌面不可行，未验证 L5 进入 GameSelector）。补 4 个 ADR-010 回归测试（深度保留/模态门控/相等深度边界/kill_dialog 入队），cargo test 25+25 通过 | AI |
