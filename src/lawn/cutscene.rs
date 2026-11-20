@@ -5,14 +5,14 @@ use crate::framework::graphics::graphics::Graphics;
 use crate::framework::key_codes::KeyCode;
 use crate::lawn::board::{self, Board, MAX_GRID_SIZE_Y, MAX_ZOMBIES_IN_WAVE};
 use crate::lawn::game_enums::{
-    AdviceType, BackgroundType, ChallengePage, ChallengeState, CrazyDaveState, GameMode,
-    GridSquareType, ParticleEffect, PlantRowType, PlantingReason, ReanimationID, ReanimationType,
-    SeedType, StoreItem, TutorialState, ZombieType, NUM_ZOMBIE_TYPES, REANIMATIONID_NULL,
+    AdviceType, BackgroundType, BoardResult, ChallengePage, ChallengeState, CrazyDaveState,
+    GameMode, GridSquareType, ParticleEffect, PlantRowType, PlantingReason, ReanimationID,
+    ReanimationType, SeedType, StoreItem, TutorialState, ZombieType, NUM_ZOMBIE_TYPES,
+    REANIMATIONID_NULL,
 };
 use crate::lawn::lawn_app::LawnApp;
 use crate::lawn::system::music::MusicTune;
 use crate::lawn::widget::challenge_screen::ChallengeScreen;
-use crate::todlib::tod_common::rand_range_float;
 use crate::todlib::tod_foley::FoleyType;
 
 /// 购买种子槽位对话框结果监听器（异步化 C++ WaitForResult）
@@ -100,6 +100,8 @@ impl CutScene {
     }
 
     /// 设置 app 和 board 引用（在创建后调用）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ CutScene 无独立 InitApp（§3/§4 疑似噪音）；初始化由 CutScene::new 承担
     pub fn init_app(&mut self, app: *mut LawnApp) {
         self.app = Some(app);
         let board = unsafe { (*app).board };
@@ -223,27 +225,71 @@ impl CutScene {
             self.m_ready_set_plant_time = TIME_READY_SET_PLANT_END - TIME_READY_SET_PLANT_START;
         }
 
+        // C++ 751-755: if (!IsSurvivalRepick()) mLawnMowerTime = 550;
         self.m_lawn_mower_time = 0;
+        if !self.is_survival_repick() {
+            self.m_lawn_mower_time = 550;
+        }
+
+        // C++ 757-761: isRestart = mBoard->mPrevBoardResult 为 BOARDRESULT_LOST / BOARDRESULT_RESTART
+        let is_restart = self.get_board().map_or(false, |b| {
+            b.m_prev_board_result == BoardResult::Lost
+                || b.m_prev_board_result == BoardResult::Restart
+        });
+
         self.m_crazy_dave_dialog_start = -1;
-        // [TRANSLATION_NOTE]: 戴夫对话起点细化分支依赖等级/关卡类型与 packet upgrade 判定，核心冒险分支保留
+        // C++ 763-853：戴夫对话起点分支（顺序与 C++ 逐条一致）
         if is_first_time && a_level == 11 {
             self.m_crazy_dave_dialog_start = 201;
+        } else if is_first_time && a_level == 12 {
+            self.m_crazy_dave_dialog_start = 1401;
+        } else if is_first_time
+            && a_level >= 13
+            && a_level <= 24
+            && a_level != 15
+            && a_level != 20
+            && a_level != 21
+            && self.can_get_packet_upgrade()
+        {
+            self.m_crazy_dave_dialog_start = 1501;
+        } else if is_first_time
+            && a_level >= 16
+            && a_level <= 24
+            && a_level != 20
+            && a_level != 21
+            && self.can_get_second_packet_upgrade()
+        {
+            self.m_crazy_dave_dialog_start = 1551;
         } else if self.get_app().map_or(false, |a| {
             a.is_wallnut_bowling_level() && a.is_adventure_mode()
         }) {
-            self.m_crazy_dave_dialog_start = if is_first_time { 2400 } else { 2411 };
+            if is_first_time {
+                self.m_crazy_dave_dialog_start = 2400;
+            } else {
+                self.m_crazy_dave_dialog_start = 2411;
+                // C++ 788: mBoard->mChallenge->mShowBowlingLine = true;
+                if let Some(board) = self.get_board_mut() {
+                    if let Some(ch) = board.challenge.as_mut() {
+                        ch.show_bowling_line = 1;
+                    }
+                }
+            }
+            // C++ 790: mBoard->mShowShovel = true;
             if let Some(board) = self.get_board_mut() {
                 board.m_show_shovel = true;
             }
+        } else if is_first_time && a_level == 21 {
+            self.m_crazy_dave_dialog_start = 501;
         } else if self.get_app().map_or(false, |a| {
             a.is_whack_a_zombie_level() && a.is_adventure_mode()
         }) {
             self.m_crazy_dave_dialog_start = 401;
-        } else if self
-            .get_app()
-            .map_or(false, |a| a.is_final_boss_level() && a.is_adventure_mode())
-        {
-            self.m_crazy_dave_dialog_start = 2300;
+        } else if self.get_app().map_or(false, |a| {
+            a.is_little_trouble_level() && a.is_adventure_mode()
+        }) {
+            self.m_crazy_dave_dialog_start = 701;
+        } else if is_first_time && a_level == 31 {
+            self.m_crazy_dave_dialog_start = 801;
         } else if self.get_app().map_or(false, |a| {
             a.is_scary_potter_level() && a.is_adventure_mode()
         }) {
@@ -252,6 +298,8 @@ impl CutScene {
             a.is_stormy_night_level() && a.is_adventure_mode()
         }) {
             self.m_crazy_dave_dialog_start = 1101;
+        } else if is_first_time && a_level == 41 {
+            self.m_crazy_dave_dialog_start = 1201;
         } else if self.get_app().map_or(false, |a| {
             a.is_bungee_blitz_level() && a.is_adventure_mode()
         }) {
@@ -263,12 +311,47 @@ impl CutScene {
         } else if game_mode == GameMode::Upsell {
             self.m_crazy_dave_dialog_start = 3300;
             self.m_upsell_hide_board = true;
+            // C++ 836: mBoard->mMenuButton->mBtnNoDraw = false;
+            if let Some(board) = self.get_board_mut() {
+                if let Some(menu) = board.menu_button {
+                    unsafe {
+                        (*menu).btn_no_draw = false;
+                    }
+                }
+            }
         } else if game_mode == GameMode::ScaryPotter1
             && !self
                 .get_app()
                 .map_or(false, |a| a.has_beaten_challenge(GameMode::ScaryPotter1))
         {
             self.m_crazy_dave_dialog_start = 3000;
+        } else if !is_restart
+            && self
+                .get_app()
+                .map_or(false, |a| a.is_final_boss_level() && a.is_adventure_mode())
+        {
+            self.m_crazy_dave_dialog_start = 2300;
+        } else if game_mode == GameMode::ChallengeTreeOfWisdom {
+            // C++ 846-853: 未购买树之智慧肥料时显示 3200 提示并隐藏商店按钮
+            const PURCHASE_COUNT_OFFSET: i32 = 1000;
+            let a_tree_food = self.get_app().map_or(0, |a| {
+                a.player_info.as_ref().map_or(0, |pi| {
+                    pi.m_purchases
+                        .get(crate::lawn::game_enums::StoreItem::TreeFood as usize)
+                        .copied()
+                        .unwrap_or(0)
+                })
+            });
+            if a_tree_food < PURCHASE_COUNT_OFFSET {
+                self.m_crazy_dave_dialog_start = 3200;
+                if let Some(board) = self.get_board_mut() {
+                    if let Some(store) = board.store_button {
+                        unsafe {
+                            (*store).btn_no_draw = true;
+                        }
+                    }
+                }
+            }
         }
 
         if self.m_crazy_dave_dialog_start != -1 {
@@ -309,6 +392,8 @@ impl CutScene {
     pub fn cancel_intro(&mut self) {
         // 对应 C++ CancelIntro：跳过入场动画直接进入游戏
         const TIME_PAN_RIGHT_END: i32 = 3500;
+        #[allow(dead_code)]
+        // NOT-WIRED: C++ CutScene.cpp:59 选卡滑入动画；animate_board 的 seed chooser 滑动段未翻译（§1）
         const TIME_SEED_CHOSER_SLIDE_ON_END: i32 = 4250;
         const TIME_PAN_LEFT_START: i32 = 4500;
         const TIME_INTRO_END: i32 = 6000;
@@ -545,8 +630,14 @@ impl CutScene {
         const TIME_EARLY_DAVE_ENTER_END: i32 = 2750;
         const TIME_EARLY_DAVE_LEAVE_END: i32 = 4000;
         const TIME_SEED_CHOSER_SLIDE_ON_START: i32 = 4000;
+        // NOT-WIRED: C++ CutScene.cpp:59 选卡滑入动画；animate_board 的 seed chooser 滑动段未翻译（§1）
+        #[allow(dead_code)]
         const TIME_SEED_CHOSER_SLIDE_ON_END: i32 = 4250;
+        #[allow(dead_code)]
+        // NOT-WIRED: C++ CutScene.cpp:60 选卡滑出动画；未翻译（§1）
         const TIME_SEED_CHOSER_SLIDE_OFF_START: i32 = 4500;
+        #[allow(dead_code)]
+        // NOT-WIRED: C++ CutScene.cpp:61 选卡滑出动画；未翻译（§1）
         const TIME_SEED_CHOSER_SLIDE_OFF_END: i32 = 4750;
         const TIME_PAN_LEFT_START: i32 = 4500;
         const TIME_PAN_LEFT_END: i32 = 6000;
@@ -565,6 +656,8 @@ impl CutScene {
         const BOARD_IMAGE_WIDTH_OFFSET: i32 = 1180;
         const SEED_BANK_OFFSET_X: i32 = 0;
         const SEED_BANK_OFFSET_X_END: i32 = 10;
+        #[allow(dead_code)]
+        // NOT-WIRED: C++ CutScene.cpp:695 选卡屏 Y 偏移；未翻译（§1）
         const SEED_CHOOSER_OFFSET_Y: i32 = 516;
 
         let a_time_pan_right_start = TIME_PAN_RIGHT_START + self.m_crazy_dave_time;
@@ -1674,6 +1767,8 @@ impl CutScene {
     }
 
     /// 能否获得指定索引的升级包
+    #[allow(dead_code)]
+    // NOT-WIRED: Rust 自创拆分（UNUSED_CPP_USAGE.md §3）；can_get_packet_upgrade 已用其逻辑
     pub fn can_get_packet_upgrade_index(&self, index: i32) -> bool {
         // 对应 C++ CanGetPacketUpgrade(int theUpgradeIndex)
         let cost =

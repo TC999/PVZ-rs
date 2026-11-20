@@ -755,7 +755,15 @@ impl GameSelectorImpl {
             self.m_trophy_particle_id = crate::lawn::game_enums::PARTICLESYSTEMID_NULL;
         }
 
+        // 对应 C++ GameSelector::SyncProfile 尾部（GameSelector.cpp:547-550）：
+        //     SyncButtons(); AlmanacInitForPlayer(); BoardInitForPlayer();
+        //     ReportAchievement::AchievementInitForPlayer(mApp);
         self.sync_buttons();
+        crate::lawn::widget::almanac_dialog::almanac_init_for_player();
+        crate::lawn::board::board_init_for_player();
+        crate::lawn::widget::achievements_screen::ReportAchievement::achievement_init_for_player(
+            Some(self.app),
+        );
     }
 
     // ============================================================

@@ -11,7 +11,12 @@ const CAUSTIC_IMAGE_WIDTH: i32 = 128;
 const CAUSTIC_IMAGE_HEIGHT: i32 = 64;
 /// 游戏资源 IMAGE_POOL 的实际尺寸（704x300），
 /// 对应 C++ PoolEffectDraw 中 IMAGE_POOL->GetWidth()/GetHeight()
+// C++: PoolEffect.cpp:145-146 | float aGridSquareX = IMAGE_POOL->GetWidth() / 15.0f;
+// NOT-WIRED(传递性 dead): 常量仅在 draw（本文件 draw 内，宽高各除以 15/5）被使用；draw 因 PoolEffect 实例从未构造
+//   且 Board::Draw 链未接线而 dead（断点见 draw 上方注释）。
+#[allow(dead_code)]
 const POOL_IMAGE_WIDTH: f32 = 704.0;
+#[allow(dead_code)]
 const POOL_IMAGE_HEIGHT: f32 = 300.0;
 
 /// 水池波光效果（对应 C++ PoolEffect）
@@ -25,6 +30,11 @@ pub struct PoolEffect {
 }
 
 impl PoolEffect {
+    // C++: LawnApp.cpp:1745 | mPoolEffect = new PoolEffect();
+    // NOT-WIRED: C++ 在 LawnApp LoadingThreadProc 中构造 PoolEffect；Rust 侧 lawn_app.rs 的
+    //   pool_effect 字段初始化为 None，initialize() 调用点仅对 Some 分支执行，
+    //   从未执行 new() —— 断点在 lawn_app.rs（范围外），实例因此恒为 None。
+    #[allow(dead_code)]
     pub fn new() -> Self {
         PoolEffect {
             grayscale_image: Vec::new(),
@@ -53,6 +63,10 @@ impl PoolEffect {
     }
 
     /// 双线性插值查找（对应 C++ BilinearLookupFixedPoint）
+    // C++: PoolEffect.cpp:103-104 | BilinearLookupFixedPoint(timeU - timePool1 / 6, timeV1 + timePool0 / 8)（UpdateWaterEffect 内，共两次）
+    // NOT-WIRED: Rust update_water_effect 因 &mut self.caustic_image 与 &self 借用冲突，将本函数逻辑内联展开
+    //   （见 update_water_effect 内注释）；本方法本体保留作逐行对照，全仓无调用者。
+    #[allow(dead_code)]
     fn bilinear_lookup_fixed_point(&self, u: u32, v: u32) -> u32 {
         let time_u = u & 0xFFFF0000;
         let time_v = v & 0xFFFF0000;
@@ -83,6 +97,10 @@ impl PoolEffect {
     /// 更新水效纹理（对应 C++ UpdateWaterEffect）
     ///
     /// 为避免借用冲突，将纹理图像的可变引用和 self 的不可变引用分离操作。
+    // C++: PoolEffect.cpp:252 | UpdateWaterEffect();（在 PoolEffectDraw 内）
+    // NOT-WIRED(传递性 dead): Rust draw 末尾已调用本方法（self.update_water_effect()）；断点在实例构造（PoolEffect::new 从未执行）
+    //   与 Board::Draw 链未接线，整条调用链当前不可达。
+    #[allow(dead_code)]
     pub fn update_water_effect(&mut self) {
         // 先解出 caustic_image 的引用（可变借用 self 的一部分）
         let caustic_image: &mut Box<MemoryImage> = match &mut self.caustic_image {
@@ -185,6 +203,11 @@ impl PoolEffect {
     ///
     /// POOL_IMAGE_WIDTH/HEIGHT 为游戏资源 IMAGE_POOL 的 704x300 实际尺寸，
     /// 对应 C++ 中 IMAGE_POOL->GetWidth()/GetHeight()。
+    // C++: Board.cpp:5933 | mApp->mPoolEffect->PoolEffectDraw(g, StageIsNight());（Board::DrawBackdrop 内）
+    // NOT-WIRED(传递性 dead): Rust 调用点已存在于 board.rs 的 Board::draw_backdrop 内（对应 C++ 5933 处）；
+    //   断点 = PoolEffect 实例从未构造（lawn_app.rs 的 pool_effect 恒为 None，C++ LawnApp.cpp:1745 有 new）
+    //   + Board::Draw/DrawBackdrop 链尚未从入口接线（board.rs 范围外）。
+    #[allow(dead_code)]
     pub fn draw(&mut self, g: &mut Graphics, the_is_night: bool) {
         // C++: if (!mApp->Is3DAccelerated()) —— 本移植中 3D 加速恒启用，软件分支永不执行（C++ 源码注释原话）
         if false {

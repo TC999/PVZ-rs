@@ -1555,6 +1555,19 @@ impl Graphics {
         let num_chars = chars.len() as i32;
         let mc = if max_chars < 0 { num_chars } else { max_chars };
 
+        // C++: WriteWordWrappedHelper（Graphics.cpp:1182-1192）—— 绘制长度按 theMaxChars 截断，
+        // theOffset+theLength > theMaxChars 时取 theMaxChars-theOffset；截断后 <=0 返回 -1（不绘制）
+        let apply_max_chars = |offset: i32, length: i32| -> Option<i32> {
+            let mut a_length = length;
+            if offset + a_length > mc {
+                a_length = mc - offset;
+                if a_length <= 0 {
+                    return None;
+                }
+            }
+            Some(a_length)
+        };
+
         unsafe {
             if self.font.is_null() {
                 return 0;
@@ -1648,17 +1661,21 @@ impl Graphics {
                         if phys_y >= self.clip_rect.y
                             && phys_y < self.clip_rect.y + self.clip_rect.height + spacing
                         {
-                            self.write_string(
-                                line,
-                                rect.x + indent_x,
-                                rect.y + y_offset,
-                                rect.width,
-                                justification,
-                                true,
-                                line_start_pos as i32,
-                                break_draw_len,
-                                orig_color_int,
-                            );
+                            if let Some(a_len) =
+                                apply_max_chars(line_start_pos as i32, break_draw_len)
+                            {
+                                self.write_string(
+                                    line,
+                                    rect.x + indent_x,
+                                    rect.y + y_offset,
+                                    rect.width,
+                                    justification,
+                                    true,
+                                    line_start_pos as i32,
+                                    a_len,
+                                    orig_color_int,
+                                );
+                            }
                         }
                         written_width = cur_width + indent_x;
                         if written_width < 0 {
@@ -1679,6 +1696,13 @@ impl Graphics {
                         if draw_end <= line_start_pos {
                             draw_end = char_end;
                         }
+                        let a_len = match apply_max_chars(
+                            line_start_pos as i32,
+                            (draw_end - line_start_pos) as i32,
+                        ) {
+                            Some(len) => len,
+                            None => break,
+                        };
                         written_width = self.write_string(
                             line,
                             rect.x + indent_x,
@@ -1687,7 +1711,7 @@ impl Graphics {
                             justification,
                             true,
                             line_start_pos as i32,
-                            (draw_end - line_start_pos) as i32,
+                            a_len,
                             orig_color_int,
                         );
                         if written_width < 0 {
@@ -1717,17 +1741,23 @@ impl Graphics {
             }
 
             if line_start_pos < chars.len() {
-                let written_width = self.write_string(
-                    line,
-                    rect.x + indent_x,
-                    rect.y + y_offset,
-                    rect.width,
-                    justification,
-                    true,
+                let written_width = match apply_max_chars(
                     line_start_pos as i32,
                     (chars.len() - line_start_pos) as i32,
-                    orig_color_int,
-                );
+                ) {
+                    Some(a_len) => self.write_string(
+                        line,
+                        rect.x + indent_x,
+                        rect.y + y_offset,
+                        rect.width,
+                        justification,
+                        true,
+                        line_start_pos as i32,
+                        a_len,
+                        orig_color_int,
+                    ),
+                    None => -1,
+                };
                 if written_width >= 0 {
                     if written_width > a_max_width {
                         a_max_width = written_width;

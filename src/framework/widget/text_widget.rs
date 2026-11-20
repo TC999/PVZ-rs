@@ -14,7 +14,6 @@ use crate::framework::color::Color;
 use crate::framework::graphics::font::Font;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::key_codes::KeyCode;
-use crate::framework::rect::Rect;
 use crate::framework::widget::insets::Insets;
 use crate::framework::widget::scrollbar_widget::{ScrollListener, ScrollbarWidget};
 use crate::framework::widget::widget_manager::WidgetManager;

@@ -212,30 +212,25 @@ impl NewOptionsDialog {
         }
         self.sfx_slider = Some(Box::into_raw(a_sfx_slider));
 
-        // C++: mFullscreenCheckbox = MakeNewCheckbox(Fullscreen, this, !mIsWindowed)
-        //      mHardwareAccelerationCheckbox = MakeNewCheckbox(HardwareAcceleration, this, Is3DAccelerated())
-        let a_cb0 = self.get_resource_image("IMAGE_OPTIONS_CHECKBOX0");
-        let a_cb1 = self.get_resource_image("IMAGE_OPTIONS_CHECKBOX1");
-        let mut a_fullscreen_checkbox = Box::new(Checkbox::new(
-            a_cb0,
-            a_cb1,
-            6,
-            Some(Box::new(RawCheckboxListener { host })),
-        ));
+        // C++ NewOptionsDialog.cpp:77-78:
+        //     mFullscreenCheckbox = MakeNewCheckbox(Fullscreen, this, !mIsWindowed);
+        //     mHardwareAccelerationCheckbox = MakeNewCheckbox(HardwareAcceleration, this, Is3DAccelerated());
         let a_windowed = self
             .app
             .map_or(true, |app| unsafe { (*app).base.is_windowed });
-        a_fullscreen_checkbox.set_checked(!a_windowed, false);
+        let a_fullscreen_checkbox = Box::new(crate::lawn::lawn_common::make_new_checkbox(
+            6,
+            Some(Box::new(RawCheckboxListener { host })),
+            !a_windowed,
+        ));
         self.fullscreen_checkbox = Some(Box::into_raw(a_fullscreen_checkbox));
 
         // C++: Is3DAccelerated()；Rust 无 3D 加速检测，以当前复选框状态为初值
-        let mut a_hardware_checkbox = Box::new(Checkbox::new(
-            a_cb0,
-            a_cb1,
+        let a_hardware_checkbox = Box::new(crate::lawn::lawn_common::make_new_checkbox(
             7,
             Some(Box::new(RawCheckboxListener { host })),
+            self.hardware_acceleration_checked,
         ));
-        a_hardware_checkbox.set_checked(self.hardware_acceleration_checked, false);
         self.hardware_checkbox = Some(Box::into_raw(a_hardware_checkbox));
 
         // C++: mAlmanacButton/mRestartButton/mBackToMainButton = MakeButton(...)
@@ -530,11 +525,11 @@ impl NewOptionsDialog {
     }
 
     /// 鼠标释放（对应 C++ Dialog 基类 MouseUp 分发）
-    pub fn mouse_up(&mut self, _x: i32, _y: i32) {
+    pub fn mouse_up(&mut self, x: i32, y: i32) {
         for p in [self.music_slider, self.sfx_slider] {
             if let Some(p) = p {
                 unsafe {
-                    (*p).mouse_up(_x - self.x, _y - self.y);
+                    (*p).mouse_up(x - self.x, y - self.y);
                 }
             }
         }
@@ -571,7 +566,11 @@ impl NewOptionsDialog {
 
     /// 复选框变化（对应 C++ CheckboxChecked）
     pub fn checkbox_checked(&mut self, the_id: i32, checked: bool) {
-        let Some(app) = self.app else { return };
+        #[allow(unused_variables)]
+        let Some(app) = self.app
+        else {
+            return;
+        };
         unsafe {
             match the_id {
                 6 => {

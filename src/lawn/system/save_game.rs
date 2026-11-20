@@ -22,11 +22,10 @@ use crate::lawn::projectile::Projectile;
 use crate::lawn::seed_packet::SeedPacket;
 use crate::lawn::system::music::Music;
 use crate::lawn::system::player_info::PottedPlant;
-use crate::lawn::widget::message_widget::{MessageWidget, MAX_MESSAGE_LENGTH};
-use crate::lawn::zombie::{Zombie, MAX_ZOMBIE_FOLLOWERS};
+use crate::lawn::widget::message_widget::MessageWidget;
+use crate::lawn::zombie::Zombie;
 use crate::todlib::attachment::{Attachment, MAX_EFFECTS_PER_ATTACHMENT};
 use crate::todlib::definition::{ReanimatorTrackInstance, ReanimatorTransform};
-use crate::todlib::effect_system::EffectSystem;
 use crate::todlib::reanimator::Reanimation;
 use crate::todlib::tod_common::TodSmoothArray;
 use crate::todlib::tod_particle::TodParticleSystem;
@@ -752,8 +751,8 @@ pub fn lawn_load_game(board: Option<*mut Board>, file_path: &str) -> bool {
         // 分发到对应 chunk 处理器
         if let Some(b) = board {
             unsafe {
-                let _board = &mut *b;
-                if !read_chunk_v4(chunk_type, chunk_data, _board) {
+                let board = &mut *b;
+                if !read_chunk_v4(chunk_type, chunk_data, board) {
                     return false;
                 }
             }
@@ -877,79 +876,75 @@ pub fn lawn_save_game(board: Option<*mut Board>, file_path: &str) -> bool {
 
     if let Some(b) = board {
         unsafe {
-            let _board = &mut *b;
+            let board = &mut *b;
             // 对应 C++ LawnSaveGame（SaveGame.cpp:3117-3136）：依次写入全部 chunk
             // （当前仅 BoardBase 有同步实现，其余 chunk 经 GetChunkSyncFn 语义跳过）
-            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::BoardBase as u32, _board) {
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::BoardBase as u32, board) {
                 return false;
             }
-            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Zombies as u32, _board) {
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Zombies as u32, board) {
                 return false;
             }
-            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Plants as u32, _board) {
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Plants as u32, board) {
                 return false;
             }
-            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Projectiles as u32, _board) {
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Projectiles as u32, board) {
                 return false;
             }
-            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Coins as u32, _board) {
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Coins as u32, board) {
                 return false;
             }
-            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Mowers as u32, _board) {
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Mowers as u32, board) {
                 return false;
             }
-            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::GridItems as u32, _board) {
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::GridItems as u32, board) {
                 return false;
             }
             if !write_chunk_v4(
                 &mut payload,
                 SaveChunkTypeV4::ParticleEmitters as u32,
-                _board,
+                board,
             ) {
                 return false;
             }
             if !write_chunk_v4(
                 &mut payload,
                 SaveChunkTypeV4::ParticleParticles as u32,
-                _board,
+                board,
             ) {
                 return false;
             }
-            if !write_chunk_v4(
-                &mut payload,
-                SaveChunkTypeV4::ParticleSystems as u32,
-                _board,
-            ) {
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::ParticleSystems as u32, board) {
                 return false;
             }
-            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Reanimations as u32, _board) {
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Reanimations as u32, board) {
                 return false;
             }
-            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Trails as u32, _board) {
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Trails as u32, board) {
                 return false;
             }
-            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Attachments as u32, _board) {
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Attachments as u32, board) {
                 return false;
             }
-            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Cursor as u32, _board) {
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Cursor as u32, board) {
                 return false;
             }
-            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::CursorPreview as u32, _board) {
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::CursorPreview as u32, board) {
                 return false;
             }
-            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Advice as u32, _board) {
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Advice as u32, board) {
                 return false;
             }
-            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::SeedBank as u32, _board) {
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::SeedBank as u32, board) {
                 return false;
             }
-            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::SeedPackets as u32, _board) {
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::SeedPackets as u32, board) {
                 return false;
             }
-            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Challenge as u32, _board) {
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Challenge as u32, board) {
                 return false;
             }
-            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Music as u32, _board) {
+            if !write_chunk_v4(&mut payload, SaveChunkTypeV4::Music as u32, board) {
                 return false;
             }
         }
@@ -1843,6 +1838,8 @@ fn sync_board_base_portable(ctx: &mut PortableSaveContext, board: &mut Board) {
 
 /// 写入一个 V4 chunk（对应 C++ WriteChunkV4，SaveGame.cpp:2335）
 /// 结构：字段 blob → chunk 包装（version + TLV(fieldId=1, size, data)）→ AppendChunk(type, size, data)
+#[allow(unused_assignments)]
+// 对应 C++ 局部变量「先初始化后覆盖」语义（UNUSED_CPP_USAGE.md §1）；保留赋值语句顺序
 fn write_chunk_v4(payload: &mut Vec<u8>, chunk_type: u32, board: &mut Board) -> bool {
     // C++ GetChunkSyncFn：无同步函数的 chunk 返回 true 跳过
     let chunk = match save_chunk_from_id(chunk_type) {

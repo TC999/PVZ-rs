@@ -627,7 +627,7 @@ impl EditWidget {
             }
             self.mark_dirty_internal();
         }
-        let display_str = if self.password_char == 0 {
+        let _display_str = if self.password_char == 0 {
             self.text.clone()
         } else {
             self.password_display.clone()

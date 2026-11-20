@@ -8,7 +8,11 @@ use crate::lawn::game_object::GameObject;
 
 /// 割草机（对应 C++ class LawnMower）
 pub struct LawnMower {
+    // NOT-WIRED: C++ mApp/mBoard 的镜像（LawnMower.cpp:32/35）；Rust 侧统一经
+    // base（GameObject）的 get_app/get_board 访问，本字段保留以维持结构对应（UNUSED_CPP_USAGE.md §1）
+    #[allow(dead_code)]
     pub app: Option<*mut crate::lawn::lawn_app::LawnApp>,
+    #[allow(dead_code)]
     pub board: Option<*mut crate::lawn::board::Board>,
     pub base: GameObject,
 
@@ -23,6 +27,9 @@ pub struct LawnMower {
     pub mower_state: LawnMowerState,
     pub dead: bool,
     pub visible: bool,
+    // NOT-WIRED: C++ LawnMower 无 mMowing 字段（割草机状态由 mMowerState 表达，Board.cpp:336 检查 mMowerState）；
+    // Rust 自创冗余状态位，仅 start_mower 置 true、全仓无读取方（UNUSED_CPP_USAGE.md §3）
+    #[allow(dead_code)]
     pub mowing: bool,
     pub mower_type: LawnMowerType,
     pub altitude: f32,
@@ -144,6 +151,11 @@ impl LawnMower {
     }
 
     /// 启动割草机（对应 C++ StartMower：状态置为 Triggered）
+    // C++: LawnMower.cpp:382 | void LawnMower::StartMower()
+    // NOT-WIRED(传递性 dead): C++ 调用点 LawnMower.cpp:147（MowZombie 内）；Rust 调用链已接线——
+    //   mow_zombie（本文件）→start_mower，Board::check_collisions（board.rs）→mow_zombie。
+    //   但 Board::check_collisions 自身尚未被 Board 更新链调用（board.rs 范围外的接线），故连带 dead。
+    #[allow(dead_code)]
     pub fn start_mower(&mut self) {
         if self.mower_state == LawnMowerState::Triggered {
             return;
@@ -171,6 +183,9 @@ impl LawnMower {
     }
 
     /// 启动割草机（与 start_mower 逻辑相同）
+    // NOT-WIRED: Rust 自创别名（C++ 无 StartMowing，UNUSED_CPP_USAGE.md §3）；
+    // 实际调用点使用 start_mower（C++ StartMower）
+    #[allow(dead_code)]
     pub fn start_mowing(&mut self) {
         self.start_mower();
     }
@@ -208,7 +223,7 @@ impl LawnMower {
         if self.mower_state == LawnMowerState::Triggered
             || self.mower_state == LawnMowerState::Squished
         {
-            let mut a_speed = if self.mower_type == LawnMowerType::Pool {
+            let a_speed = if self.mower_type == LawnMowerType::Pool {
                 2.5
             } else {
                 3.33
@@ -244,6 +259,10 @@ impl LawnMower {
     }
 
     /// 碾压僵尸（对应 C++ LawnMower::MowZombie）
+    // C++: LawnMower.cpp:230 | MowZombie(aZombie)（在 LawnMower::Update 内）
+    // NOT-WIRED(传递性 dead): Rust 调用点已存在于 board.rs 的 Board::check_collisions 内，
+    //   但 Board::check_collisions 尚未被 Board 更新链调用（board.rs 范围外的接线），故连带 dead。
+    #[allow(dead_code)]
     pub fn mow_zombie(&mut self, zombie: &mut crate::lawn::zombie::Zombie) {
         if self.mower_state == LawnMowerState::Ready {
             self.start_mower();
@@ -267,6 +286,9 @@ impl LawnMower {
     }
 
     /// 获取割草机碰撞矩形
+    // NOT-WIRED: 疑似改名候选（UNUSED_CPP_USAGE.md §4：C++ 为 GetLawnMowerAttackRect，
+    // 已由 get_lawn_mower_attack_rect 翻译并接线；此 80x80 版本为 Rust 自创的重复实现）
+    #[allow(dead_code)]
     pub fn get_mower_rect(&self) -> Rect {
         Rect::new(self.pos_x as i32, self.pos_y as i32, 80, 80)
     }
@@ -410,7 +432,7 @@ impl LawnMower {
         }
 
         let mut a_shadow_type = 0;
-        let mut a_scale_x = 1.0;
+        let a_scale_x = 1.0;
         let mut a_scale_y = 1.0;
         let mut is_night = false;
         if let Some(board) = self.base.get_board() {

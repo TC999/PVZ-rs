@@ -3,6 +3,10 @@
 
 /// 游戏资源标识符（对应 C++ Sexy::ResourceId）
 /// 每个变体对应一个图像、字体或声音资源
+/// [TRANSLATION_NOTE]: 游戏实际走字符串键查找（C++ 同样不按枚举取图），ResourceId 为
+/// 完整镜像；UNUSED_CPP_USAGE.md §0 已确认「整类未构造」是预期形态、非接线缺口，保留全集。
+// ResourceId 走字符串键查找（C++ 同），枚举镜像按设计保留
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i32)]
 pub enum ResourceId {
@@ -891,6 +895,8 @@ pub enum ResourceId {
 
 impl ResourceId {
     /// 获取资源标识符的数量
+    // NOT-WIRED: Rust 自创便利函数；C++ 用 ResourceIdMax 常量、无 Count() 方法（UNUSED_CPP_USAGE.md §3）
+    #[allow(dead_code)]
     pub const fn count() -> usize {
         ResourceId::ResourceIdMax as usize
     }

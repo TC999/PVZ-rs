@@ -819,6 +819,7 @@ impl SeedChooserScreen {
             return;
         }
         self.seed_chooser_age += 1;
+        #[allow(unused_variables)]
         if let Some(app) = self.app {
             unsafe {
                 self.last_mouse_x = 0 /* widget_manager */;
@@ -1698,8 +1699,9 @@ impl SeedChooserScreen {
             self.view_lawn_time = 251;
         }
     }
-    pub fn mouse_up(&mut self, x: i32, y: i32, click_count: i32) {
+    pub fn mouse_up(&mut self, _x: i32, _y: i32, click_count: i32) {
         if click_count == 1 {
+            #[allow(unused_variables)]
             if let Some(btn) = self.menu_button {
                 unsafe {
                     if true
@@ -1708,7 +1710,7 @@ impl SeedChooserScreen {
                         self.button_depress(104);
                     }
                 }
-            } else if let Some(btn) = self.start_button {
+            } else if let Some(_btn) = self.start_button {
                 unsafe {
                     if true
                     /* is_mouse_over */

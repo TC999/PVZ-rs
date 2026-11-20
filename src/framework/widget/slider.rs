@@ -173,7 +173,7 @@ impl Slider {
     }
 
     /// 鼠标移动（对应 C++ MouseMove）
-    pub fn mouse_move(&mut self, x: i32, y: i32, _wm: &mut WidgetManager) {
+    pub fn mouse_move(&mut self, _x: i32, _y: i32, _wm: &mut WidgetManager) {
         // 简化版：光标变化逻辑暂略
     }
 

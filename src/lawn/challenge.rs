@@ -14,6 +14,8 @@ use crate::todlib::tod_common::TodWeightedArray;
 
 /// 消除（Beghouled）升级类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+// NOT-WIRED: C++ Challenge.cpp:347 使用；Beghouled 升级逻辑（BeghouledPacketClicked）未完全接线（UNUSED_CPP_USAGE.md §1）
 pub enum BeghouledUpgrade {
     Repeater,
     Fumeshroom,
@@ -53,6 +55,8 @@ pub struct BeghouledBoardState {
 }
 
 /// 僵尸允许等级
+#[allow(dead_code)]
+// NOT-WIRED: C++ Challenge.cpp:75 文件级；僵尸白名单表尚未接入 Board::IsZombieAllowed（§1）
 pub struct ZombieAllowedLevels {
     pub zombie_type: ZombieType,
     pub allowed_on_level: [i32; 50],
@@ -89,6 +93,9 @@ pub struct Challenge {
 /// 对应 C++ I_ZOMBIE_WINNING_SCORE（Challenge.cpp:61）
 const I_ZOMBIE_WINNING_SCORE: i32 = 5;
 
+// NOT-WIRED: 本 impl 内部分方法为 C++ Challenge 方法的翻译，但调用方尚未接线
+//（UNUSED_CPP_USAGE.md §1；逐条缺口见 04_PROGRESS.md「未使用符号」节）。
+#[allow(dead_code)]
 impl Challenge {
     pub fn new() -> Self {
         Challenge {
@@ -444,6 +451,8 @@ impl Challenge {
         self.beghouled_mouse_capture = 1;
     }
 
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ Challenge::MouseMove（Challenge.cpp:1151）使用；Rust challenge 拖拽未接 Board::mouse_drag（§1）
     pub fn beghouled_drag_update(&mut self, x: i32, y: i32) {
         let delta_x = x - self.beghouled_mouse_down_x;
         let delta_y = y - self.beghouled_mouse_down_y;
@@ -1108,7 +1117,7 @@ impl Challenge {
         g.set_colorize_images(false);
     }
 
-    pub fn check_for_complete_art_challenge(&mut self, _grid_x: i32, _grid_y: i32) {
+    pub fn check_for_complete_art_challenge(&mut self, grid_x: i32, _grid_y: i32) {
         let board = self.get_board();
         if board.has_level_award_dropped() {
             return;
@@ -1136,7 +1145,7 @@ impl Challenge {
                 }
             }
         }
-        self.spawn_level_award(_grid_x, _grid_y);
+        self.spawn_level_award(grid_x, _grid_y);
     }
 
     pub fn get_art_challenge_seed(&self, grid_x: i32, grid_y: i32) -> SeedType {
@@ -3561,6 +3570,7 @@ impl Challenge {
         let mut grid_array: Vec<crate::todlib::tod_common::TodWeightedGridArray> = Vec::new();
         if let Some(board) = self.board {
             unsafe {
+                #[allow(unused_variables)]
                 let b = &*board;
                 let other_x = (*other_portal).grid_x;
                 let other_y = (*other_portal).grid_y;
@@ -5827,7 +5837,7 @@ impl Challenge {
                 });
             }
         }
-        let mut picks_count = picks.len();
+        let picks_count = picks.len();
         for _ in (0..7).rev() {
             let pick_idx = crate::todlib::tod_common::tod_pick_from_weighted_grid_array(
                 &mut picks,
@@ -7150,6 +7160,8 @@ impl Challenge {
         0
     }
 
+    #[allow(unused_assignments)]
+    // 对应 C++ 局部变量「先初始化后覆盖」语义（UNUSED_CPP_USAGE.md §1）；保留赋值语句顺序
     pub fn tree_of_wisdom_draw(&self, g: &mut Graphics) {
         // 对应 C++ Challenge::TreeOfWisdomDraw
         let Some(app_ptr) = self.app else {
@@ -7269,8 +7281,10 @@ impl Challenge {
             );
         }
 
+        #[allow(unused_variables)]
         // C++: 高度标注文字（FONT_HOUSEOFTERROR16 + PvzpDrawStringMatrix）
         let mut a_cur_size = a_height;
+        #[allow(unused_variables)]
         let mut a_scale = 1.0f32;
         if self.challenge_state == ChallengeState::TreeJustGrew {
             if self.challenge_state_counter > 30 {

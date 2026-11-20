@@ -2,7 +2,7 @@
 // 对应 C++ src/Lawn/CursorObject.h / CursorObject.cpp
 
 use crate::framework::graphics::graphics::Graphics;
-use crate::lawn::board::{Board, HitResult};
+use crate::lawn::board::Board;
 use crate::lawn::game_enums::*;
 use crate::lawn::game_object::GameObject;
 
@@ -62,6 +62,9 @@ impl CursorObject {
     }
 
     /// 初始化拖放（对应 C++ 中设置 mType/mCursorType）
+    // NOT-WIRED: Rust 自创封装（UNUSED_CPP_USAGE.md §3）；C++ 由 Board::SetCursor 直接赋值字段，
+    // Rust 侧由 board.set_cursor/clear_cursor 直接操作 cursor_object 字段
+    #[allow(dead_code)]
     pub fn init(&mut self, ctype: CursorType, seed_type: SeedType) {
         self.cursor_type = ctype;
         self.seed_type = seed_type;
@@ -70,6 +73,9 @@ impl CursorObject {
     }
 
     /// 更新光标位置（从鼠标坐标）
+    // NOT-WIRED: Rust 自创拆分（UNUSED_CPP_USAGE.md §3/§4：C++ 为 Board::UpdateMousePosition，
+    // 位置赋值已内联在 CursorObject::update 内）
+    #[allow(dead_code)]
     pub fn update_position(&mut self, mx: i32, my: i32) {
         self.mouse_x = mx;
         self.mouse_y = my;
@@ -101,6 +107,8 @@ impl CursorObject {
 
     /// 销毁（对应 C++ CursorObject::Die() L73-L77）
     /// 移除关联的 Reanimation 实例
+    // NOT-WIRED: C++ 侧仅定义（CursorObject.cpp:74），全 cpp/ 无 mCursorObject->Die 调用点（§2）
+    #[allow(dead_code)]
     pub fn die(&mut self) {
         // 移除光标上的 Reanimation 动画（对应 C++ mApp->RemoveReanimation(mReanimCursorID)）
         // 由于 App 引用不可达，此处仅重置 ID
@@ -237,6 +245,8 @@ impl CursorObject {
 
     /// 是否需要更新光标（对应 C++ 中 mApp->SetCursor 调用）
     /// 返回当前光标的系统指针类型
+    // NOT-WIRED: Rust 自创辅助（UNUSED_CPP_USAGE.md §3）
+    #[allow(dead_code)]
     pub fn get_cursor_type_for_app(&self) -> i32 {
         match self.cursor_type {
             CursorType::Shovel
@@ -304,6 +314,7 @@ impl CursorPreview {
     /// 根据鼠标位置和 Board 状态计算是否显示种植预览
     pub fn update(&mut self, mouse_x: i32, mouse_y: i32) {
         // 先提取所有需要的 Board/App 值到局部变量，避免借用冲突
+        #[allow(unused_variables)]
         let (scene_ok, seed_type, grid_x, grid_y, show_preview, pixel_x, pixel_y) = {
             let board = match self.base.get_board() {
                 Some(b) => b,

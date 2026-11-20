@@ -20,4 +20,3 @@ pub mod trail;
 pub mod xml_parser;
 
 pub use tod_string_file::init_lawn_string_formats;
-pub use tod_string_file::TodStringFile;

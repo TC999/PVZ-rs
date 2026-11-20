@@ -19,7 +19,7 @@
 #![allow(non_upper_case_globals)]
 
 use std::collections::HashMap;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -467,7 +467,7 @@ impl PakInterface {
 
         // 1. 先从 PAK 包中查找
         let key = normalize_pak_path(the_file_name);
-        if let Some(record) = self.records.get(&key) {
+        if let Some(_record) = self.records.get(&key) {
             return Some(PakFileHandle::PakFile {
                 record_key: key,
                 pos: 0,
@@ -681,7 +681,7 @@ impl PakInterface {
                 if the_char == -1 {
                     return -1;
                 }
-                let c = the_char as u8;
+                let _c = the_char as u8;
                 // 尝试用 seek 回退一个字节
                 match file.seek(SeekFrom::Current(-1)) {
                     Ok(_) => the_char,

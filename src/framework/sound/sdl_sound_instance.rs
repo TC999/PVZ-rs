@@ -42,11 +42,15 @@ pub struct SDLSoundInstance {
     pub m_base_pan: i32,
     pub m_base_volume: f64,
 
+    // NOT-WIRED: C++ 仅 SetPan（SDLSoundInstance.cpp:202）写入、RehupPan 为空实现，全仓无读取点（UNUSED_CPP_USAGE.md §1）
+    #[allow(dead_code)]
     pub m_pan: i32,
     pub m_volume: f64,
     pub m_pitch: f32,
     pub m_pitch_handler: Box<SDLSoundPitchHandler>,
 
+    // NOT-WIRED: C++ 仅构造时写 44100（SDLSoundInstance.cpp:48），全仓无读取点（UNUSED_CPP_USAGE.md §1）
+    #[allow(dead_code)]
     pub m_default_frequency: u32,
 
     /// demo 模式下：视为播放结束的首次更新计数；0 表示未播放

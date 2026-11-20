@@ -157,7 +157,7 @@ impl CheatDialog {
                     }
                 })
             };
-            let mut h = wrapper.borrow_mut();
+            let h = wrapper.borrow_mut();
             if let Some(ew) = h.level_edit_widget {
                 unsafe {
                     let ew_ref = &mut *ew;
@@ -180,6 +180,8 @@ impl CheatDialog {
 
     /// 计算对话框尺寸（对应 C++ CheatDialog::GetPreferredHeight）
     /// C++: return LawnDialog::GetPreferredHeight(theWidth);  （无 +40 加成）
+    #[allow(unused_assignments)]
+    // 对应 C++ 局部变量「先初始化后覆盖」语义（UNUSED_CPP_USAGE.md §1）；保留赋值语句顺序
     pub fn get_preferred_height(&self, the_width: i32) -> i32 {
         let ci = self.content_insets;
         let bi = self.background_insets;

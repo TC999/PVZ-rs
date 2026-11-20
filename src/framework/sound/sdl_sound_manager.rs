@@ -159,6 +159,8 @@ impl SDLSoundManager {
     }
 
     /// 对应 C++ SDLSoundManager::SetVolume 中对各实例的 RehupVolume
+    // NOT-WIRED: C++ SetVolume（SDLSoundManager.cpp:323-325）循环的拆分；唯一调用者 set_volume 未接线（UNUSED_CPP_USAGE.md §1/§3）
+    #[allow(dead_code)]
     fn rehup_all_volumes(&mut self) {
         for i in 0..MAX_CHANNELS as usize {
             if !self.m_playing_sounds[i].is_null() {
@@ -355,6 +357,8 @@ impl Drop for SDLSoundManager {
 }
 
 /// 设置音乐放大（对应 C++ SetMusicAmplify）
+// NOT-WIRED: C++ 亦仅定义/声明无调用点（UNUSED_CPP_USAGE.md §2），保留以维持逐函数对应
+#[allow(dead_code)]
 pub fn set_music_amplify(_music_id: i32, _amplify: f64) {}
 /// 加载 AU 音效（对应 C++ LoadAUSound，SDLSoundManager.cpp:85-245，161 行）
 /// [TRANSLATION_NOTE]: 保留为桩。两点说明：
@@ -364,10 +368,14 @@ pub fn set_music_amplify(_music_id: i32, _amplify: f64) {}
 ///    静态枚举），无法用字符串检索判定。若要确证，可用运行期证据：`load_into_slot` 在每次尝试时
 ///    都会 eprintln 出 "尝试加载: <path>"，加载失败即会打出路径 —— 若日志中不存在任何
 ///    只在 .au 下命中的音效，则本函数无需实现。
+// NOT-WIRED: C++ 调用点 SDLSoundManager.cpp:280（.wav/.mp3/.ogg 全失败的 .au 兜底）；Rust AU 解码桩未实现，无法安全接线（UNUSED_CPP_USAGE.md §1）
+#[allow(dead_code)]
 pub fn load_au_sound(_data: &[u8]) -> i32 {
     0
 }
 /// 获取音效数量（对应 C++ GetNumSounds）
+// NOT-WIRED: C++ 亦仅定义/声明无调用点（SoundManager::GetNumSounds，SDLSoundManager.cpp:429；UNUSED_CPP_USAGE.md §2）
+#[allow(dead_code)]
 pub fn get_num_sounds() -> i32 {
     0
 }

@@ -5,7 +5,7 @@
 // 更新和绘制。这是 PvZ 游戏逻辑的心脏。
 
 use crate::framework::color::Color;
-use crate::framework::common::{self, RandFloat, RandRange};
+use crate::framework::common::{self, RandRange};
 use crate::framework::graphics::graphics::DrawMode;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::key_codes::KeyCode;
@@ -22,13 +22,11 @@ use crate::lawn::projectile::Projectile;
 use crate::lawn::seed_packet::SeedPacket;
 use crate::lawn::tool_tip_widget::ToolTipWidget;
 use crate::lawn::zombie::{get_zombie_definition, Zombie, MAX_ZOMBIE_FOLLOWERS};
-use crate::todlib::reanimator::Reanimation;
 use crate::todlib::tod_common::{
     tod_animate_curve, tod_pick_from_weighted_array, tod_pick_from_weighted_grid_array,
     TodSmoothArray, TodWeightedArray, TodWeightedGridArray,
 };
 use crate::todlib::tod_foley::FoleyType;
-use crate::todlib::tod_particle::ParticleSystem;
 
 pub const MAX_GRID_SIZE_X: usize = 9;
 pub const MAX_GRID_SIZE_Y: usize = 6;
@@ -79,6 +77,8 @@ pub struct ZombiePicker {
 }
 
 impl ZombiePicker {
+    #[allow(dead_code)]
+    // NOT-WIRED: ZombiePicker 构造（C++ 无构造函数，仅 Init 系列初始化，§3）
     pub fn new() -> Self {
         ZombiePicker {
             zombie_count: 0,
@@ -135,11 +135,15 @@ pub fn row_to_y(row: i32) -> i32 {
 }
 
 /// 将 Y 坐标转换为行号
+#[allow(dead_code)]
+// NOT-WIRED: Rust 自创辅助（UNUSED_CPP_USAGE.md §3）；实际使用 pixel_to_grid_y
 pub fn y_to_row(y: i32) -> i32 {
     ((y - 80) / 100).clamp(0, 5)
 }
 
 /// 将 X 坐标转换为列号
+#[allow(dead_code)]
+// NOT-WIRED: Rust 自创辅助（UNUSED_CPP_USAGE.md §3）；实际使用 pixel_to_grid_x
 pub fn x_to_col(x: i32) -> i32 {
     ((x - 40) / 80).clamp(0, 8)
 }
@@ -265,6 +269,8 @@ pub struct Board {
     // 网格
     /// 对应 C++ mGridPlants[MAX_GRID_SIZE_X][MAX_GRID_SIZE_Y]（Board.h:146）：
     /// 外层索引 = x（0..9），内层 = y（0..6）——与 C++ [x][y] 访问顺序一致
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ mGridPlants（Board.h:146）镜像；Rust 以 plants 线性扫描/plant_col 判断替代（§1 待回放验证）
     pub grid_plants: [[Option<PlantID>; MAX_GRID_SIZE_Y]; MAX_GRID_SIZE_X],
     pub grid_square_type: [[GridSquareType; MAX_GRID_SIZE_Y]; MAX_GRID_SIZE_X],
     pub grid_cel_look: [[i32; MAX_GRID_SIZE_Y]; MAX_GRID_SIZE_X],
@@ -304,10 +310,14 @@ pub struct Board {
     pub m_sun_money: i32,
 
     // 金钱
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ mCoinBank（金钱银行动画）；Rust draw_ui_coin_bank 以 m_coin_bank_fade_count 简化（§1）
     pub m_coin_bank: i64,
     pub m_coin_bank_fade_count: i32,
 
     // 关卡状态
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ mNumWaves 相关（Board.cpp:551）；Rust 使用 m_num_waves（§1）
     pub m_wave_count: i32,
     pub m_current_wave: i32,
     pub m_total_waves: i32,
@@ -316,7 +326,11 @@ pub struct Board {
     pub m_zombie_allowed: [bool; NUM_ZOMBIE_TYPES as usize],
     pub m_total_spawned_waves: i32,
     pub m_out_of_money_counter: i32,
+    #[allow(dead_code)]
+    // NOT-WIRED: Rust 自有字段（UNUSED_CPP_USAGE.md §6）；无 C++ 对应
     pub m_wave_countdown: i32,
+    #[allow(dead_code)]
+    // NOT-WIRED: Rust 自有字段（§6）；无 C++ 对应
     pub m_flag_countdown: i32,
     pub m_level_complete: bool,
     pub m_game_over: bool,
@@ -388,6 +402,8 @@ pub struct Board {
     // 火焰扫荡效果（对应 C++ mFwooshCountDown / mFwooshID）
     pub m_fwoosh_count_down: i32,
     pub m_fwoosh_id: [[ReanimationID; 12]; MAX_GRID_SIZE_Y],
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ mIceParticle（Ice 粒子系统 ID）；Rust 冰面绘制走 m_ice_timer（§1）
     pub m_ice_particle: i32,
 
     // 屏幕震动
@@ -510,6 +526,9 @@ pub(crate) fn get_overlay_image(
     std::ptr::null_mut()
 }
 
+// NOT-WIRED: 本 impl 内部分方法为 C++ Board 方法的翻译，但调用方尚未接线
+//（UNUSED_CPP_USAGE.md §1；逐条缺口见 04_PROGRESS.md「未使用符号」节）。
+#[allow(dead_code)]
 impl Board {
     pub fn new() -> Self {
         Board {
@@ -1181,6 +1200,7 @@ impl Board {
                 tod_pick_from_weighted_grid_array(&mut a_grid_array, a_grid_array_count)
             {
                 a_grid_array[idx].weight = 0;
+                #[allow(unused_variables)]
                 let grid_x = a_grid_array[idx].x;
                 let grid_y = a_grid_array[idx].y;
 
@@ -1325,77 +1345,13 @@ impl Board {
     }
 
     /// 碰撞检测
+    /// 割草机碰撞（对应 C++ LawnMower::Update 内的碰撞检测段，LawnMower.cpp:178-234）
+    ///
+    /// [TRANSLATION_NOTE]: 子弹-僵尸碰撞由 Projectile::CheckForCollision（Projectile.cpp:314）
+    /// 承担、僵尸进食由 Zombie::CheckIfPreyCaught（Zombie.cpp:6817）承担，均已在各实体
+    /// 自身 Update 路径接线；此处若重复处理会造成双倍伤害。故本函数只保留割草机碰撞，
+    /// 由 Board::update_game_objects 在 mower.update() 之前调用（对齐 C++ 碰撞先于状态机）。
     fn check_collisions(&mut self) {
-        // 子弹与僵尸碰撞
-        let mut projectiles_to_remove = Vec::new();
-        for (i, proj) in self.projectiles.iter().enumerate() {
-            if proj.dead {
-                continue;
-            }
-            let proj_rect = proj.get_projectile_rect();
-
-            for zombie in &mut self.zombies {
-                if zombie.dead {
-                    continue;
-                }
-                if zombie.base.row != proj.base.row {
-                    continue;
-                }
-
-                let z_rect = zombie.get_zombie_rect();
-                if proj_rect.intersects(&z_rect) {
-                    zombie.take_damage(proj.damage, proj.damage_flags);
-                    projectiles_to_remove.push(i);
-                    break;
-                }
-            }
-        }
-
-        for &i in projectiles_to_remove.iter().rev() {
-            if i < self.projectiles.len() {
-                self.projectiles[i].dead = true;
-            }
-        }
-
-        // 僵尸与植物碰撞（进食判定；对应 C++ Zombie::UpdateEating 的进食频率门控 + EatPlant）
-        for zombie in &mut self.zombies {
-            if zombie.dead {
-                continue;
-            }
-
-            // C++ Zombie::UpdateEating：chilled 时啃咬间隔加倍
-            let mut a_ticks_between_eats = crate::lawn::zombie::DAMAGE_PER_EAT;
-            if zombie.chilled_counter > 0 {
-                a_ticks_between_eats *= 2;
-            }
-            if zombie.zombie_age % a_ticks_between_eats != 0 {
-                continue;
-            }
-
-            let z_attack = zombie.get_zombie_attack_rect();
-
-            let mut a_plant_eaten = false;
-            for plant in &mut self.plants {
-                if plant.dead || !plant.is_on_board {
-                    continue;
-                }
-                if plant.base.row != zombie.base.row {
-                    continue;
-                }
-
-                let p_rect = plant.plant_rect;
-                if z_attack.intersects(&p_rect) {
-                    zombie.eat_plant(plant);
-                    a_plant_eaten = true;
-                    break;
-                }
-            }
-            // C++ Zombie::UpdateEating：目标不在了则停止进食
-            if !a_plant_eaten && zombie.is_eating {
-                zombie.stop_eating();
-            }
-        }
-
         // 僵尸与割草机碰撞（对应 C++ LawnMower::Update 中的碰撞检测→MowZombie）
         for zombie in &mut self.zombies {
             if zombie.dead {
@@ -1442,6 +1398,8 @@ impl Board {
     }
 
     /// 在指定行列查找植物（对应 C++ Board::GetTopPlantAt，TOPPLANT_EATING_ORDER）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ Board::GetTopPlantAt（Board.cpp:1943）；Rust 调用方（Zombie::FindPlantTarget 等）未接线（UNUSED_CPP_USAGE.md §1）
     pub fn find_plant_at(&mut self, row: i32, col: usize) -> Option<&mut Plant> {
         if col >= MAX_GRID_SIZE_X {
             return None;
@@ -1463,6 +1421,9 @@ impl Board {
     /// [TRANSLATION_NOTE]: 简化版（同行 + 植物右侧 + 最靠左）；C++ 完整版依赖 Plant 上下文
     /// （mSeedType/mState/攻击矩形/伤害范围标志/Portal 检查/Chomper/PotatoMine/TangleKelp 特判），
     /// 属 Plant 模块翻译范围，此处保留简化。
+    // NOT-WIRED: C++ Plant::FindTargetZombie（Plant.cpp:4769）的简化替身；
+    // 调用方（Plant 攻击链）未接线（UNUSED_CPP_USAGE.md §1）
+    #[allow(dead_code)]
     pub fn find_zombie_in_row(&mut self, row: i32, from_col: i32) -> Option<&mut Zombie> {
         let mut best_idx = None;
         let mut best_x = i32::MAX;
@@ -3564,6 +3525,8 @@ Spawn: {}
     }
 
     /// 检查游戏状态（胜利/失败）
+    #[allow(dead_code)]
+    // NOT-WIRED: Rust 自创总控（UNUSED_CPP_USAGE.md §3）；等价逻辑在 Board::update_level_end_sequence/CheckForGameEnd
     fn check_game_state(&mut self) {
         if self.m_game_over {
             return;
@@ -3843,7 +3806,7 @@ Spawn: {}
         }
 
         // UI 渲染项（C++ 6239-6303）
-        let mut a_z_pos;
+        let a_z_pos;
         if self.m_time_stop_counter > 0 {
             a_z_pos = make_render_order(RENDER_LAYER_ABOVE_UI, 0, 0);
         } else if game_scene == GameScenes::Playing || game_scene == GameScenes::ZombiesWon {
@@ -4191,6 +4154,11 @@ Spawn: {}
             g.draw_line(LAWN_XMIN, y, LAWN_XMIN + MAX_GRID_SIZE_X as i32 * 80, y);
         }
 
+        // C++ Board::DrawBackdrop（Board.cpp:5943）: mChallenge->DrawBackdrop(g);
+        if let Some(ch) = self.challenge.as_ref() {
+            ch.draw_backdrop(g);
+        }
+
         // C++ DrawBackdrop：僵尸获胜场景绘制房门底部（DrawHouseDoorBottom，Board.cpp:5928）
         if self.app.map_or(false, |app| unsafe {
             (*app).game_scene == crate::lawn::lawn_app::GameScenes::ZombiesWon
@@ -4293,8 +4261,8 @@ Spawn: {}
                 let a_cel_look =
                     self.grid_cel_look[x as usize][(y % MAX_GRID_SIZE_Y as i32) as usize];
                 let a_cel_col = a_cel_look % 8;
-                let mut a_pos_x = x as f32 * 80.0 + self.m_fog_offset - 15.0;
-                let mut a_pos_y = y as f32 * 85.0 + 20.0;
+                let a_pos_x = x as f32 * 80.0 + self.m_fog_offset - 15.0;
+                let a_pos_y = y as f32 * 85.0 + 20.0;
                 const FOG_ANIM_PERIOD: u32 = 4500;
                 let a_time =
                     (self.m_main_counter % FOG_ANIM_PERIOD) as f32 * std::f32::consts::PI * 2.0;
@@ -4401,7 +4369,7 @@ Spawn: {}
             }
         });
         let mut a_pos_x = 780;
-        let mut a_pos_y = 595;
+        let a_pos_y = 595;
         if self.has_progress_meter() {
             a_pos_x = 593;
         }
@@ -5700,6 +5668,8 @@ Spawn: {}
     }
 
     /// 选择背景（对应 C++ Board::PickBackground）
+    #[allow(unused_assignments)]
+    // 对应 C++ 局部变量「先初始化后覆盖」语义（UNUSED_CPP_USAGE.md §1）；保留赋值语句顺序
     pub fn pick_background(&mut self, app: *mut crate::lawn::lawn_app::LawnApp) {
         let game_mode = unsafe { (*app).game_mode };
         let level = self.level;
@@ -6469,7 +6439,7 @@ Spawn: {}
             .map_or(crate::lawn::lawn_app::GameScenes::Playing, |app| unsafe {
                 (*app).game_scene
             });
-        let mut a_to_die: Vec<usize> = Vec::new();
+        let a_to_die: Vec<usize> = Vec::new();
         for item in self.grid_items.iter_mut() {
             if item.dead {
                 continue;
@@ -7689,16 +7659,24 @@ Spawn: {}
 
     // ========== 鼠标事件 ==========
 
-    /// 鼠标移动（对应 C++ MouseMove）
+    /// 鼠标移动（对应 C++ Board::MouseMove，Board.cpp:3028-3032）
+    /// C++: Widget::MouseMove(x, y); mChallenge->MouseMove(x, y);
     pub fn mouse_move(&mut self, x: i32, y: i32) {
         self.m_prev_mouse_x = x;
         self.m_prev_mouse_y = y;
+        if let Some(ch) = self.challenge.as_mut() {
+            ch.mouse_move(x, y);
+        }
     }
 
-    /// 鼠标拖拽（对应 C++ MouseDrag）
+    /// 鼠标拖拽（对应 C++ Board::MouseDrag，Board.cpp:3034-3038）
+    /// C++: Widget::MouseDrag(x, y); mChallenge->MouseMove(x, y);
     pub fn mouse_drag(&mut self, x: i32, y: i32) {
         self.m_prev_mouse_x = x;
         self.m_prev_mouse_y = y;
+        if let Some(ch) = self.challenge.as_mut() {
+            ch.mouse_move(x, y);
+        }
     }
 
     // ========== 阳光/金钱 ==========
@@ -11410,6 +11388,9 @@ Spawn: {}
         for coin in &mut self.coins {
             coin.update();
         }
+        // C++ LawnMower::Update（LawnMower.cpp:178-234）：碰撞检测 → MowZombie 在状态机推进之前；
+        // Rust 因借用限制下沉到 Board 层（Board::check_collisions），顺序保持「先碰撞后状态机」
+        self.check_collisions();
         for mower in &mut self.lawn_mowers {
             mower.update();
         }

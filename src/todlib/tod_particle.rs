@@ -7,7 +7,6 @@
 
 #![allow(dead_code)]
 
-use std::collections::LinkedList;
 use std::ptr;
 
 use crate::framework::color::Color;
@@ -16,8 +15,8 @@ use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
 use crate::framework::rect::Rect;
 use crate::lawn::game_enums::{
-    ParticleEffect, ParticleEmitterID, ParticleID, ParticleSystemID, TodCurves,
-    PARTICLEEMITTERID_NULL, PARTICLEID_NULL, PARTICLESYSTEMID_NULL,
+    ParticleEffect, ParticleEmitterID, ParticleID, TodCurves, PARTICLEEMITTERID_NULL,
+    PARTICLEID_NULL,
 };
 use crate::todlib::data_array::DataArray;
 use crate::todlib::tod_common::pvzp_curve_evaluate;
@@ -1472,7 +1471,7 @@ impl TodParticleEmitter {
 
         let mut a_pos_x = the_params.pos_x + a_clip_left * a_cel_width as f32;
         let mut a_pos_y = the_params.pos_y + a_clip_top * a_cel_height as f32;
-        let mut a_src_rect = Rect::new(
+        let a_src_rect = Rect::new(
             (a_frame * a_cel_width + (a_clip_left * a_cel_width as f32).round() as i32).max(0),
             (a_emitter_def.image_row.min(a_image_ref.num_rows - 1) * a_cel_height
                 + (a_clip_top * a_cel_height as f32).round() as i32)
@@ -2412,8 +2411,10 @@ impl TodParticleEmitter {
             }
 
             // 对应 C++: 位置计算（按发射器类型）
-            let mut a_pos_x = 0.0;
-            let mut a_pos_y = 0.0;
+            // C++ PvzpParticle.cpp:381 为延迟初始化声明 `float aPosX, aPosY;`，
+            // 下方 switch 各分支均赋值 → 这里同样延迟初始化（零行为差异）
+            let a_pos_x: f32;
+            let a_pos_y: f32;
             match def.emitter_type {
                 EmitterType::Circle | EmitterType::CirclePath | EmitterType::CircleEvenSpacing => {
                     let a_emitter_radius_interp = RandFloat(1.0);
@@ -3592,7 +3593,8 @@ pub fn tod_particle_load_definitions(params: &[ParticleParams]) {
             return;
         }
         let mut a_def_array: Vec<TodParticleDefinition> = Vec::with_capacity(params.len());
-        for (i, a_param) in params.iter().enumerate() {
+        // C++: for (i...) { TOD_ASSERT(aParam.mParticleEffect == i) } —— 断言未接入，索引保留为 _i
+        for (_i, a_param) in params.iter().enumerate() {
             let mut a_def = TodParticleDefinition::new();
             tod_particle_load_a_def(&mut a_def, &a_param.file_name);
             // [TRANSLATION_NOTE]: 校验 aParam.mParticleEffect == i 依赖调用方参数表顺序

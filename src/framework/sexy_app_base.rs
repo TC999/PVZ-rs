@@ -8,7 +8,6 @@
 use std::collections::HashMap;
 
 use sdl2::event::{Event, WindowEvent};
-use sdl2::keyboard::Keycode;
 use sdl2::mouse::MouseButton;
 use sdl2::video::{GLContext, GLProfile, Window};
 
@@ -17,7 +16,6 @@ use crate::framework::color::Color;
 use crate::framework::common;
 use crate::framework::graphics::gl_image::GLImage;
 use crate::framework::graphics::gl_interface::GLInterface;
-use crate::framework::graphics::image::Image;
 use crate::framework::graphics::memory_image::MemoryImage;
 use crate::framework::key_codes::*;
 use crate::framework::paklib::{init_pak_interface, set_resource_folder, with_pak_interface_mut};
@@ -2908,6 +2906,8 @@ impl SexyAppBase {
         }
 
         let a_commands = take!(a_bytes_left as usize).to_vec();
+        // C++ 用 std::ifstream 隐式推进读取位置；Rust 的 pos 在最后一次读取后不再使用
+        let _ = pos;
         self.m_demo_buffer.write_bytes(&a_commands);
         self.m_demo_buffer.seek_front();
 

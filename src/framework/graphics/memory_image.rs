@@ -11,8 +11,7 @@
 #![allow(dead_code)]
 
 use crate::framework::color::Color;
-use crate::framework::graphics::image::{Image, ImageKind, Span};
-use crate::framework::point::Point;
+use crate::framework::graphics::image::{Image, ImageKind};
 use crate::framework::rect::Rect;
 use crate::framework::sexy_matrix::SexyMatrix3;
 
@@ -203,7 +202,7 @@ impl MemoryImage {
         src_rect: &Rect,
         color: &Color,
         draw_mode: i32,
-        linear_filter: bool,
+        _linear_filter: bool,
     ) {
         match draw_mode {
             0 => self.normal_blt(src, dest_x, dest_y, src_rect, color),
@@ -376,7 +375,7 @@ impl MemoryImage {
         // 通知 GLInterface 重新提交纹理
         if !self.app.is_null() && self.committed_to_gpu() {
             unsafe {
-                let app = &*self.app;
+                let _app = &*self.app;
                 // 通过 SexyAppBase 获取 GLInterface 并重新提交
                 // 实际实现在 GLInterface 中
             }
@@ -393,7 +392,7 @@ impl MemoryImage {
         // 通过 GLInterface 上传纹理
         if !self.app.is_null() {
             unsafe {
-                let app = &*self.app;
+                let _app = &*self.app;
                 // 使用 gl_interface 上传
                 self.commit_to_gpu();
             }

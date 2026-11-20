@@ -2,7 +2,6 @@
 // 对应 C++ src/Lawn/SeedPacket.h / SeedPacket.cpp
 
 use crate::framework::graphics::graphics::Graphics;
-use crate::framework::rect::Rect;
 use crate::lawn::board::HitResult;
 use crate::lawn::game_enums::*;
 use crate::lawn::game_object::GameObject;
@@ -21,12 +20,16 @@ pub struct SeedPacket {
     pub refresh_time: i32,
     pub refreshing: bool,
     pub active: bool,
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ SeedPacket::mCanAfford；Rust 每帧计算而非缓存（§1）
     pub can_afford: bool,
     pub slot_machine_countdown: i32,
     pub slot_machine_position: f32,
     pub slot_machine_next_seed: SeedType,
     pub times_used: i32,
     pub offset_x: i32,
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ mOffsetY（System/Zombatar.h:132 引用）；未接线（§1）
     pub offset_y: i32,
     pub app: Option<*mut crate::lawn::lawn_app::LawnApp>,
     pub board: Option<*mut crate::lawn::board::Board>,
@@ -242,6 +245,8 @@ impl SeedPacket {
     }
 
     /// 老虎机启动（对应 C++ SlotMachineStart）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ Challenge.cpp:1309 SlotMachine 拉杆调用；Rust challenge.mouse_down 未接 SlotMachine 分支（§1，待 Challenge 分支链接线）
     pub fn slot_machine_start(&mut self) {
         self.slot_machine_countdown = 300;
         self.slot_machine_position = 0.0;
@@ -398,6 +403,8 @@ impl SeedPacket {
     }
 
     /// 设置冷却时间
+    #[allow(dead_code)]
+    // NOT-WIRED: Rust 自创组织函数（UNUSED_CPP_USAGE.md §3）；倒计时逻辑内联于 update
     pub fn set_countdown(&mut self, refresh_time: i32) {
         self.countdown = refresh_time;
     }
@@ -639,6 +646,8 @@ impl Default for SeedPacket {
 }
 
 /// 种子银行 — 管理多个种子槽（对应 C++ SeedBank : GameObject）
+#[allow(dead_code)]
+// NOT-WIRED: C++ Board.cpp:96 mSeedBank 持有；Rust Board 以 Vec<SeedPacket> 直接管理，SeedBank 类待 Board 集成（§1）
 pub struct SeedBank {
     pub base: GameObject,
     pub num_packets: i32,
@@ -647,6 +656,8 @@ pub struct SeedBank {
     pub conveyor_belt_counter: i32,
 }
 
+#[allow(dead_code)]
+// NOT-WIRED: C++ mSeedBank 由 Board 持有；Rust Board 以 Vec<SeedPacket> 直接管理（§1）
 impl SeedBank {
     pub fn new() -> Self {
         SeedBank {
@@ -661,7 +672,8 @@ impl SeedBank {
     /// 绘制种子银行
     pub fn draw(&self, _g: &mut Graphics) {
         // 待 SeedPacket.cpp 翻译时实现完整绘制逻辑
-        for packet in &self.seed_packets {
+        // C++: for (SeedPacket& aPacket : mSeedPackets) aPacket.Draw(g);
+        for _packet in &self.seed_packets {
             // 每个种子槽的绘制由 SeedPacket::draw 处理
         }
     }
@@ -693,6 +705,11 @@ impl Default for SeedBank {
 }
 
 /// 绘制种子包（对应 C++ 全局函数 DrawSeedPacket，SeedPacket.cpp:285）
+// [TRANSLATION_NOTE]: C++ DrawSeedPacket 的图标缩放/偏移表（aScale/aOffsetX/aOffsetY/
+// aDrawSeedInMiddle，约 40 项 switch）保留逐项赋值以维持语句顺序；其消费方
+// SeedPacketDrawSeed（画像 cel 缩放绘制）依赖 IMAGE_SEED_BANK 等资源 cel 映射表，
+// Rust 侧尚未翻译（见函数内 993 行注释），故这些赋值暂未被读取。
+#[allow(unused_assignments)]
 pub fn draw_seed_packet(
     g: &mut Graphics,
     x: f32,
@@ -702,7 +719,8 @@ pub fn draw_seed_packet(
     percent_dark: f32,
     grayness: i32,
     draw_cost: bool,
-    use_current_cost: bool,
+    // C++: DrawSeedPacket(..., bool theUseCurrentCost)——消费方绘制未翻译（aScale 段同上）
+    _use_current_cost: bool,
 ) {
     // 对应 C++: 模仿者替换为被模仿种子
     let mut a_seed_type = seed_type;
@@ -799,7 +817,10 @@ pub fn draw_seed_packet(
     }
 
     // 对应 C++: 图标缩放/偏移表（switch 约 40 项）
+    // NOT-WIRED: 消费方 SeedPacketDrawSeed 未翻译（见上方 TRANSLATION_NOTE），故仅赋值未读取
+    #[allow(unused_variables)]
     let mut a_scale = 0.5f32;
+    #[allow(unused_variables)]
     let mut a_draw_seed_in_middle = true;
     let mut a_offset_x = 5.0f32;
     let mut a_offset_y = 8.0f32;

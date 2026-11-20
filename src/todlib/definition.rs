@@ -4,8 +4,6 @@
 #![allow(dead_code)]
 
 use crate::framework::color::Color;
-use crate::framework::rect::Rect;
-use crate::todlib::reanimator::{ReanimLoopType, Reanimation};
 
 /// 动画定义（轨迹）
 #[derive(Debug, Clone)]

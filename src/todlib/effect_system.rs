@@ -4,7 +4,7 @@
 #![allow(dead_code)]
 
 use crate::framework::graphics::graphics::Graphics;
-use crate::lawn::game_enums::{CoinID, ParticleID, ReanimationID, ATTACHMENTID_NULL};
+use crate::lawn::game_enums::{ParticleID, ReanimationID};
 use crate::todlib::attachment::Attachment;
 use crate::todlib::reanimator::Reanimation;
 use crate::todlib::tod_particle::ParticleSystem;
@@ -131,7 +131,7 @@ impl EffectSystem {
                 return None;
             }
         }
-        let mut a_system = ParticleSystem::new();
+        let a_system = ParticleSystem::new();
         let id = self.add_particle_system(a_system);
         let idx = (id - 1) as usize;
         let a_system_ptr = &mut self.particle_systems[idx] as *mut ParticleSystem;

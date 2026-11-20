@@ -2,24 +2,24 @@
 // 对应 C++ src/Lawn/Zombie.h / Zombie.cpp
 
 use crate::framework::color::Color;
-use crate::framework::common::{Rand, RandFloat, RandRange};
+use crate::framework::common::{RandFloat, RandRange};
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
 use crate::framework::rect::Rect;
 use crate::framework::sexy_matrix::SexyMatrix3;
-use crate::lawn::board::Board;
 use crate::lawn::game_enums::*;
 use crate::lawn::game_object::GameObject;
-use crate::lawn::lawn_app::LawnApp;
 use crate::lawn::plant::Plant;
 use crate::lawn::zombatar::*;
-use crate::todlib::attachment::{attach_reanim, find_reanim_attachment, Attachment};
+use crate::todlib::attachment::{attach_reanim, find_reanim_attachment};
 use crate::todlib::reanimator::{ReanimLoopType, Reanimation, ReanimationType};
 use crate::todlib::tod_particle::ParticleSystem;
 
 pub const MAX_ZOMBIE_FOLLOWERS: usize = 4;
 pub const NUM_BACKUP_DANCERS: usize = 4;
 pub const ZOMBIE_BACKUP_DANCER_RISE_HEIGHT: i32 = -200;
+#[allow(dead_code)]
+// NOT-WIRED: C++ Zombie.cpp:48 文件级；Bungee 高度逻辑未接线（§1）
 pub const BUNGEE_ZOMBIE_HEIGHT: i32 = 3000;
 pub const ZOMBIE_LIMP_SPEED_FACTOR: i32 = 2;
 pub const POGO_BOUNCE_TIME: i32 = 80;
@@ -48,6 +48,8 @@ pub const BOSS_ZOMBIE_LIST: [ZombieType; 12] = [
 ];
 
 // C++ Zombie.cpp 文件级常量
+#[allow(dead_code)]
+// NOT-WIRED: C++ Zombie.cpp:70 文件级；消费方 bungee/绘制裁剪未翻译（§1）
 const CLIP_HEIGHT_LIMIT: f32 = -100.0; // C++ constexpr CLIP_HEIGHT_LIMIT = -100.0f
 const ZOMBIE_MINDCONTROLLED_COLOR: Color = Color {
     r: 128,
@@ -100,6 +102,8 @@ pub enum ZombieAttackType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
+#[allow(dead_code)]
+// NOT-WIRED: C++ Zombie.cpp:5216 DrawZombieHead 使用；Rust 分部位绘制走 reanim 部件表（§1）
 pub enum ZombieParts {
     Body = 0,
     Head,
@@ -147,6 +151,8 @@ impl ZombieDrawPosition {
 pub struct Zombie {
     pub base: GameObject,
 
+    #[allow(dead_code)]
+    // NOT-WIRED: ZombieDefinition 字段镜像（C++ gZombieDefs）；C++ 读取点属图鉴/血条链，未接线（§1）
     pub zombie_type: ZombieType,
     pub zombie_phase: ZombiePhase,
     pub pos_x: f32,
@@ -225,6 +231,9 @@ pub struct Zombie {
     pub last_portal_x: i32,
 }
 
+// NOT-WIRED: 本 impl 内部分方法为 C++ Zombie 方法的翻译，但调用方尚未接线
+//（UNUSED_CPP_USAGE.md §1；逐条缺口见 04_PROGRESS.md「未使用符号」节）。
+#[allow(dead_code)]
 impl Zombie {
     /// 预加载僵尸资源（对应 C++ Zombie::PreloadZombieResources）
     pub fn preload_zombie_resources(zombie_type: ZombieType) {
@@ -865,6 +874,8 @@ impl Zombie {
         self.update_reanim();
     }
 
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ Zombie::SetupHealthForType 派生逻辑；Rust 由 zombie_definition 表直接赋值（§3 自创组织函数）
     fn setup_health_for_type(&mut self, ztype: ZombieType) {
         match ztype {
             ZombieType::Normal | ZombieType::Flag | ZombieType::DuckyTube => {
@@ -1019,8 +1030,23 @@ impl Zombie {
                     self.phase_counter -= 1;
                 }
 
-                // 依赖底层系统
-                if self.is_on_board() {
+                // C++ 4345-4353: mApp->mGameScene == SCENE_ZOMBIES_WON 时，
+                // 由 mBoard->mCutScene->ShowZombieWalking() 决定是否推进 Chimney/Walking
+                let a_zombies_won = self.base.get_app().map_or(false, |a| {
+                    a.game_scene == crate::lawn::lawn_app::GameScenes::ZombiesWon
+                });
+                if a_zombies_won {
+                    let a_show_walking = self
+                        .base
+                        .get_board()
+                        .and_then(|b| b.m_cut_scene)
+                        .map_or(false, |cs| unsafe { (*cs).show_zombie_walking() });
+                    if a_show_walking {
+                        self.update_zombie_chimney();
+                        self.update_zombie_walking();
+                    }
+                } else if self.is_on_board() {
+                    // 依赖底层系统
                     self.update_playing();
                 }
 
@@ -1169,9 +1195,13 @@ impl Zombie {
             return;
         }
 
+        // 对应 C++ Zombie::UpdatePlaying（Zombie.cpp:4642-4650）：
+        //     UpdateActions(); UpdateZombiePosition(); CheckIfPreyCaught();
+        //     CheckForPool(); CheckForHighGround(); CheckForBoardEdge();
         if !self.is_immobilized() {
             self.update_actions();
             self.update_zombie_position();
+            self.check_if_prey_caught();
             self.check_for_pool();
             self.check_for_high_ground();
             self.check_for_board_edge();
@@ -2746,6 +2776,8 @@ impl Zombie {
     }
 
     /// 获取伽刚特尔下方植物的列（对应 C++ FindPlantTarget 简化）
+    #[allow(dead_code)]
+    // NOT-WIRED: Rust 自创拆分（UNUSED_CPP_USAGE.md §3）；调用方未接线
     pub fn plant_col_below(&self) -> i32 {
         if let Some(idx) = self.find_plant_target_index(ZombieAttackType::Chew) {
             if let Some(board) = self.base.get_board() {
@@ -3759,6 +3791,9 @@ impl Zombie {
     }
 
     /// 烧毁整行僵尸（对应 C++ BurnRow）
+    // NOT-WIRED: C++ BurnRow 为 Plant::BurnRow（Plant.cpp:4225），已由 plant.rs::burn_row 翻译并接线；
+    // 本方法为同逻辑的重复实现（UNUSED_CPP_USAGE.md §3），保留作对照
+    #[allow(dead_code)]
     pub fn burn_row(&mut self, the_row: i32) {
         let board = match self.base.board {
             Some(b) => b,
@@ -4300,6 +4335,8 @@ impl Zombie {
         }
     }
 
+    #[allow(unused_assignments)]
+    // 对应 C++ 局部变量「先初始化后覆盖」语义（UNUSED_CPP_USAGE.md §1）；保留赋值语句顺序
     pub fn update_boss_fireball(&mut self) {
         let fireball_id = self.boss_fire_ball_reanim_id;
         if fireball_id == REANIMATIONID_NULL {
@@ -6619,14 +6656,46 @@ impl Zombie {
             self.eat_zombie(target);
             return;
         }
+        // C++ 6876-6883: if (!mMindControlled) { Plant* aPlant = FindPlantTarget(CHEW);
+        //                    if (aPlant) { EatPlant(aPlant); return; } }
         if !self.mind_controlled {
-            if self
-                .find_plant_target_index(ZombieAttackType::Chew)
-                .is_some()
-            {
-                self.start_eating();
+            if let Some(a_plant_index) = self.find_plant_target_index(ZombieAttackType::Chew) {
+                if let Some(a_board) = self.base.board {
+                    // SAFETY: a_board 为 Board 裸指针（项目同构持有，见 ADR-003）；
+                    // 此处仅取其 plants 元素的可变引用交给 eat_plant，同帧内不再以其它
+                    // 路径访问同一 plant（zombie 与 board 为不同对象，单线程主循环）。
+                    unsafe {
+                        if let Some(a_plant) = (&mut *a_board).plants.get_mut(a_plant_index) {
+                            self.eat_plant(a_plant);
+                            return;
+                        }
+                    }
+                }
             }
         }
+
+        // C++ 6886-6889: if (mApp->IsIZombieLevel() && mBoard->mChallenge->IZombieEatBrain(this)) return;
+        // C++ LawnApp::IsIZombieLevel（LawnApp.cpp:2125-2141）：mBoard 非空 + game_mode 为 I_ZOMBIE 系
+        let a_is_i_zombie = self.base.board.is_some()
+            && self.base.get_app().map_or(false, |app| {
+                crate::lawn::widget::challenge_screen::ChallengeScreen::is_i_zombie_level(
+                    app.game_mode,
+                )
+            });
+        if a_is_i_zombie {
+            if let Some(a_board) = self.base.board {
+                // SAFETY: 同上一处——单线程主循环内经裸指针取 Challenge 可变引用；
+                // challenge 与 self 为 Board 内不同对象，调用期间不再经其它路径访问 challenge。
+                unsafe {
+                    if let Some(a_challenge) = (&mut *a_board).challenge.as_mut() {
+                        if a_challenge.i_zombie_eat_brain(self) != 0 {
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
         if self.is_eating {
             self.stop_eating();
         }
@@ -9645,7 +9714,7 @@ impl Zombie {
                 (*board).remove_all_zombies();
             }
 
-            let mut coin_type;
+            let coin_type;
             if (*app).is_scary_potter_level() && !(*board).is_final_scary_potter_stage() {
                 coin_type = CoinType::None;
                 let gx = (*board)
@@ -10898,9 +10967,12 @@ impl Zombie {
 
     /// 获取渲染位置（对应 C++ Zombie::GetDrawPos）
     pub fn get_draw_pos(&self) -> ZombieDrawPosition {
+        // NOT-WIRED: C++ Zombie::GetDrawPos 内局部常量（Zombie.cpp:70/48）；Rust 简化版未用裁剪高度
+        #[allow(dead_code)]
         const CLIP_HEIGHT_LIMIT: f32 = -100.0;
         const CLIP_HEIGHT_OFF: f32 = -200.0;
         const HIGH_GROUND_HEIGHT: f32 = 30.0;
+        #[allow(dead_code)]
         const BUNGEE_ZOMBIE_HEIGHT: f32 = 3000.0;
 
         let mut pos = ZombieDrawPosition::new();
@@ -12290,6 +12362,8 @@ impl Zombie {
 }
 
 /// 僵尸定义（对应 C++ ZombieDefinition）
+#[allow(dead_code)]
+// NOT-WIRED: C++ gZombieDefs 表条目；图鉴/血条读取链未接线（§1）
 #[derive(Debug, Clone)]
 pub struct ZombieDefinition {
     pub zombie_type: ZombieType,
@@ -12755,6 +12829,8 @@ impl Default for Zombie {
 
 // --- Zombie 类常量（对应 C++ Zombie 内部枚举） ---
 impl Zombie {
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ Board.cpp:8090 调试生成入口；Rust key_char 调试键未引用（§1）
     pub const ZOMBIE_WAVE_DEBUG: i32 = -1;
     pub const ZOMBIE_WAVE_CUTSCENE: i32 = -2;
     pub const ZOMBIE_WAVE_UI: i32 = -3;

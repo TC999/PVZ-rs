@@ -7,7 +7,6 @@
 #![allow(dead_code)]
 
 use crate::framework::color::Color;
-use crate::framework::graphics::graphics::Graphics;
 use crate::framework::point::Point;
 use crate::framework::rect::Rect;
 use std::any::Any;
@@ -552,7 +551,6 @@ impl Image {
                     a_dest_y += 1;
                 }
                 a_dest_idx += a_x_inc;
-                a_dest_x += a_x_inc;
 
                 let a_weight = 255 - ((an_err_acc >> 8) as i32);
                 let a_weight2 = a_weight ^ 0xFF;
@@ -593,7 +591,6 @@ impl Image {
                     a_dest_x += a_x_inc;
                 }
                 a_dest_idx += stride;
-                a_dest_y += 1;
 
                 let a_weight = 255 - ((an_err_acc >> 8) as i32);
                 let a_weight2 = a_weight ^ 0xFF;

@@ -6,7 +6,6 @@
 use crate::framework::common::RandFloat;
 use crate::framework::common::RandRange;
 use crate::framework::sound::sound_instance::SoundInstance;
-use crate::framework::sound::sound_manager::SoundManager;
 
 /// 最大拟音类型数
 pub const MAX_FOLEY_TYPES: usize = 110;

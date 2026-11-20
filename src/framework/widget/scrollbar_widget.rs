@@ -5,7 +5,6 @@
 
 use crate::framework::color::Color;
 use crate::framework::graphics::graphics::Graphics;
-use crate::framework::rect::Rect;
 use crate::framework::widget::button_listener::ButtonListener;
 use crate::framework::widget::insets::Insets;
 use crate::framework::widget::scrollbutton_widget::ScrollbuttonWidget;

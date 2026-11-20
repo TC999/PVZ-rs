@@ -3,8 +3,6 @@
 
 #![allow(dead_code)]
 
-use std::f32::consts::PI;
-
 use crate::framework::color::Color;
 use crate::framework::common::SexyVector2;
 use crate::framework::graphics::graphics::Graphics;
@@ -227,7 +225,9 @@ impl Trail {
 
         let def = unsafe { &*self.m_definition };
         let time_value = self.m_trail_age as f32 / (self.m_trail_duration - 1).max(1) as f32;
-        let triangle_count = (self.m_num_trail_points - 1) * 2;
+        // C++ Trail.cpp:180-181：aTriangleCount 仅用于 PVZP_ASSERT(aTriangleCount < MAX_TRAIL_TRIANGLES)，
+        // 本函数为简化线段绘制，断言/三角形数组未接入 → 下划线保留声明
+        let _triangle_count = (self.m_num_trail_points - 1) * 2;
         // assert!(triangle_count < MAX_TRAIL_TRIANGLES as i32);
 
         let mut have_prev = false;

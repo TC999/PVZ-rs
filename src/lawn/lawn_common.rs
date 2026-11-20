@@ -14,6 +14,8 @@ use crate::lawn::game_enums::*;
 // ====================================================================================================
 // ★ 编辑框控件颜色表（对应 C++ gLawnEditWidgetColors）
 // ====================================================================================================
+#[allow(dead_code)]
+// NOT-WIRED: C++ gLawnEditWidgetColors（LawnCommon.cpp:35）由 CreateEditWidget 的 SetColors 使用；Rust create_edit_widget 的颜色设置尚未实装（TODO），待接线后引用
 pub const LAWN_EDIT_WIDGET_COLORS: [[u8; 4]; 5] = [
     [0, 0, 0, 0],
     [0, 0, 0, 0],
@@ -27,6 +29,8 @@ pub const LAWN_EDIT_WIDGET_COLORS: [[u8; 4]; 5] = [
 // ====================================================================================================
 
 /// 判断在 [theNumber - theRange, theNumber + theRange] 区间内是否存在 theMod 的整数倍数
+#[allow(dead_code)]
+// NOT-WIRED: C++ ModInRange（LawnCommon.cpp:44）全 cpp/ 仅定义/声明、无调用点（UNUSED_CPP_USAGE.md §2）
 pub fn mod_in_range(the_number: i32, the_mod: i32, the_range: i32) -> bool {
     let range = the_range.abs();
     for i in (the_number - range)..=(the_number + range) {
@@ -38,6 +42,8 @@ pub fn mod_in_range(the_number: i32, the_mod: i32, the_range: i32) -> bool {
 }
 
 /// 判断点 (x1, y1) 是否位于点 (x2, y2) 周围的 (theRangeX, theRangeY) 范围内
+#[allow(dead_code)]
+// NOT-WIRED: 与 board::grid_in_range（board.rs 内的同名实现，已接线且对应 C++ GridInRange 三个调用点）重复；本函数为早期拆分遗留（UNUSED_CPP_USAGE.md §3）
 pub fn grid_in_range(
     x1: i32,
     y1: i32,
@@ -57,6 +63,8 @@ pub fn grid_in_range(
 // ====================================================================================================
 
 /// 水平平铺图片（每次绘制图像的一部分，直到填满指定宽度）
+#[allow(dead_code)]
+// NOT-WIRED: C++ TileImageHorizontally（LawnCommon.cpp:58）全 cpp/ 仅定义/声明、无调用点（§2）
 pub fn tile_image_horizontally(
     g: &mut Graphics,
     the_image: &Image,
@@ -76,6 +84,8 @@ pub fn tile_image_horizontally(
 }
 
 /// 垂直平铺图片（每次绘制图像的一部分，直到填满指定高度）
+#[allow(dead_code)]
+// NOT-WIRED: C++ TileImageVertically（LawnCommon.cpp:69）全 cpp/ 仅定义/声明、无调用点（§2）
 pub fn tile_image_vertically(
     g: &mut Graphics,
     the_image: &Image,
@@ -99,12 +109,16 @@ pub fn tile_image_vertically(
 // ====================================================================================================
 
 /// 草地编辑框控件（对应 C++ LawnEditWidget : EditWidget）
+#[allow(dead_code)]
+// NOT-WIRED: C++ LawnEditWidget : EditWidget（LawnCommon.cpp:80）；Rust 侧 NewUserDialog/CheatDialog 直接使用 EditWidget（未继承桥），本类与工厂待重构接线
 pub struct LawnEditWidget {
     pub dialog: Option<*mut Dialog>,
     pub auto_cap_first_letter: bool,
 }
 
 impl LawnEditWidget {
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ CreateEditWidget 构造 LawnEditWidget；Rust 侧对话框直接使用 EditWidget，本构造未接线
     pub fn new(
         _the_id: i32,
         _the_listener: Option<&mut dyn EditListener>,
@@ -116,6 +130,8 @@ impl LawnEditWidget {
         }
     }
 
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ LawnEditWidget::KeyDown（LawnCommon.cpp:90）；宿主 CreateEditWidget 未接线
     pub fn key_down(&mut self, the_key: i32) {
         // EditWidget::KeyDown(theKey) 基类处理——TODO: 实际需要调用基类方法
         if the_key == KEYCODE_ESCAPE {
@@ -124,6 +140,8 @@ impl LawnEditWidget {
         }
     }
 
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ LawnEditWidget::KeyChar（LawnCommon.cpp:109）；宿主 CreateEditWidget 未接线
     pub fn key_char(&mut self, the_char: char) {
         if self.auto_cap_first_letter && the_char.is_ascii_alphabetic() {
             self.auto_cap_first_letter = false;
@@ -133,6 +151,8 @@ impl LawnEditWidget {
 
     /// 按键文本输入（对应 C++ LawnEditWidget::KeyText，LawnCommon.cpp:117）
     /// 整段文本逐字符做 AutoCapChar 检查：找到第一个可大写字母后停止自动大写
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ LawnEditWidget::KeyText（LawnCommon.cpp:117）；宿主 CreateEditWidget 未接线
     pub fn key_text(&mut self, the_text: &str) {
         if !self.auto_cap_first_letter {
             // EditWidget::KeyText(theText) 基类处理——[TRANSLATION_NOTE]: Rust 基类为
@@ -158,6 +178,8 @@ impl LawnEditWidget {
 // ====================================================================================================
 
 /// 创建编辑框控件（对应 C++ CreateEditWidget）
+#[allow(dead_code)]
+// NOT-WIRED: C++ CreateEditWidget（LawnCommon.cpp:138）调用点为 CheatDialog.cpp:36 / NewUserDialog.cpp:40；Rust 两处直接构造 EditWidget，待 LawnEditWidget 继承链接线
 pub fn create_edit_widget(
     _the_id: i32,
     _the_listener: Option<&mut dyn EditListener>,
@@ -181,14 +203,31 @@ pub fn draw_edit_box(_g: &mut Graphics, the_widget: &EditWidget) {
     // TODO: g->DrawImageBox(aDest, IMAGE_EDITBOX);
 }
 
-/// 创建新复选框（对应 C++ MakeNewCheckbox）
+/// 创建新复选框（对应 C++ MakeNewCheckbox，LawnCommon.cpp:154-162）
+/// C++ 直接使用全局 Sexy::IMAGE_OPTIONS_CHECKBOX0/1 资源句柄；Rust 无资源全局变量，
+/// 经 LawnApp 的 ResourceManager 按同名 key 解析（与 CursorObject::Draw 等既有取图方式一致）。
 pub fn make_new_checkbox(
     the_id: i32,
-    _the_listener: Option<Box<dyn CheckboxListener>>,
+    the_listener: Option<Box<dyn CheckboxListener>>,
     the_default: bool,
 ) -> Checkbox {
-    // 构造时传入空指针图像，实际图像资源在运行时设置
-    let mut checkbox = Checkbox::new(std::ptr::null_mut(), std::ptr::null_mut(), the_id, None);
+    let (a_image0, a_image1) = crate::lawn::lawn_app::LawnApp::instance().map_or(
+        (std::ptr::null_mut(), std::ptr::null_mut()),
+        |app| {
+            let get = |a_key: &str| -> *mut Image {
+                app.base
+                    .resource_manager
+                    .map_or(std::ptr::null_mut(), |rm| unsafe {
+                        (*rm).get_image(a_key).as_image_ptr()
+                    })
+            };
+            (
+                get("IMAGE_OPTIONS_CHECKBOX0"),
+                get("IMAGE_OPTIONS_CHECKBOX1"),
+            )
+        },
+    );
+    let mut checkbox = Checkbox::new(a_image0, a_image1, the_id, the_listener);
     checkbox.checked = the_default;
     checkbox.has_alpha = true;
     checkbox.has_transparencies = true;

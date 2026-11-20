@@ -4,11 +4,9 @@
 #![allow(dead_code)]
 
 use crate::framework::color::Color;
-use crate::framework::graphics::gl_interface::TriVertex;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
-use crate::framework::rect::Rect;
-use crate::lawn::game_enums::{ReanimationID, TodCurves, REANIMATIONID_NULL};
+use crate::lawn::game_enums::{ReanimationID, REANIMATIONID_NULL};
 use crate::todlib::data_array::DataArray;
 use crate::todlib::definition::{
     ReanimatorDefinition, ReanimatorTrackInstance, ReanimatorTransform,
@@ -444,7 +442,7 @@ impl Reanimation {
                         a_atlas_img.width,
                         a_atlas_img.height,
                     );
-                    let mut a_atlas_memory = (*atlas_ptr.unwrap()).memory_image;
+                    let a_atlas_memory = (*atlas_ptr.unwrap()).memory_image;
                     if !a_atlas_memory.is_null() {
                         // 对应 C++: FilterEffectGetImage(aImage, mFilterEffect)
                         let a_base = &mut (*a_atlas_memory).base
@@ -1618,7 +1616,7 @@ impl Reanimation {
         if !a_attacher_info.reanim_name.is_empty() {
             let a_reanim_file_name = format!("reanim/{}.reanim", a_attacher_info.reanim_name);
             let app = crate::lawn::lawn_app::LawnApp::instance();
-            if let Some(app) = app {
+            if let Some(_app) = app {
                 // 遍历全部 reanim 类型，找文件名匹配
                 for t in 0..crate::lawn::game_enums::ReanimationType::NumReanims as i32 {
                     let t_enum = unsafe { std::mem::transmute::<i32, ReanimationType>(t) };
@@ -1641,7 +1639,7 @@ impl Reanimation {
 
         // 对应 C++: FindReanimAttachment + 类型不匹配 → 重新分配
         let mut a_track_attachment_id = self.m_track_instances[track_index].m_attachment_id;
-        let mut a_attach_reanim =
+        let a_attach_reanim =
             crate::todlib::attachment::find_reanim_attachment(&mut a_track_attachment_id);
         let mut a_attach_reanim: Option<*mut Reanimation> =
             a_attach_reanim.map(|p| p as *mut Reanimation);
@@ -1652,7 +1650,7 @@ impl Reanimation {
         if a_need_alloc {
             crate::todlib::attachment::attachment_die(&mut a_track_attachment_id);
             let a_new_reanim = crate::lawn::lawn_app::LawnApp::instance().and_then(|app| {
-                let mut app = app;
+                let app = app;
                 unsafe { (&mut *app).add_reanimation(0.0, 0.0, 0, a_reanimation_type as i32) }
             });
             if let Some(a_new_reanim) = a_new_reanim {

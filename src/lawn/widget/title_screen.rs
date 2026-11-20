@@ -41,6 +41,8 @@ pub enum TitleState {
 /// C++ TitleScreen 匿名枚举成员（TitleScreen_Start / TitleScreen_Register）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
+#[allow(dead_code)]
+// NOT-WIRED: C++ TitleScreen 按钮 ID 集合；Rust 按钮分派走 title_screen 内部常量（§3）
 pub enum TitleScreenButtonId {
     Start = 0,
     Register = 1,
@@ -67,8 +69,14 @@ pub struct TitleScreenImpl {
     pub prev_loading_percent: f32,
 
     // ---- 注册 ----
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ TitleScreen.cpp:48 字段；注册流程未翻译（§6）
     pub need_register: bool,
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ TitleScreen.cpp:49；注册流程未翻译（§6）
     pub register_clicked: bool,
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ TitleScreen.cpp:50；注册流程未翻译（§6）
     pub need_show_register_box: bool,
     pub display_partner_logo: bool,
 
@@ -138,6 +146,8 @@ impl TitleScreenImpl {
     }
 
     /// 对应 C++ TitleScreen::Resize — 仅调用基类 Widget::Resize
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ TitleScreen::Resize（Board.cpp:205 联动）；Rust TitleScreenImpl 无该覆写（§1）
     pub fn resize(&mut self, widget: &mut Widget, x: i32, y: i32, w: i32, h: i32) {
         widget.resize(x, y, w, h);
     }
@@ -145,6 +155,8 @@ impl TitleScreenImpl {
     /// 对应 C++ TitleScreen::AddedToManager
     /// C++ 中：Widget::AddedToManager + theWidgetManager->AddWidget(mStartButton)。
     /// [TRANSLATION_NOTE]: mStartButton 已内化为字段（无真实子控件可挂接），故为 no-op。
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ Widget::AddedToManager（WidgetContainer.cpp:94）；Rust WidgetImpl trait 无该回调（§1，需 widget.rs 扩展）
     pub fn added_to_manager(&mut self, _widget: &mut Widget, _wm: *mut WidgetManager) {
         // (void)theWidgetManager;
         // theWidgetManager->AddWidget(mStartButton);
@@ -153,12 +165,16 @@ impl TitleScreenImpl {
     /// 对应 C++ TitleScreen::RemovedFromManager
     /// C++ 中：Widget::RemovedFromManager + theWidgetManager->RemoveWidget(mStartButton)。
     /// [TRANSLATION_NOTE]: mStartButton 已内化，故为 no-op。
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ Widget::RemovedFromManager（Widget.cpp:85）；同上
     pub fn removed_from_manager(&mut self, _widget: &mut Widget) {
         // (void)theWidgetManager;
         // theWidgetManager->RemoveWidget(mStartButton);
     }
 
     /// 对应 C++ TitleScreen::ButtonPress — 按钮按下播放点击音
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ TitleScreen 按钮按下回调；Rust 按钮分派未接（§1）
     pub fn button_press(&mut self, _the_id: i32) {
         // (void)theId;
         let app = unsafe { &*self.app };
@@ -166,6 +182,8 @@ impl TitleScreenImpl {
     }
 
     /// 对应 C++ TitleScreen::ButtonDepress — 按钮释放分发
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ TitleScreen 按钮释放回调；未接（§1）
     pub fn button_depress(&mut self, the_id: i32) {
         let id = the_id as i32;
         if id == TitleScreenButtonId::Start as i32 {
@@ -178,6 +196,8 @@ impl TitleScreenImpl {
 
     /// 对应 C++ TitleScreen::SetRegistered（头文件声明，原 cpp 未提供定义，
     /// 此处提供与 mNeedRegister 语义一致的空实现）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ TitleScreen.h:95（§2 仅声明）；注册流程未翻译
     pub fn set_registered(&mut self) {
         // C++ 无实现体；mNeedRegister 由外部注册流程驱动
     }
@@ -187,6 +207,8 @@ impl TitleScreenImpl {
     // ============================================================
 
     /// 对应 C++ TitleScreen::Draw（由 WidgetImpl::draw 转调）
+    #[allow(unused_assignments)]
+    // 对应 C++ 局部变量「先初始化后覆盖」语义（UNUSED_CPP_USAGE.md §1）；保留赋值语句顺序
     fn draw_impl(&mut self, widget: &Widget, g: &mut Graphics) {
         g.set_linear_blend(true);
 

@@ -235,7 +235,7 @@ impl FontData {
         color: &mut Color,
     ) -> bool {
         match element {
-            DataElement::List(list) => {
+            DataElement::List(_list) => {
                 let mut factor_vec = Vec::new();
                 if self.data_to_double_vector(element, &mut factor_vec) && factor_vec.len() == 4 {
                     *color = Color::new(
@@ -865,7 +865,7 @@ impl DescParser for FontData {
                             && self.data_to_string_vector(&list[3], &mut to_codes)
                             && from_codes.len() == to_codes.len()
                         {
-                            if let Some(layer) = self.font_layer_list.get_mut(idx) {
+                            if let Some(_layer) = self.font_layer_list.get_mut(idx) {
                                 // 处理字符映射——此处的语义是在图层级别做映射
                                 // C++ 中在 FontLayer 级别没有 mCharMap，只有 FontData 有
                                 // 这里实际上在 FontData 的 HandleCommand 中处理
@@ -881,7 +881,7 @@ impl DescParser for FontData {
                 // 处理字符帧定义
                 if let Some(idx) = self.data_to_layer(&list[1]) {
                     // 第4+个参数是帧数据
-                    let layer = &self.font_layer_list[idx];
+                    let _layer = &self.font_layer_list[idx];
                     // 获取字符码点
                     let ch_elem = &list[2];
                     if let DataElement::Single(ch_s) = ch_elem {
@@ -1079,9 +1079,9 @@ impl ImageFont {
                 max_ps,
                 point_size_val,
                 char_data_map,
-                image_ref,
-                offset_val,
-                spacing_val,
+                _image_ref,
+                _offset_val,
+                _spacing_val,
             ) = {
                 let layer = &fd.font_layer_list[layer_idx];
                 (
@@ -1293,7 +1293,7 @@ impl ImageFont {
     pub fn string_width(&mut self, text: &str) -> i32 {
         let mut width = 0i32;
         let mut prev_char: char = '\0';
-        let bytes = text.as_bytes();
+        let _bytes = text.as_bytes();
         let mut offset = 0usize;
         while let Some(ch) = utf8_decode_next_str(text, &mut offset) {
             width += self.char_width_kern(ch, prev_char);
@@ -1592,7 +1592,6 @@ impl ImageFont {
         }
 
         let orig_color = g.get_color().clone();
-        let orig_colorize = g.get_colorize_images();
 
         // 执行渲染命令
         {
@@ -1620,7 +1619,8 @@ impl ImageFont {
         }
 
         g.set_color(&orig_color);
-        g.set_colorize_images(orig_colorize);
+        // 恢复调用前保存的原值（C++ ImageFont.cpp:1486 / 1640），而非进入时已被置为 true 的值
+        g.set_colorize_images(colorize_images);
     }
 
     /// 复制字体（对应 C++ Duplicate）

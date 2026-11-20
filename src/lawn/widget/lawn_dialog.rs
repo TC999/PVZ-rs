@@ -6,7 +6,6 @@
 use crate::framework::color::Color;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::key_codes::KeyCode;
-use crate::framework::widget::dialog::Dialog;
 use crate::framework::widget::dialog_button::DialogButton;
 use crate::framework::widget::widget_manager::WidgetManager;
 use crate::lawn::game_enums::*;

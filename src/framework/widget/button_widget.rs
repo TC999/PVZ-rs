@@ -349,7 +349,7 @@ impl ButtonWidget {
     }
 
     /// 鼠标按下（带按钮号，对应 C++ MouseDown）
-    pub fn mouse_down_btn(&mut self, the_x: i32, the_y: i32, the_btn: i32, the_click: i32) {
+    pub fn mouse_down_btn(&mut self, the_x: i32, the_y: i32, _the_btn: i32, the_click: i32) {
         self.mouse_down_widget(the_x, the_y, the_click);
         if let Some(ref mut listener) = self.button_listener {
             listener.button_press(self.id);
@@ -358,7 +358,7 @@ impl ButtonWidget {
     }
 
     /// 鼠标释放（带按钮号，对应 C++ MouseUp）
-    pub fn mouse_up_btn(&mut self, the_x: i32, the_y: i32, the_btn: i32, the_click: i32) {
+    pub fn mouse_up_btn(&mut self, the_x: i32, the_y: i32, _the_btn: i32, _the_click: i32) {
         self.mouse_up_widget(the_x, the_y);
         if self.is_over {
             if let Some(ref mut listener) = self.button_listener {

@@ -1483,7 +1483,7 @@ impl ZenGarden {
         -1
     }
 
-    pub fn draw_backdrop(&self, g: &mut Graphics) {
+    pub fn draw_backdrop(&self, _g: &mut Graphics) {
         // 对应 C++ DrawBackdrop：水族馆中在空位绘制植物阴影（引导放置）
         if self.garden_type != GardenType::Aquarium {
             return;

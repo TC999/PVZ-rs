@@ -796,6 +796,10 @@ impl GridItem {
     }
 
     /// 添加墓碑出现粒子（对应 C++ GridItem::AddGraveStoneParticles）
+    // C++: Challenge.cpp:2938 | aGridItem->AddGraveStoneParticles();（Challenge::GraveDangerSpawnGraveAt 内）
+    // NOT-WIRED: Rust 调用方在 challenge.rs / cutscene.rs（cutscene.rs 的同名桩函数内留有"待 GridItem 翻译后接入"注释），
+    //   这两个文件不在本批范围，本方法保留待接线。
+    #[allow(dead_code)]
     pub fn add_grave_stone_particles(&mut self) {
         let board = match self.board {
             Some(b) => unsafe { &*b },

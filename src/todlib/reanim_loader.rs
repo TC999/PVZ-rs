@@ -201,6 +201,9 @@ pub fn resolve_reanim_font_name(name: &str) -> i32 {
 }
 
 /// 按索引取字体名（-1 返回 None）
+// NOT-WIRED: Rust 自创资源表查询（REANIM_FONT_NAMES 是 Rust 资源管线自建映射，C++ Reanimator
+//   无字体名表对应，UNUSED_CPP_USAGE.md §3 列为 "-"）；当前无调用者。
+#[allow(dead_code)]
 pub fn get_reanim_font_name(idx: i32) -> Option<&'static str> {
     if idx < 0 {
         return None;
@@ -214,6 +217,8 @@ pub fn get_reanim_font_name(idx: i32) -> Option<&'static str> {
 }
 
 /// 诊断用：查图片名在全局表中的索引
+// NOT-WIRED: Rust 自创诊断辅助（C++ Reanimator 无对应函数，UNUSED_CPP_USAGE.md §3 列为 "-"）。
+#[allow(dead_code)]
 pub fn reanim_image_name_index(name: &str) -> Option<usize> {
     unsafe { REANIM_IMAGE_NAMES.iter().position(|n| n == name) }
 }
@@ -357,6 +362,9 @@ fn fill_in_missing_data(transforms: &mut [ReanimatorTransform]) {
 
 /// 解析 reanim XML 片段（对应 C++ DefinitionLoadXML + ReanimationLoadDefinition）
 /// 诊断入口：暴露 parse_reanim_xml 给 paklib 的测试（不改变状态）
+// NOT-WIRED: Rust 自创诊断/测试入口（C++ 无此包装函数，UNUSED_CPP_USAGE.md §3 列为 "-"）；
+//   实际解析逻辑 parse_reanim_xml 另有调用路径，本包装仅测试用。
+#[allow(dead_code)]
 pub fn parse_reanim_xml_for_test(
     xml: &str,
 ) -> Option<crate::todlib::definition::ReanimatorDefinition> {

@@ -6,6 +6,7 @@
 use crate::framework::common::{file_exists, string_to_lower};
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
+use crate::framework::key_codes::KeyCode;
 use crate::framework::sexy_app_base::SexyAppBase;
 use crate::framework::widget::button_widget::ButtonWidget;
 use crate::framework::widget::dialog::{Dialog, BUTTONS_FOOTER, BUTTONS_OK_CANCEL};
@@ -17,7 +18,7 @@ use crate::lawn::game_enums::*;
 use crate::lawn::system::reanimation_lawn::ReanimatorCache;
 use crate::lawn::system::save_game::lawn_save_game;
 use crate::lawn::widget::game_selector::GameSelectorImpl;
-use crate::lawn::widget::title_screen::{TitleScreenImpl, TitleState};
+use crate::lawn::widget::title_screen::TitleScreenImpl;
 use crate::lawn::zen_garden::ZenGarden;
 use crate::todlib::effect_system::EffectSystem;
 use crate::todlib::reanimator::Reanimation;
@@ -26,6 +27,8 @@ use crate::todlib::tod_particle::TodParticleSystem;
 use std::collections::LinkedList;
 
 /// 游戏场景枚举（对应 C++ GameScenes）
+#[allow(dead_code)]
+// NOT-WIRED: 场景切换路径待接线（UNUSED_CPP_USAGE.md §5），变体按 C++ ConstEnums.h 保留
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum GameScenes {
@@ -49,6 +52,8 @@ pub struct LevelStats {
 }
 
 impl LevelStats {
+    #[allow(dead_code)]
+    // NOT-WIRED: LevelStats::new（C++ LevelStats 无构造；Rust 以默认字段构造，§3）
     pub fn new() -> Self {
         LevelStats {
             unused_lawn_mowers: 0,
@@ -70,6 +75,9 @@ pub struct LawnApp {
 
     // ---- 游戏屏幕/面板 ----
     pub board: Option<*mut Board>,
+    /// Board 的 Widget 包装（对应 C++ Board 自身即 Widget；Rust 以 Widget + BoardWidgetImpl
+    /// 桥接，经 WidgetManager 接收绘制与输入分派，对应 LawnApp.cpp:449 AddWidget(mBoard)）
+    pub board_widget: Option<*mut Widget>,
     pub title_screen: Option<*mut Widget>,
     pub game_selector: Option<*mut ()>,
     /// [TRANSLATION_NOTE]: C++ mSeedChooserScreen 为强类型指针；Rust 侧原为 *mut () 擦除，
@@ -107,7 +115,11 @@ pub struct LawnApp {
     pub pool_effect: Option<Box<crate::lawn::system::pool_effect::PoolEffect>>,
 
     // ---- 列表 ----
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ LawnApp.h:85 mControlButtonList（AddControlButton 维护）；Rust 控件列表路径未接线（§5）
     pub control_button_list: ButtonList,
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ LawnApp.h:86 mCreatedImageList；Rust 图像列表路径未接线（§5）
     pub created_image_list: ImageList,
 
     // ---- 游戏状态 ----
@@ -115,6 +127,8 @@ pub struct LawnApp {
     pub game_scene: GameScenes,
     pub board_result: BoardResult,
     pub m_level: i32,
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ LawnApp mNumLevels；Rust 读取点未接线（§5）
     pub m_num_levels: i32,
     pub m_close_request: bool,
     pub m_app_counter: u32,
@@ -156,22 +170,46 @@ pub struct LawnApp {
     pub m_sukhbir_mode: bool,
 
     // ---- 游戏统计 ----
+    #[allow(dead_code)]
+    // NOT-WIRED: PVZ_DEBUG 路径（C++ LawnApp.cpp:176-182 初始化、UpdatePlayTimeStats:1560-1611 读取；调用点 LawnApp.cpp:1620 #ifdef PVZ_DEBUG），需 feature=debug
     pub m_games_played: i32,
+    #[allow(dead_code)]
+    // NOT-WIRED: PVZ_DEBUG 路径（同上，LawnApp.cpp:176-182）
     pub m_max_executions: i32,
+    #[allow(dead_code)]
+    // NOT-WIRED: PVZ_DEBUG 路径（同上，LawnApp.cpp:178）
     pub m_max_plays: i32,
+    #[allow(dead_code)]
+    // NOT-WIRED: PVZ_DEBUG 路径（同上，LawnApp.cpp:179）
     pub m_max_time: i32,
+    #[allow(dead_code)]
+    // NOT-WIRED: PVZ_DEBUG 路径（UpdatePlayTimeStats:1584 读取），需 feature=debug
     pub m_play_time_active_session: i32,
+    #[allow(dead_code)]
+    // NOT-WIRED: PVZ_DEBUG 路径（UpdatePlayTimeStats:1598 读取），需 feature=debug
     pub m_play_time_inactive_session: i32,
     pub m_saw_yeti: bool,
 
     // ---- 对话框 ----
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ mDialogId（对话框管理）；Rust 对话框路径未接线（§5）
     pub m_dialog_id: i32,
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ mTutorialState（ConstEnums.h:1187 TutorialState）；Rust 教程路径未接线（§5）
     pub m_tutorial_state: TutorialState,
 
     // ---- 注册/标识信息 ----
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ 注册流程字段（LawnApp.cpp:182 初始化）；Rust 注册流程未实现（§6）
     pub m_refer_id: String,
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ 注册流程字段（§6）
     pub m_register_link: String,
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ 注册流程字段（§6）
     pub m_mod: String,
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ 注册流程字段（LawnApp.cpp:182）；Rust 注册流程未实现（§6）
     pub m_register_resources_loaded: bool,
 
     // ---- 其他 ----
@@ -180,9 +218,13 @@ pub struct LawnApp {
     pub m_last_level_stats: Option<Box<LevelStats>>,
 
     // ---- 线程状态 ----
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ 僵尸加载线程状态；Rust 同步加载（docs/07_BOOT_SEQUENCE.md），该字段未读
     pub m_loading_zombies_thread_completed: bool,
 
     // ---- 会话/试用 ----
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ SexyAppBase 会话 ID；Rust 未使用
     pub m_session_id: isize,
     pub m_trial_type: TrialType,
     pub m_debug_trial_locked: bool,
@@ -213,11 +255,133 @@ fn drive_board_frame() {
     }
 }
 
+/// Board 的 Widget 桥接（对应 C++ Board 自身即 Widget，Board.cpp:7463 Board::Draw、
+/// Board.cpp:4397 Board::MouseDown 等作为 WidgetManager 虚分派入口）。
+/// C++ 中 Board 经 LawnApp::MakeNewBoard 的 AddWidget/BringToBack/SetFocus
+/// （LawnApp.cpp:449-451）注册，绘制由 WidgetManager::DrawScreen 驱动，
+/// 输入由 WidgetManager::MouseDown/MouseUp/MouseMove/KeyDown/KeyChar 分派。
+/// Rust Board 非 Widget 子类，此 impl 将 Widget 虚分派转发到 Board 对应方法。
+struct BoardWidgetImpl;
+
+impl WidgetImpl for BoardWidgetImpl {
+    /// 对应 C++ Board::Draw（Board.cpp:7463）
+    fn draw(&mut self, _widget: &Widget, g: &mut Graphics) {
+        if let Some(app) = LawnApp::instance() {
+            if let Some(board) = app.board {
+                unsafe {
+                    (*board).draw(g);
+                }
+            }
+        }
+    }
+
+    /// 对应 C++ Board::Update（经 WidgetManager::UpdateFrame 的 UpdateAll 分派）
+    fn update(&mut self, _widget: &mut Widget) {
+        // [TRANSLATION_NOTE]: C++ 的 Board::Update 由 WidgetManager::UpdateFrame →
+        // UpdateAll 驱动；Rust 为保证 update 顺序与 C++ 一致（先 ProcessDeleteQueue
+        // 后 UpdateFrame），Board::Update 仍由 LawnApp::update_frames 直驱
+        // （lawn_app.rs update_frames 中的 (*board_ptr).update()），此处不再重复调用，
+        // 否则每帧更新两次会改变 RNG 消耗序列。
+    }
+
+    /// 对应 C++ Widget::MouseEnter/Leave（Board 不覆写，无额外逻辑）
+
+    /// 对应 C++ Board::MouseMove（Board.cpp:3023）
+    fn mouse_move(&mut self, _widget: &mut Widget, x: i32, y: i32) {
+        if let Some(app) = LawnApp::instance() {
+            if let Some(board) = app.board {
+                unsafe {
+                    (*board).mouse_move(x, y);
+                }
+            }
+        }
+    }
+
+    /// 对应 C++ Board::MouseDown（Board.cpp:4397）
+    /// C++ WidgetManager::MouseDown 直传原始编码 theClickCount（左=1/右=-1/中=3，
+    /// WidgetManager.cpp:659 aWidget->MouseDown(aWidgetX, aWidgetY, theClickCount)）；
+    /// Rust Widget 层把该编码拆成 (btn, click)，此处还原：btn=0→click（左/正值）、
+    /// btn=1→-click（右键）、btn=2→3*click（中键）。
+    fn mouse_down_btn(&mut self, _widget: &mut Widget, x: i32, y: i32, btn: i32, click: i32) {
+        let a_click_count = if btn == 1 {
+            -click
+        } else if btn == 2 {
+            3 * click
+        } else {
+            click
+        };
+        if let Some(app) = LawnApp::instance() {
+            if let Some(board) = app.board {
+                unsafe {
+                    (*board).mouse_down(x, y, a_click_count);
+                }
+            }
+        }
+    }
+
+    /// 对应 C++ Board::MouseDrag（Board.cpp:3031）
+    fn mouse_drag(&mut self, _widget: &mut Widget, x: i32, y: i32) {
+        if let Some(app) = LawnApp::instance() {
+            if let Some(board) = app.board {
+                unsafe {
+                    (*board).mouse_drag(x, y);
+                }
+            }
+        }
+    }
+
+    /// 对应 C++ Board::MouseUp（Board.cpp:4614）
+    /// C++ WidgetManager::MouseUp 传 mLastDownButtonId（-1/1/2，WidgetManager.cpp:581
+    /// 区域 aLastDownWidget->MouseUp(...)）；Rust Widget 层拆成 (btn, click)，
+    /// 还原规则与 MouseDown 一致：btn=0→click、btn=1→-click、btn=2→3*click。
+    fn mouse_up_btn(&mut self, _widget: &mut Widget, x: i32, y: i32, btn: i32, click: i32) {
+        let a_click_count = if btn == 1 {
+            -click
+        } else if btn == 2 {
+            3 * click
+        } else {
+            click
+        };
+        if let Some(app) = LawnApp::instance() {
+            if let Some(board) = app.board {
+                unsafe {
+                    (*board).mouse_up(x, y, a_click_count);
+                }
+            }
+        }
+    }
+
+    /// 对应 C++ Board::KeyDown（Board.cpp:7661）
+    fn key_down(&mut self, _widget: &mut Widget, key: KeyCode, _wm: &mut WidgetManager) {
+        if let Some(app) = LawnApp::instance() {
+            if let Some(board) = app.board {
+                unsafe {
+                    (*board).key_down(key);
+                }
+            }
+        }
+    }
+
+    /// 对应 C++ Board::KeyChar（Board.cpp:7697）
+    fn key_char(&mut self, _widget: &mut Widget, c: u8) {
+        if let Some(app) = LawnApp::instance() {
+            if let Some(board) = app.board {
+                unsafe {
+                    if let Some(ch) = char::from_u32(c as u32) {
+                        (*board).key_char(ch);
+                    }
+                }
+            }
+        }
+    }
+}
+
 impl LawnApp {
     pub fn new() -> Self {
         let mut app = LawnApp {
             base: SexyAppBase::new(),
             board: None,
+            board_widget: None,
             title_screen: None,
             game_selector: None,
             seed_chooser_screen: None,
@@ -566,6 +730,8 @@ impl LawnApp {
     }
 
     /// 开始关卡
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ LawnApp::StartLevel；Rust 走 StartPlaying→board.start_level()，LawnApp::start_level 未接线（§1）
     pub fn start_level(&mut self, level: i32) {
         self.m_level = level;
         self.make_new_board();
@@ -579,13 +745,36 @@ impl LawnApp {
         // [TRANSLATION_NOTE]: ShowSeedChooserScreen + CutScene::StartLevelIntro 暂未实现
     }
 
-    /// 创建新 Board（对应 C++ MakeNewBoard）
+    /// 创建新 Board（对应 C++ MakeNewBoard，LawnApp.cpp:444-452）
     pub fn make_new_board(&mut self) {
         self.kill_board();
         let mut board = Box::new(Board::new());
         board.level = self.m_level;
         board.board_init(self as *mut LawnApp);
-        self.board = Some(Box::into_raw(board));
+        let board_ptr = Box::into_raw(board);
+        self.board = Some(board_ptr);
+
+        // C++ LawnApp.cpp:447-451:
+        //     mBoard = new Board(this);
+        //     mBoard->Resize(0, 0, mWidth, mHeight);
+        //     mWidgetManager->AddWidget(mBoard);
+        //     mWidgetManager->BringToBack(mBoard);
+        //     mWidgetManager->SetFocus(mBoard);
+        // Rust Board 非 Widget 子类，以 Widget 包装桥接（BoardWidgetImpl 转发
+        // 绘制/更新/鼠标/键盘分派到 Board），使 Board 经 WidgetManager 正常
+        // 接收每帧绘制与输入事件（BringToBack = 移到绘制列表最前 = 最底层）。
+        let mut board_widget = Box::new(Widget::new());
+        board_widget.resize(0, 0, self.base.width, self.base.height);
+        board_widget.impl_ = Some(Box::new(BoardWidgetImpl));
+        let widget_ptr = Box::into_raw(board_widget);
+        self.board_widget = Some(widget_ptr);
+        if let Some(wm) = self.base.widget_manager {
+            unsafe {
+                (*wm).add_widget(widget_ptr);
+                (*wm).bring_to_back(widget_ptr);
+                (*wm).set_focus(Some(widget_ptr));
+            }
+        }
     }
 
     /// 完成 ZenGarden 教学（对应 C++ LawnApp::FinishZenGardenToturial，LawnApp.cpp:3177）
@@ -601,13 +790,18 @@ impl LawnApp {
             unsafe {
                 // C++: mBoard->DisposeBoard()（LawnApp.cpp:358）
                 (*b).dispose_board();
-                // C++: mWidgetManager->RemoveWidget(mBoard)（LawnApp.cpp:359）；
-                // [TRANSLATION_NOTE]: Rust Board 非 Widget 子类且未注册进
-                // WidgetManager（make_new_board 未 AddWidget），remove_widget
-                // 会按错误布局解引用，故省略。
             }
-            // C++: SafeDeleteWidget(mBoard); mBoard = nullptr（LawnApp.cpp:360-361）
-            // Board 经安全删除列表延迟释放（ADR-010）
+            // C++: mWidgetManager->RemoveWidget(mBoard)（LawnApp.cpp:359）
+            if let Some(w) = self.board_widget.take() {
+                if let Some(wm) = self.base.widget_manager {
+                    unsafe {
+                        (*wm).remove_widget(w);
+                    }
+                }
+                // C++: SafeDeleteWidget(mBoard); mBoard = nullptr（LawnApp.cpp:360-361）
+                // Board 与其 Widget 包装均经安全删除列表延迟释放（ADR-010）
+                self.base.safe_delete_widget(w);
+            }
             self.base.safe_delete_ptr(b);
         }
         // [TRANSLATION_NOTE]: 清理种子选择界面、删除存档文件暂未实现
@@ -975,6 +1169,8 @@ impl LawnApp {
         self.seed_chooser_screen_widget = Some(widget_ptr);
     }
 
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ LawnApp.cpp:343/456 调用；Rust 场景切换路径未接线（§5）
     pub fn kill_seed_chooser_screen(&mut self) {
         if let Some(widget_ptr) = self.seed_chooser_screen_widget.take() {
             if let Some(wm) = self.base.widget_manager {
@@ -1002,7 +1198,7 @@ impl LawnApp {
         }
 
         // 创建 StoreScreen 本体（Box 拥有，存于 self.store_screen）
-        let mut screen = Box::new(crate::lawn::widget::store_screen::StoreScreen::new(app));
+        let screen = Box::new(crate::lawn::widget::store_screen::StoreScreen::new(app));
         let screen_ptr = Box::into_raw(screen);
 
         // 创建 Widget 包装（impl_ 非拥有地引用 StoreScreen 本体）并注册进 WidgetManager
@@ -1177,6 +1373,8 @@ impl LawnApp {
 
     /// 关闭所有非模态对话框（对应 C++ FinishModelessDialogs）
     /// 关闭绑定到棋盘的对话框；被关闭的对话框按取消处理，删除延后
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ LawnApp.cpp:342 调用；Rust 场景切换路径未接线（§5）
     pub fn finish_modeless_dialogs(&mut self) {
         self.kill_dialog(Dialogs::ConfirmRestart);
         self.kill_dialog(Dialogs::ConfirmBackToMain);
@@ -1607,7 +1805,7 @@ impl LawnApp {
             .dialog_map
             .values()
             .any(|d| unsafe { (**d).is_modal });
-        let mut a_dialog = Box::new(Dialog::new(
+        let a_dialog = Box::new(Dialog::new(
             std::ptr::null_mut(),
             std::ptr::null_mut(),
             the_dialog_id,
@@ -1626,6 +1824,8 @@ impl LawnApp {
 
     /// 延迟创建对话框（对应 C++ DoDialogDelay）
     /// 创建对话框并设置按钮延迟
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ 仅定义（LawnApp.cpp:812）/声明（LawnApp.h:205），无调用点（§2）
     pub fn do_dialog_delay(
         &mut self,
         id: i32,
@@ -1647,6 +1847,8 @@ impl LawnApp {
 
     /// 居中对话框（对应 C++ CenterDialog）
     /// 将对话框置于屏幕中央
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ LawnApp.cpp:708/716/750/772 调用；Rust 对话框布局路径未接线（§5）
     pub fn center_dialog(dialog: *mut Dialog, width: i32, height: i32) {
         unsafe {
             let d = &mut *dialog;
@@ -2206,12 +2408,16 @@ impl LawnApp {
         // [TRANSLATION_NOTE]: C++ 直接 (SeedType)aSeedsHasGot 强转；Rust 枚举无法直接转换，用 unsafe transmute 保持等价
         unsafe { std::mem::transmute::<i32, SeedType>(a_seeds_has_got) }
     }
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ CutScene.cpp:902/925 调用；Rust CutScene 挑战名提示段未接线（§5）
     pub fn get_current_challenge_def() -> u32 {
         0
     }
     pub fn get_current_challenge_index(&self) -> i32 {
         0
     }
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ LawnApp.h:319 为 inline 桩（返回 "Unknown"）无调用点；Rust 自创格式化（§3）
     pub fn get_current_level_name(&self) -> String {
         format!("Level {}", self.m_level)
     }
@@ -2265,9 +2471,13 @@ impl LawnApp {
             format!("${}", a_value)
         }
     }
+    #[allow(dead_code)]
+    // NOT-WIRED: §4 改名候选（C++ LawnGetCloseRequest，LawnApp.cpp:98）；Rust 调用点未接线
     pub fn get_close_request(&self) -> bool {
         self.m_close_request
     }
+    #[allow(dead_code)]
+    // NOT-WIRED: §4 改名候选（C++ LawnHasUsedCheatKeys，LawnApp.cpp:106）；无调用点（§2）
     pub fn has_used_cheat_keys(&self) -> bool {
         self.m_cheat_keys_used
     }
@@ -2784,6 +2994,8 @@ impl LawnApp {
     }
 
     /// 绘制疯狂戴夫（对应 C++ DrawCrazyDave）
+    // 对应 C++ 局部变量「先初始化后覆盖」语义（UNUSED_CPP_USAGE.md §1）；保留赋值语句顺序
+    #[allow(unused_assignments)]
     pub fn draw_crazy_dave(&self, g: &mut Graphics) {
         let reanim_ptr: *const Reanimation = {
             let r = self.reanimation_get(self.m_crazy_dave_reanim_id);
@@ -2797,7 +3009,10 @@ impl LawnApp {
             // [TRANSLATION_NOTE]: C++ 中绘制 IMAGE_STORE_SPEECHBUBBLE(2) 气泡与
             // PvzpDrawStringWrapped(FONT_BRIANNETOD16) 台词文本、click to continue 提示；
             // Rust 侧对应图片/字体资源未接入，此处仅保留位置计算逻辑
+            #[allow(unused_variables)]
+            #[allow(unused_variables)]
             let mut a_pos_x = 285;
+            #[allow(unused_variables)]
             let mut a_pos_y = 20;
             if self.base.dialog_map.contains_key(&(Dialogs::Store as i32)) {
                 a_pos_x -= 180;
@@ -2812,6 +3027,7 @@ impl LawnApp {
                 a_bubble_text = a_bubble_text.replace("{SHAKE}", "");
                 // C++ 中气泡矩形位置每帧随机偏移（rand()%2）
             }
+            #[allow(unused_variables)]
             let _click_to_continue = self.game_mode != GameMode::Upsell;
         }
 
@@ -2822,7 +3038,7 @@ impl LawnApp {
 
     /// 推进戴夫台词（对应 C++ AdvanceCrazyDaveText）
     pub fn advance_crazy_dave_text(&mut self) -> bool {
-        let a_message_name = format!("[CRAZY_DAVE_{}]", self.m_crazy_dave_message_index + 1);
+        let _a_message_name = format!("[CRAZY_DAVE_{}]", self.m_crazy_dave_message_index + 1);
         // [TRANSLATION_NOTE]: C++ 中 PvzpStringListExists(aMessageName) 检查字符串表
         // 是否存在该台词；Rust 侧用 get_string 近似判定
         if self.base.resource_manager.is_none() {
@@ -2859,16 +3075,22 @@ impl LawnApp {
         }
     }
     /// 窗口获得焦点（对应 C++ LawnApp::GotFocus，LawnApp.cpp:387-389，C++ 为空实现）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ SexyAppBase 虚函数覆盖；Rust LawnApp 以组合嵌入 SexyAppBase，无虚分派桥（§3）
     pub fn got_focus(&mut self) {}
 
     /// 窗口失去焦点（对应 C++ LawnApp::LostFocus，LawnApp.cpp:391-399）
     /// C++ 仅在 Android/iOS 平台弹出暂停对话框；桌面平台为空实现
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ SexyAppBase.cpp:2041 RehupFocus 调用；Rust 无虚分派桥（§3）
     pub fn lost_focus(&mut self) {
         // [TRANSLATION_NOTE]: C++ 的 #if (__ANDROID__ || __IPHONEOS__) 分支调用
         // DoPauseDialog()；Rust 目标为桌面平台，同 C++ 桌面分支保持空实现
     }
 
     /// 模态对话框打开（对应 C++ LawnApp::ModalOpen，LawnApp.cpp:1163-1169）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ SexyAppBase 虚函数覆盖；Rust 无虚分派桥（§3）
     pub fn modal_open(&mut self) {
         if self.board.is_some() && self.need_pause_game() {
             unsafe {
@@ -2878,11 +3100,15 @@ impl LawnApp {
     }
 
     /// 初始化钩子（对应 C++ LawnApp::InitHook，LawnApp.cpp:3192-3195）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ SexyAppBase 虚函数覆盖；Rust 无虚分派桥（§3）
     pub fn init_hook(&mut self) {
         self.m_trial_type = TrialType::None;
     }
 
     /// 游戏时长统计（对应 C++ LawnApp::UpdatePlayTimeStats，LawnApp.cpp:1560-1611）
+    #[allow(dead_code)]
+    // NOT-WIRED: PVZ_DEBUG 路径（C++ LawnApp.cpp:1620 #ifdef PVZ_DEBUG 内调用），需 feature=debug
     pub fn update_play_time_stats(&mut self) {
         // C++ 中 aLastTime 为函数内 static 局部变量（毫秒级 SDL_GetTicks）；
         // Rust 用函数内 static 近似，时间源为 UNIX 毫秒时间戳
@@ -2965,6 +3191,8 @@ impl LawnApp {
         (self.board.is_none() || self.game_mode != GameMode::ChallengeZenGarden)
             && (self.board.is_none() || self.game_mode != GameMode::ChallengeTreeOfWisdom)
     }
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ 仅声明（LawnApp.h:216），无定义/调用点（§2）
     pub fn need_register(&self) -> bool {
         false
     }
@@ -3011,6 +3239,8 @@ impl LawnApp {
 
     /// 关闭模式对话框（对应 C++ LawnApp::ModalClose，LawnApp.cpp:1171-1177）
     /// 恢复游戏暂停状态
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ LawnApp.cpp:1171 定义、SexyAppBase.cpp:870 调用；Rust 无虚分派桥（§3）
     pub fn modal_close(&mut self) {
         if self.board.is_some() && !self.need_pause_game() {
             unsafe {
@@ -3020,6 +3250,8 @@ impl LawnApp {
     }
 
     /// 确认返回主菜单对话框（对应 C++ LawnApp::DoConfirmBackToMain，LawnApp.cpp:686-701）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ NewOptionsDialog.cpp:340/344 调用；new_options_dialog.rs 未接线（范围外）
     pub fn do_confirm_back_to_main(&mut self) {
         self.do_dialog(
             Dialogs::ConfirmBackToMain as i32,
@@ -3035,6 +3267,8 @@ impl LawnApp {
     }
 
     /// 确认出售对话框（对应 C++ LawnApp::DoConfirmSellDialog，LawnApp.cpp:1098-1101）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ 仅定义（LawnApp.cpp:1098），无调用点（§2）
     pub fn do_confirm_sell_dialog(&mut self, the_message: &str) {
         self.do_dialog(
             Dialogs::ZenSell as i32,
@@ -3075,15 +3309,23 @@ impl LawnApp {
     }
 
     /// 执行注册（对应 C++ LawnApp::DoRegister，LawnApp.cpp:3305-3308，C++ 为空实现）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ LawnApp.cpp:3305 空实现桩；注册流程未实现（§6）
     pub fn do_register(&mut self) {}
 
     /// 注册错误（对应 C++ LawnApp::DoRegisterError，LawnApp.cpp:3310-3313，C++ 为空实现）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ LawnApp.cpp:3310 空实现桩（§2/§6）
     pub fn do_register_error(&mut self) {}
 
     /// 需要注册对话框（对应 C++ LawnApp::DoNeedRegisterDialog，LawnApp.cpp:3320-3323，C++ 为空实现）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ LawnApp.cpp:3320 空实现桩；调用点 :544 被注释（§2/§6）
     pub fn do_need_register_dialog(&mut self) {}
 
     /// Zombatar 服务条款对话框（对应 C++ LawnApp::ShowZombatarTOS，LawnApp.cpp:713-719）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ 无对应符号（grep 0 命中，§3 自创）
     pub fn show_zombatar_tos(&mut self) {
         // C++: ZombatarTOS* aDialog = new ZombatarTOS(this); CenterDialog(aDialog, mWidth, mHeight);
         //      AddDialog(DIALOG_ZOMBATAR_TOS, aDialog); mWidgetManager->SetFocus(aDialog)
@@ -3098,11 +3340,15 @@ impl LawnApp {
     }
 
     /// 显示前钩子（对应 C++ LawnApp::PreDisplayHook，LawnApp.cpp:1848-1851）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ SexyAppBase.cpp:3373/3515 调用；Rust 无虚分派桥（§3）
     pub fn pre_display_hook(&mut self) {
         self.base.pre_display_hook();
     }
 
     /// 加载完成回调（对应 C++ LawnApp::LoadingThreadCompleted，LawnApp.cpp:1788-1790，C++ 为空实现）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ LawnApp.cpp:1788 空实现桩；Rust 同步加载（docs/07）
     pub fn loading_thread_completed(&mut self) {}
 
     /// 命令行参数处理（对应 C++ LawnApp::HandleCmdLineParam，LawnApp.cpp:1341-1354）
@@ -3122,6 +3368,8 @@ impl LawnApp {
     }
 
     /// 应用更新（对应 C++ LawnApp::UpdateApp，LawnApp.cpp:2276-2297）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ SexyAppBase::UpdateApp 虚函数覆盖；Rust 主循环调 SexyAppBase 自身方法，无分派桥（§3）
     pub fn update_app(&mut self) -> bool {
         if self.m_close_request {
             self.base.shutdown();
@@ -3386,6 +3634,8 @@ impl LawnApp {
         }
     }
 
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ SexyAppBase.cpp 调用；Rust 无虚分派桥（§3）
     pub fn write_to_registry(&mut self) {
         if let Some(player_info) = &mut self.player_info {
             // C++: RegistryWriteString("CurUser", mPlayerInfo->mName) — 用户名经 regemu 持久化
@@ -3398,6 +3648,8 @@ impl LawnApp {
         self.base.write_to_registry();
     }
     /// 读取注册表（对应 C++ ReadFromRegistry）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ SexyAppBase.cpp:3491 调用；Rust 无虚分派桥（§3）
     pub fn read_from_registry(&self, _key: &str, _default: &str) -> String {
         _default.to_string()
     }
@@ -3419,10 +3671,14 @@ impl LawnApp {
         // 对话框实例挂载管理未接入，此处不联动
     }
     /// 弹出高分对话框（对应 C++ DoHighScoreDialog）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ LawnApp.cpp:3300 空实现桩，无调用点（§2）
     pub fn do_high_score_dialog(&mut self) {
         // C++ 中该函数体为空（DoRegister 等同类注册对话框同样为空）
     }
     /// 更改目录钩子（对应 C++ ChangeDirHook）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ SexyAppBase.cpp:3422 调用；Rust 无虚分派桥（§3）
     pub fn change_dir_hook(&self, _path: &str) -> bool {
         false
     }
@@ -3579,10 +3835,14 @@ impl LawnApp {
         a_unlocked_new_challenge
     }
     /// URL 打开成功回调（对应 C++ URLOpenSucceeded）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ SexyAppBase.cpp:2174 调用；Rust 无虚分派桥（§3）
     pub fn url_open_succeeded(&self, _url: &str) {
         // [TRANSLATION_NOTE]: C++ 中无对应方法（Rust 侧为占位，浏览器打开回调暂不处理）
     }
     /// 打开 URL（对应 C++ LawnApp::OpenURL，LawnApp.cpp:1823）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ SexyAppBase 虚函数覆盖；Rust 无虚分派桥（§3）
     pub fn open_url(&mut self, the_url: &str, shutdown_on_open: bool) -> bool {
         // C++: DoDialog(DIALOG_OPENURL_WAIT, true, GetString("OPENING_BROWSER","Opening Browser"), ...)
         let a_dialog_text = self.base.get_string("OPENING_BROWSER");
@@ -3915,6 +4175,8 @@ impl LawnApp {
 
     // ==================== 事件处理 ====================
 
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ LawnApp::MouseDown 覆盖由 SexyAppBase 分派；Rust 事件链走 Widget/WidgetManager，无分派桥（§3）
     pub fn mouse_down(&mut self, x: i32, y: i32, _btn: i32, _cc: i32) {
         if let Some(board_ptr) = self.board {
             unsafe {
@@ -3923,6 +4185,8 @@ impl LawnApp {
         }
     }
 
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ LawnApp::KeyDown 覆盖由 SexyAppBase 分派；Rust 事件链走 Widget/WidgetManager，无分派桥（§3）
     pub fn key_down(&mut self, key: i32) {
         if let Some(board_ptr) = self.board {
             unsafe {
@@ -3933,9 +4197,13 @@ impl LawnApp {
 
     // ==================== 调试 ====================
 
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ LawnApp::DebugKeyDown 覆盖；Rust 无分派桥（§3）
     pub fn debug_key_down(&mut self, _key: i32) -> bool {
         false
     }
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ LawnApp.cpp:1241/1692 调用；Rust 资源错误路径未接线（§5）
     pub fn show_resource_error(&mut self, do_exit: bool) {
         // 对应 C++ SexyAppBase::ShowResourceError
         let a_error = "".to_string(); // [TRANSLATION_NOTE]: mResourceManager->GetErrorText() 未接入
@@ -3954,12 +4222,16 @@ impl LawnApp {
 }
 
 // 全局辅助函数
+#[allow(dead_code)]
+// NOT-WIRED: C++ LawnApp.cpp:3214 GetMoneyString 使用 LawnGetCurrentLevelName；金额字符串链未接线（§1）
 pub fn lawn_get_current_level_name() -> String {
     LawnApp::instance()
         .map(|a| a.get_current_level_name())
         .unwrap_or_default()
 }
 
+#[allow(dead_code)]
+// NOT-WIRED: 疑似改名候选（§4：C++ LawnGetCloseRequest）；Rust 侧直接读 m_close_request 字段
 pub fn lawn_get_close_request() -> bool {
     LawnApp::instance()
         .map(|a| a.m_close_request)

@@ -8,7 +8,6 @@ use crate::framework::graphics::graphics::Graphics;
 use crate::framework::key_codes::{KeyCode, KEYCODE_ESCAPE};
 use crate::framework::rect::Rect;
 use crate::framework::widget::widget_manager::WidgetManager;
-use crate::lawn::game_enums::*;
 use crate::todlib::tod_common::tod_string_translate;
 
 /// 对话框 ID（对应 C++ ConstEnums.h Dialogs::DIALOG_ZOMBATAR_TOS）

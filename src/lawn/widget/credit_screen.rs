@@ -1966,6 +1966,7 @@ impl CreditScreen {
         // 对应 C++ CreditScreen::JumpToFrame（CreditScreen.cpp:1537）:
         // aFrameFactor = 1.0f / (aReanim->mDefinition->mTracks.tracks->mTransforms.count - 1)
         // 即「第一轨道的变换数 - 1」的倒数（原实现以 1/384 近似，且注释误作「轨道数」）
+        #[allow(unused_variables)]
         let a_frame_factor = match _reanim {
             Some(a_reanim) => unsafe {
                 let a_frame_count = (*a_reanim)
@@ -2427,13 +2428,13 @@ pub fn draw_disco(g: &mut Graphics, center_x: f32, center_y: f32, time: f32) {
     // Rust 侧 Graphics 无三角带绘制接口，暂略
     let _ = (g, center_x, center_y, time);
 }
-pub fn draw_reanim_to_preload(_g: &mut Graphics, the_reanim_type: ReanimationType) {
+pub fn draw_reanim_to_preload(g: &mut Graphics, the_reanim_type: ReanimationType) {
     // 对应 C++ DrawReanimToPreload：创建指定动画并绘制（预加载用途）
     // [TRANSLATION_NOTE]: C++ 中 CREDIT_SCREEN_ANIM_RATE = 0.3f
     let mut a_reanim = crate::todlib::reanimator::Reanimation::new();
     a_reanim.m_anim_rate = 0.3;
     a_reanim.reanimation_initialize_type(0.0, 0.0, the_reanim_type);
-    a_reanim.draw(_g);
+    a_reanim.draw(g);
 }
 
 /// 绘制制作人员名单内容（对应 C++ DrawCreditsContent）

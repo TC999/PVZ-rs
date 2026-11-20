@@ -13,9 +13,7 @@
 
 use crate::ffi::opengl::GLuint;
 use crate::framework::color::Color;
-use crate::framework::graphics::gl_interface::{
-    GLInterface, PixelFormat, TextureDataPiece, TriVertex,
-};
+use crate::framework::graphics::gl_interface::{GLInterface, TriVertex};
 use crate::framework::graphics::image::{Image, ImageKind, Span};
 use crate::framework::graphics::memory_image::MemoryImage;
 use crate::framework::point::Point;
@@ -402,7 +400,7 @@ impl GLImage {
         texture: &Image,
         vertices: &[[TriVertex; 3]],
         num_triangles: i32,
-        clip_rect: &Rect,
+        _clip_rect: &Rect,
         color: &Color,
         draw_mode: i32,
         tx: f32,

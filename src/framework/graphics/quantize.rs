@@ -6,8 +6,6 @@
 
 #![allow(dead_code)]
 
-use crate::framework::common::uchar;
-
 /// 将 32 位 RGBA 像素数据量化为 8 位索引色（对应 C++ Quantize8Bit）
 ///
 /// # 参数

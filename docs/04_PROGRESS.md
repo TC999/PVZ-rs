@@ -82,6 +82,7 @@
 - 复现：`python scripts/unused_symbols.py --collect`（重新编译采集诊断并重建报告）。
 - 口径：rustc 的 `dead_code`/`unused_variables`/`unused_assignments`/`unused_mut`/`unused_imports`，以 bin 目标 `pvz-portable` 为准并并入 lib 独有诊断。
 - 结论：函数/方法类 360 项未接线（33 自由函数 + 222 方法 + 105 关联函数），是 `04` P2「接线断裂」的机器证据；枚举变体 885 项中 868 项来自 `framework/resources.rs` 的 `ResourceId`（整类未被构造，游戏实际走字符串键查找）。
+- **C++ 出处分析（2026-11-20 第二轮补充）**：1573 条未使用符号逐一对照 cpp/ 检索调用点，产物 `UNUSED_CPP_USAGE.md`（人读）+ `target/unused_final_verdicts.json`（机读）。结论：**480 项在 C++ 中确实被使用**（= P2 接线缺口的直接证据清单，含调用点文件:行号）；23 项 C++ 仅有定义/声明（C++ 侧同样无调用）；36 项为 Rust 自创/拆分组织（C++ 无独立对应，含 check_collisions、check_game_state 等，属翻译口径问题待人工裁决）；16 项疑似改名有候选；130 项 Rust 自有（借用辅助/导入/常量）；868 枚举变体为 ResourceId 整类镜像（游戏实际走字符串键查找，非缺口）。方法与局限见 UNUSED_CPP_USAGE.md §7。**未改任何游戏代码；未运行验证**
 
 ## 需要返工的文件
 
@@ -93,6 +94,7 @@
 
 | 日期 | 变更 | 操作者 |
 |---|---|---|
+| 2026-11-20 | **未使用符号 C++ 出处全量分析（只读）**：按台账 P2 要求，把 `UNUSED_SYMBOLS.md` 1573 条逐一在 cpp/ 权威源码中定位原使用点，产出 `UNUSED_CPP_USAGE.md` 与机读 `target/unused_final_verdicts.json`。判定分布：C++ 有使用（接线缺口）480、C++ 仅定义 23、Rust 自创/拆分 36、疑似改名 16、Rust 自有 130、非 ResourceId 枚举变体 17、ResourceId 整类 868。复现脚本与中间产物在 `target/cpp_*.json`。未改任何游戏代码，未运行验证 | AI |
 | 2026-11-20 | **未使用符号全量统计（只读，未改任何游戏代码）**：以 rustc 的 dead_code / unused_* 诊断为证据，产出 `UNUSED_SYMBOLS.md`（1573 条去重条目 / 72 个文件）与机读清单 `target/unused_items.json`，采集脚本 `scripts/unused_symbols.py`（`--collect` 可重跑）。分布：函数 33、方法 222、关联函数 105、常量 13、结构体 6、枚举 4、字段 51、枚举变体 885（其中 `resources.rs` 的 ResourceId 占 868，属整类未接线）、局部变量 188、未用导入 66。**未运行验证**（仅静态统计） |
 | 2026-11-20 | **第二轮台账修复**：ANALYSIS_REPORT §1-A 的 A1~A10 十项缺口按 cpp/ 权威源码全部补全（选卡界面全套+构造数据、图鉴交互、成就页链、捏僵尸 9 按钮、剪贴板粘贴、RegEmu 注册表持久化、Music 30 轨音量、JPEG 质量 80、SDL 文本输入、资源反查路径），触碰 14 个源文件。cargo check 0 error，cargo fmt 通过，cargo test 26+26 通过；clippy 125 error 均为存量。**未运行验证** | AI |
 | 2026-11-12 | 依据实际仓库重建台账 | |
@@ -217,3 +219,81 @@ CPU 13-18%、选关界面云动画推进正常。
 
 遗留：无 vsync 节流分支与 mVSyncBroken 检测未翻译（C++ :2700-2722 仅 vsync 分支需要，
 mVSyncUpdates 默认 false 不会走到）；mStepMode 单步调试分支未翻译（仅 demo 调试用）。
+
+## 2026-11-21 未使用函数/变量全量处置（UNUSED_CPP_USAGE.md 落地）
+
+**未运行验证**（无 main.pak 运行环境；本次为编译期 + 静态对照 C++ 源码）。
+
+### 结果
+
+| 口径 | 处置前 | 处置后 |
+|---|---|---|
+| rustc dead_code（never used / never constructed / never read） | 178 | **0** |
+| unused_variables | 90 | **0** |
+| unused_assignments | ~50 | **0** |
+| unused_imports | 59 | **0** |
+| unused_mut | 29 | **0** |
+| cargo check error | 0 | **0** |
+| 总 warning 行（含存量 gl 命名/unsafe 等非本任务口径） | 755 | 402 |
+
+cargo fmt --check 通过；cargo test 26 + 26 通过。
+
+### 根接线（最大缺口，一次激活整批符号）
+
+- **Board 注册进 WidgetManager**（对齐 C++ LawnApp.cpp:444-452 MakeNewBoard）：
+  lawn_app.rs 新增 board_widget 字段与 BoardWidgetImpl 桥（WidgetImpl 转发
+  draw/update/mouse/key 到 Board 对应方法），make_new_board 执行
+  Resize + AddWidget + BringToBack + SetFocus；kill_board 补 RemoveWidget +
+  延迟释放（ADR-010）。WidgetManager 补 bring_to_back（对应 C++
+  WidgetContainer::BringToBack，WidgetContainer.cpp:283-296）。
+  桥接层按 C++ 编码还原按钮参数（左=1/右=-1/中=3），对应
+  WidgetManager.cpp:659 / 581 的直传语义。
+  该接线使 Board::draw / DrawGameObjects 全渲染链、MouseDown/MouseUp/MouseMove/
+  MouseDrag/KeyDown/KeyChar 首次进入实际调用路径（激活 board/challenge/zombie/
+  plant/coin/seed_packet/grid_item/lawn_mower/cutscene 等约 60 个方法）。
+- **Zombie::UpdatePlaying 补 CheckIfPreyCaught**（C++ Zombie.cpp:4642-4650 顺序），
+  并修正其内部 EatPlant 段（C++ 6876-6883）：原实现丢 return 导致 start_eating
+  后立即 stop_eating；补 IZombie 大脑分支（C++ 6886-6889）。
+- **LawnMower 碰撞链**：C++ 碰撞在 LawnMower::Update 内（LawnMower.cpp:178-234）；
+  Rust 因借用限制曾在 Board::check_collisions 重复实现三类碰撞（与
+  Projectile::CheckForCollision / Zombie::CheckIfPreyCaught 双倍伤害）。
+  本轮将 check_collisions 精简为仅割草机碰撞段，并在 update_game_objects 的
+  mower.update() 之前调用（保持「碰撞先于状态机」）。
+- **Projectile**：CheckForCollision/CheckForHighGround 从 update_motion（且排除
+  Lobbed）移到 Update 末尾无条件调用（C++ Projectile.cpp:735-736）；
+  do_splash_damage 按 C++ 461-510 重写（溅射总量上限 + IsZombieHitBySplash +
+  GetDamageFlags）。
+- **StartLevelIntro 分支链**按 C++ CutScene.cpp:751-853 逐条重写（补 12/13-24/
+  16-24/21/31/41 关卡、can_get_packet_upgrade 两处、little trouble、TreeOfWisdom、
+  isRestart 判定、mLawnMowerTime=550），并补 SyncProfile 尾部三初始化
+  （C++ GameSelector.cpp:547-550）：AlmanacInitForPlayer / BoardInitForPlayer /
+  AchievementInitForPlayer。
+- 其他接线：Board::MouseMove/MouseDrag → Challenge::MouseMove（C++ Board.cpp:
+  3028-3038）；Board::DrawBackdrop → Challenge::DrawBackdrop（C++ Board.cpp:5943）；
+  Plant::Update → UpdateReanim（C++ Plant.cpp:2875）；Zombie ZOMBIES_WON 场景 →
+  CutScene::ShowZombieWalking（C++ Zombie.cpp:4345-4353）；
+  make_new_checkbox 实装 IMAGE_OPTIONS_CHECKBOX0/1 并接入 NewOptionsDialog
+  （C++ LawnCommon.cpp:154-162 / NewOptionsDialog.cpp:77-78）。
+
+### NOT-WIRED 登记口径
+
+对「C++ 仅定义/声明（UNUSED_CPP_USAGE.md §2）」「Rust 自创/拆分（§3）」「宿主
+类型或调用链尚未翻译（§1）」的符号，逐符号加
+// NOT-WIRED: <原因 + C++ 文件:行> + #[allow(dead_code)]（未用文件级 allow
+掩盖证据）。共登记约 130 处，含：
+- Board/Challenge/Plant/Zombie 的 4 组聚合未接线方法（C++ 调用方未触达，
+  见各 impl 上方统一注释）；
+- ResourceId 整类（§0 预期形态：游戏走字符串键查找）；
+- 各音频/音乐 trait 的 C++ 虚接口方法（宿主 SexyAppBase 路径未接线）；
+- Widget/TextWidget/ListWidget 的类方法占位（自由函数位置待迁入宿主类型）；
+- 各级「挂起」项：pool_effect 实例构造（lawn_app.rs 范围）、TitleScreen 的
+  Widget 生命周期回调（需 widget.rs 扩展）、成就/图鉴绘制链等。
+
+### 遗留（下一轮）
+
+1. 4 组聚合未接线方法需按 UNUSED_CPP_USAGE.md §1 逐条接线（Board 29 /
+   Challenge 18 / Plant 10 / Zombie 11），主要是各模式 MouseDown 分支
+   （WhackAZombie / ScaryPotter / IZombie / TreeOfWisdom）与绘制链。
+2. pool_effect 实例构造（C++ LawnApp.cpp:1745）。
+3. WidgetImpl trait 缺 added_to_manager/removed_from_manager 回调。
+4. LawnEditWidget 继承 EditWidget 的桥接（CheatDialog/NewUserDialog）。

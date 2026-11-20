@@ -4,18 +4,21 @@
 use crate::framework::color::Color;
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
-use crate::framework::rect::Rect;
 use crate::lawn::game_enums::*;
 
 /// 最大消息长度（对应 C++ #define MAX_MESSAGE_LENGTH 128）
 pub const MAX_MESSAGE_LENGTH: usize = 128;
 
 /// 最大重动画行数（对应 C++ #define MAX_REANIM_LINES 5）
+#[allow(dead_code)]
+// NOT-WIRED: C++ MessageWidget.cpp:92 SetLabel 使用；Rust SetLabel 的 reanim 分行逻辑未翻译（§1）
 pub const MAX_REANIM_LINES: usize = 5;
 
 /// 消息控件（显示提示文字、教程信息、关卡名称等）
 /// 对应 C++ class MessageWidget
 pub struct MessageWidget {
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ MessageWidget::mApp（Lawn/MessageWidget.cpp:35）；Rust 经全局实例访问（§1）
     pub app: Option<*mut crate::lawn::lawn_app::LawnApp>,
     pub label: [u8; MAX_MESSAGE_LENGTH],
     pub display_time: i32,
@@ -103,12 +106,20 @@ impl MessageWidget {
     }
 
     /// 获取字体（简化实现）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ MessageWidget.cpp:183 LayoutReanimText 使用；reanim 文本排版未翻译（§1）
     pub fn get_font(&self) -> Option<&'static Image> {
         None
     }
 
     /// 绘制消息（对应 C++ MessageWidget::Draw，MessageWidget.cpp:362）
     /// 按消息样式绘制不同位置和样式的文字
+    #[allow(unused_assignments)]
+    // 对应 C++ 局部变量「先初始化后覆盖」语义（UNUSED_CPP_USAGE.md §1）；保留赋值语句顺序
+    #[allow(unused_assignments)]
+    // 对应 C++ 局部变量「先初始化后覆盖」语义（UNUSED_CPP_USAGE.md §1）；保留赋值语句顺序
+    #[allow(unused_assignments)]
+    // 对应 C++ 局部变量「先初始化后覆盖」语义（UNUSED_CPP_USAGE.md §1）；保留赋值语句顺序
     pub fn draw(&self, g: &mut Graphics) {
         if self.duration <= 0 {
             return;
@@ -305,12 +316,16 @@ impl MessageWidget {
     }
 
     /// 判断是否正在显示
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ Challenge.cpp:894 BeghouledScore 使用；未接线（§1）
     pub fn is_being_displayed(&self) -> bool {
         self.duration != 0
     }
 
     /// 布局重动画文字（对应 C++ LayoutReanimText）
     /// 逐行统计宽度、逐字符（UTF-8 code point）创建文字 reanim，记录每个字符的 reanim id 与字节偏移
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ MessageWidget.cpp:173 SetLabel 使用；未接线（§1）
     pub fn layout_reanim_text(&mut self) {
         let label_len = self
             .label

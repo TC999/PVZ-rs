@@ -18,8 +18,7 @@ use crate::lawn::system::player_info::PottedPlant;
 use crate::lawn::widget::achievements_screen::{AchievementId, ReportAchievement};
 use crate::lawn::widget::seed_chooser_screen::SeedChooserScreen;
 use crate::todlib::tod_common::{
-    rand_range_int, tod_animate_curve, tod_pick_from_weighted_array, tod_string_translate,
-    TodWeightedArray,
+    rand_range_int, tod_pick_from_weighted_array, tod_string_translate, TodWeightedArray,
 };
 use crate::todlib::tod_foley::FoleyType;
 
@@ -141,7 +140,7 @@ impl StoreScreen {
                 DrawVariation::MarigoldLightGreen as i32,
             ))
         };
-        let mut screen = StoreScreen {
+        let screen = StoreScreen {
             app,
             back_button: None,
             prev_button: None,

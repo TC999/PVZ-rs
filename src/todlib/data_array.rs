@@ -54,7 +54,8 @@ impl<T> DataArray<T> {
     /// 初始化（对应 C++ DataArrayInitialize）
     pub fn initialize(&mut self, max_size: u32, name: &str) {
         self.slots = Vec::with_capacity(max_size as usize);
-        for i in 0..max_size {
+        // C++ DataArrayInitialize 直接分配数组，无循环变量（不保留未用索引）
+        for _ in 0..max_size {
             self.slots.push(None);
         }
         self.free_head = 0;

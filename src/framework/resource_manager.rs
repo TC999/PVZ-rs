@@ -5,15 +5,13 @@
 
 #![allow(dead_code)]
 
-use std::collections::{HashMap, HashSet, LinkedList};
-use std::ptr;
+use std::collections::{HashMap, HashSet};
 
 use crate::framework::common::string_to_lower;
 use crate::framework::graphics::font::Font;
-use crate::framework::graphics::gl_image::GLImage;
 use crate::framework::graphics::image::Image;
 use crate::framework::graphics::memory_image::MemoryImage;
-use crate::framework::graphics::shared_image::{SharedImage, SharedImageRef};
+use crate::framework::graphics::shared_image::SharedImageRef;
 use crate::framework::sexy_app_base::SexyAppBase;
 use crate::framework::xml_parser::{XMLElement, XMLParser};
 
@@ -489,7 +487,7 @@ impl ResourceManager {
     /// 解析带子元素的资源容器（如 <Font ...>...</Font>）
     fn parse_resource_container(&mut self, parser: &mut XMLParser, start_element: &XMLElement) {
         // 原子地处理当前容器内的所有子元素
-        let section_name = start_element.section.clone();
+        let _section_name = start_element.section.clone();
         let mut depth = 1;
 
         let mut element = XMLElement::new();

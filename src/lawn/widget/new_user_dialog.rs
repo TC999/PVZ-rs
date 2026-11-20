@@ -203,6 +203,8 @@ impl NewUserDialog {
     /// C++ `Dialog::GetPreferredHeight`（Dialog.cpp:185）公式展开：content/bg 内边距 + header 行
     /// + lines 换行高度 + footer 行（footer==[DIALOG_BUTTON_OK] 时不额外加行，因 ButtonMode
     /// 为 BUTTONS_OK_CANCEL 而非 BUTTONS_FOOTER）+ button_height + 40。
+    #[allow(unused_assignments)]
+    // 对应 C++ 局部变量「先初始化后覆盖」语义（UNUSED_CPP_USAGE.md §1）；保留赋值语句顺序
     pub fn get_preferred_height(&self, the_width: i32) -> i32 {
         let ci = self.content_insets;
         let bi = self.background_insets;

@@ -7,7 +7,6 @@
 // FontData 继承自 DescParser，所以此模块同时定义了 DataElement 等基础类型。
 
 use std::collections::HashMap;
-use std::fs;
 
 // ============================================================
 // DataElement 层次结构
@@ -25,6 +24,8 @@ pub enum DataElement {
 
 impl DataElement {
     /// 是否为列表
+    // NOT-WIRED: C++ DataElement 仅有 mIsList 字段、无 IsList 方法；Rust 枚举访问器自创（UNUSED_CPP_USAGE.md §3）
+    #[allow(dead_code)]
     pub fn is_list(&self) -> bool {
         matches!(self, DataElement::List(_))
     }
@@ -38,6 +39,8 @@ impl DataElement {
     }
 
     /// 获取列表引用（仅对 List 有效）
+    // NOT-WIRED: C++ DataElement 无 AsList 方法；Rust 枚举访问器自创（UNUSED_CPP_USAGE.md §3）
+    #[allow(dead_code)]
     pub fn as_list(&self) -> Option<&Vec<DataElement>> {
         match self {
             DataElement::List(v) => Some(v),
@@ -46,6 +49,8 @@ impl DataElement {
     }
 
     /// 获取可变列表引用
+    // NOT-WIRED: C++ DataElement 无可变列表访问器；Rust 自创（UNUSED_CPP_USAGE.md §3）
+    #[allow(dead_code)]
     pub fn as_list_mut(&mut self) -> Option<&mut Vec<DataElement>> {
         match self {
             DataElement::List(v) => Some(v),
@@ -69,14 +74,20 @@ pub const CMDSEP_NO_INDENT: i32 = 2;
 /// 使用 trait 替代 C++ 虚继承，派生类需实现 handle_command
 pub trait DescParser {
     /// 获取当前错误信息
+    // NOT-WIRED: C++ mError 无 getter；Rust 仅 cfg(test) 断言读取（UNUSED_CPP_USAGE.md §3）
+    #[allow(dead_code)]
     fn error_message(&self) -> &str;
     /// 获取可变错误信息
     fn error_message_mut(&mut self) -> &mut String;
     /// 获取命令分隔符标志
     fn cmd_sep(&self) -> i32;
     /// 设置命令分隔符标志
+    // NOT-WIRED: C++ FontData 构造直接写 mCmdSep、无 setter；Rust 访问器未接线（UNUSED_CPP_USAGE.md §3）
+    #[allow(dead_code)]
     fn set_cmd_sep(&mut self, sep: i32);
     /// 获取当前行号
+    // NOT-WIRED: C++ 读取点 ImageFont.cpp:208 组装错误信息；Rust 读取方（FontData 错误信息组装）待翻译（UNUSED_CPP_USAGE.md §1）
+    #[allow(dead_code)]
     fn current_line_num(&self) -> i32;
     /// 设置当前行号
     fn set_current_line_num(&mut self, num: i32);
@@ -87,6 +98,8 @@ pub trait DescParser {
     /// 获取定义映射
     fn define_map(&self) -> &DataElementMap;
     /// 获取可变定义映射
+    // NOT-WIRED: C++ 由 FontData::HandleCommand 直接操作 mDefineMap；Rust 同样直接访问字段，trait 访问器未接线（UNUSED_CPP_USAGE.md §3）
+    #[allow(dead_code)]
     fn define_map_mut(&mut self) -> &mut DataElementMap;
 
     // ============================================================
@@ -161,7 +174,7 @@ pub trait DescParser {
             DataElement::List(list) => {
                 for elem in list {
                     match elem {
-                        DataElement::List(child_list) => {
+                        DataElement::List(_child_list) => {
                             let mut child_values = Vec::new();
                             if !self.get_values(elem, &mut child_values) {
                                 return false;

@@ -23,7 +23,12 @@ pub struct Coin {
     pub pos_y: f32,
     pub vel_x: f32,
     pub vel_y: f32,
+    // NOT-WIRED: C++ Coin 无 destination 字段（Coin.h 只有 mCollectX/mCollectY；收集目标 aDestX/aDestY
+    //   是 UpdateCollected 的局部变量，Coin.cpp:607-657）。Rust 侧收集动画已用 collect_x/collect_y 完成。
+    //   UNUSED_CPP_USAGE.md 所列 Board.cpp:1293/1412 实为 SeedPacket::mX/mY，系脚本按 mX 名字误映射。
+    #[allow(dead_code)]
     pub destination_x: f32,
+    #[allow(dead_code)]
     pub destination_y: f32,
     pub lifetime: i32,
     pub lifespan: i32,
@@ -1389,6 +1394,7 @@ impl Coin {
         if self.is_level_award() {
             if let Some(app) = app_ptr {
                 unsafe {
+                    #[allow(unused_variables)]
                     let mode = (*app).game_mode;
                     if a_is_endless_award {
                         if self.coin_type == CoinType::AwardBagDiamond {
@@ -1635,6 +1641,7 @@ impl Coin {
     pub fn fan_out_coins(&mut self, coin_type: CoinType, num_coins: i32) {
         use std::f32::consts::PI;
         for i in 0..num_coins {
+            #[allow(unused_variables)]
             let a_angle = PI / 2.0 + PI * (i + 1) as f32 / (num_coins + 1) as f32;
             let a_pos_x = self.pos_x + 20.0;
             let a_pos_y = self.pos_y;

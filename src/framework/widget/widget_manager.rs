@@ -146,6 +146,18 @@ impl WidgetManager {
         }
     }
 
+    /// 后置 Widget（对应 C++ WidgetContainer::BringToBack，WidgetContainer.cpp:283-296：
+    /// 从列表移除并插入开头；绘制按列表序，开头即最底层）
+    pub fn bring_to_back(&mut self, widget: *mut Widget) {
+        if let Some(idx) = self.widget_list.iter().position(|w| *w == widget) {
+            self.widget_list.remove(idx);
+            self.widget_list.insert(0, widget);
+            unsafe {
+                (*widget).order_in_manager_changed();
+            }
+        }
+    }
+
     /// 禁用控件
     pub fn disable_widget(&mut self, w: *mut Widget) {
         if Some(w) == self.focus_widget {

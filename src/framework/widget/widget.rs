@@ -15,7 +15,6 @@ use crate::framework::key_codes::{KeyCode, KEYCODE_SHIFT, KEYCODE_TAB};
 use crate::framework::point::Point;
 use crate::framework::rect::Rect;
 use crate::framework::widget::insets::Insets;
-use crate::framework::widget::widget_container::WidgetContainer;
 use crate::framework::widget::widget_manager::WidgetManager;
 
 /// 布局标志
@@ -49,29 +48,29 @@ pub const LAY_MAX: i32 = 0x400000;
 /// 所有方法都有默认空实现，子类只覆盖需要的即可。
 pub trait WidgetImpl {
     // ---- 绘制 ----
-    fn draw(&mut self, widget: &Widget, g: &mut Graphics) {}
-    fn draw_overlay(&mut self, widget: &Widget, g: &mut Graphics) {}
+    fn draw(&mut self, _widget: &Widget, _g: &mut Graphics) {}
+    fn draw_overlay(&mut self, _widget: &Widget, _g: &mut Graphics) {}
 
     // ---- 更新 ----
-    fn update(&mut self, widget: &mut Widget) {}
+    fn update(&mut self, _widget: &mut Widget) {}
 
     // ---- 键盘 ----
-    fn key_down(&mut self, widget: &mut Widget, key: KeyCode, wm: &mut WidgetManager) {}
-    fn key_up(&mut self, widget: &mut Widget, key: KeyCode) {}
-    fn key_char(&mut self, widget: &mut Widget, c: u8) {}
+    fn key_down(&mut self, _widget: &mut Widget, _key: KeyCode, _wm: &mut WidgetManager) {}
+    fn key_up(&mut self, _widget: &mut Widget, _key: KeyCode) {}
+    fn key_char(&mut self, _widget: &mut Widget, _c: u8) {}
 
     // ---- 鼠标 ----
-    fn mouse_down_btn(&mut self, widget: &mut Widget, x: i32, y: i32, btn: i32, click: i32) {}
-    fn mouse_up_btn(&mut self, widget: &mut Widget, x: i32, y: i32, btn: i32, click: i32) {}
-    fn mouse_move(&mut self, widget: &mut Widget, x: i32, y: i32) {}
-    fn mouse_drag(&mut self, widget: &mut Widget, x: i32, y: i32) {}
-    fn mouse_wheel(&mut self, widget: &mut Widget, delta: i32) {}
-    fn mouse_enter(&mut self, widget: &mut Widget) {}
-    fn mouse_leave(&mut self, widget: &mut Widget) {}
+    fn mouse_down_btn(&mut self, _widget: &mut Widget, _x: i32, _y: i32, _btn: i32, _click: i32) {}
+    fn mouse_up_btn(&mut self, _widget: &mut Widget, _x: i32, _y: i32, _btn: i32, _click: i32) {}
+    fn mouse_move(&mut self, _widget: &mut Widget, _x: i32, _y: i32) {}
+    fn mouse_drag(&mut self, _widget: &mut Widget, _x: i32, _y: i32) {}
+    fn mouse_wheel(&mut self, _widget: &mut Widget, _delta: i32) {}
+    fn mouse_enter(&mut self, _widget: &mut Widget) {}
+    fn mouse_leave(&mut self, _widget: &mut Widget) {}
 
     // ---- 焦点 ----
-    fn got_focus(&mut self, widget: &mut Widget) {}
-    fn lost_focus(&mut self, widget: &mut Widget) {}
+    fn got_focus(&mut self, _widget: &mut Widget) {}
+    fn lost_focus(&mut self, _widget: &mut Widget) {}
 }
 
 /// 控件基类（对应 C++ Widget，继承自 WidgetContainer）

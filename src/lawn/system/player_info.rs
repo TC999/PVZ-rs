@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use crate::lawn::game_enums::*;
-use crate::lawn::system::data_sync::DataReaderException;
 use crate::lawn::system::data_sync::{DataReader, DataSync, DataWriter};
 use std::fs;
 use std::path::Path;

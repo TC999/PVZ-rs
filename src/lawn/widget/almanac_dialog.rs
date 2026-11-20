@@ -8,7 +8,6 @@ use crate::framework::key_codes::{KeyCode, KEYCODE_ESCAPE};
 use crate::framework::widget::widget_manager::WidgetManager;
 use crate::lawn::game_enums::*;
 use crate::lawn::widget::game_button::GameButton;
-use crate::lawn::widget::lawn_dialog::LawnDialog;
 use crate::todlib::reanimator::Reanimation;
 
 pub const NUM_ALMANAC_SEEDS: i32 = 49;

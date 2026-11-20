@@ -287,7 +287,7 @@ impl ReanimatorCache {
             &mut a_width,
             &mut a_height,
         );
-        let mut a_memory_image = self.make_blank_memory_image(a_width, a_height)?;
+        let a_memory_image = self.make_blank_memory_image(a_width, a_height)?;
         let img_ptr = a_memory_image as *mut MemoryImage;
         let mut a_memory_graphics =
             Graphics::new_with_image(unsafe { &mut (*img_ptr).base } as *mut _);
@@ -399,7 +399,7 @@ impl ReanimatorCache {
 
     pub fn make_cached_mower_frame(&self, mower_type: LawnMowerType) -> Option<*mut MemoryImage> {
         // 对应 C++ MakeCachedMowerFrame（ReanimationLawn.cpp:149）
-        let mut a_memory_image = self.make_blank_memory_image(90, 100)?;
+        let a_memory_image = self.make_blank_memory_image(90, 100)?;
         let img_ptr = a_memory_image as *mut MemoryImage;
         let mut a_memory_graphics =
             Graphics::new_with_image(unsafe { &mut (*img_ptr).base } as *mut _);
@@ -462,7 +462,7 @@ impl ReanimatorCache {
 
     pub fn make_cached_zombie_frame(&self, zombie_type: ZombieType) -> Option<*mut MemoryImage> {
         // 对应 C++ MakeCachedZombieFrame（ReanimationLawn.cpp:261）
-        let mut a_memory_image = self.make_blank_memory_image(200, 210)?;
+        let a_memory_image = self.make_blank_memory_image(200, 210)?;
         let img_ptr = a_memory_image as *mut MemoryImage;
         let mut a_memory_graphics =
             Graphics::new_with_image(unsafe { &mut (*img_ptr).base } as *mut _);
@@ -480,7 +480,7 @@ impl ReanimatorCache {
             return Some(a_memory_image);
         }
 
-        let mut a_pos_x = 40.0f32;
+        let a_pos_x = 40.0f32;
         let mut a_pos_y = 40.0f32;
         if a_zombie_def.reanimation_type == ReanimationType::Zombie {
             let mut a_reanim = Reanimation::new();

@@ -1,7 +1,6 @@
 // PvZ Portable Rust 翻译 — Projectile（子弹/投射物）
 // 对应 C++ src/Lawn/Projectile.h / Projectile.cpp
 
-use crate::framework::common::{Rand, RandFloat, RandRange};
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::rect::Rect;
 use crate::framework::sexy_matrix::SexyMatrix3;
@@ -32,20 +31,24 @@ fn pvzp_scale_rotate_transform_matrix(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum ProjectileMotion {
-    Straight = 0,     // MOTION_STRAIGHT
-    Lobbed = 1,       // MOTION_LOBBED
-    Threepeater = 2,  // MOTION_THREEPEATER
-    Bee = 3,          // MOTION_BEE
+    Straight = 0,    // MOTION_STRAIGHT
+    Lobbed = 1,      // MOTION_LOBBED
+    Threepeater = 2, // MOTION_THREEPEATER
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ ProjectileMotion::MOTION_BEE；蜂类子弹未翻译（§5 游戏路径未触达）
+    Bee = 3, // MOTION_BEE
     BeeBackwards = 4, // MOTION_BEE_BACKWARDS（蜜蜂向后飞，绘制时需镜像）
-    Puff = 5,         // MOTION_PUFF（直飞，随时间淡出）
-    Backwards = 6,    // MOTION_BACKWARDS（ZombiePea 向左直飞）
-    Star = 7,         // MOTION_STAR（斜向）
-    Floating = 8,     // MOTION_FLOAT_OVER（慢速漂浮，无碰撞）
-    Homing = 9,       // MOTION_HOMING（追踪）
+    Puff = 5,        // MOTION_PUFF（直飞，随时间淡出）
+    Backwards = 6,   // MOTION_BACKWARDS（ZombiePea 向左直飞）
+    Star = 7,        // MOTION_STAR（斜向）
+    Floating = 8,    // MOTION_FLOAT_OVER（慢速漂浮，无碰撞）
+    Homing = 9,      // MOTION_HOMING（追踪）
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
+#[allow(dead_code)]
+// NOT-WIRED: C++ ProjectileFlags（§2 仅定义）；Rust 用 damage_flags 位常量
 pub enum ProjectileFlags {
     None = 0,
     Glow = 1,
@@ -54,6 +57,8 @@ pub enum ProjectileFlags {
     Fire = 8,
     Acid = 16,
     PlantHead = 32,
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ ProjectileType::PROJECTILE_STINKY；禅园臭鼬子弹未翻译（§5）
     Stinky = 64,
     Cross = 128,
 }
@@ -67,12 +72,18 @@ pub enum ProjectileType {
     Melon,
     Kernel,
     Butter,
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ PROJECTILE_STINKY；禅园臭鼬子弹未翻译（§5）
     Stinky,
     Spore,
     Star,
     Spike,
     Cactus,
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ PROJECTILE_...（榴弹类）；未翻译（§5）
     Guod,
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ PROJECTILE_COBBIG 相关；玉米加农炮子弹未翻译（§5）
     Cobcannon,
     Fireball,
     Wintermelon,
@@ -86,6 +97,8 @@ pub enum ProjectileType {
 pub struct Projectile {
     pub base: GameObject,
 
+    #[allow(dead_code)]
+    // NOT-WIRED: ProjectileDefinition 字段（C++ gProjectileDefinitions 表）；Rust 逐类型内联（§1）
     pub projectile_type: ProjectileType,
     pub motion: ProjectileMotion,
     pub pos_x: f32,
@@ -95,9 +108,15 @@ pub struct Projectile {
     pub vel_y: f32,
     pub vel_z: f32,
     pub acc_z: f32,
+    #[allow(dead_code)]
+    // NOT-WIRED: ProjectileDefinition 字段；同上
     pub damage: i32,
     pub damage_flags: u32,
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ mTargetX（Plant.cpp:123 写入）；Rust 追踪弹用 target_zombie_id（§1）
     pub target_x: f32,
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ mTargetY（Plant.cpp:124）；同上
     pub target_y: f32,
     pub cob_target_x: f32,
     pub cob_target_row: i32,
@@ -105,10 +124,14 @@ pub struct Projectile {
     pub num_frames: i32,
     pub anim_counter: i32,
     pub anim_ticks_per_frame: i32,
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ mProjectileFlags 镜像；未接线（§1）
     pub projectile_flags: u32,
     pub damage_range_flags: u32,
     pub from_cobcannon: bool,
     pub dead: bool,
+    #[allow(dead_code)]
+    // NOT-WIRED: Rust 自有字段（§6）；阴影绘制走 shadow_y
     pub shadow: bool,
     pub shadow_y: f32,
     pub hit_torchwood_grid_x: i32,
@@ -237,6 +260,11 @@ impl Projectile {
         self.rotation += self.rotation_speed;
 
         self.update_motion();
+        // C++ Projectile::Update（Projectile.cpp:735-736）：
+        //     CheckForCollision(); CheckForHighGround();
+        // （C++ 在 Update 末尾无条件调用，含 Lobbed 运动；此前误放在 update_motion 内且排除 Lobbed）
+        self.check_for_collision();
+        self.check_for_high_ground();
         // [TRANSLATION_NOTE]: AttachmentUpdateAndMove 暂未实现
     }
 
@@ -249,7 +277,9 @@ impl Projectile {
             self.frame = self.anim_counter / self.anim_ticks_per_frame;
         }
 
+        #[allow(unused_variables)]
         let a_old_row = self.base.row;
+        #[allow(unused_variables)]
         let a_old_y = self.pos_y; // 简化：GetPosYBasedOnRow
 
         // 运动类型分发
@@ -257,11 +287,6 @@ impl Projectile {
             self.update_lob_motion();
         } else {
             self.update_normal_motion();
-        }
-
-        // 碰撞检测（非 Lobbed 运动走正常碰撞检测，Lobbed 在内部处理）
-        if self.motion != ProjectileMotion::Lobbed {
-            self.check_for_collision();
         }
 
         // 坡度高度变化
@@ -865,13 +890,12 @@ impl Projectile {
 
         let app = self.base.get_app();
         // C++ 中 IMAGE_* 为全局资源宏；Rust 侧经资源管理器按名称取图
-        let mut get_projectile_image =
-            |name: &str| -> *mut crate::framework::graphics::image::Image {
-                match app {
-                    Some(a) => crate::lawn::board::get_overlay_image(a, name),
-                    None => std::ptr::null_mut(),
-                }
-            };
+        let get_projectile_image = |name: &str| -> *mut crate::framework::graphics::image::Image {
+            match app {
+                Some(a) => crate::lawn::board::get_overlay_image(a, name),
+                None => std::ptr::null_mut(),
+            }
+        };
 
         let mut a_image: *mut crate::framework::graphics::image::Image = std::ptr::null_mut();
         let mut a_scale = 1.0f32;
@@ -1080,6 +1104,7 @@ impl Projectile {
     pub fn find_collision_target_plant(&self) -> Option<usize> {
         let proj_rect = self.get_projectile_rect();
         let my_row = self.base.row;
+        #[allow(unused_variables)]
         let proj_type = self.projectile_type;
 
         if let Some(board) = self.base.get_board() {
@@ -1134,34 +1159,55 @@ impl Projectile {
 
     /// 产生溅射伤害（对应 C++ DoSplashDamage）
     pub fn do_splash_damage(&mut self, the_zombie_idx: Option<usize>) {
-        // [TRANSLATION_NOTE]: 溅射伤害完整实现依赖遍历 board.zombies + 伤害计算
-        // 简化版：直接对目标僵尸造成全额伤害，对其他僵尸造成 1/3 伤害
-        let a_original_damage = self.damage;
-        let a_splash_damage = (a_original_damage / 3).max(1);
-        let a_damage_flags = self.damage_flags;
-        let my_pos_x = self.pos_x as i32;
-        let my_pos_y = self.pos_y as i32;
-        let my_row = self.base.row;
-        let proj_type = self.projectile_type;
-
-        if let Some(board) = self.base.get_board_mut() {
-            for (idx, zombie) in board.zombies.iter_mut().enumerate() {
-                if zombie.dead {
-                    continue;
-                }
-                let a_row_deviation = zombie.base.row - my_row;
-                if proj_type == ProjectileType::Melon {
-                    if a_row_deviation > 1 || a_row_deviation < -1 {
+        // 对应 C++ Projectile::DoSplashDamage（Projectile.cpp:459-510）：
+        // 1) 统计被溅射命中的僵尸数；2) 计算溅射伤害与总量上限；
+        // 3) 对每个命中僵尸按 GetDamageFlags 施加伤害（目标本人吃全额）。
+        // 只读阶段收集：命中索引 + 每个僵尸的伤害标志（对应 C++ 464-473 的统计与 490-496 的 GetDamageFlags）
+        let mut a_hits: Vec<(usize, u32)> = Vec::new();
+        let mut a_zombies_get_splashed = 0i32;
+        if let Some(a_board) = self.base.board {
+            // SAFETY: a_board 为 Board 裸指针（项目同构持有，ADR-003）；只读遍历僵尸，
+            // 期间不修改 Board 或僵尸，单线程主循环。
+            unsafe {
+                for (idx, zombie) in (&*a_board).zombies.iter().enumerate() {
+                    if zombie.dead || !self.is_zombie_hit_by_splash(idx) {
                         continue;
                     }
+                    if Some(idx) != the_zombie_idx {
+                        a_zombies_get_splashed += 1;
+                    }
+                    a_hits.push((idx, self.get_damage_flags(Some(zombie))));
                 }
-                let z_rect = zombie.get_zombie_rect();
-                let splash_rect = Rect::new(my_pos_x - 5, my_pos_y - 5, 10, 10);
-                if crate::lawn::board::get_rect_overlap(&splash_rect, &z_rect) >= 0 {
-                    if Some(idx) == the_zombie_idx {
-                        zombie.take_damage(a_original_damage, a_damage_flags);
-                    } else {
-                        zombie.take_damage(a_splash_damage, a_damage_flags);
+            }
+        }
+
+        let a_original_damage = self.damage;
+        let mut a_splash_damage = a_original_damage / 3;
+        let mut a_max_splash_damage_amount = a_original_damage * 7;
+        if self.projectile_type == ProjectileType::Fireball {
+            a_max_splash_damage_amount = a_original_damage;
+        }
+        let a_splash_damage_amount = a_splash_damage * a_zombies_get_splashed;
+        if a_splash_damage_amount > a_max_splash_damage_amount {
+            a_splash_damage =
+                a_original_damage * a_max_splash_damage_amount / (a_splash_damage_amount * 3);
+            a_splash_damage = a_splash_damage.max(1);
+        }
+
+        if let Some(a_board) = self.base.board {
+            // SAFETY: 同上一处——只读阶段已收集命中列表与伤害标志，此处仅按索引施加伤害；
+            // 单线程主循环内消费该列表，期间不再读取 self 的方法。
+            unsafe {
+                for (idx, a_damage_flags) in a_hits {
+                    if let Some(zombie) = (&mut *a_board).zombies.get_mut(idx) {
+                        if zombie.dead {
+                            continue;
+                        }
+                        if Some(idx) == the_zombie_idx {
+                            zombie.take_damage(a_original_damage, a_damage_flags);
+                        } else {
+                            zombie.take_damage(a_splash_damage, a_damage_flags);
+                        }
                     }
                 }
             }
@@ -1208,8 +1254,9 @@ impl Projectile {
             if let Some(zombie) = board.zombies.get(zombie_idx) {
                 let my_pos_x = self.pos_x as i32;
                 let my_pos_y = self.pos_y as i32;
+                #[allow(unused_variables)]
                 let my_width = self.base.width;
-                let mut splash_rect = Rect::new(my_pos_x - 5, my_pos_y - 5, 10, 10);
+                let splash_rect = Rect::new(my_pos_x - 5, my_pos_y - 5, 10, 10);
                 // [TRANSLATION_NOTE]: Fireball 溅射半径 100
                 let a_row_deviation = zombie.base.row - self.base.row;
                 if self.projectile_type == ProjectileType::Melon {
@@ -1478,6 +1525,8 @@ impl Default for Projectile {
 /// 子弹定义表条目（对应 C++ ProjectileDefinition）
 /// 存储每种子弹类型的静态属性：类型、图像行索引、伤害值
 /// 全局数组 gProjectileDefinition[NUM_PROJECTILES] 将在 Projectile.cpp 主体翻译时实现
+#[allow(dead_code)]
+// NOT-WIRED: C++ gProjectileDefinitions 表条目；Rust 逐类型内联（§1）
 #[derive(Debug, Clone, Copy)]
 pub struct ProjectileDefinition {
     pub projectile_type: ProjectileType,

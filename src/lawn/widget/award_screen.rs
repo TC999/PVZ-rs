@@ -11,6 +11,8 @@ use crate::lawn::widget::game_button::GameButton;
 
 /// 成就屏幕条目（对应 C++ AchievementScreenItem）
 pub struct AchievementScreenItem {
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ AwardScreen.cpp:62 成就项 ID；成就列表绘制未接线（§1）
     pub id: i32,
     pub start_anim_time: i32,
     pub end_anim_time: i32,
@@ -706,6 +708,8 @@ impl AwardScreen {
         }
     }
 
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ AwardScreen.cpp:301 DrawAchievements；Rust 奖励屏未绘制成就列表（§1）
     pub fn draw_achievements(&self, g: &mut Graphics) {
         // 对应 C++ AwardScreen::DrawAchievements（AwardScreen.cpp:606-631）
         // C++ 607-611: 白底色化矩形

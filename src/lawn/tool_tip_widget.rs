@@ -4,7 +4,6 @@
 #![allow(dead_code)]
 
 use crate::framework::color::Color;
-use crate::framework::graphics::font::Font;
 use crate::framework::graphics::graphics::Graphics;
 use crate::lawn::game_enums::{BOARD_HEIGHT, BOARD_WIDTH};
 

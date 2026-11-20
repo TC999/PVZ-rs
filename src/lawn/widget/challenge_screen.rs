@@ -14,7 +14,7 @@ use crate::framework::widget::dialog_button::DialogButton;
 use crate::framework::widget::widget::{Widget, WidgetImpl};
 use crate::framework::widget::widget_manager::WidgetManager;
 use crate::lawn::game_enums::*;
-use crate::todlib::tod_common::{tod_animate_curve, tod_string_translate};
+use crate::todlib::tod_common::tod_string_translate;
 use crate::todlib::tod_foley::FoleyType;
 
 // ==================== DrawButton 的绘制辅助（对应 C++ PvzpLib 的绘制封装） ====================
@@ -267,6 +267,7 @@ impl ChallengeScreen {
             if !(*btn).visible {
                 return;
             }
+            #[allow(unused_variables)]
             let Some(a_def) = get_challenge_definition(challenge_index) else {
                 return;
             };

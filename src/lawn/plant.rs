@@ -2,14 +2,13 @@
 // 对应 C++ src/Lawn/Plant.h / Plant.cpp
 
 use crate::framework::color::Color;
-use crate::framework::common::{Rand, RandFloat, RandRange};
+use crate::framework::common::{RandFloat, RandRange};
 use crate::framework::graphics::graphics::Graphics;
 use crate::framework::graphics::image::Image;
 use crate::framework::rect::Rect;
 use crate::lawn::board::Board;
 use crate::lawn::game_enums::*;
 use crate::lawn::game_object::GameObject;
-use crate::lawn::zombie::Zombie;
 use crate::todlib::reanimator::{ReanimLoopType, Reanimation, ReanimationType};
 use crate::todlib::tod_particle::ParticleSystem;
 
@@ -43,6 +42,8 @@ impl MagnetItem {
 pub struct Plant {
     pub base: GameObject,
 
+    #[allow(dead_code)]
+    // NOT-WIRED: PlantDefinition 字段（C++ gPlantDefs 表）；Rust 取种子类型走 SeedPacket/Plant 本体（§1）
     pub seed_type: SeedType,
     pub plant_col: i32,
     pub pos_x: f32,
@@ -98,6 +99,9 @@ pub struct Plant {
 static CRACK_IMAGE_1: u8 = 0;
 static CRACK_IMAGE_2: u8 = 0;
 
+// NOT-WIRED: 本 impl 内部分方法为 C++ Plant 方法的翻译，但调用方尚未接线
+//（UNUSED_CPP_USAGE.md §1；逐条缺口见 04_PROGRESS.md「未使用符号」节）。
+#[allow(dead_code)]
 impl Plant {
     pub fn new() -> Self {
         Plant {
@@ -523,8 +527,9 @@ impl Plant {
                 self.die();
             }
 
-            // C++ Update 中 UpdateReanim() 内的重动画颜色更新（Plant.cpp:2745）
-            self.update_reanim_color();
+            // C++ Plant::Update（Plant.cpp:2875）: UpdateReanim()；
+            // UpdateReanim（Plant.cpp:2739-2745）首步即 UpdateReanimColor()
+            self.update_reanim();
         }
     }
 
@@ -1096,7 +1101,7 @@ impl Plant {
         let m_x = self.base.x;
         let m_y = self.base.y;
         let m_row = self.base.row;
-        let mut a_origin_x;
+        let a_origin_x;
         let mut a_origin_y;
         if self.seed_type == SeedType::Puffshroom {
             a_origin_x = m_x + 40;
@@ -1430,6 +1435,8 @@ impl Plant {
     }
 
     /// 是否找到星星果实目标（对应 C++ FindStarFruitTarget）
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ Plant::FindStarFruitTarget（Plant.cpp:913 LaunchStarFruit 使用）；Rust 星星果实发射链未接线（§1）
     pub fn find_star_fruit_target(&self) -> bool {
         if self.recently_eaten_countdown > 0 {
             return true;
@@ -1670,6 +1677,7 @@ impl Plant {
 
     /// 窝瓜碾压伤害（对应 C++ DoSquashDamage）
     pub fn do_squash_damage(&mut self) {
+        #[allow(unused_variables)]
         let a_damage_range_flags = self.get_damage_range_flags(PlantWeapon::Primary);
         let a_attack_rect = self.get_plant_attack_rect(PlantWeapon::Primary);
         let my_row = self.base.row;
@@ -1986,7 +1994,7 @@ impl Plant {
             .base
             .get_board()
             .map_or(SeedType::None, |b| b.get_seed_type_in_cursor());
-        let mut a_color_override;
+        let a_color_override;
 
         // C++: mBoard->mCursorObject->mCursorType == CURSOR_TYPE_PLANT_FROM_GLOVE
         let mut is_on_glove = false;
@@ -2096,6 +2104,8 @@ impl Plant {
     }
 
     /// 更新重动画位置/缩放（对应 C++ Plant::UpdateReanim，Plant.cpp:2739）
+    #[allow(unused_assignments)]
+    // 对应 C++ 局部变量「先初始化后覆盖」语义（UNUSED_CPP_USAGE.md §1）；保留赋值语句顺序
     pub fn update_reanim(&mut self) {
         // ReanimationTryToGet(mBodyReanimID)：取不到直接返回
         let has_body_reanim = {
@@ -2296,7 +2306,7 @@ impl Plant {
         let a_cracked2: *mut crate::framework::graphics::image::Image =
             &CRACK_IMAGE_2 as *const u8 as *mut _;
 
-        let mut a_pos_x = self.pos_x as i32 + 40;
+        let a_pos_x = self.pos_x as i32 + 40;
         let mut a_pos_y = self.pos_y as i32 + 10;
         if self.seed_type == SeedType::Tallnut {
             a_pos_y -= 32;
@@ -2472,9 +2482,9 @@ impl Plant {
             if item.item_type == MagnetItemType::None {
                 continue;
             }
-            let mut a_cel_row = 0;
+            let a_cel_row = 0;
             let mut a_cel_col = 0;
-            let mut a_image: *mut crate::framework::graphics::image::Image = std::ptr::null_mut();
+            let a_image: *mut crate::framework::graphics::image::Image = std::ptr::null_mut();
             let mut a_scale = 0.8f32;
 
             // [TRANSLATION_NOTE]: C++ 使用 IMAGE_REANIM_ZOMBIE_BUCKET1/2/3、FOOTBALL_HELMET、
@@ -3276,6 +3286,8 @@ impl Plant {
     }
 
     /// 绘制植物种子图像（对应 C++ Plant::DrawSeedType）
+    #[allow(unused_assignments)]
+    // 对应 C++ 局部变量「先初始化后覆盖」语义（UNUSED_CPP_USAGE.md §1）；保留赋值语句顺序
     pub fn draw_seed_type(
         g: &mut Graphics,
         seed_type: SeedType,
@@ -3286,6 +3298,7 @@ impl Plant {
     ) {
         // 模仿者变体选择
         let mut a_seed_type = seed_type;
+        #[allow(unused_variables)]
         let mut a_draw_variation = draw_variation;
         if seed_type == SeedType::Imitater && imitater_type != SeedType::None {
             a_seed_type = imitater_type;
@@ -3306,6 +3319,7 @@ impl Plant {
 
         // 缩放（对应 C++ aSeedG.mScaleX/mScaleY）
         let mut a_scale_x = g.scale_x as f32;
+        #[allow(unused_variables)]
         let mut a_scale_y = g.scale_y as f32;
         let mut a_offset_x = 0.0f32;
         let mut a_offset_y = 0.0f32;
@@ -5031,6 +5045,8 @@ impl Plant {
                     if gi.grid_item_type == crate::lawn::grid_item::GridItemType::Ladder {
                         let a_diff_x = (gi.grid_x - self.plant_col).abs();
                         let a_diff_y = (gi.grid_y - self.base.row).abs();
+                        #[allow(unused_variables)]
+                        #[allow(unused_variables)]
                         let a_square_distance = a_diff_x.max(a_diff_y);
                         if a_square_distance <= 2 {
                             let a_distance = a_square_distance as f32 + a_diff_y as f32 * 0.05;
@@ -5051,7 +5067,7 @@ impl Plant {
                 }
                 // 对应 C++ Plant.cpp:2148-2155：GridItemDie → GetFreeMagnetItem →
                 // GridToPixelX/Y(aClosestLadder->mGridX, aClosestLadder->mGridY)（借用规避：board 借用限定在坐标提取块内）
-                let (a_ladder_grid_x, a_ladder_grid_y, a_pixel_x, a_pixel_y) =
+                let (_a_ladder_grid_x, _a_ladder_grid_y, a_pixel_x, a_pixel_y) =
                     if let Some(board) = self.base.get_board_mut() {
                         let gi = &board.grid_items[grid_idx];
                         let (gx, gy) = (gi.grid_x, gi.grid_y);
@@ -5384,6 +5400,7 @@ impl Plant {
                         self.base.y = crate::todlib::tod_common::tod_animate_curve(
                             50,
                             20,
+                            #[allow(unused_variables)]
                             self.state_countdown,
                             a_start_y,
                             a_dest_y - 120,
@@ -5404,7 +5421,7 @@ impl Plant {
                 }
             } else if self.state == PlantState::SquashFalling {
                 // C++: mY = PvzpAnimateCurve(10, 0, mStateCountdown, aDestY - 120, aDestY, CURVE_EASE_IN_OUT);
-                if let Some(board) = board_ptr {
+                if let Some(_board) = board_ptr {
                     unsafe {
                         self.base.y = crate::todlib::tod_common::tod_animate_curve(
                             10,
@@ -5662,7 +5679,8 @@ impl Plant {
             board.m_fog_blown_count_down = 4000;
         }
     }
-
+    #[allow(unused_variables)]
+    #[allow(unused_variables)]
     /// 杀死周围植物（对应 C++ Plant::KillAllPlantsNearDoom）
     pub fn kill_all_plants_near_doom(&mut self) {
         let my_row = self.base.row;
@@ -5682,8 +5700,8 @@ impl Plant {
     }
 
     pub fn do_special(&mut self) {
-        let a_pos_x = self.base.x + self.base.width / 2;
-        let a_pos_y = self.base.y + self.base.height / 2;
+        let _a_pos_x = self.base.x + self.base.width / 2;
+        let _a_pos_y = self.base.y + self.base.height / 2;
 
         match self.seed_type {
             SeedType::Blover => {
@@ -5786,11 +5804,15 @@ impl Default for Plant {
 /// 存储每个种子类型的静态属性：图像、重动画类型、花费、冷却时间等
 /// 全局数组 gPlantDefs[SeedType::NUM_SEED_TYPES] 和 GetPlantDefinition() 函数
 /// 将在 Plant.cpp 主体翻译时实现
+#[allow(dead_code)]
+// NOT-WIRED: C++ gPlantDefs 表条目；Rust 定义表未接线（§1）
 #[derive(Debug, Clone, Copy)]
 pub struct PlantDefinition {
     pub seed_type: SeedType,
     pub plant_image: Option<*mut Image>,
     pub reanimation_type: ReanimationType,
+    #[allow(dead_code)]
+    // NOT-WIRED: PlantDefinition 字段（C++ gPlantDefs 表）；未接线（§1）
     pub packet_index: i32,
     pub seed_cost: i32,
     pub refresh_time: i32,
@@ -5801,6 +5823,8 @@ pub struct PlantDefinition {
 
 /// 获取植物图片（对应 C++ Plant::GetImage，Plant.cpp:3802）
 /// C++: GetPlantDefinition(theSeedType).mPlantImage[0]，无图返回 nullptr
+#[allow(dead_code)]
+// NOT-WIRED: C++ Plant.cpp:4027 Plant::GetImage（UNUSED_CPP_USAGE.md §1）；Plant 绘制使用 reanim 路径，GetImage 未接线
 pub fn get_image(seed_type: SeedType) -> Option<*mut Image> {
     get_plant_definition(seed_type).plant_image
 }

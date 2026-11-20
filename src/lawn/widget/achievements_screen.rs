@@ -15,20 +15,32 @@ pub enum AchievementId {
     NovelPeasPrize,
     BetterOffDead,
     ChinaShop,
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ AchievementId 变体；对应成就判定逻辑未翻译（§5）
     Spudow,
+    #[allow(dead_code)]
+    // NOT-WIRED: 同上
     Explodonator,
     Morticulturalist,
     DontPea,
+    #[allow(dead_code)]
+    // NOT-WIRED: 同上
     RollSomeHeads,
     Grounded,
     Zombologist,
+    #[allow(dead_code)]
+    // NOT-WIRED: 同上
     PennyPincher,
     SunnyDays,
+    #[allow(dead_code)]
+    // NOT-WIRED: 同上
     PopcornParty,
     GoodMorning,
     NoFungusAmongUs,
     BeyondTheGrave,
     Immortal,
+    #[allow(dead_code)]
+    // NOT-WIRED: 同上
     ToweringWisdom,
     MustacheMode,
     MaxAchievements,
@@ -39,6 +51,8 @@ pub const MAX_ACHIEVEMENTS: usize = AchievementId::MaxAchievements as usize;
 /// 成就条目（对应 C++ AchievementItem）
 pub struct AchievementItem {
     pub name: &'static str,
+    #[allow(dead_code)]
+    // NOT-WIRED: C++ AchievementsScreen.cpp:161 读取成就描述；成就页文本绘制未接线（§1）
     pub description: &'static str,
 }
 
@@ -127,6 +141,8 @@ pub const G_ACHIEVEMENT_LIST: [AchievementItem; MAX_ACHIEVEMENTS] = [
 ];
 
 /// 成就界面 Widget（对应 C++ AchievementsWidget）
+#[allow(dead_code)]
+// NOT-WIRED: C++ AchievementsScreen.cpp:78 构造；Rust 成就页 Widget 未接线（§1）
 pub struct AchievementsWidget {
     pub app: Option<*mut crate::lawn::lawn_app::LawnApp>,
     pub scroll_direction: i32,
@@ -137,6 +153,8 @@ pub struct AchievementsWidget {
     pub did_press_more_button: bool,
 }
 
+#[allow(dead_code)]
+// NOT-WIRED: C++ AchievementsScreen.cpp:78 构造 / AchievementsWidget::Update/Draw/KeyDown/Mouse* 回调；Rust 成就页 Widget 未接线（§1），以下 new/update/draw/key_down/mouse_down/mouse_up/mouse_wheel 均无调用点
 impl AchievementsWidget {
     pub fn new() -> Self {
         AchievementsWidget {

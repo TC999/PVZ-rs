@@ -52,6 +52,10 @@ impl GameObject {
 
     /// 创建父级图形帧
     /// 恢复 Graphics 上下文的坐标转换
+    // C++: GameObject.cpp:52 | void GameObject::MakeParentGraphicsFrame(Graphics* g)
+    // NOT-WIRED: C++ 调用点 Coin.cpp:830（Coin::Draw 附件分支）、Projectile.cpp:1068、Zombie.cpp:6328/9713；
+    //   Rust 侧按 ID 的附件绘制入口尚未接线（见 coin.rs 的 Coin::draw 附件绘制段 TRANSLATION_NOTE），对应调用点均未具备。
+    #[allow(dead_code)]
     pub fn make_parent_graphics_frame(&self, g: &mut Graphics) {
         g.translate(-self.x, -self.y);
     }

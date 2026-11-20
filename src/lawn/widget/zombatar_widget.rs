@@ -10,12 +10,10 @@ use crate::framework::graphics::image::Image;
 use crate::framework::key_codes::{KeyCode, KEYCODE_ESCAPE};
 use crate::framework::rect::Rect;
 use crate::framework::widget::dialog::{BUTTONS_YES_NO, ID_YES};
-use crate::framework::widget::widget_manager::WidgetManager;
 use crate::lawn::game_enums::*;
 use crate::lawn::widget::game_selector::GameSelectorImpl;
 use crate::lawn::zombatar::{
-    get_part_layout, zombatar_get_color, zombatar_read_record_slot,
-    zombatar_read_signed_record_slot, ZombatarPage,
+    get_part_layout, zombatar_get_color, zombatar_read_signed_record_slot, ZombatarPage,
 };
 use crate::todlib::tod_common::tod_animate_curve;
 
