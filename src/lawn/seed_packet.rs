@@ -437,8 +437,14 @@ impl SeedPacket {
         }
 
         if conveyor {
-            // [TRANSLATION_NOTE]: C++ mBoard->mSeedBank->RemoveSeed(mIndex) — Rust 侧
-            // board.seed_bank 为 Vec<SeedPacket>，移除逻辑由 Board 层处理，此处暂略
+            // C++ 878: mBoard->mSeedBank->RemoveSeed(mIndex);
+            // board.seed_bank 即 C++ mSeedBank 的 Vec 镜像，直接按索引移除
+            if let Some(board) = self.board {
+                unsafe {
+                    // C++ mIndex 即本包在种子槽中的下标（Rust packet_index）
+                    (*board).remove_seed(self.packet_index);
+                }
+            }
         } else if slot_level {
             self.deactivate();
         } else if last_stand_before_onslaught {

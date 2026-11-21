@@ -1007,32 +1007,12 @@ impl Plant {
         }
     }
 
-    /// 发射星星（对应 C++ StarFruitFire）
+    /// 发射星星预备（对应 C++ Plant::LaunchStarFruit，Plant.cpp:911-918）
     pub fn launch_star_fruit(&mut self) {
-        if let Some(app) = self.base.get_app() {
-            app.play_foley(crate::todlib::tod_foley::FoleyType::Throw as i32);
-        }
-        let a_shoot_angle_x = (30.0f32).to_radians().cos() * 3.33;
-        let a_shoot_angle_y = (30.0f32).to_radians().sin() * 3.33;
-        let x = (self.base.x + 25) as f32;
-        let y = (self.base.y + 25) as f32;
-        let row = self.base.row;
-        let a_damage_range_flags = self.get_damage_range_flags(PlantWeapon::Primary);
-        if let Some(board) = self.base.get_board_mut() {
-            for i in 0..5 {
-                let idx = board.add_projectile(x, y, row, SeedType::Starfruit);
-                let (vel_x, vel_y) = match i {
-                    0 => (-3.33, 0.0),
-                    1 => (0.0, 3.33),
-                    2 => (0.0, -3.33),
-                    3 => (a_shoot_angle_x, a_shoot_angle_y),
-                    _ => (a_shoot_angle_x, -a_shoot_angle_y),
-                };
-                board.projectiles[idx].vel_x = vel_x;
-                board.projectiles[idx].vel_y = vel_y;
-                board.projectiles[idx].motion = crate::lawn::projectile::ProjectileMotion::Star;
-                board.projectiles[idx].damage_flags = a_damage_range_flags;
-            }
+        // C++ 913: if (FindStarFruitTarget())
+        if self.find_star_fruit_target() {
+            self.play_body_reanim("anim_shoot", ReanimLoopType::PlayOnceAndHold, 20, 28.0);
+            self.shooting_counter = 40;
         }
     }
 
@@ -1056,7 +1036,8 @@ impl Plant {
             return;
         }
         if self.seed_type == SeedType::Starfruit {
-            self.launch_star_fruit();
+            // C++ 4488-4491: StarFruitFire(); return;
+            self.star_fruit_fire();
             return;
         }
 
@@ -1571,11 +1552,159 @@ impl Plant {
 
     /// 绘制植物（对应 C++ Plant::Draw 简化：绘制 body reanim + 阴影）
     pub fn draw(&self, g: &mut Graphics) {
-        // 位置已在 update_abilities 中通过 SetPosition 同步
-        if let Some(app) = self.base.get_app() {
+        // 对应 C++ Plant::Draw（Plant.cpp:3936-4072）主体骨架
+        let a_offset_x = 0.0f32;
+        let mut a_offset_y = Self::plant_draw_height_offset(
+            self.base.get_board(),
+            Some(self),
+            self.seed_type,
+            self.plant_col,
+            self.base.row,
+        );
+        if Plant::is_flying(self.seed_type) && self.squished {
+            a_offset_y += 30.0;
+        }
+
+        // C++ 3948-3962: mSquished 分支（压扁绘制）——[TRANSLATION_NOTE]: DrawSeedType 依赖
+        // 图像路径（Plant::GetImage 静态版），Rust 走 reanim 路径，压扁段暂以缩放近似未译
+        if self.squished {
+            self.draw_shadow(g, a_offset_x, a_offset_y);
+            return;
+        }
+
+        // C++ 3965-4001: 南瓜后景判定
+        let mut a_draw_pumpkin_back = false;
+        let mut a_pumpkin_info: Option<(usize, i32, i32)> = None; // (idx, dx, dy)
+        if self.is_on_board() {
+            let a_my_col = self.plant_col;
+            let a_my_row = self.base.row;
+            let a_my_x = self.base.x;
+            let a_my_y = self.base.y;
+            if let Some(board) = self.base.get_board() {
+                // C++ 3970: aPumpkin = mBoard->GetPumpkinAt(mPlantCol, mRow);
+                let a_pumpkin_idx = board.get_pumpkin_at(a_my_col, a_my_row).map(|p| {
+                    board
+                        .plants
+                        .iter()
+                        .position(|q| std::ptr::eq(q, p))
+                        .unwrap_or(0)
+                });
+                if let Some(a_pumpkin_i) = a_pumpkin_idx {
+                    // C++ 3973-3989
+                    let a_in_pumpkin_idx = board.get_top_plant_at(
+                        a_my_col,
+                        a_my_row,
+                        crate::lawn::game_enums::PlantPriority::OnlyNormalPosition,
+                    );
+                    let mut a_in_pumpkin_i = a_in_pumpkin_idx.map(|p| {
+                        board
+                            .plants
+                            .iter()
+                            .position(|q| std::ptr::eq(q, p))
+                            .unwrap_or(0)
+                    });
+                    if let Some(ai) = a_in_pumpkin_i {
+                        if board.plants[ai].base.render_order
+                            > board.plants[a_pumpkin_i].base.render_order
+                            || board.plants[ai].on_bungee_state
+                                == PlantOnBungeeState::GettingGrabbedByBungee
+                        {
+                            a_in_pumpkin_i = None;
+                        }
+                    }
+                    // C++ 3982-3985: aPlantInPumpkin == this（本株即南瓜内顶株）
+                    let a_this_i = board.plants.iter().position(|q| std::ptr::eq(q, self));
+                    if a_in_pumpkin_i.is_some() && a_in_pumpkin_i == a_this_i {
+                        a_draw_pumpkin_back = true;
+                    }
+                    if a_in_pumpkin_i.is_none() && self.seed_type == SeedType::Pumpkinshell {
+                        // C++ 3986-3989
+                        a_draw_pumpkin_back = true;
+                    }
+                    let a_pk = &board.plants[a_pumpkin_i];
+                    a_pumpkin_info =
+                        Some((a_pumpkin_i, a_pk.base.x - a_my_x, a_pk.base.y - a_my_y));
+                } else if self.seed_type == SeedType::Pumpkinshell {
+                    // C++ 3991-3995
+                    a_draw_pumpkin_back = true;
+                    a_pumpkin_info = Some((usize::MAX, 0, 0));
+                }
+            }
+        } else if self.seed_type == SeedType::Pumpkinshell {
+            // C++ 3997-4001
+            a_draw_pumpkin_back = true;
+            a_pumpkin_info = Some((usize::MAX, 0, 0));
+        }
+
+        // C++ 4003: DrawShadow(g, aOffsetX, aOffsetY);
+        self.draw_shadow(g, a_offset_x, a_offset_y);
+
+        // C++ 4005-4012: 飞行植物摆动
+        if Plant::is_flying(self.seed_type) {
+            let a_counter = if self.is_on_board() {
+                self.base.get_board().map_or(0, |b| b.m_main_counter as u32)
+            } else {
+                self.base
+                    .get_app()
+                    .map_or(0, |app| app.m_app_counter as u32)
+            };
+            let a_time =
+                ((self.base.row as f64 * 97.0 + self.plant_col as f64 * 61.0 + a_counter as f64)
+                    * 0.03)
+                    % (2.0 * std::f64::consts::PI);
+            let a_wave = (a_time as f32).sin() * 2.0;
+            a_offset_y += a_wave;
+        }
+
+        // C++ 4014-4021: 南瓜后景绘制（C++ 拷贝 Graphics 后平移绘制组 1；
+        // Rust 无 Graphics 拷贝构造，以 push_state + 平移 + pop_state 等价实现）
+        if a_draw_pumpkin_back {
+            if let Some((a_pk_idx, a_dx, a_dy)) = a_pumpkin_info {
+                let a_app = match self.base.get_app() {
+                    Some(a) => a,
+                    None => return,
+                };
+                unsafe {
+                    let a_pk_body_id = if a_pk_idx != usize::MAX {
+                        let a_plants = &mut (*self.base.board.unwrap()).plants;
+                        a_plants[a_pk_idx].body_reanim_id
+                    } else {
+                        self.body_reanim_id
+                    };
+                    if let Some(a_pumpkin_reanim) = (*a_app).reanimation_get(a_pk_body_id) {
+                        g.push_state();
+                        g.trans_x += a_dx as f64;
+                        g.trans_y += a_dy as f64;
+                        a_pumpkin_reanim.draw_render_group(g, 1);
+                        g.pop_state();
+                    }
+                }
+            }
+        }
+
+        let a_offset_x = a_offset_x + self.shake_offset_x;
+        let a_offset_y = a_offset_y + self.shake_offset_y;
+        let _ = (a_offset_x, a_offset_y);
+
+        // C++ 4025-4028: IsInPlay() && IsIZombieLevel() → IZombieDrawPlant
+        let a_in_play_izombie = self.is_in_play()
+            && self
+                .base
+                .get_app()
+                .map_or(false, |app| app.is_izombie_level());
+        if a_in_play_izombie {
+            // SAFETY: 单线程主循环内经裸指针取 Challenge；IZombieDrawPlant 只读植物
+            unsafe {
+                if let Some(a_board) = self.base.board {
+                    if let Some(a_challenge) = (*a_board).challenge.as_ref() {
+                        a_challenge.i_zombie_draw_plant(g, self);
+                    }
+                }
+            }
+        } else if let Some(app) = self.base.get_app() {
+            // C++ 4029-4044: 有 body reanim 时绘制
             if let Some(reanim) = app.reanimation_get(self.body_reanim_id) {
                 reanim.draw(g);
-                self.draw_shadow(g, 0.0, 0.0);
                 return;
             }
         }
@@ -1590,7 +1719,6 @@ impl Plant {
         };
         g.set_color(&crate::framework::color::Color::new(r, gr, b, 255));
         g.fill_rect_xywh(self.base.x, self.base.y, 60, 60);
-        self.draw_shadow(g, 0.0, 0.0);
     }
 
     /// 绘制影子（对应 C++ Plant::DrawShadow，半透明占位）
@@ -5675,6 +5803,12 @@ impl Plant {
                 }
             }
         }
+        // C++ 4273: mApp->PlaySample(SOUND_BLOVER);
+        if let Some(app) = self.base.get_app() {
+            let a_blover_id = unsafe { crate::todlib::tod_foley::SOUND_BLOVER };
+            app.play_sample(a_blover_id);
+        }
+        // C++ 4274: mBoard->mFogBlownCountDown = 4000;
         if let Some(board) = self.base.get_board_mut() {
             board.m_fog_blown_count_down = 4000;
         }
@@ -5700,47 +5834,220 @@ impl Plant {
     }
 
     pub fn do_special(&mut self) {
-        let _a_pos_x = self.base.x + self.base.width / 2;
-        let _a_pos_y = self.base.y + self.base.height / 2;
+        // 对应 C++ Plant::DoSpecial（Plant.cpp:4290-4403）
+        let a_pos_x = self.base.x + self.base.width / 2;
+        let a_pos_y = self.base.y + self.base.height / 2;
+        let a_damage_range_flags = self.get_damage_range_flags(PlantWeapon::Primary);
 
         match self.seed_type {
             SeedType::Blover => {
+                // C++ 4298-4305
                 if self.state != PlantState::DoingSpecial {
                     self.state = PlantState::DoingSpecial;
-                    // 依赖底层系统
+                    // C++ 4303: BlowAwayFliers();
+                    self.blow_away_fliers();
                 }
             }
             SeedType::Cherrybomb => {
-                // 依赖底层系统
+                // C++ 4307-4319
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Cherrybomb as i32);
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Juicy as i32);
+                }
+                // C++ 4312-4313: KillAllZombiesInRadius + Explodonator 成就
+                let a_killed = {
+                    let row = self.base.row;
+                    if let Some(board) = self.base.get_board_mut() {
+                        board.kill_all_zombies_in_radius(
+                            row,
+                            a_pos_x,
+                            a_pos_y,
+                            115,
+                            1,
+                            true,
+                            a_damage_range_flags,
+                        )
+                    } else {
+                        0
+                    }
+                };
+                if a_killed >= 10 {
+                    crate::lawn::widget::achievements_screen::ReportAchievement::give_achievement(
+                        self.base.app,
+                        crate::lawn::widget::achievements_screen::AchievementId::Explodonator
+                            as i32,
+                        true,
+                    );
+                }
+                // C++ 4315: AddPvzpParticle(aPosX, aPosY, RENDER_LAYER_TOP, PARTICLE_POWIE)
+                //           [TRANSLATION_NOTE]: PvzpParticle API 未接入（04_PROGRESS P2）
+                // C++ 4316: ShakeBoard(3, -4)
+                if let Some(board) = self.base.get_board_mut() {
+                    board.shake_board(3, -4);
+                }
                 self.die();
             }
             SeedType::Doomshroom => {
-                // 依赖底层系统
+                // C++ 4321-4333
+                if let Some(app) = self.base.get_app() {
+                    let a_doom_id = unsafe { crate::todlib::tod_foley::SOUND_DOOMSHROOM };
+                    app.play_sample(a_doom_id);
+                }
+                {
+                    let row = self.base.row;
+                    if let Some(board) = self.base.get_board_mut() {
+                        board.kill_all_zombies_in_radius(
+                            row,
+                            a_pos_x,
+                            a_pos_y,
+                            250,
+                            3,
+                            true,
+                            a_damage_range_flags,
+                        );
+                    }
+                }
+                // C++ 4326: KillAllPlantsNearDoom();
+                self.kill_all_plants_near_doom();
+                // C++ 4328: AddPvzpParticle(... PARTICLE_DOOM) — [TRANSLATION_NOTE]: 粒子 API 未接入
+                // C++ 4329: AddACrater(mPlantCol, mRow)->mGridItemCounter = 18000
+                let a_doom_col = self.plant_col;
+                let a_doom_row = self.base.row;
+                if let Some(board) = self.base.get_board_mut() {
+                    let a_col = a_doom_col;
+                    let a_row = a_doom_row;
+                    let mut a_crater = crate::lawn::grid_item::GridItem::new();
+                    a_crater.grid_item_type = crate::lawn::grid_item::GridItemType::Crater;
+                    a_crater.render_order = crate::lawn::board::make_render_order(
+                        crate::lawn::game_enums::RENDER_LAYER_GROUND,
+                        a_row,
+                        1,
+                    );
+                    a_crater.grid_x = a_col;
+                    a_crater.grid_y = a_row;
+                    a_crater.counter = 18000;
+                    board.grid_items.push(a_crater);
+                    // C++ 4330: ShakeBoard(3, -4)
+                    board.shake_board(3, -4);
+                }
                 self.die();
             }
             SeedType::Jalapeno => {
-                // 依赖底层系统
+                // C++ 4335-4347
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::JalapenoIgnite as i32);
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Juicy as i32);
+                }
+                {
+                    let row = self.base.row;
+                    if let Some(board) = self.base.get_board_mut() {
+                        // C++ 4340-4341: DoFwoosh(mRow); ShakeBoard(3, -4);
+                        board.do_fwoosh(row);
+                        board.shake_board(3, -4);
+                    }
+                }
+                // C++ 4343: BurnRow(mRow);
+                let a_jal_row = self.base.row;
+                self.burn_row(a_jal_row);
+                // C++ 4344: mBoard->mIceTimer[mRow] = 20;
+                if let Some(board) = self.base.get_board_mut() {
+                    let row = a_jal_row as usize;
+                    if row < board.m_ice_timer.len() {
+                        board.m_ice_timer[row] = 20;
+                    }
+                }
                 self.die();
             }
             SeedType::Umbrella => {
+                // C++ 4349-4359
                 if self.state != PlantState::UmbrellaTriggered
                     && self.state != PlantState::UmbrellaReflecting
                 {
                     self.state = PlantState::UmbrellaTriggered;
                     self.state_countdown = 5;
+                    self.play_body_reanim("anim_block", ReanimLoopType::PlayOnceAndHold, 0, 22.0);
                 }
             }
             SeedType::Iceshroom => {
-                // 依赖底层系统
+                // C++ 4361-4368
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Frozen as i32);
+                }
+                // C++ 4364: IceZombies();
+                self.ice_zombies();
+                // C++ 4365: AddPvzpParticle(... PARTICLE_ICE_TRAP) — [TRANSLATION_NOTE]: 粒子 API 未接入
                 self.die();
             }
             SeedType::PotatoMine => {
-                // 依赖底层系统
+                // C++ 4370-4384
+                let a_pos_x = self.base.x + self.base.width / 2 - 20;
+                let a_pos_y = self.base.y + self.base.height / 2;
+                if let Some(app) = self.base.get_app() {
+                    let a_mine_id = unsafe { crate::todlib::tod_foley::SOUND_POTATO_MINE };
+                    app.play_sample(a_mine_id);
+                }
+                // C++ 4376-4377: KillAllZombiesInRadius + Spudow 成就
+                let a_killed = {
+                    let row = self.base.row;
+                    if let Some(board) = self.base.get_board_mut() {
+                        board.kill_all_zombies_in_radius(
+                            row,
+                            a_pos_x,
+                            a_pos_y,
+                            60,
+                            0,
+                            false,
+                            a_damage_range_flags,
+                        )
+                    } else {
+                        0
+                    }
+                };
+                if a_killed >= 1 {
+                    crate::lawn::widget::achievements_screen::ReportAchievement::give_achievement(
+                        self.base.app,
+                        crate::lawn::widget::achievements_screen::AchievementId::Spudow as i32,
+                        true,
+                    );
+                }
+                // C++ 4379-4380: AddPvzpParticle(... PARTICLE_POTATO_MINE) — [TRANSLATION_NOTE]: 粒子 API 未接入
+                // C++ 4381: ShakeBoard(3, -4)
+                if let Some(board) = self.base.get_board_mut() {
+                    board.shake_board(3, -4);
+                }
                 self.die();
             }
             SeedType::InstantCoffee => {
-                // 依赖底层系统
+                // C++ 4386-4398
+                {
+                    let a_col = self.plant_col;
+                    let a_row = self.base.row;
+                    if let Some(board) = self.base.get_board_mut() {
+                        // C++ 4388-4392: aPlant = GetTopPlantAt(..., TOPPLANT_ONLY_NORMAL_POSITION);
+                        //                if (aPlant && aPlant->mIsAsleep) aPlant->mWakeUpCounter = 100;
+                        // 借用拆分：先以不可变引用判定是否睡着的顶植物，再按索引可变写
+                        let a_top_asleep = board
+                            .get_top_plant_at(
+                                a_col,
+                                a_row,
+                                crate::lawn::game_enums::PlantPriority::OnlyNormalPosition,
+                            )
+                            .map(|p| p.is_asleep)
+                            == Some(true);
+                        if a_top_asleep {
+                            if let Some(idx) = board.plants.iter().position(|p| {
+                                !p.dead && p.plant_col == a_col && p.base.row == a_row
+                            }) {
+                                board.plants[idx].wake_up_counter = 100;
+                            }
+                        }
+                    }
+                }
                 self.state = PlantState::DoingSpecial;
+                self.play_body_reanim("anim_crumble", ReanimLoopType::PlayOnceAndHold, 20, 22.0);
+                if let Some(app) = self.base.get_app() {
+                    app.play_foley(crate::todlib::tod_foley::FoleyType::Coffee as i32);
+                }
             }
             _ => {}
         }

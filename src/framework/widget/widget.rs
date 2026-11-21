@@ -67,6 +67,20 @@ pub trait WidgetImpl {
     fn mouse_wheel(&mut self, _widget: &mut Widget, _delta: i32) {}
     fn mouse_enter(&mut self, _widget: &mut Widget) {}
     fn mouse_leave(&mut self, _widget: &mut Widget) {}
+    /// 加入管理器回调（对应 C++ Widget::AddedToManager 虚函数，WidgetContainer.cpp:349）
+    fn added_to_manager(
+        &mut self,
+        _widget: &mut Widget,
+        _wm: *mut crate::framework::widget::widget_manager::WidgetManager,
+    ) {
+    }
+    /// 移出管理器回调（对应 C++ Widget::RemovedFromManager 虚函数，WidgetContainer.cpp:364）
+    fn removed_from_manager(
+        &mut self,
+        _widget: &mut Widget,
+        _wm: Option<*mut crate::framework::widget::widget_manager::WidgetManager>,
+    ) {
+    }
 
     // ---- 焦点 ----
     fn got_focus(&mut self, _widget: &mut Widget) {}
@@ -567,8 +581,29 @@ impl Widget {
     // ============================================================
 
     pub fn order_in_manager_changed(&mut self) {}
-    pub fn added_to_manager(&mut self, _wm: *mut WidgetManager) {}
-    pub fn removed_from_manager(&mut self, _wm: Option<*mut WidgetManager>) {}
+    /// 基类入口：转发给 impl_ 的 added_to_manager（对应 C++ 虚函数分派）
+    pub fn added_to_manager(&mut self, wm: *mut WidgetManager) {
+        // SAFETY: impl_ 为 Box<dyn WidgetImpl>，取裸指针后与 self 并存使用；
+        // 回调实现不会经其它路径再借用本 Widget 的 impl_（单线程主循环）
+        let impl_ptr: *mut Box<dyn WidgetImpl> = match self.impl_.as_mut() {
+            Some(b) => b as *mut _,
+            None => return,
+        };
+        unsafe {
+            (**impl_ptr).added_to_manager(self, wm);
+        }
+    }
+    /// 基类入口：转发给 impl_ 的 removed_from_manager（对应 C++ 虚函数分派）
+    pub fn removed_from_manager(&mut self, wm: Option<*mut WidgetManager>) {
+        // SAFETY: 同 added_to_manager
+        let impl_ptr: *mut Box<dyn WidgetImpl> = match self.impl_.as_mut() {
+            Some(b) => b as *mut _,
+            None => return,
+        };
+        unsafe {
+            (**impl_ptr).removed_from_manager(self, wm);
+        }
+    }
 
     pub fn widget_removed_helper(&mut self) {
         if self.widget_manager.is_none() {

@@ -8,6 +8,7 @@
 
 - **阶段：** 引擎主体编译通过；L1–L6 部分验证通过（标题屏「点击开始！」+ GameSelector 全部按钮/木牌/成就基座渲染成功，截图对照原版确认）。
 - **当前焦点：** ①GameSelector 布局缺口（部件位置/FrameBasePose/滑动动画，画面元素位置与原版有偏差）；②新发现崩溃：按键触发 foley 播放时 tod_foley.rs:322 指针未对齐（详见更新记录）。**未验证项：游戏内玩法回放一致性。**
+- **2026-11-21 二轮遗留项状态：** §1 方法类 133/167 有调用点（本轮 103→133）；遗留项2/3/4（pool_effect 构造、WidgetImpl 管理器回调、LawnEditWidget 桥接）已完成；剩余无调用点为 C++ 注释死代码（draw_zombie_part/head）、C++ 无调用点（Board::SaveGame）、Rust 自创拆分（§3）与 decl-only 链（§1 末段），登记维持。
 
 ## 优先级（建议）
 
@@ -92,6 +93,7 @@
 
 ## 更新记录
 
+| 2026-11-21 | **第二轮遗留项全量接线（本轮）**：①§1 方法类真实缺口 30 项接线（起点 103/167 → 133/167 有调用点）：board（init_zombie_waves→ForLevel、PlantingRequirementsMet+Cobcannon、ToolHitTest→Helper、MouseDownWithTool 补 ZenGarden/TreeOfWisdom 分支、update_level_end_sequence 补 C++ 1775-1802 GetBottomLawnMower 金币链+SOUND_POINTS 音高、init_level→PickBackground 忠实版+墓碑段 C++ 1097-1163、key_char f 段→GetZenToolAt、add_plant 补 C++ 2112-2135 fungi/catapult 段、ZOMBIE_WAVE_DEBUG 常量化）；challenge（MouseDown 补 WhackAZombie/ScaryPotter 分支、SpawnZombieWave 按 C++ 2969-3013 全量、InitLevel 补 ZenGarden/IZombie/ScaryPotter/TreeOfWisdom、LastStandCompletedStage 按 C++ 5132-5156 全量+SOUND_HUGE_WAVE、SquirrelUpdate 接 SquirrelUpdateOne、IZombiePlacePlantInSquare 接 IZombieSetupPlant、i_zombie_squish_brain 补 MakeRenderOrder）；plant（**DoSpecial 按 C++ 4290-4403 全量重写**：Cherrybomb/Doomshroom/Jalapeno/Iceshroom/PotatoMine/InstantCoffee 分支+Explodonator/Spudow 成就+AddACrater、BlowAwayFliers 补 SOUND_BLOVER、**Starfruit 链修正**：LaunchStarFruit=FindTarget+anim_shoot+counter40、Fire→StarFruitFire、Draw 按 C++ Plant::Draw 3963-4044 骨架：南瓜后景+飞行摆动+IZombieDrawPlant 分支）；zombie（apply_burn 尾补 BobsledBurn 钩子 C++ 8804-8807、update_zombie_jalapeno_head 补 DO_FIX_BUGS mMindControlled→Zombie::BurnRow 分支（cfg feature）、zombie_initialize Flag 分支补全 C++ 585-592：flag reanim attach+FrameBasePose+SetupZombatarFlagReanim、burn_row 误判注释修正）；tod_foley（补注册 SOUND_BLOVER/SOUND_DOOMSHROOM/SOUND_POTATO_MINE）；②遗留项2：pool_effect 实例构造接线（LawnApp.cpp:1745-1746）；③遗留项3：WidgetImpl trait 补 added_to_manager/removed_from_manager 默认回调+Widget 基类转发；④遗留项4：LawnEditWidget 按 C++ LawnCommon.cpp:80-146 重写（key_down_forward_escape/key_char/key_text+AutoCapChar 98-107+工厂），Dialog 补 dialog_key_down（对应继承 Widget::KeyDown 的 TAB-only 语义）；⑤Cargo.toml 声明 fix_bugs feature。**未接线判定修正**：zombie draw_zombie_part/head 在 C++ 为注释死代码（Zombie.cpp:5210-5275）保持 NOT-WIRED；save_game（Board.cpp:375）C++ 亦无调用点改记 §2。**未运行验证**（无 main.pak 复验环境；需用户复验：WarAndPeas 调试键生成、LastStand 通关提示、智慧树工具、锤僵尸/砸罐、星光果发射、燃烧雪橇队、旗僵尸 zombatar 头、用户名输入自动大写） | AI |
 | 日期 | 变更 | 操作者 |
 |---|---|---|
 | 2026-11-20 | **未使用符号 C++ 出处全量分析（只读）**：按台账 P2 要求，把 `UNUSED_SYMBOLS.md` 1573 条逐一在 cpp/ 权威源码中定位原使用点，产出 `UNUSED_CPP_USAGE.md` 与机读 `target/unused_final_verdicts.json`。判定分布：C++ 有使用（接线缺口）480、C++ 仅定义 23、Rust 自创/拆分 36、疑似改名 16、Rust 自有 130、非 ResourceId 枚举变体 17、ResourceId 整类 868。复现脚本与中间产物在 `target/cpp_*.json`。未改任何游戏代码，未运行验证 | AI |

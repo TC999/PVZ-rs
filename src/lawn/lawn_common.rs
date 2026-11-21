@@ -130,47 +130,66 @@ impl LawnEditWidget {
         }
     }
 
-    #[allow(dead_code)]
-    // NOT-WIRED: C++ LawnEditWidget::KeyDown（LawnCommon.cpp:90）；宿主 CreateEditWidget 未接线
-    pub fn key_down(&mut self, the_key: i32) {
-        // EditWidget::KeyDown(theKey) 基类处理——TODO: 实际需要调用基类方法
+    /// KeyDown 的 ESC 转发段（对应 C++ LawnEditWidget::KeyDown，LawnCommon.cpp:90-95：
+    /// EditWidget::KeyDown(theKey) 基类段由调用方先调，本方法做 mDialog->KeyDown 转发）
+    pub fn key_down_forward_escape(&mut self, the_key: i32) {
         if the_key == KEYCODE_ESCAPE {
-            // 原始 C++ 调用 mDialog->KeyDown(KEYCODE_ESCAPE)
-            // 但 Dialog::key_down 通过 WidgetImpl trait 提供，暂不调用
+            if let Some(a_dialog) = self.dialog {
+                unsafe {
+                    (*a_dialog).dialog_key_down(the_key);
+                }
+            }
         }
     }
 
-    #[allow(dead_code)]
-    // NOT-WIRED: C++ LawnEditWidget::KeyChar（LawnCommon.cpp:109）；宿主 CreateEditWidget 未接线
-    pub fn key_char(&mut self, the_char: char) {
-        if self.auto_cap_first_letter && the_char.is_ascii_alphabetic() {
+    /// KeyChar 的首字母大写段（对应 C++ LawnEditWidget::KeyChar，LawnCommon.cpp:109-115）：
+    /// AutoCapChar 原地改写首个可大写字母后停止自动大写；返回改写后的字符，
+    /// 基类 EditWidget::KeyChar 由调用方以返回值继续调用（Rust 无继承）
+    pub fn key_char(&mut self, the_char: char) -> char {
+        let mut a_char = the_char;
+        if self.auto_cap_first_letter && auto_cap_char(&mut a_char) {
             self.auto_cap_first_letter = false;
         }
-        // EditWidget::KeyChar(theChar) 基类处理——TODO: 实际需要调用基类方法
+        a_char
     }
 
-    /// 按键文本输入（对应 C++ LawnEditWidget::KeyText，LawnCommon.cpp:117）
-    /// 整段文本逐字符做 AutoCapChar 检查：找到第一个可大写字母后停止自动大写
-    #[allow(dead_code)]
-    // NOT-WIRED: C++ LawnEditWidget::KeyText（LawnCommon.cpp:117）；宿主 CreateEditWidget 未接线
-    pub fn key_text(&mut self, the_text: &str) {
+    /// KeyText 的首字母大写段（对应 C++ LawnEditWidget::KeyText，LawnCommon.cpp:117-136）：
+    /// 未启用自动大写时原文直通（基类 EditWidget::KeyText 由调用方继续）；
+    /// 启用时对整段做 AutoCapChar，返回改写后的文本
+    pub fn key_text(&mut self, the_text: &str) -> String {
         if !self.auto_cap_first_letter {
-            // EditWidget::KeyText(theText) 基类处理——[TRANSLATION_NOTE]: Rust 基类为
-            // 逐字符 key_char，无整段文本入口，此处仅保留状态逻辑
-            return;
+            // C++ 119-123: 未启用自动大写，原文直通（基类 EditWidget::KeyText 由调用方继续）
+            return the_text.to_string();
         }
 
-        // C++: for (char& aCh : aText) { if (AutoCapChar(aCh)) { mAutoCapFirstLetter = false; break; } }
-        // AutoCapChar：小写 a-z 转大写返回 true；大写 A-Z 返回 true；其余返回 false
-        for a_ch in the_text.chars() {
-            if a_ch.is_ascii_alphabetic() {
+        // C++ 125-133: for (char& aCh : aText) { if (AutoCapChar(aCh)) { mAutoCapFirstLetter = false; break; } }
+        let mut a_text = the_text.to_string();
+        for a_byte in unsafe { a_text.as_bytes_mut() } {
+            if auto_cap_char_byte(a_byte) {
                 self.auto_cap_first_letter = false;
                 break;
             }
         }
-
-        // EditWidget::KeyText(aText) 基类处理——[TRANSLATION_NOTE]: 同上，无整段入口
+        a_text
     }
+}
+
+/// C++ LawnCommon.cpp:98-107 AutoCapChar：小写 a-z 原地转大写返回 true；大写 A-Z 返回 true；其余 false
+fn auto_cap_char(the_char: &mut char) -> bool {
+    if (*the_char as u8) >= b'a' && (*the_char as u8) <= b'z' {
+        *the_char = ((*the_char as u8) - b'a' + b'A') as char;
+        return true;
+    }
+    (*the_char as u8) >= b'A' && (*the_char as u8) <= b'Z'
+}
+
+/// 字节版 AutoCapChar（对 String 就地改写；locale 无关，ASCII 安全）
+fn auto_cap_char_byte(the_char: &mut u8) -> bool {
+    if *the_char >= b'a' && *the_char <= b'z' {
+        *the_char = *the_char - b'a' + b'A';
+        return true;
+    }
+    *the_char >= b'A' && *the_char <= b'Z'
 }
 
 // ====================================================================================================

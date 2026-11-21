@@ -963,11 +963,12 @@ impl CutScene {
                             + self.m_grave_stone_time
                             + self.m_crazy_dave_time;
                         if self.m_cutscene_time > a_time_lawn_mower_start {
-                            // [TRANSLATION_NOTE]: C++ 中 FindLawnMowerInRow 查找该行割草机并
-                            // 设置 visible/posX；Rust 侧割草机无 row 字段，遍历全部设置
-                            for mower in b.lawn_mowers.iter_mut() {
-                                mower.visible = true;
-                                mower.pos_x = self.calc_position(
+                            // C++ 1264-1269: FindLawnMowerInRow(aGridY) 查找该行割草机并设置 visible/posX
+                            if let Some(a_lawn_mower) =
+                                b.find_lawn_mower_in_row_mut(a_grid_y as i32)
+                            {
+                                a_lawn_mower.visible = true;
+                                a_lawn_mower.pos_x = self.calc_position(
                                     a_time_lawn_mower_start,
                                     a_time_lawn_mower_start + TIME_LAWN_MOWER_DURATION,
                                     -80,

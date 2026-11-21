@@ -266,6 +266,10 @@ impl Dialog {
         self.dragging = false;
     }
     pub fn update(&mut self) {}
+    /// 按键处理（对应 C++ Dialog 继承 Widget::KeyDown，Widget.cpp:247-258：
+    /// 仅处理 TAB 焦点切换；Rust Dialog 无 tab 指针与管理器按键表，TAB 分支空实现；
+    /// ESC 等其余键为空操作——与 C++ 行为一致）
+    pub fn dialog_key_down(&mut self, _the_key: i32) {}
     pub fn is_modal(&self) -> bool {
         self.is_modal
     }

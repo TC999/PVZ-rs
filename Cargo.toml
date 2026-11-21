@@ -12,6 +12,10 @@ path = "src/lib.rs"
 name = "pvz-portable"
 path = "src/main.rs"
 
+[features]
+# 对应 C++ DO_FIX_BUGS（见 docs/03_CONVENTIONS.md 与 04_PROGRESS.md P0）
+fix_bugs = []
+
 [dependencies]
 sdl2 = { version = "0.37", features = ["bundled", "mixer"] }
 

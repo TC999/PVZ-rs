@@ -543,6 +543,38 @@ impl Challenge {
             }
             return 1;
         }
+        // C++ 1324-1329: WhackAZombie 锤僵尸
+        if self.get_app().is_whack_a_zombie_level()
+            && hit_result.object_type == GameObjectType::None
+            && {
+                let board = self.get_board();
+                board.cursor_object.cursor_type == CursorType::Hammer
+            }
+            && click_count >= 0
+        {
+            self.mouse_down_whack_a_zombie(x, y);
+            return 1;
+        }
+        // C++ 1341-1345: ScaryPotter 砸罐
+        if self.get_app().is_scary_potter_level()
+            && hit_result.object_type == GameObjectType::ScaryPot
+        {
+            let a_pot_idx = hit_result.object;
+            if let Some(idx) = a_pot_idx {
+                let a_board_ptr = self.board;
+                // SAFETY: 单线程主循环内经裸指针取 GridItem 可变引用；
+                // scary_potter_mallet_pot 内部另行经 self.board 取 board，二者顺序执行无并存借用
+                unsafe {
+                    if let Some(a_board) = a_board_ptr {
+                        let a_grid_items = &mut (*a_board).grid_items;
+                        if let Some(a_pot) = a_grid_items.get_mut(idx) {
+                            self.scary_potter_mallet_pot(a_pot);
+                        }
+                    }
+                }
+            }
+            return 1;
+        }
         0
     }
 
@@ -2423,7 +2455,13 @@ impl Challenge {
             self.conveyor_belt_counter = 1000;
         }
         if self.get_app().game_mode == GameMode::ChallengeZenGarden {
-            // [TRANSLATION_NOTE]: mZenGarden->mGardenType/mZenGardenInitLevel 依赖 zen_garden 完整实现，暂略
+            // C++ 393-397: mApp->mZenGarden->mGardenType = GARDEN_MAIN; mApp->mZenGarden->ZenGardenInitLevel();
+            if let Some(zen_garden) = self.get_app().zen_garden {
+                unsafe {
+                    (*zen_garden).garden_type = crate::lawn::game_enums::GardenType::Main;
+                    (*zen_garden).zen_garden_init_level();
+                }
+            }
         }
         if self.get_app().game_mode == GameMode::ChallengeColumns {
             // C++: mBoard->mSeedBank->AddSeed 六连（传送带）
@@ -2443,10 +2481,12 @@ impl Challenge {
             self.conveyor_belt_counter = 1000;
         }
         if self.get_app().is_izombie_level() {
-            // [TRANSLATION_NOTE]: IZombieInitLevel 依赖 i_zombie 完整实现，暂略
+            // C++ 414-417: IZombieInitLevel();
+            self.i_zombie_init_level();
         }
         if self.get_app().is_scary_potter_level() {
-            // [TRANSLATION_NOTE]: ScaryPotterPopulate 依赖 scary_potter 完整实现，暂略
+            // C++ 418-421: ScaryPotterPopulate();
+            self.scary_potter_populate();
         }
         if self.get_app().is_first_time_adventure_mode() && self.get_board().level == 5 {
             // C++: NewPlant 三棵豌豆射手（第 5 关新手引导）
@@ -2460,16 +2500,71 @@ impl Challenge {
             self.challenge_grid_y = -1;
         }
         if self.get_app().game_mode == GameMode::ChallengeTreeOfWisdom {
-            // [TRANSLATION_NOTE]: TreeOfWisdomInit 依赖 tree_of_wisdom 完整实现，暂略
+            // C++ 433-436: TreeOfWisdomInit();
+            self.tree_of_wisdom_init();
         }
     }
 
     pub fn spawn_zombie_wave(&mut self) {
-        let board = self.get_board();
-        if board.m_current_wave == board.m_num_waves {
-            return;
+        // 对应 C++ Challenge::SpawnZombieWave（Challenge.cpp:2969-3013）
+        // SAFETY: 单线程主循环内经裸指针访问 board；board 与 challenge 为不同对象，
+        // 各段顺序执行，无并存借用
+        unsafe {
+            let board = self.board.unwrap() as *mut crate::lawn::board::Board;
+            let a_is_continuous = (*self.app.unwrap()).is_continuous_challenge();
+            if a_is_continuous && (*board).m_current_wave == (*board).m_num_waves {
+                (*board).m_current_wave = (*board).m_num_waves - 1;
+                for i in 0..crate::lawn::board::MAX_ZOMBIES_IN_WAVE {
+                    let a_wave_zombie =
+                        (*board).m_zombies_in_wave[(*board).m_current_wave as usize][i];
+                    if a_wave_zombie == ZombieType::Invalid {
+                        break;
+                    }
+                    if a_wave_zombie == ZombieType::Flag {
+                        (*board).m_zombies_in_wave[(*board).m_current_wave as usize][i] =
+                            ZombieType::Normal;
+                    }
+                }
+            }
+
+            let a_is_flag_wave = (*board).is_flag_wave((*board).m_current_wave);
+            if (*self.app.unwrap()).game_mode == GameMode::ChallengeGraveDanger
+                && (*board).m_current_wave != (*board).m_num_waves - 1
+            {
+                if a_is_flag_wave {
+                    // C++ 2993: mBoard->SpawnZombiesFromGraves();
+                    (*board).spawn_zombies_from_graves();
+                } else if (*board).m_current_wave > 5 {
+                    // C++ 2997: GraveDangerSpawnRandomGrave();
+                    self.grave_danger_spawn_random_grave();
+                }
+            }
+            let a_app = self.app.unwrap();
+            let is_survival_mode = (*a_app).is_survival_mode();
+            if is_survival_mode
+                && (*board).m_background_type == crate::lawn::game_enums::BackgroundType::Night
+                && (*board).m_current_wave == (*board).m_num_waves - 1
+            {
+                // C++ 3000-3008: 墓碑未达上限时补一个
+                let a_num_graves = (*board).get_grave_stone_count();
+                let a_grave_limit = if (*a_app).is_survival_normal((*a_app).game_mode) {
+                    8
+                } else {
+                    12
+                };
+                if a_num_graves < a_grave_limit {
+                    self.grave_danger_spawn_random_grave();
+                }
+            }
+            if (*a_app).is_bungee_blitz_level() && a_is_flag_wave {
+                // C++ 3009-3012
+                (*board).display_advice(
+                    "[ADVICE_BUNGEES_INCOMING]",
+                    MessageStyle::HintFast as i32,
+                    AdviceType::None,
+                );
+            }
         }
-        board.m_current_wave += 1;
     }
 
     pub fn grave_danger_spawn_random_grave(&mut self) {
@@ -5802,11 +5897,45 @@ impl Challenge {
     }
 
     pub fn squirrel_update(&mut self) {
-        let score = self.squirrel_count_uncaught();
-        self.challenge_score = 7 - score;
-        let progress = self.challenge_score;
+        // 对应 C++ Challenge::SquirrelUpdate（Challenge.cpp:5062-5074）
+        const MAX_SQUIRRELS: i32 = 7; // C++ Challenge.cpp:63
+        let a_squirrel_idxs: Vec<usize> = {
+            let board = self.get_board();
+            board
+                .grid_items
+                .iter()
+                .enumerate()
+                .filter(|(_, item)| {
+                    item.grid_item_type == crate::lawn::grid_item::GridItemType::Squirrel
+                })
+                .map(|(i, _)| i)
+                .collect()
+        };
+        let a_board_ptr = self.board;
+        for a_idx in a_squirrel_idxs {
+            // SAFETY: 单线程主循环内经裸指针取 GridItem 可变引用；
+            // squirrel_update_one 内部经 self.board 另行访问 board，二者顺序执行无并存借用
+            unsafe {
+                if let Some(a_board) = a_board_ptr {
+                    let a_grid_items = &mut (*a_board).grid_items;
+                    if let Some(a_grid_item) = a_grid_items.get_mut(a_idx) {
+                        self.squirrel_update_one(a_grid_item);
+                    }
+                }
+            }
+        }
+
+        self.challenge_score = MAX_SQUIRRELS - self.squirrel_count_uncaught();
+        let a_score = self.challenge_score;
         let board = self.get_board();
-        board.m_progress_meter_width = progress;
+        board.m_progress_meter_width = crate::todlib::tod_common::tod_animate_curve(
+            0,
+            MAX_SQUIRRELS,
+            a_score,
+            0,
+            crate::lawn::board::PROGRESS_METER_COUNTER,
+            TodCurves::Linear,
+        );
     }
 
     pub fn squirrel_count_uncaught(&self) -> i32 {
@@ -6247,11 +6376,21 @@ impl Challenge {
         grid_x: i32,
         grid_y: i32,
     ) {
+        // 对应 C++ Challenge::IZombiePlacePlantInSquare（Challenge.cpp:4359-4365）
         let board = self.get_board();
         if board.can_plant_at(grid_x, grid_y, seed_type)
             == crate::lawn::game_enums::PlantingReason::Ok
         {
-            board.add_plant(grid_x, grid_y, seed_type, SeedType::None);
+            // C++ 4363: IZombieSetupPlant(mBoard->NewPlant(theGridX, theGridY, theSeedType));
+            let a_plant_idx = board.add_plant(grid_x, grid_y, seed_type, SeedType::None);
+            // SAFETY: 单线程主循环内，challenge 与 board.plants 为不同对象，无并存借用
+            unsafe {
+                let a_board = self.board.unwrap();
+                let a_plants = &mut (*a_board).plants;
+                if let Some(a_plant) = a_plants.get_mut(a_plant_idx) {
+                    self.i_zombie_setup_plant(a_plant);
+                }
+            }
         }
     }
 
@@ -6425,8 +6564,14 @@ impl Challenge {
         }
     }
 
+    /// C++ Challenge::IZombieSquishBrain 直译（Challenge.cpp:4866-4873，GridItem* 入口）；
+    /// 与 izombie_squish_brain(usize)（同文件 1256 行起）为同一 C++ 函数的两份实现：
+    /// 本版按 GridItem 引用操作，izombie_squish_brain 按索引操作（含 MakeRenderOrder + PlayFoley 完整链）。
+    /// C++ 调用方（Zombie.cpp:2132/6579）经 challenge 引用调用，Rust 侧由 zombie.rs 走 izombie_squish_brain。
     pub fn i_zombie_squish_brain(&mut self, brain: &mut GridItem) {
-        brain.render_order = 0;
+        // C++: theBrain->mRenderOrder = MakeRenderOrder(RENDER_LAYER_GRAVE_STONE, mGridY, 0);
+        brain.render_order =
+            crate::lawn::board::make_render_order(RENDER_LAYER_GRAVE_STONE, brain.grid_y, 0);
         brain.grid_item_state = GridItemState::BrainSquished;
         brain.counter = 500;
         self.i_zombie_score_brain(brain);
@@ -6915,10 +7060,44 @@ impl Challenge {
     }
 
     pub fn last_stand_completed_stage(&mut self) {
+        // 对应 C++ Challenge::LastStandCompletedStage（Challenge.cpp:5132-5156）
+        // SAFETY: 读取 static mut SOUND_HUGE_WAVE（资源槽位 id，加载后不变）
+        let a_huge_wave_id = unsafe { crate::todlib::tod_foley::SOUND_HUGE_WAVE };
+        self.get_app().play_sample(a_huge_wave_id);
         self.challenge_state = ChallengeState::Normal;
+        // C++ 5153: mSurvivalStage++（借用顺序：在取 board 可变借用前自增）
         self.survival_stage += 1;
         let board = self.get_board();
+        board.refresh_all_packets();
+
+        // C++ 5138-5147: 消化/武装/磁力菇状态倒计时压到 200
+        for i in 0..board.plants.len() {
+            // SAFETY: board 为 self.board 裸指针解引用，单线程主循环内独占访问
+            let a_plant = unsafe { board.plants.get_unchecked_mut(i) };
+            if a_plant.dead {
+                continue;
+            }
+            if a_plant.state == PlantState::ChomperDigesting
+                || a_plant.state == PlantState::CobcannonArming
+                || a_plant.state == PlantState::MagnetshroomSucking
+                || a_plant.state == PlantState::MagnetshroomCharging
+            {
+                a_plant.state_countdown = a_plant.state_countdown.min(200);
+            }
+        }
+
+        // C++ 5149-5151: Pluralize + PvzpReplaceString + DisplayAdvice
+        let a_flag_str = crate::lawn::lawn_app::LawnApp::pluralize(
+            board.get_survival_flags_completed(),
+            "[ONE_FLAG]",
+            "[COUNT_FLAGS]",
+        );
+        let a_msg = String::from("[SUCCESSFULLY_DEFENDED]").replace("{FLAGS}", &a_flag_str);
+        board.display_advice(&a_msg, MessageStyle::BigMiddleFast as i32, AdviceType::None);
+
+        // C++ 5154-5155: mLevelComplete=false; InitZombieWaves();（mSurvivalStage++ 已前置）
         board.m_level_complete = false;
+        board.init_zombie_waves();
     }
 
     pub fn tree_of_wisdom_update(&mut self) {

@@ -3986,7 +3986,10 @@ impl LawnApp {
             music.music_init();
         }
 
-        // mPoolEffect = new PoolEffect(); PoolEffectInitialize()
+        // C++ 1745-1746: mPoolEffect = new PoolEffect(); mPoolEffect->PoolEffectInitialize();
+        if self.pool_effect.is_none() {
+            self.pool_effect = Some(Box::new(crate::lawn::system::pool_effect::PoolEffect::new()));
+        }
         if let Some(pool_effect) = self.pool_effect.as_mut() {
             pool_effect.initialize();
         }

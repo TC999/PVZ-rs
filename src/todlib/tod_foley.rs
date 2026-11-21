@@ -651,6 +651,10 @@ pub static mut SOUND_SPLAT3: i32 = -1;
 pub static mut SOUND_LAWNMOWER: i32 = -1;
 pub static mut SOUND_THROW: i32 = -1;
 pub static mut SOUND_THROW2: i32 = -1;
+// C++ Resources.cpp:2153/2194/2263（GetSoundThrow 注册）；DoSpecial 音效链使用
+pub static mut SOUND_BLOVER: i32 = -1;
+pub static mut SOUND_DOOMSHROOM: i32 = -1;
+pub static mut SOUND_POTATO_MINE: i32 = -1;
 pub static mut SOUND_CHOMP: i32 = -1;
 pub static mut SOUND_CHOMP2: i32 = -1;
 pub static mut SOUND_CHOMPSOFT: i32 = -1;
@@ -2578,6 +2582,9 @@ pub fn assign_sound_id(name: &str, id: i32) {
             "sound_lawnmower" => SOUND_LAWNMOWER = id,
             "sound_throw" => SOUND_THROW = id,
             "sound_throw2" => SOUND_THROW2 = id,
+            "sound_blover" => SOUND_BLOVER = id,
+            "sound_doomshroom" => SOUND_DOOMSHROOM = id,
+            "sound_potato_mine" => SOUND_POTATO_MINE = id,
             "sound_chomp" => SOUND_CHOMP = id,
             "sound_chomp2" => SOUND_CHOMP2 = id,
             "sound_chompsoft" => SOUND_CHOMPSOFT = id,

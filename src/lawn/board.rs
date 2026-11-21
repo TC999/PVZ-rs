@@ -1294,7 +1294,7 @@ impl Board {
     }
 
     /// 从墓碑生成僵尸（对应 C++ SpawnZombiesFromGraves）
-    fn spawn_zombies_from_graves(&mut self) {
+    pub fn spawn_zombies_from_graves(&mut self) {
         let app_mode = self
             .app
             .map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
@@ -1537,6 +1537,33 @@ impl Board {
             + self.count_plant_by_type(SeedType::Sunflower);
         if a_sun_plants_count > self.m_max_sun_plants {
             self.m_max_sun_plants = a_sun_plants_count;
+        }
+
+        // C++ 2112-2127: 豌豆系/投掷系使用标记
+        if seed_type == SeedType::Peashooter
+            || seed_type == SeedType::Snowpea
+            || seed_type == SeedType::Repeater
+            || seed_type == SeedType::Threepeater
+            || seed_type == SeedType::Splitpea
+            || seed_type == SeedType::Gatlingpea
+        {
+            self.m_pea_shooter_used = true;
+        }
+        if seed_type == SeedType::Cabbagepult
+            || seed_type == SeedType::Kernelpult
+            || seed_type == SeedType::Melonpult
+            || seed_type == SeedType::Wintermelon
+        {
+            self.m_catapult_plants_used = true;
+        }
+
+        // C++ 2129-2135: IsFungus / IsFlying 标记（激活 Plant::IsFungus）
+        let a_is_fungi = Plant::is_fungus(seed_type);
+        if !Plant::is_flying(seed_type) && !a_is_fungi {
+            self.m_mushroom_and_coffee_beans_only = false;
+        }
+        if a_is_fungi {
+            self.m_mushrooms_used = true;
         }
 
         a_new_index
@@ -4509,6 +4536,56 @@ Spawn: {}
                 }
             }
         }
+
+        // C++ 1775-1802: mScoreNextMowerCounter 倒计时 + 底行割草机换金币
+        if self.m_score_next_mower_counter > 0 {
+            self.m_score_next_mower_counter -= 1;
+            // C++ 1778: if (mScoreNextMowerCounter) return;（计数器非 0 即返回）
+            if self.m_score_next_mower_counter != 0 {
+                return;
+            }
+        }
+
+        // C++ 1784-1802: if (CanDropLoot() && !IsSurvivalStageWithRepick())
+        if self.can_drop_loot() && !self.is_survival_stage_with_repick() {
+            self.m_score_next_mower_counter = 40;
+            // C++ 1787: LawnMower* aLawnMower = GetBottomLawnMower();
+            let a_mower_info = self.get_bottom_lawn_mower().map(|m| (m.base.x, m.base.y));
+            if let Some((a_mower_x, a_mower_y)) = a_mower_info {
+                self.add_coin(
+                    a_mower_x as f32 + 40.0,
+                    a_mower_y as f32 + 40.0,
+                    CoinType::Gold,
+                    CoinMotion::LawnmowerCoin,
+                );
+                // C++ 1791-1797: SOUND_POINTS 音高随未触发割草机数递减
+                unsafe {
+                    if let Some(app) = self.app {
+                        let a_sound_instance = match (*app).base.sound_manager {
+                            Some(a_sm) => {
+                                (*a_sm).get_sound_instance(crate::todlib::tod_foley::SOUND_POINTS)
+                            }
+                            None => None,
+                        };
+                        if let Some(a_si) = a_sound_instance {
+                            let a_pitch = (6 - self.count_untrigger_lawn_mowers()).clamp(0, 6);
+                            crate::framework::sound::sound_instance::SoundInstance::adjust_pitch(
+                                &mut *a_si,
+                                a_pitch as f64,
+                            );
+                        }
+                    }
+                }
+                // C++ 1798: aLawnMower->Die();
+                if let Some(a_idx) = self
+                    .lawn_mowers
+                    .iter()
+                    .position(|m| !m.dead && m.base.x == a_mower_x && m.base.y == a_mower_y)
+                {
+                    self.lawn_mowers[a_idx].die();
+                }
+            }
+        }
     }
 
     /// 绘制淡出效果（对应 C++ DrawFadeOut）
@@ -4968,13 +5045,8 @@ Spawn: {}
                         i += 1;
                         continue;
                     }
-                    // C++: GetZenToolAt(plantCol, plantRow) == nullptr && mPottedPlantIndex >= 0
-                    let has_zen_tool = self.grid_items.iter().any(|item| {
-                        !item.dead
-                            && item.grid_item_type == GridItemType::ZenTool
-                            && item.grid_x == a_plant_col
-                            && item.grid_y == a_plant_row
-                    });
+                    // C++ 7747: GetZenToolAt(plantCol, plantRow) == nullptr && mPottedPlantIndex >= 0
+                    let has_zen_tool = self.get_zen_tool_at(a_plant_col, a_plant_row).is_some();
                     if !has_zen_tool && a_potted_plant_index >= 0 {
                         let a_need = zen_garden
                             .and_then(|zg| unsafe {
@@ -5377,7 +5449,8 @@ Spawn: {}
                 _ => None,
             };
             if let Some(a_zombie_type) = a_zombie_type {
-                self.add_zombie(a_zombie_type, -3); // C++: ZOMBIE_WAVE_DEBUG = -3
+                // C++: AddZombie(aZombieType, Zombie::ZOMBIE_WAVE_DEBUG);（Zombie.h:79 = -1）
+                self.add_zombie(a_zombie_type, Zombie::ZOMBIE_WAVE_DEBUG);
                 return;
             }
         }
@@ -5670,6 +5743,8 @@ Spawn: {}
     /// 选择背景（对应 C++ Board::PickBackground）
     #[allow(unused_assignments)]
     // 对应 C++ 局部变量「先初始化后覆盖」语义（UNUSED_CPP_USAGE.md §1）；保留赋值语句顺序
+    // SAFETY: app 为 LawnApp 注入的裸指针（同 board_init 模式）；墓碑段解引用由调用方保证非空
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn pick_background(&mut self, app: *mut crate::lawn::lawn_app::LawnApp) {
         let game_mode = unsafe { (*app).game_mode };
         let level = self.level;
@@ -5831,6 +5906,79 @@ Spawn: {}
                 }
             }
         }
+
+        // C++ 1097-1162: MTRand aLevelRNG(GetLevelRandSeed()); 有墓碑时按模式布设
+        let mut a_level_rng =
+            crate::framework::mt_rand::MTRand::from_seed(self.get_level_rand_seed() as u32);
+        if self.stage_has_grave_stones() {
+            let a_app_mode = unsafe { (*app).game_mode };
+            if a_app_mode == GameMode::ChallengeGraveDanger {
+                // C++ 1102-1104
+                self.add_grave_stones(
+                    6,
+                    crate::todlib::tod_common::rand_range_int(1, 2),
+                    &mut a_level_rng,
+                );
+                self.add_grave_stones(
+                    7,
+                    crate::todlib::tod_common::rand_range_int(1, 3),
+                    &mut a_level_rng,
+                );
+                self.add_grave_stones(
+                    8,
+                    crate::todlib::tod_common::rand_range_int(2, 3),
+                    &mut a_level_rng,
+                );
+            } else if unsafe { (*app).is_whack_a_zombie_level() } {
+                // C++ 1106-1109: mChallenge->WhackAZombiePlaceGraves(9);
+                if let Some(ref mut a_challenge) = self.challenge {
+                    a_challenge.whack_a_zombie_place_graves(9);
+                }
+            } else if self.m_background_type == BackgroundType::Night {
+                if unsafe { (*app).is_survival_normal(a_app_mode) } {
+                    // C++ 1112-1118
+                    self.add_grave_stones(5, 1, &mut a_level_rng);
+                    self.add_grave_stones(6, 1, &mut a_level_rng);
+                    self.add_grave_stones(7, 1, &mut a_level_rng);
+                    self.add_grave_stones(8, 2, &mut a_level_rng);
+                } else if !unsafe { (*app).is_adventure_mode() } {
+                    // C++ 1119-1126
+                    self.add_grave_stones(4, 1, &mut a_level_rng);
+                    self.add_grave_stones(5, 1, &mut a_level_rng);
+                    self.add_grave_stones(6, 2, &mut a_level_rng);
+                    self.add_grave_stones(7, 2, &mut a_level_rng);
+                    self.add_grave_stones(8, 3, &mut a_level_rng);
+                } else if self.level == 11 || self.level == 12 || self.level == 13 {
+                    // C++ 1127-1132
+                    self.add_grave_stones(6, 1, &mut a_level_rng);
+                    self.add_grave_stones(7, 1, &mut a_level_rng);
+                    self.add_grave_stones(8, 2, &mut a_level_rng);
+                } else if self.level == 14 || self.level == 16 {
+                    // C++ 1133-1139
+                    self.add_grave_stones(5, 1, &mut a_level_rng);
+                    self.add_grave_stones(6, 1, &mut a_level_rng);
+                    self.add_grave_stones(7, 2, &mut a_level_rng);
+                    self.add_grave_stones(8, 3, &mut a_level_rng);
+                } else if self.level == 17 || self.level == 18 || self.level == 19 {
+                    // C++ 1140-1147
+                    self.add_grave_stones(4, 1, &mut a_level_rng);
+                    self.add_grave_stones(5, 2, &mut a_level_rng);
+                    self.add_grave_stones(6, 2, &mut a_level_rng);
+                    self.add_grave_stones(7, 3, &mut a_level_rng);
+                    self.add_grave_stones(8, 3, &mut a_level_rng);
+                } else if self.level >= 20 {
+                    // C++ 1148-1156
+                    self.add_grave_stones(3, 1, &mut a_level_rng);
+                    self.add_grave_stones(4, 2, &mut a_level_rng);
+                    self.add_grave_stones(5, 2, &mut a_level_rng);
+                    self.add_grave_stones(6, 2, &mut a_level_rng);
+                    self.add_grave_stones(7, 3, &mut a_level_rng);
+                    self.add_grave_stones(8, 3, &mut a_level_rng);
+                }
+            }
+        }
+        // C++ 1163: PickSpecialGraveStone();
+        self.pick_special_grave_stone();
     }
 
     /// 是否有雾
@@ -7161,7 +7309,9 @@ Spawn: {}
         };
 
         // C++ 1366-1367: PickBackground(); InitZombieWaves();
-        self.setup_background();
+        if let Some(a_app) = self.app {
+            self.pick_background(a_app);
+        }
         self.setup_waves();
 
         // C++ 1368-1388: 按模式设定初始阳光
@@ -7909,6 +8059,8 @@ Spawn: {}
             SeedType::Wintermelon => self.count_plant_by_type(SeedType::Melonpult) > 0,
             SeedType::GoldMagnet => self.count_plant_by_type(SeedType::Magnetshroom) > 0,
             SeedType::Spikerock => self.count_plant_by_type(SeedType::Spikeweed) > 0,
+            // C++ 9312: case SEED_COBCANNON: return HasValidCobCannonSpot();
+            SeedType::Cobcannon => self.has_valid_cob_cannon_spot(),
             _ => true,
         }
     }
@@ -8806,9 +8958,22 @@ Spawn: {}
             .app
             .map_or(GameMode::Adventure, |app| unsafe { (*app).game_mode });
 
-        if game_mode == GameMode::ChallengeZenGarden || game_mode == GameMode::ChallengeTreeOfWisdom
-        {
-            // Zen 花园和智慧树工具操作由专用模块处理
+        if game_mode == GameMode::ChallengeZenGarden {
+            // C++ 4015-4019: mApp->mZenGarden->MouseDownWithTool(x, y, theCursorType);
+            if let Some(app) = self.app {
+                unsafe {
+                    if let Some(zen_garden) = (*app).zen_garden {
+                        (*zen_garden).mouse_down_with_tool(x, y, cursor_type);
+                    }
+                }
+            }
+            return;
+        }
+        if game_mode == GameMode::ChallengeTreeOfWisdom {
+            // C++ 4020-4024: mChallenge->TreeOfWisdomTool(x, y);
+            if let Some(ref mut challenge) = self.challenge {
+                challenge.tree_of_wisdom_tool(x, y);
+            }
             return;
         }
 
@@ -8860,7 +9025,8 @@ Spawn: {}
         };
         self.mouse_hit_test(x, y, &mut result);
         if result.object_type == GameObjectType::Plant {
-            result.object
+            // C++ 3988: return ToolHitTestHelper(&aHitResult);（Board.cpp:3982-3991）
+            self.tool_hit_test_helper(&result)
         } else {
             None
         }
@@ -12674,12 +12840,8 @@ Spawn: {}
             .app
             .map_or(false, |app| unsafe { (*app).is_adventure_mode() });
         if is_adventure {
-            // InitZombieWavesForLevel：遍历所有僵尸类型设置允许列表
-            for ztype_idx in 0..(NUM_ZOMBIE_TYPES as i32) {
-                let a_zombie_type: ZombieType = unsafe { std::mem::transmute(ztype_idx) };
-                self.m_zombie_allowed[ztype_idx as usize] =
-                    self.can_zombie_spawn_on_level(a_zombie_type, self.level);
-            }
+            // C++ 1217: InitZombieWavesForLevel(mLevel);
+            self.init_zombie_waves_for_level(self.level);
         } else {
             // 非冒险模式：由 Challenge 的 InitZombieWaves 处理（C++ 1219: mChallenge->InitZombieWaves();）
             if let Some(ref mut challenge) = self.challenge {
@@ -13076,7 +13238,11 @@ Spawn: {}
 
     // ========== 存档 ==========
 
-    /// 保存游戏（对应 C++ Board::SaveGame）
+    /// 保存游戏（对应 C++ Board::SaveGame，Board.cpp:375-379）
+    // NOT-WIRED: C++ 侧 Board::SaveGame 亦无调用点（调用链一律走 TryToSaveGame→LawnSaveGame，
+    // 见 Board.cpp:358/1724/4691、LawnApp.cpp:336/1922）；Rust try_to_save_game 已接线 LawnSaveGame。
+    // 本方法维持逐函数对应保留（UNUSED_CPP_USAGE.md §2 同类口径）。
+    #[allow(dead_code)]
     pub fn save_game(&self, file_name: &str) {
         // 对应 C++ SaveGame：委托 LawnSaveGame
         unsafe {

@@ -16,6 +16,8 @@ use crate::todlib::reanimator::{ReanimLoopType, Reanimation, ReanimationType};
 use crate::todlib::tod_particle::ParticleSystem;
 
 pub const MAX_ZOMBIE_FOLLOWERS: usize = 4;
+/// C++ PlayerInfo.h:27 #define ZOMBATAR_RECORD_SIZE 0x48
+pub const ZOMBATAR_RECORD_SIZE: usize = 0x48;
 pub const NUM_BACKUP_DANCERS: usize = 4;
 pub const ZOMBIE_BACKUP_DANCER_RISE_HEIGHT: i32 = -200;
 #[allow(dead_code)]
@@ -688,6 +690,62 @@ impl Zombie {
             ZombieType::Flag => {
                 self.has_object = true;
                 self.load_plain_zombie_reanim();
+                // C++ 585-592: 加载旗帜 reanim 并 attach 到 Zombie_flaghand 轨道
+                let a_flag_reanim_ptr = self
+                    .base
+                    .get_app_mut()
+                    .and_then(|app| app.add_reanimation(0.0, 0.0, 0, ReanimationType::Flag as i32));
+                if let Some(a_flag_reanim) = a_flag_reanim_ptr {
+                    let a_body_reanim_id = self.body_reanim_id;
+                    if let Some(app) = self.base.get_app_mut() {
+                        // C++ 587: PlayReanim("Zombie_flag", REANIM_LOOP, 0, 15.0f)
+                        unsafe {
+                            (*a_flag_reanim).play_reanim(
+                                "Zombie_flag",
+                                ReanimLoopType::Loop,
+                                0,
+                                15.0,
+                            );
+                        }
+                        // C++ 588: mSpecialHeadReanimID = mApp->ReanimationGetID(aFlagReanim);
+                        self.special_head_reanim_id = app.reanimation_get_id(a_flag_reanim);
+                        // C++ 589-590: GetTrackInstanceByName("Zombie_flaghand") + AttachReanim
+                        let mut a_track_attachment_id: AttachmentID = 0;
+                        if let Some(a_body_reanim) = app.reanimation_get_mut(a_body_reanim_id) {
+                            if let Some(a_track_instance) =
+                                a_body_reanim.get_track_instance_by_name("Zombie_flaghand")
+                            {
+                                a_track_attachment_id = a_track_instance.m_attachment_id;
+                            }
+                        }
+                        crate::todlib::attachment::attach_reanim(
+                            &mut a_track_attachment_id,
+                            a_flag_reanim as *mut std::ffi::c_void,
+                            0.0,
+                            0.0,
+                        );
+                        // C++ 591: aBodyReanim->mFrameBasePose = 0;
+                        if let Some(a_body) = app.reanimation_get_mut(a_body_reanim_id) {
+                            a_body.m_frame_base_pose = 0;
+                        }
+                    }
+                    // C++ 592: SetupZombatarFlagReanim(aZombatarRecordIndex);
+                    // aZombatarRecordIndex 按函数头部（C++ 146-156）计算
+                    let a_zombatar_record_index = {
+                        let mut a_index = -1;
+                        if let Some(app) = self.base.get_app() {
+                            if let Some(a_player) = app.player_info.as_ref() {
+                                let a_count =
+                                    (a_player.m_zombatar_data.len() / ZOMBATAR_RECORD_SIZE) as i32;
+                                if a_count > 0 {
+                                    a_index = RandRange(a_count);
+                                }
+                            }
+                        }
+                        a_index
+                    };
+                    self.setup_zombatar_flag_reanim(a_zombatar_record_index);
+                }
                 self.pos_x = 900.0; // WIDE_BOARD_WIDTH
             }
             ZombieType::Pogo => {
@@ -3790,10 +3848,8 @@ impl Zombie {
         }
     }
 
-    /// 烧毁整行僵尸（对应 C++ BurnRow）
-    // NOT-WIRED: C++ BurnRow 为 Plant::BurnRow（Plant.cpp:4225），已由 plant.rs::burn_row 翻译并接线；
-    // 本方法为同逻辑的重复实现（UNUSED_CPP_USAGE.md §3），保留作对照
-    #[allow(dead_code)]
+    /// 烧毁整行僵尸（对应 C++ Zombie::BurnRow，Zombie.cpp:2360-2388）
+    /// 仅被 DO_FIX_BUGS 的 UpdateZombieJalapenoHead 分支（Zombie.cpp:2405）调用
     pub fn burn_row(&mut self, the_row: i32) {
         let board = match self.base.board {
             Some(b) => b,
@@ -4884,6 +4940,10 @@ impl Zombie {
         } else {
             // C++ 其余情况：DieWithLoot()
             self.die_with_loot();
+        }
+        // C++ 8804-8807: if (mZombieType == ZOMBIE_BOBSLED) BobsledBurn();
+        if self.zombie_type == ZombieType::Bobsled {
+            self.bobsled_burn();
         }
         // 对应 C++ ApplyBurn（Zombie.cpp:8660）结束
     }
@@ -8417,19 +8477,47 @@ impl Zombie {
                 board.do_fwoosh(row);
                 board.shake_board(3, -4);
             }
-            if let Some(board) = self.base.get_board_mut() {
-                let mut to_kill: Vec<usize> = Vec::new();
-                for (i, plant) in board.plants.iter().enumerate() {
-                    if plant.dead {
-                        continue;
-                    }
-                    if plant.base.row == row && !plant.not_on_ground() {
-                        to_kill.push(i);
+            #[cfg(feature = "fix_bugs")]
+            {
+                // C++ 2402-2420（DO_FIX_BUGS）: mMindControlled 时烧整行，否则吃植物
+                if self.mind_controlled {
+                    // C++ 2405: BurnRow(mRow);（Zombie::BurnRow，Zombie.cpp:2360）
+                    self.burn_row(row);
+                } else {
+                    if let Some(board) = self.base.get_board_mut() {
+                        let mut to_kill: Vec<usize> = Vec::new();
+                        for (i, plant) in board.plants.iter().enumerate() {
+                            if plant.dead {
+                                continue;
+                            }
+                            if plant.base.row == row && !plant.not_on_ground() {
+                                to_kill.push(i);
+                            }
+                        }
+                        for idx in to_kill {
+                            board.m_plants_eaten += 1;
+                            board.plants[idx].die();
+                        }
                     }
                 }
-                for idx in to_kill {
-                    board.m_plants_eaten += 1;
-                    board.plants[idx].die();
+            }
+            #[cfg(not(feature = "fix_bugs"))]
+            {
+                // C++ 2421-2433（非 DO_FIX_BUGS 原版行为）
+                if let Some(board) = self.base.get_board_mut() {
+                    let mut to_kill: Vec<usize> = Vec::new();
+                    for (i, plant) in board.plants.iter().enumerate() {
+                        if plant.dead {
+                            continue;
+                        }
+                        if plant.base.row == row && !plant.not_on_ground() {
+                            to_kill.push(i);
+                        }
+                    }
+                    for idx in to_kill {
+                        board.m_plants_eaten += 1;
+                        board.plants[idx].die();
+                    }
                 }
             }
             self.die_no_loot();
@@ -12830,7 +12918,7 @@ impl Default for Zombie {
 // --- Zombie 类常量（对应 C++ Zombie 内部枚举） ---
 impl Zombie {
     #[allow(dead_code)]
-    // NOT-WIRED: C++ Board.cpp:8090 调试生成入口；Rust key_char 调试键未引用（§1）
+    // C++ Board.cpp:8090+ 调试生成入口已接线（board.rs key_char WarAndPeas 段）
     pub const ZOMBIE_WAVE_DEBUG: i32 = -1;
     pub const ZOMBIE_WAVE_CUTSCENE: i32 = -2;
     pub const ZOMBIE_WAVE_UI: i32 = -3;
