@@ -493,8 +493,19 @@ impl SeedChooserScreen {
     pub fn has_7_rows(&self) -> bool {
         if let Some(app) = self.app {
             unsafe {
-                (*app).has_finished_adventure()
-                    || (*app).player_info.as_ref().unwrap().m_purchases[0] != 0
+                // C++ SeedChooserScreen.cpp:278: mApp->mPlayerInfo->mPurchases[STORE_ITEM_PLANT_GATLINGPEA]
+                // 无档案时 C++ 为空指针解引用（UB）；Rust 侧 None 视为未购买（false）
+                if (*app).has_finished_adventure() {
+                    return true;
+                }
+                if let Some(player_info) = (*app).player_info.as_ref() {
+                    if player_info.m_purchases[0] != 0 {
+                        return true;
+                    }
+                }
+                // TODO(translate): C++ 279-280 还有 SEED_TWINSUNFLOWER..SEED_COBCANNON 的
+                // HasSeedType 检查循环，Rust 版缺失（见 ANALYSIS_REPORT.md 缺口台账）
+                false
             }
         } else {
             false

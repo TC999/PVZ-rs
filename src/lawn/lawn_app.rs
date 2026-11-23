@@ -536,6 +536,29 @@ impl LawnApp {
             }
         }
 
+        // 对应 C++ LawnApp::Init（LawnApp.cpp:1253-1263）：mProfileMgr->Load()，
+        // 读注册表 CurUser 取回上次玩家，失败则 GetAnyProfile() 兜底，
+        // 保证 mPlayerInfo 非空（后续 Has7Rows 等直接解引用）
+        if let Some(pm) = self.profile_mgr.as_mut() {
+            pm.load();
+        }
+        if self.player_info.is_none() {
+            if let Some(a_cur_user) = self.base.registry_read_string("CurUser") {
+                if let Some(pm) = self.profile_mgr.as_mut() {
+                    if let Some(a_profile) = pm.get_profile(&a_cur_user) {
+                        self.player_info = Some(Box::new(a_profile.clone()));
+                    }
+                }
+            }
+        }
+        if self.player_info.is_none() {
+            if let Some(pm) = self.profile_mgr.as_mut() {
+                if let Some(a_profile) = pm.get_any_profile() {
+                    self.player_info = Some(Box::new(a_profile.clone()));
+                }
+            }
+        }
+
         // 创建 TitleScreen Widget + WidgetImpl
         let mut title_widget = Box::new(Widget::new());
         title_widget.impl_ = Some(Box::new(TitleScreenImpl::new(self as *mut LawnApp)));

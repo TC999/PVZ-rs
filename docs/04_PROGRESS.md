@@ -93,6 +93,18 @@
 
 ## 更新记录
 
+## 2026-11-23 实际运行验证轮（cargo run + 截图验证）
+
+**运行验证通过：游戏窗口渲染成功（标题画面「植物大战僵尸」完整显示，截图确认），进程持续响应 >150 秒无崩溃。**
+
+本轮环境修复与发现：
+1. 构建环境：`target/` 目录 ACL 损坏（所有者为 Administrators，当前用户无 WRITE_DAC/WRITE_OWNER）导致 cargo 锁文件拒绝访问，诊断脚本确认无法在不动所有者前提下修复（PRECONDITION），改用独立 --target-dir（target2）绕过。SDL2 bundled 构建在沙箱下仅单线程 MSBuild 可行（并行节点命名管道被拒），cargo build -j 1 通过。SDL 源 cmake_minimum_required 3.0.0/3.4 与 CMake 4.2 不兼容，按用户指示改为 3.5（改的是 registry 缓存 sdl2-sys-0.37.0/SDL/CMakeLists.txt，非仓库文件）。
+2. **接线缺口（本轮修复）：LawnApp::init 漏掉 C++ LawnApp.cpp:1253-1263 的 profile 加载段**（mProfileMgr->Load() + 注册表 CurUser + GetAnyProfile 兜底），导致 player_info 恒为 None。
+3. **崩溃修复：seed_chooser_screen.rs has_7_rows（原 497 行）对 player_info.unwrap() 直接 panic**，首次运行（无 userdata/users.dat，GetAnyProfile 返回 None）进入选卡界面必崩，backtrace 确认。修复按 C++ SeedChooserScreen.cpp:275-282 语义：None 视为未购买返回 false（C++ 此场景为空指针解引用 UB）。**TODO(translate) 已登记：C++ 279-280 的 SEED_TWINSUNFLOWER..SEED_COBCANNON HasSeedType 检查循环 Rust 版缺失。**
+4. 验证过程：修复前 ~55-60 秒必现 panic（exit 101）；修复后 150+ 秒稳定运行、窗口 Responding=True、标题画面渲染正常（CopyFromScreen 截图成功；PrintWindow 对 GL 窗口恒黑帧，再次证实 2026-11-14 的记录）。
+
+自检：cargo fmt --check 通过；cargo build 0 error（405 存量 warning）；cargo test 0+0 通过（仓库无测试用例）；cargo clippy 123 error 均为存量（missing_safety_doc 等，集中在 build.rs 与 FFI 层），本轮修改行无新告警。clippy 需 -j 1 且 TEMP 指向工作区内目录（MSBuild/链接器写 %TEMP%\MSBuildTemp 被沙箱拒绝）。
+
 | 2026-11-21 | **第二轮遗留项全量接线（本轮）**：①§1 方法类真实缺口 30 项接线（起点 103/167 → 133/167 有调用点）：board（init_zombie_waves→ForLevel、PlantingRequirementsMet+Cobcannon、ToolHitTest→Helper、MouseDownWithTool 补 ZenGarden/TreeOfWisdom 分支、update_level_end_sequence 补 C++ 1775-1802 GetBottomLawnMower 金币链+SOUND_POINTS 音高、init_level→PickBackground 忠实版+墓碑段 C++ 1097-1163、key_char f 段→GetZenToolAt、add_plant 补 C++ 2112-2135 fungi/catapult 段、ZOMBIE_WAVE_DEBUG 常量化）；challenge（MouseDown 补 WhackAZombie/ScaryPotter 分支、SpawnZombieWave 按 C++ 2969-3013 全量、InitLevel 补 ZenGarden/IZombie/ScaryPotter/TreeOfWisdom、LastStandCompletedStage 按 C++ 5132-5156 全量+SOUND_HUGE_WAVE、SquirrelUpdate 接 SquirrelUpdateOne、IZombiePlacePlantInSquare 接 IZombieSetupPlant、i_zombie_squish_brain 补 MakeRenderOrder）；plant（**DoSpecial 按 C++ 4290-4403 全量重写**：Cherrybomb/Doomshroom/Jalapeno/Iceshroom/PotatoMine/InstantCoffee 分支+Explodonator/Spudow 成就+AddACrater、BlowAwayFliers 补 SOUND_BLOVER、**Starfruit 链修正**：LaunchStarFruit=FindTarget+anim_shoot+counter40、Fire→StarFruitFire、Draw 按 C++ Plant::Draw 3963-4044 骨架：南瓜后景+飞行摆动+IZombieDrawPlant 分支）；zombie（apply_burn 尾补 BobsledBurn 钩子 C++ 8804-8807、update_zombie_jalapeno_head 补 DO_FIX_BUGS mMindControlled→Zombie::BurnRow 分支（cfg feature）、zombie_initialize Flag 分支补全 C++ 585-592：flag reanim attach+FrameBasePose+SetupZombatarFlagReanim、burn_row 误判注释修正）；tod_foley（补注册 SOUND_BLOVER/SOUND_DOOMSHROOM/SOUND_POTATO_MINE）；②遗留项2：pool_effect 实例构造接线（LawnApp.cpp:1745-1746）；③遗留项3：WidgetImpl trait 补 added_to_manager/removed_from_manager 默认回调+Widget 基类转发；④遗留项4：LawnEditWidget 按 C++ LawnCommon.cpp:80-146 重写（key_down_forward_escape/key_char/key_text+AutoCapChar 98-107+工厂），Dialog 补 dialog_key_down（对应继承 Widget::KeyDown 的 TAB-only 语义）；⑤Cargo.toml 声明 fix_bugs feature。**未接线判定修正**：zombie draw_zombie_part/head 在 C++ 为注释死代码（Zombie.cpp:5210-5275）保持 NOT-WIRED；save_game（Board.cpp:375）C++ 亦无调用点改记 §2。**未运行验证**（无 main.pak 复验环境；需用户复验：WarAndPeas 调试键生成、LastStand 通关提示、智慧树工具、锤僵尸/砸罐、星光果发射、燃烧雪橇队、旗僵尸 zombatar 头、用户名输入自动大写） | AI |
 | 日期 | 变更 | 操作者 |
 |---|---|---|
